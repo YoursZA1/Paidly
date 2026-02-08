@@ -1,0 +1,186 @@
+#!/bin/bash
+
+# Test Account Creation and Excel Export Functionality
+# This script provides curl commands to test the account creation feature
+
+echo "=========================================="
+echo "Account Creation & Excel Export Test Guide"
+echo "=========================================="
+echo ""
+
+echo "Prerequisites:"
+echo "1. Start the dev server: npm run dev"
+echo "2. Open browser to: http://localhost:5173/"
+echo "3. Login with admin account"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 1: Create Test Account"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Click 'Create Account' button in Quick Actions panel"
+echo "2. Fill in form with test data:"
+echo "   - Email: test.user@example.com"
+echo "   - Full Name: Test User"
+echo "   - Company: Test Company Inc"
+echo "   - Role: user"
+echo "   - Plan: basic"
+echo "3. Click 'Create Account' button"
+echo "4. Verify success message appears"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 2: Verify Data Persistence"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Open browser Developer Tools (F12)"
+echo "2. Go to 'Application' or 'Storage' tab"
+echo "3. Find localStorage"
+echo "4. Search for key: 'breakapi_users_data'"
+echo "5. Expand and view JSON data"
+echo "6. Verify created user is in the list"
+echo "7. Check timestamp fields (created_at, updated_at)"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 3: Export to Excel"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Click 'Export Users' button in Quick Actions"
+echo "2. Browser downloads 'users.xlsx' file"
+echo "3. Open file in Excel or Google Sheets"
+echo "4. Verify columns are present:"
+echo "   - id, email, full_name, display_name"
+echo "   - company_name, company_address, role"
+echo "   - status, plan, currency, timezone"
+echo "   - phone, created_at, updated_at"
+echo "5. Verify all user records appear"
+echo "6. Check created user data is accurate"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 4: Duplicate Email Prevention"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Click 'Create Account' button"
+echo "2. Use same email as previous test"
+echo "3. Fill other fields"
+echo "4. Click 'Create Account'"
+echo "5. Verify error message: 'User with this email already exists'"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 5: Validation Tests"
+echo "=========================================="
+echo ""
+echo "Test 5a - Missing Required Fields:"
+echo "1. Click 'Create Account'"
+echo "2. Leave email empty"
+echo "3. Click 'Create Account'"
+echo "4. Verify error: 'Email is required'"
+echo ""
+echo "Test 5b - Invalid Email Format:"
+echo "1. Click 'Create Account'"
+echo "2. Enter email: 'invalid.email.com' (no @)"
+echo "3. Click 'Create Account'"
+echo "4. Verify error: 'Please enter a valid email address'"
+echo ""
+echo "Test 5c - Missing Full Name:"
+echo "1. Click 'Create Account'"
+echo "2. Enter valid email but leave full name empty"
+echo "3. Click 'Create Account'"
+echo "4. Verify error: 'Full name is required'"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 6: Dashboard Metrics Update"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Create several test accounts"
+echo "2. Go to Dashboard"
+echo "3. Check KPI card: 'Total Users' updates"
+echo "4. Verify count increases with each account"
+echo "5. Check 'New Users This Month' metric"
+echo "6. Create multiple users and verify counter increments"
+echo ""
+
+echo "=========================================="
+echo "Test Scenario 7: Form Reset After Success"
+echo "=========================================="
+echo ""
+echo "Steps:"
+echo "1. Create an account successfully"
+echo "2. After success message, verify dialog closes"
+echo "3. Open 'Create Account' again"
+echo "4. Verify form fields are empty/reset"
+echo "5. Verify role defaults to 'user'"
+echo "6. Verify plan defaults to 'free'"
+echo ""
+
+echo "=========================================="
+echo "Expected Results Summary"
+echo "=========================================="
+echo ""
+echo "✓ User accounts are created successfully"
+echo "✓ Data persists in browser localStorage"
+echo "✓ Can export all users to Excel file"
+echo "✓ Excel file contains all required columns"
+echo "✓ Duplicate emails are prevented"
+echo "✓ Form validation works correctly"
+echo "✓ Dashboard metrics update automatically"
+echo "✓ Timestamps are in ISO 8601 format"
+echo "✓ Admin role is required to create accounts"
+echo "✓ Created accounts appear in admin dashboard"
+echo ""
+
+echo "=========================================="
+echo "Browser Console Checks"
+echo "=========================================="
+echo ""
+echo "Open browser console (F12) and check for:"
+echo "- No JavaScript errors"
+echo "- No network errors"
+echo "- localStorage updates logged"
+echo "- Excel export success messages"
+echo ""
+
+echo "=========================================="
+echo "Data Structure Example"
+echo "=========================================="
+echo ""
+echo "Created user object:"
+echo ""
+echo "{
+  \"id\": \"user_1707044400000\",
+  \"email\": \"test@example.com\",
+  \"full_name\": \"Test User\",
+  \"display_name\": \"Test User\",
+  \"company_name\": \"Test Company\",
+  \"company_address\": \"123 Test St\",
+  \"role\": \"user\",
+  \"status\": \"active\",
+  \"plan\": \"basic\",
+  \"currency\": \"ZAR\",
+  \"timezone\": \"UTC\",
+  \"phone\": \"+27123456789\",
+  \"created_at\": \"2026-02-03T12:00:00.000Z\",
+  \"updated_at\": \"2026-02-03T12:00:00.000Z\",
+  \"subscription_amount\": 0,
+  \"plan_history\": [\"basic\"],
+  \"previously_trial\": false,
+  \"suspension_reason\": null
+}"
+echo ""
+
+echo "=========================================="
+echo "Test Completion"
+echo "=========================================="
+echo ""
+echo "All tests completed!"
+echo "Document your results above."
+echo ""

@@ -1,0 +1,577 @@
+import React, { useState, useEffect } from 'react';
+import { breakApi } from '@/api/apiClient';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+    FileText, 
+    Download, 
+    CreditCard, 
+    User, 
+    CheckCircle, 
+    Clock,
+    AlertCircle,
+    LogOut,
+    Mail,
+    Phone,
+    MapPin,
+    Calendar,
+    MessageCircle
+} from 'lucide-react';
+import { formatCurrency } from '../components/CurrencySelector';
+import { format, parseISO, isValid } from 'date-fns';
+import { createPageUrl } from '@/utils';
+import ClientLogin from '../components/clientportal/ClientLogin';
+import PaymentModal from '../components/clientportal/PaymentModal';
+import ContactUpdateModal from '../components/clientportal/ContactUpdateModal';
+import ClientMessages from '../components/clientportal/ClientMessages';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const statusStyles = {
+    draft: "bg-slate-100 text-slate-700",
+    sent: "bg-blue-100 text-blue-700",
+    viewed: "bg-purple-100 text-purple-700",
+    paid: "bg-emerald-100 text-emerald-700",
+    partial_paid: "bg-yellow-100 text-yellow-700",
+    overdue: "bg-red-100 text-red-700",
+    cancelled: "bg-slate-200 text-slate-700",
+    accepted: "bg-green-100 text-green-700",
+    rejected: "bg-red-100 text-red-700",
+    expired: "bg-gray-100 text-gray-700"
+};
+
+const safeFormatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = parseISO(dateStr);
+        return isValid(date) ? format(date, 'MMM d, yyyy') : 'N/A';
+    } catch {
+        return 'N/A';
+    }
+};
+
+export default function ClientPortal() {
+    const [client, setClient] = useState(null);
+    const [invoices, setInvoices] = useState([]);
+    const [quotes, setQuotes] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
+
+    useEffect(() => {
+        const savedClient = sessionStorage.getItem('portal_client_email');
+        if (savedClient) {
+            handleLogin(savedClient);
+        }
+    }, []);
+
+    const handleLogin = async (email) => {
+        setIsLoading(true);
+        try {
+            // Use backend function to bypass RLS
+            const { client: clientData, token } = await breakApi.backend.ClientPortal.login({ email });
+            
+            setClient(clientData);
+            sessionStorage.setItem('portal_client_email', email);
+            if (token) sessionStorage.setItem('portal_token', token);
+
+            // Load client's invoices and quotes via backend
+            const { invoices: invoicesData, quotes: quotesData } = await breakApi.backend.ClientPortal.getData({ 
+                clientId: clientData.id, 
+                email: email 
+            });
+
+            setInvoices(invoicesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+            setQuotes(quotesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+        } catch (error) {
+            console.error('Login error:', error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        setClient(null);
+        setInvoices([]);
+        setQuotes([]);
+        sessionStorage.removeItem('portal_client_email');
+    };
+
+    const handlePayment = (invoice) => {
+        setSelectedInvoice(invoice);
+        setShowPaymentModal(true);
+    };
+
+    const handlePaymentSuccess = async (invoiceId, amount) => {
+        try {
+            await breakApi.backend.ClientPortal.processPayment({
+                invoiceId,
+                amount,
+                method: 'credit_card',
+                notes: 'Online payment via client portal'
+            });
+
+            // Reload data
+            const { invoices: invoicesData } = await breakApi.backend.ClientPortal.getData({ 
+                clientId: client.id, 
+                email: client.email 
+            });
+            setInvoices(invoicesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+        } catch (error) {
+            console.error("Payment processing error:", error);
+            alert("Payment recorded but failed to update status. Please contact support.");
+        }
+    };
+
+    const handleContactUpdate = async (formData) => {
+        await breakApi.backend.ClientPortal.updateClient({
+            clientId: client.id,
+            data: formData
+        });
+        setClient({ ...client, ...formData });
+    };
+
+    const handleDownload = (type, id) => {
+        const url = type === 'invoice' 
+            ? createPageUrl(`InvoicePDF?id=${id}`)
+            : createPageUrl(`QuotePDF?id=${id}`);
+        window.open(url, '_blank');
+    };
+
+    const calculateTotalPaid = (invoice) => {
+        if (!invoice.payments || invoice.payments.length === 0) return 0;
+        return invoice.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    };
+
+    const calculateOutstanding = (invoice) => {
+        return invoice.total_amount - calculateTotalPaid(invoice);
+    };
+
+    // Stats
+    const totalOutstanding = invoices
+        .filter(inv => inv.status === 'sent' || inv.status === 'overdue')
+        .reduce((sum, inv) => sum + calculateOutstanding(inv), 0);
+    
+    const totalPaid = invoices
+        .filter(inv => inv.status === 'paid')
+        .reduce((sum, inv) => sum + inv.total_amount, 0);
+
+    const pendingQuotes = quotes.filter(q => q.status === 'sent' || q.status === 'viewed').length;
+
+    if (!client) {
+        return <ClientLogin onLogin={handleLogin} />;
+    }
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-slate-50 p-4">
+                <div className="max-w-7xl mx-auto space-y-6">
+                    <Skeleton className="h-40 w-full" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Skeleton className="h-32" />
+                        <Skeleton className="h-32" />
+                        <Skeleton className="h-32" />
+                    </div>
+                    <Skeleton className="h-96 w-full" />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+            {/* Header */}
+            <div className="bg-white border-b shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 py-6">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900">Welcome back, {client.name}</h1>
+                            <p className="text-slate-600 mt-1">Manage your invoices, quotes, and account details</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button 
+                                onClick={() => setShowContactModal(true)}
+                                variant="outline"
+                                className="gap-2"
+                            >
+                                <User className="w-4 h-4" />
+                                Update Contact
+                            </Button>
+                            <Button 
+                                onClick={handleLogout}
+                                variant="outline"
+                                className="gap-2"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                Logout
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 py-8">
+                {/* Client Info Card */}
+                <Card className="mb-8 border-0 shadow-lg">
+                    <CardContent className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="flex items-start gap-3">
+                                <Mail className="w-5 h-5 text-emerald-600 mt-1" />
+                                <div>
+                                    <p className="text-sm text-slate-600">Email</p>
+                                    <p className="font-medium text-slate-900">{client.email}</p>
+                                </div>
+                            </div>
+                            {client.phone && (
+                                <div className="flex items-start gap-3">
+                                    <Phone className="w-5 h-5 text-emerald-600 mt-1" />
+                                    <div>
+                                        <p className="text-sm text-slate-600">Phone</p>
+                                        <p className="font-medium text-slate-900">{client.phone}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {client.address && (
+                                <div className="flex items-start gap-3">
+                                    <MapPin className="w-5 h-5 text-emerald-600 mt-1" />
+                                    <div>
+                                        <p className="text-sm text-slate-600">Address</p>
+                                        <p className="font-medium text-slate-900">{client.address}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <Card className="border-0 shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-slate-600 mb-1">Outstanding Balance</p>
+                                    <p className="text-2xl font-bold text-red-600">
+                                        {formatCurrency(totalOutstanding, client.currency || 'ZAR')}
+                                    </p>
+                                </div>
+                                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                                    <AlertCircle className="w-6 h-6 text-red-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-0 shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-slate-600 mb-1">Total Paid</p>
+                                    <p className="text-2xl font-bold text-green-600">
+                                        {formatCurrency(totalPaid, client.currency || 'ZAR')}
+                                    </p>
+                                </div>
+                                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <CheckCircle className="w-6 h-6 text-green-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-0 shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-slate-600 mb-1">Pending Quotes</p>
+                                    <p className="text-2xl font-bold text-blue-600">{pendingQuotes}</p>
+                                </div>
+                                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <Clock className="w-6 h-6 text-blue-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Tabs */}
+                <Tabs defaultValue="invoices" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4 mb-6">
+                        <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
+                        <TabsTrigger value="quotes">Quotes ({quotes.length})</TabsTrigger>
+                        <TabsTrigger value="messages">
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Messages
+                        </TabsTrigger>
+                        <TabsTrigger value="reports">
+                            <FileText className="w-4 h-4 mr-2" />
+                            Reports
+                        </TabsTrigger>
+                        <TabsTrigger value="payments">Payments</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="invoices">
+                        <div className="space-y-4">
+                            {invoices.length === 0 ? (
+                                <Card className="border-0 shadow-lg">
+                                    <CardContent className="p-12 text-center">
+                                        <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                                        <h3 className="text-lg font-semibold text-slate-900 mb-2">No invoices yet</h3>
+                                        <p className="text-slate-600">You don't have any invoices at the moment</p>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                invoices.map(invoice => (
+                                    <Card key={invoice.id} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+                                        <CardContent className="p-6">
+                                            <div className="flex flex-col md:flex-row justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <h3 className="font-bold text-lg text-slate-900">
+                                                            Invoice #{invoice.invoice_number}
+                                                        </h3>
+                                                        <Badge className={statusStyles[invoice.status]}>
+                                                            {invoice.status?.replace('_', ' ')}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-slate-600 mb-2">{invoice.project_title}</p>
+                                                    <div className="flex items-center gap-4 text-sm text-slate-500">
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar className="w-4 h-4" />
+                                                            {safeFormatDate(invoice.created_date)}
+                                                        </div>
+                                                        {invoice.delivery_date && (
+                                                            <div>Due: {safeFormatDate(invoice.delivery_date)}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-between gap-4">
+                                                    <div className="text-right">
+                                                        <p className="text-sm text-slate-600">Total Amount</p>
+                                                        <p className="text-2xl font-bold text-slate-900">
+                                                            {formatCurrency(invoice.total_amount, invoice.owner_currency || 'ZAR')}
+                                                        </p>
+                                                        {(invoice.status === 'sent' || invoice.status === 'overdue') && (
+                                                            <p className="text-sm text-red-600 mt-1">
+                                                                Outstanding: {formatCurrency(calculateOutstanding(invoice), invoice.owner_currency || 'ZAR')}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            onClick={() => handleDownload('invoice', invoice.id)}
+                                                            variant="outline"
+                                                            size="sm"
+                                                        >
+                                                            <Download className="w-4 h-4 mr-2" />
+                                                            Download
+                                                        </Button>
+                                                        {(invoice.status === 'sent' || invoice.status === 'overdue') && (
+                                                            <Button
+                                                                onClick={() => handlePayment(invoice)}
+                                                                size="sm"
+                                                                className="bg-emerald-600 hover:bg-emerald-700"
+                                                            >
+                                                                <CreditCard className="w-4 h-4 mr-2" />
+                                                                Pay Now
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="quotes">
+                        <div className="space-y-4">
+                            {quotes.length === 0 ? (
+                                <Card className="border-0 shadow-lg">
+                                    <CardContent className="p-12 text-center">
+                                        <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                                        <h3 className="text-lg font-semibold text-slate-900 mb-2">No quotes yet</h3>
+                                        <p className="text-slate-600">You don't have any quotes at the moment</p>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                quotes.map(quote => (
+                                    <Card key={quote.id} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+                                        <CardContent className="p-6">
+                                            <div className="flex flex-col md:flex-row justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <h3 className="font-bold text-lg text-slate-900">
+                                                            Quote #{quote.quote_number}
+                                                        </h3>
+                                                        <Badge className={statusStyles[quote.status]}>
+                                                            {quote.status?.replace('_', ' ')}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-slate-600 mb-2">{quote.project_title}</p>
+                                                    <div className="flex items-center gap-4 text-sm text-slate-500">
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar className="w-4 h-4" />
+                                                            Created: {safeFormatDate(quote.created_date)}
+                                                        </div>
+                                                        {quote.valid_until && (
+                                                            <div>Valid until: {safeFormatDate(quote.valid_until)}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-between gap-4">
+                                                    <div className="text-right">
+                                                        <p className="text-sm text-slate-600">Quote Amount</p>
+                                                        <p className="text-2xl font-bold text-slate-900">
+                                                            {formatCurrency(quote.total_amount, client.currency || 'ZAR')}
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        onClick={() => handleDownload('quote', quote.id)}
+                                                        variant="outline"
+                                                        size="sm"
+                                                    >
+                                                        <Download className="w-4 h-4 mr-2" />
+                                                        Download
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="messages">
+                        <ClientMessages client={client} invoices={invoices} />
+                    </TabsContent>
+
+                    <TabsContent value="reports">
+                        <Card className="border-0 shadow-lg">
+                            <CardHeader>
+                                <CardTitle>Shared Reports</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                <FileText className="w-6 h-6 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-semibold text-slate-900">Statement of Account</h4>
+                                                <p className="text-sm text-slate-500">Full history of invoices and payments</p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={() => window.open(createPageUrl(`ReportPDF?client=${client.id}&range=year`), '_blank')}
+                                            variant="outline"
+                                        >
+                                            <Download className="w-4 h-4 mr-2" />
+                                            Download
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                                <Clock className="w-6 h-6 text-purple-600" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-semibold text-slate-900">Outstanding Balance Report</h4>
+                                                <p className="text-sm text-slate-500">Summary of all unpaid invoices</p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={() => window.open(createPageUrl(`ReportPDF?client=${client.id}&status=overdue`), '_blank')}
+                                            variant="outline"
+                                        >
+                                            <Download className="w-4 h-4 mr-2" />
+                                            Download
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="payments">
+                        <Card className="border-0 shadow-lg">
+                            <CardHeader>
+                                <CardTitle>Payment History</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    {invoices
+                                        .filter(inv => inv.payments && inv.payments.length > 0)
+                                        .flatMap(inv => 
+                                            inv.payments.map(payment => ({
+                                                ...payment,
+                                                invoiceNumber: inv.invoice_number,
+                                                invoiceId: inv.id
+                                            }))
+                                        )
+                                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                        .map((payment, index) => (
+                                            <div key={index} className="flex justify-between items-center py-4 border-b last:border-0">
+                                                <div>
+                                                    <p className="font-medium text-slate-900">
+                                                        Invoice #{payment.invoiceNumber}
+                                                    </p>
+                                                    <p className="text-sm text-slate-600">
+                                                        {safeFormatDate(payment.date)} • {payment.method?.replace('_', ' ')}
+                                                    </p>
+                                                    {payment.notes && (
+                                                        <p className="text-xs text-slate-500 mt-1">{payment.notes}</p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-lg font-bold text-green-600">
+                                                        {formatCurrency(payment.amount, client.currency || 'ZAR')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    
+                                    {invoices.every(inv => !inv.payments || inv.payments.length === 0) && (
+                                        <div className="text-center py-12 text-slate-500">
+                                            <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                            <p>No payment history yet</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
+            </div>
+
+            {/* Modals */}
+            {showPaymentModal && selectedInvoice && (
+                <PaymentModal
+                    isOpen={showPaymentModal}
+                    onClose={() => {
+                        setShowPaymentModal(false);
+                        setSelectedInvoice(null);
+                    }}
+                    invoice={selectedInvoice}
+                    onPaymentSuccess={handlePaymentSuccess}
+                />
+            )}
+
+            {showContactModal && (
+                <ContactUpdateModal
+                    isOpen={showContactModal}
+                    onClose={() => setShowContactModal(false)}
+                    client={client}
+                    onUpdate={handleContactUpdate}
+                />
+            )}
+        </div>
+    );
+}

@@ -1,0 +1,741 @@
+import React, { useState, useEffect } from "react";
+import { User, BankingDetail } from "@/api/entities";
+import { UploadFile } from "@/api/integrations";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Globe, Bell, Award, Check, FileText, DollarSign, User as UserIcon } from "lucide-react";
+import { motion } from "framer-motion";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/components/auth/AuthContext";
+
+import BankingCard from "../components/banking/BankingCard";
+import HelpTooltip from "../components/shared/HelpTooltip";
+import BankingForm from "../components/banking/BankingForm";
+import CurrencySelector from "../components/CurrencySelector";
+import PaymentReminderSettings from "../components/reminders/PaymentReminderSettings";
+import SubscriptionSettings from "../components/subscription/SubscriptionSettings";
+import CurrencyConfiguration from "../components/currency/CurrencyConfiguration";
+
+const DOCUMENT_TEMPLATES = [
+    {
+        id: "classic",
+        name: "Classic",
+        description: "Traditional layout with clean sections",
+        colors: ["#1e293b", "#f1f5f9", "#3b82f6"]
+    },
+    {
+        id: "modern",
+        name: "Modern",
+        description: "Gradient header with bold accents",
+        colors: ["#7c3aed", "#faf5ff", "#a855f7"]
+    },
+    {
+        id: "minimal",
+        name: "Minimal",
+        description: "Minimalist style with high readability",
+        colors: ["#18181b", "#ffffff", "#71717a"]
+    },
+    {
+        id: "bold",
+        name: "Bold",
+        description: "Strong contrast with confident headings",
+        colors: ["#0f766e", "#f0fdfa", "#14b8a6"]
+    }
+];
+
+function CompanyProfileSettings() {
+    const [formData, setFormData] = useState({
+        display_name: "",
+        company_name: "",
+        company_address: "",
+        logo_url: "",
+        currency: "USD",
+        country: "",
+        timezone: "",
+        invoice_template: "classic",
+        invoice_header: ""
+    });
+    const [logoFile, setLogoFile] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const { toast } = useToast();
+    const { refreshUser } = useAuth();
+
+    useEffect(() => {
+        loadUserData();
+    }, []);
+
+    // Cleanup blob URLs on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
+                URL.revokeObjectURL(formData.logo_url);
+            }
+        };
+    }, [formData.logo_url]);
+
+    const loadUserData = async () => {
+        setIsLoading(true);
+        try {
+            const currentUser = await User.me();
+            setFormData({
+                display_name: currentUser.display_name || "",
+                company_name: currentUser.company_name || "",
+                company_address: currentUser.company_address || "",
+                logo_url: currentUser.logo_url || "",
+                currency: currentUser.currency || "USD",
+                country: currentUser.country || "",
+                timezone: currentUser.timezone || "",
+                invoice_template: currentUser.invoice_template || "classic",
+                invoice_header: currentUser.invoice_header || ""
+            });
+        } catch (error) {
+            console.error("Error loading user data:", error);
+        }
+        setIsLoading(false);
+    };
+
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleLogoChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            
+            // Validate file type
+            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+            if (!validTypes.includes(file.type)) {
+                toast({
+                    title: "Invalid file type",
+                    description: "Please upload a PNG, JPG, or SVG image.",
+                    variant: "destructive"
+                });
+                return;
+            }
+            
+            // Validate file size (2MB max)
+            const maxSize = 2 * 1024 * 1024; // 2MB in bytes
+            if (file.size > maxSize) {
+                toast({
+                    title: "File too large",
+                    description: "Please upload an image smaller than 2MB.",
+                    variant: "destructive"
+                });
+                return;
+            }
+            
+            // Revoke old blob URL if it exists to prevent memory leaks
+            if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
+                URL.revokeObjectURL(formData.logo_url);
+            }
+            
+            // Create preview URL
+            const previewUrl = URL.createObjectURL(file);
+            setFormData(prev => ({ ...prev, logo_url: previewUrl }));
+            setLogoFile(file);
+            
+            // Show success message
+            toast({
+                title: "✓ Logo selected",
+                description: `${file.name} is ready to upload. Click "Save Changes" to apply.`,
+                variant: "success"
+            });
+        }
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setIsSaving(true);
+        let updatedData = { ...formData };
+
+        try {
+            if (logoFile) {
+                console.log("Uploading logo file:", logoFile.name);
+                
+                // Revoke previous preview URL if it exists
+                if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
+                    URL.revokeObjectURL(formData.logo_url);
+                }
+                
+                try {
+                    const uploadResult = await UploadFile({ file: logoFile });
+                    console.log("Upload result:", uploadResult);
+                    
+                    if (!uploadResult || !uploadResult.file_url) {
+                        throw new Error("Upload failed - no file URL returned");
+                    }
+                    
+                    updatedData.logo_url = uploadResult.file_url;
+                } catch (uploadError) {
+                    console.error("Logo upload error:", uploadError);
+                    toast({
+                        title: "✗ Upload Failed",
+                        description: `Failed to upload logo: ${uploadError.message || 'Unknown error'}`,
+                        variant: "destructive"
+                    });
+                    setIsSaving(false);
+                    return;
+                }
+            }
+            
+            console.log("Updating user data:", updatedData);
+            await User.updateMyUserData(updatedData);
+            setFormData(updatedData);
+            setLogoFile(null);
+            await refreshUser();
+            toast({
+                title: "✓ Settings Saved",
+                description: "Your company profile has been updated successfully.",
+                variant: "success"
+            });
+        } catch (error) {
+            console.error("Error saving settings:", error);
+            toast({
+                title: "✗ Error",
+                description: `Failed to save settings: ${error.message || 'Please try again.'}`,
+                variant: "destructive"
+            });
+        }
+        setIsSaving(false);
+    };
+    
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-32 w-full" />
+            </div>
+        )
+    }
+    
+    // Check if branding is complete
+    const isBrandingComplete = formData.company_name && formData.company_address && formData.logo_url;
+
+    return (
+        <form onSubmit={handleSave} className="space-y-6">
+            {/* Branding Status Card */}
+            <div className={`p-5 rounded-xl border-2 ${isBrandingComplete ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300' : 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300'}`}>
+                <div className="flex items-start gap-4">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isBrandingComplete ? 'bg-green-500' : 'bg-amber-500'}`}>
+                        {isBrandingComplete ? (
+                            <Check className="w-7 h-7 text-white" />
+                        ) : (
+                            <ImageIcon className="w-7 h-7 text-white" />
+                        )}
+                    </div>
+                    <div className="flex-1">
+                        <h3 className={`font-bold text-lg mb-1 ${isBrandingComplete ? 'text-green-900' : 'text-amber-900'}`}>
+                            {isBrandingComplete ? '✓ Professional Branding Complete!' : '⚠️ Complete Your Branding'}
+                        </h3>
+                        <p className={`text-sm mb-3 ${isBrandingComplete ? 'text-green-700' : 'text-amber-700'}`}>
+                            {isBrandingComplete 
+                                ? 'Your invoices will look professional with your logo, company name, and address.' 
+                                : 'Add your logo, company name, and address to create professional, credible invoices.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_name ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                                {formData.company_name ? '✓' : '○'} Company Name
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_address ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                                {formData.company_address ? '✓' : '○'} Address
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.logo_url ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                                {formData.logo_url ? '✓' : '○'} Logo
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="display_name" className="text-sm font-semibold text-slate-700">Dashboard Display Name</Label>
+                <Input
+                    id="display_name"
+                    value={formData.display_name}
+                    onChange={(e) => handleInputChange('display_name', e.target.value)}
+                    placeholder="How you want to be greeted (e.g., John, Boss, etc.)"
+                    className="h-12 rounded-xl"
+                />
+                <p className="text-xs text-slate-500">
+                    This name will be shown on your dashboard greeting.
+                </p>
+            </div>
+
+            {/* Company Name - Enhanced */}
+            <div className="space-y-2">
+                <Label htmlFor="company_name" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <SettingsIcon className="w-4 h-4" />
+                    Company Name (Required for Professional Invoices)
+                    <HelpTooltip content="This is your official business name that appears on all invoices and quotes." />
+                </Label>
+                <Input
+                    id="company_name"
+                    value={formData.company_name}
+                    onChange={(e) => handleInputChange('company_name', e.target.value)}
+                    placeholder="e.g., Acme Corp, John's Consulting LLC, Your Business Name"
+                    className="h-12 rounded-xl"
+                />
+                {!formData.company_name && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>Company name is required for professional invoices. It appears prominently in PDF headers.</span>
+                    </p>
+                )}
+                {formData.company_name && (
+                    <p className="text-xs text-green-600">
+                        ✓ Will appear on all invoices {formData.logo_url ? "(below your logo)" : "(as main heading)"}
+                    </p>
+                )}
+            </div>
+            
+            {/* Company Address - Enhanced */}
+            <div className="space-y-2">
+                <Label htmlFor="company_address" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    Company Address (Highly Recommended)
+                    <HelpTooltip content="Your business address adds credibility and is often legally required on invoices." />
+                </Label>
+                <Textarea
+                    id="company_address"
+                    value={formData.company_address}
+                    onChange={(e) => handleInputChange('company_address', e.target.value)}
+                    placeholder="Example:&#10;123 Business Street, Suite 100&#10;Cape Town, Western Cape 8001&#10;South Africa"
+                    className="min-h-28 rounded-xl resize-none font-mono text-sm"
+                />
+                {!formData.company_address && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>Address recommended for credibility and legal compliance (especially for VAT invoices).</span>
+                    </p>
+                )}
+                {formData.company_address && (
+                    <p className="text-xs text-green-600">
+                        ✓ Address will appear in invoice headers for professional presentation
+                    </p>
+                )}
+            </div>
+
+            <div className="space-y-2">
+                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    Default Currency
+                </Label>
+                <CurrencySelector
+                    value={formData.currency}
+                    onChange={(value) => handleInputChange('currency', value)}
+                    className="h-12 rounded-xl"
+                />
+                <p className="text-xs text-slate-500">
+                    This currency will be used for all new invoices. You can still change it per invoice if needed.
+                </p>
+            </div>
+            
+            {/* Logo & Profile Picture Section - Unified */}
+            <div className="space-y-3">
+                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    Logo & Profile Picture
+                    <HelpTooltip content="Upload one image that serves as both your company logo (on invoices) and profile picture (in the app)." />
+                </Label>
+                
+                {/* Combined Preview & Upload */}
+                <div className="p-5 bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl border border-slate-200 space-y-4">
+                    {/* Dual Preview */}
+                    <div className="flex items-center gap-6">
+                        {/* Profile Preview (Circular) */}
+                        <div className="text-center">
+                            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-2 border-slate-300 shadow-sm overflow-hidden mb-2">
+                                {formData.logo_url ? (
+                                    <img src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
+                                ) : (
+                                    <UserIcon className="w-10 h-10 text-slate-300" />
+                                )}
+                            </div>
+                            <p className="text-[10px] font-semibold text-slate-600">Profile</p>
+                        </div>
+
+                        {/* Logo Preview (Square) */}
+                        <div className="text-center">
+                            <div className="w-28 h-20 rounded-lg bg-white flex items-center justify-center border-2 border-dashed border-slate-300 shadow-sm mb-2">
+                                {formData.logo_url ? (
+                                    <img src={formData.logo_url} alt="Logo" className="object-contain w-full h-full p-2" />
+                                ) : (
+                                    <div className="text-center">
+                                        <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-[10px] font-semibold text-slate-600">Invoice Logo</p>
+                        </div>
+
+                        {/* Upload Button */}
+                        <div className="flex-1">
+                            <label htmlFor="logo-upload" className="cursor-pointer bg-white border-2 border-blue-300 rounded-xl px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 flex items-center justify-center gap-2 transition-all shadow-sm w-full">
+                                <UploadCloud className="w-5 h-5" />
+                                <span>{logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}</span>
+                            </label>
+                            <input 
+                                id="logo-upload" 
+                                type="file" 
+                                accept="image/png,image/jpeg,image/jpg,image/svg+xml" 
+                                className="hidden" 
+                                onChange={handleLogoChange}
+                            />
+                            {logoFile && (
+                                <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                                    <Check className="w-3 h-3" />
+                                    Ready to save: {logoFile.name}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Guidelines */}
+                    <div className="bg-white rounded-lg p-3 border border-blue-100">
+                        <p className="text-xs font-semibold text-slate-700 mb-2">📐 Image Guidelines:</p>
+                        <ul className="text-xs text-slate-600 space-y-1">
+                            <li className="flex items-start gap-1.5">
+                                <span className="text-green-600 font-bold mt-0.5">✓</span>
+                                <span><strong>Format:</strong> Square (400×400px+), PNG with transparent background recommended</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                                <span className="text-green-600 font-bold mt-0.5">✓</span>
+                                <span><strong>Usage:</strong> Appears as profile picture (circular) and invoice logo (full)</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                                <span className="text-blue-600 font-bold mt-0.5">ℹ</span>
+                                <span><strong>Size:</strong> Keep under 2MB for optimal performance</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            {/* Invoice Header Message */}
+            <div className="space-y-2">
+                <Label htmlFor="invoice_header" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Invoice Header Message
+                    <HelpTooltip content="A standard message displayed near the top of every invoice, e.g., 'Tax Invoice' or your slogan." />
+                </Label>
+                <Textarea
+                    id="invoice_header"
+                    value={formData.invoice_header}
+                    onChange={(e) => handleInputChange('invoice_header', e.target.value)}
+                    placeholder="Add a custom message that appears at the top of your invoices (e.g., 'Thank you for your business!')"
+                    className="min-h-20 rounded-xl resize-none"
+                />
+                <p className="text-xs text-slate-500">
+                    This message will appear on all your invoices below the header.
+                </p>
+            </div>
+
+            {/* Invoice Template Selection */}
+            <div className="space-y-3">
+                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Document Template
+                    <HelpTooltip content="This template design will apply to all your PDF exports for both Invoices and Quotes." />
+                </Label>
+                <p className="text-xs text-slate-500 mb-3">
+                    Choose a template style for your invoices and quotes
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4" role="radiogroup" aria-label="Document templates">
+                    {DOCUMENT_TEMPLATES.map((template) => (
+                        <button
+                            type="button"
+                            key={template.id}
+                            onClick={() => handleInputChange('invoice_template', template.id)}
+                            aria-checked={formData.invoice_template === template.id}
+                            role="radio"
+                            className={`relative text-left rounded-xl border-2 p-3 transition-all hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                                formData.invoice_template === template.id
+                                    ? 'border-blue-500 ring-2 ring-blue-200'
+                                    : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                        >
+                            {formData.invoice_template === template.id && (
+                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                    <Check className="w-4 h-4 text-white" />
+                                </div>
+                            )}
+                            {/* Template Preview */}
+                            <div 
+                                className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-slate-100"
+                                style={{ backgroundColor: template.colors[1] }}
+                            >
+                                {/* Header */}
+                                <div 
+                                    className="h-1/4 p-2"
+                                    style={{ backgroundColor: template.colors[0] }}
+                                >
+                                    <div className="w-6 h-1.5 rounded-full bg-white/80 mb-1"></div>
+                                    <div className="w-10 h-1 rounded-full bg-white/50"></div>
+                                </div>
+                                {/* Content */}
+                                <div className="p-2 space-y-1.5">
+                                    <div className="flex gap-1">
+                                        <div className="w-8 h-1 rounded-full bg-slate-300"></div>
+                                        <div className="w-6 h-1 rounded-full bg-slate-200"></div>
+                                    </div>
+                                    <div className="w-full h-0.5 bg-slate-200 rounded-full"></div>
+                                    <div className="w-full h-0.5 bg-slate-200 rounded-full"></div>
+                                    <div className="w-3/4 h-0.5 bg-slate-200 rounded-full"></div>
+                                    <div className="mt-2 flex justify-end">
+                                        <div 
+                                            className="w-8 h-2 rounded"
+                                            style={{ backgroundColor: template.colors[2] }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-sm font-medium text-slate-700 text-center">{template.name}</p>
+                            <p className="text-[11px] text-slate-500 text-center mt-1">{template.description}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex justify-end pt-4">
+                <Button
+                    type="submit"
+                    disabled={isSaving}
+                    className={`${
+                        logoFile 
+                            ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 animate-pulse' 
+                            : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                    } text-white px-8 py-3 rounded-xl shadow-lg transition-all`}
+                >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isSaving ? "Saving..." : logoFile ? "Save Changes (Logo Ready)" : "Save Changes"}
+                </Button>
+            </div>
+        </form>
+    );
+}
+
+function PaymentMethodsSettings() {
+    const [bankingDetails, setBankingDetails] = useState([]);
+    const [showForm, setShowForm] = useState(false);
+    const [editingDetail, setEditingDetail] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        loadBankingDetails();
+    }, []);
+
+    const loadBankingDetails = async () => {
+        setIsLoading(true);
+        try {
+            const detailsData = await BankingDetail.list("-created_date");
+            setBankingDetails(detailsData);
+        } catch (error) {
+            console.error("Error loading banking details:", error);
+        }
+        setIsLoading(false);
+    };
+
+    const handleSaveDetail = async (detailData) => {
+        try {
+            if (editingDetail) {
+                await BankingDetail.update(editingDetail.id, detailData);
+                toast({
+                    title: "✓ Banking Details Updated",
+                    description: "Your banking information has been updated successfully.",
+                    variant: "success"
+                });
+            } else {
+                await BankingDetail.create(detailData);
+                toast({
+                    title: "✓ Banking Details Added",
+                    description: "New banking information has been added successfully.",
+                    variant: "success"
+                });
+            }
+            setShowForm(false);
+            setEditingDetail(null);
+            loadBankingDetails();
+        } catch (error) {
+            console.error("Error saving banking detail:", error);
+            toast({
+                title: "✗ Error",
+                description: "Failed to save banking details. Please try again.",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleEditDetail = (detail) => {
+        setEditingDetail(detail);
+        setShowForm(true);
+    };
+
+    const handleSetDefault = async (detailId) => {
+        try {
+            const updatePromises = bankingDetails.map(detail => 
+                BankingDetail.update(detail.id, { ...detail, is_default: false })
+            );
+            await Promise.all(updatePromises);
+            
+            const detailToUpdate = bankingDetails.find(d => d.id === detailId);
+            await BankingDetail.update(detailId, { ...detailToUpdate, is_default: true });
+            
+            loadBankingDetails();
+            toast({
+                title: "✓ Default Updated",
+                description: "Default banking method has been updated.",
+                variant: "success"
+            });
+        } catch (error) {
+            console.error("Error setting default:", error);
+            toast({
+                title: "✗ Error",
+                description: "Failed to update default banking method.",
+                variant: "destructive"
+            });
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex justify-end mb-6">
+                <Button
+                    onClick={() => setShowForm(true)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Payment Method
+                </Button>
+            </div>
+
+            {showForm && (
+                <BankingForm
+                    detail={editingDetail}
+                    onSave={handleSaveDetail}
+                    onCancel={() => {
+                        setShowForm(false);
+                        setEditingDetail(null);
+                    }}
+                />
+            )}
+            
+            {isLoading ? (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {Array(3).fill(0).map((_, i) => (
+                        <Card key={i} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+                            <CardContent className="p-6"><div className="animate-pulse space-y-4"><div className="h-4 bg-slate-200 rounded w-3/4"></div><div className="h-3 bg-slate-200 rounded w-1/2"></div><div className="h-3 bg-slate-200 rounded w-2/3"></div></div></CardContent>
+                        </Card>
+                    ))}
+                </div>
+            ) : bankingDetails.length === 0 && !showForm ? (
+                 <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+                    <CardContent className="p-8 md:p-12 text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4"><CreditCard className="w-8 h-8 text-slate-400" /></div>
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">No payment methods yet</h3>
+                        <p className="text-slate-600 mb-6">Add your banking details to get paid.</p>
+                        <Button onClick={() => setShowForm(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white"><Plus className="w-4 h-4 mr-2" />Add Your First Payment Method</Button>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {bankingDetails.map((detail, index) => (
+                        <BankingCard
+                            key={detail.id}
+                            detail={detail}
+                            onEdit={handleEditDetail}
+                            onSetDefault={handleSetDefault}
+                            delay={index * 0.1}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default function Settings() {
+    // Parse URL params to check for tab
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTab = urlParams.get('tab') || 'profile';
+
+    return (
+        <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+            <div className="max-w-6xl mx-auto">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-8"
+                >
+                    <h1 className="text-3xl font-bold text-slate-800">Settings</h1>
+                    <p className="text-slate-600 mt-1">Manage your company branding, payment details, and subscription.</p>
+                </motion.div>
+
+                <Tabs defaultValue={initialTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-2">
+                        <TabsTrigger value="profile">
+                            <SettingsIcon className="w-4 h-4 mr-2" />
+                            Company Profile
+                        </TabsTrigger>
+                        <TabsTrigger value="currency">
+                            <DollarSign className="w-4 h-4 mr-2" />
+                            Currency
+                        </TabsTrigger>
+                        <TabsTrigger value="payments">
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Payment Methods
+                        </TabsTrigger>
+                        <TabsTrigger value="reminders">
+                            <Bell className="w-4 h-4 mr-2" />
+                            Reminders
+                        </TabsTrigger>
+                        <TabsTrigger value="subscription">
+                            <Award className="w-4 h-4 mr-2" />
+                            Subscription
+                        </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="profile">
+                        <Card className="bg-white border-0 shadow-sm mt-4">
+                            <CardContent className="p-6 md:p-8">
+                                <CompanyProfileSettings />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    <TabsContent value="currency">
+                        <Card className="bg-white border-0 shadow-sm mt-4">
+                            <CardContent className="p-6 md:p-8">
+                                <CurrencyConfiguration />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    <TabsContent value="payments">
+                        <Card className="bg-white border-0 shadow-sm mt-4">
+                             <CardContent className="p-6 md:p-8">
+                                <PaymentMethodsSettings />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    <TabsContent value="reminders">
+                        <div className="mt-4">
+                            <PaymentReminderSettings />
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="subscription">
+                        <Card className="bg-white border-0 shadow-sm mt-4">
+                             <CardContent className="p-4 sm:p-6 md:p-8">
+                                <SubscriptionSettings />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
+            </div>
+        </div>
+    );
+}

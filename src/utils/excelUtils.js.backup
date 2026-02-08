@@ -1,0 +1,297 @@
+// Excel utility functions for data import/export
+import * as XLSX from 'xlsx';
+
+// Export data to Excel
+export const exportToExcel = (data, filename = 'export.xlsx', sheetName = 'Sheet1') => {
+  try {
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    
+    // Auto-size columns
+    const max_width = data.reduce((w, r) => Math.max(w, JSON.stringify(r).length), 10);
+    worksheet['!cols'] = [{ wch: max_width }];
+    
+    XLSX.writeFile(workbook, filename);
+    return { success: true, message: 'File exported successfully' };
+  } catch (error) {
+    console.error('Error exporting to Excel:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+// Import data from Excel
+export const importFromExcel = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        resolve({
+          success: true,
+          data: jsonData,
+          sheetName: firstSheetName,
+          totalRows: jsonData.length
+        });
+      } catch (error) {
+        reject({
+          success: false,
+          message: error.message
+        });
+      }
+    };
+    
+    reader.onerror = () => {
+      reject({
+        success: false,
+        message: 'Failed to read file'
+      });
+    };
+    
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+// Generate invoice template
+export const generateInvoiceTemplate = () => {
+  const template = [
+    {
+      'Invoice Number': 'INV-001',
+      'Client Name': 'Example Client',
+      'Project Title': 'Website Development',
+      'Project Description': 'Full website redesign and development',
+      'Invoice Date': '2026-02-01',
+      'Due Date': '2026-03-01',
+      'Item Description': 'Web Design',
+      'Quantity': 1,
+      'Unit Price': 5000,
+      'Tax Rate (%)': 15,
+      'Status': 'draft',
+      'Notes': 'Payment terms: Net 30'
+    }
+  ];
+  
+  exportToExcel(template, 'invoice_template.xlsx', 'Invoices');
+  return { success: true, message: 'Template downloaded' };
+};
+
+// Generate clients template
+export const generateClientsTemplate = () => {
+  const template = [
+    {
+      'Client Name': 'Acme Corporation',
+      'Email': 'contact@acme.com',
+      'Phone': '+1234567890',
+      'Address': '123 Business St, City, Country',
+      'Tax Number': 'TAX123456',
+      'Contact Person': 'John Doe',
+      'Notes': 'Premium client'
+    }
+  ];
+  
+  exportToExcel(template, 'clients_template.xlsx', 'Clients');
+  return { success: true, message: 'Template downloaded' };
+};
+
+// Generate services template
+export const generateServicesTemplate = () => {
+  const template = [
+    {
+      'Service Name': 'Web Development',
+      'Description': 'Full-stack web development services',
+      'Default Price': 5000,
+      'Unit': 'project',
+      'Tax Rate (%)': 15,
+      'Category': 'Development'
+    }
+  ];
+  
+  exportToExcel(template, 'services_template.xlsx', 'Services');
+  return { success: true, message: 'Template downloaded' };
+};
+
+// Validate invoice data
+export const validateInvoiceData = (data) => {
+  const errors = [];
+  const warnings = [];
+  
+  data.forEach((row, index) => {
+    const rowNum = index + 2; // Excel row number (header is row 1)
+    
+    // Required fields
+    if (!row['Invoice Number']) {
+      errors.push(`Row ${rowNum}: Invoice Number is required`);
+    }
+    if (!row['Client Name']) {
+      errors.push(`Row ${rowNum}: Client Name is required`);
+    }
+    if (!row['Project Title']) {
+      errors.push(`Row ${rowNum}: Project Title is required`);
+    }
+    
+    // Numeric validations
+    if (row['Quantity'] && isNaN(row['Quantity'])) {
+      errors.push(`Row ${rowNum}: Quantity must be a number`);
+    }
+    if (row['Unit Price'] && isNaN(row['Unit Price'])) {
+      errors.push(`Row ${rowNum}: Unit Price must be a number`);
+    }
+    if (row['Tax Rate (%)'] && isNaN(row['Tax Rate (%)'])) {
+      errors.push(`Row ${rowNum}: Tax Rate must be a number`);
+    }
+    
+    // Date validations
+    if (row['Invoice Date'] && !isValidDate(row['Invoice Date'])) {
+      errors.push(`Row ${rowNum}: Invalid Invoice Date format`);
+    }
+    if (row['Due Date'] && !isValidDate(row['Due Date'])) {
+      errors.push(`Row ${rowNum}: Invalid Due Date format`);
+    }
+    
+    // Status validation
+    const validStatuses = ['draft', 'sent', 'paid', 'overdue', 'cancelled'];
+    if (row['Status'] && !validStatuses.includes(row['Status'].toLowerCase())) {
+      warnings.push(`Row ${rowNum}: Status should be one of: ${validStatuses.join(', ')}`);
+    }
+  });
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    totalRows: data.length
+  };
+};
+
+// Validate client data
+export const validateClientData = (data) => {
+  const errors = [];
+  const warnings = [];
+  
+  data.forEach((row, index) => {
+    const rowNum = index + 2;
+    
+    if (!row['Client Name']) {
+      errors.push(`Row ${rowNum}: Client Name is required`);
+    }
+    
+    if (row['Email'] && !isValidEmail(row['Email'])) {
+      errors.push(`Row ${rowNum}: Invalid email format`);
+    }
+    
+    if (!row['Email'] && !row['Phone']) {
+      warnings.push(`Row ${rowNum}: No contact information (email or phone)`);
+    }
+  });
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    totalRows: data.length
+  };
+};
+
+// Validate service data
+export const validateServiceData = (data) => {
+  const errors = [];
+  const warnings = [];
+  
+  data.forEach((row, index) => {
+    const rowNum = index + 2;
+    
+    if (!row['Service Name']) {
+      errors.push(`Row ${rowNum}: Service Name is required`);
+    }
+    
+    if (row['Default Price'] && isNaN(row['Default Price'])) {
+      errors.push(`Row ${rowNum}: Default Price must be a number`);
+    }
+    
+    if (row['Tax Rate (%)'] && isNaN(row['Tax Rate (%)'])) {
+      errors.push(`Row ${rowNum}: Tax Rate must be a number`);
+    }
+  });
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    totalRows: data.length
+  };
+};
+
+// Helper functions
+const isValidDate = (dateString) => {
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date);
+};
+
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+// Export existing invoices to Excel
+export const exportInvoices = (invoices, clients) => {
+  const data = invoices.map(invoice => {
+    const client = clients.find(c => c.id === invoice.client_id);
+    return {
+      'Invoice Number': invoice.invoice_number,
+      'Client Name': client?.name || 'Unknown',
+      'Project Title': invoice.project_title,
+      'Project Description': invoice.project_description,
+      'Invoice Date': invoice.invoice_date || invoice.created_date,
+      'Due Date': invoice.delivery_date,
+      'Subtotal': invoice.subtotal,
+      'Tax Amount': invoice.tax_amount,
+      'Total Amount': invoice.total_amount,
+      'Status': invoice.status,
+      'Created Date': invoice.created_date,
+      'Notes': invoice.notes
+    };
+  });
+  
+  return exportToExcel(data, 'invoices_export.xlsx', 'Invoices');
+};
+
+// Export existing clients to Excel
+export const exportClients = (clients) => {
+  const data = clients.map(client => ({
+    'Client Name': client.name,
+    'Email': client.email,
+    'Phone': client.phone,
+    'Address': client.address,
+    'Tax Number': client.tax_number,
+    'Contact Person': client.contact_person,
+    'Created Date': client.created_date,
+    'Notes': client.notes
+  }));
+  
+  return exportToExcel(data, 'clients_export.xlsx', 'Clients');
+};
+
+// Export existing services to Excel
+export const exportServices = (services) => {
+  const data = services.map(service => ({
+    'Service Name': service.name,
+    'Description': service.description,
+    'Default Price': service.default_price,
+    'Unit': service.unit,
+    'Tax Rate (%)': service.tax_rate,
+    'Category': service.category,
+    'Created Date': service.created_date
+  }));
+  
+  return exportToExcel(data, 'services_export.xlsx', 'Services');
+};

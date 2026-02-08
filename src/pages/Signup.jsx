@@ -1,0 +1,421 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Building2, Loader2, Lock, Mail, Phone, User } from "lucide-react";
+import { createPageUrl } from "@/utils";
+import { userService } from "@/services/ExcelUserService";
+import { useAuth } from "@/components/auth/AuthContext";
+
+const USERS_STORAGE_KEY = "breakapi_users";
+const PLAN_OPTIONS = [
+  { value: "starter", label: "Starter" },
+  { value: "professional", label: "Professional" },
+  { value: "enterprise", label: "Enterprise" }
+];
+
+export default function Signup() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [plan, setPlan] = useState("starter");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [createdUserId, setCreatedUserId] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const validateStepOne = () => {
+    if (!fullName.trim()) {
+      setError("Full name is required");
+      return false;
+    }
+
+    if (!email.trim()) {
+      setError("Email is required");
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateStepTwo = () => {
+    if (!plan) {
+      setError("Please select a plan");
+      return false;
+    }
+    return true;
+  };
+
+  const handleStepOne = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    if (!validateStepOne()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const existingUser = userService.getUserByEmail(normalizedEmail);
+
+      if (existingUser) {
+        setError("An account with this email already exists");
+        setIsLoading(false);
+        return;
+      }
+
+      const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
+      if (storedUsers.some((user) => user.email === normalizedEmail)) {
+        setError("An account with this email already exists");
+        setIsLoading(false);
+        return;
+      }
+
+      const now = new Date();
+      const newUserRecord = {
+        id: Date.now().toString(),
+        email: normalizedEmail,
+        full_name: fullName.trim(),
+        password,
+        role: "user",
+        plan,
+        status: "pending",
+        company_name: "",
+        company_address: "",
+        phone: "",
+        currency: "ZAR",
+        timezone: "UTC",
+        logo_url: null,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString()
+      };
+
+      storedUsers.push(newUserRecord);
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
+
+      userService.createUser({
+        email: normalizedEmail,
+        full_name: fullName.trim(),
+        display_name: fullName.trim(),
+        company_name: "",
+        company_address: "",
+        role: "user",
+        plan,
+        status: "pending",
+        currency: "ZAR",
+        timezone: "UTC",
+        phone: ""
+      });
+
+      setCreatedUserId(newUserRecord.id);
+      setStep(2);
+    } catch (err) {
+      setError(err?.message || "Failed to create account");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStepTwo = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    if (!validateStepTwo()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const now = new Date();
+      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const normalizedEmail = email.trim().toLowerCase();
+      const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
+      const userIndex = storedUsers.findIndex((user) => user.id === createdUserId);
+
+      if (userIndex === -1) {
+        throw new Error("Unable to find your account. Please try again.");
+      }
+
+      storedUsers[userIndex] = {
+        ...storedUsers[userIndex],
+        plan,
+        status: "trial",
+        trial_started_at: now.toISOString(),
+        trial_ends_at: trialEndsAt.toISOString(),
+        company_name: companyName.trim(),
+        company_address: companyAddress.trim(),
+        phone: phone.trim(),
+        updated_at: now.toISOString()
+      };
+
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
+
+      const excelUser = userService.getUserByEmail(normalizedEmail);
+      if (excelUser) {
+        userService.updateUser(excelUser.id, {
+          plan,
+          status: "trial",
+          trial_started_at: now.toISOString(),
+          trial_ends_at: trialEndsAt.toISOString(),
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim(),
+          phone: phone.trim()
+        });
+      }
+
+      await login({
+        email: normalizedEmail,
+        password,
+        full_name: fullName.trim(),
+        company_name: companyName.trim(),
+        company_address: companyAddress.trim()
+      });
+      setSuccess(true);
+      setTimeout(() => {
+        navigate(createPageUrl("Dashboard"));
+      }, 800);
+    } catch (err) {
+      setError(err?.message || "Failed to finish setup");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md shadow-2xl border-0">
+        <CardHeader className="space-y-1 pb-6 text-center">
+          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <User className="w-8 h-8 text-white" />
+          </div>
+          <CardTitle className="text-2xl font-bold">Create your account</CardTitle>
+          <p className="text-sm text-slate-500">Step {step} of 2</p>
+        </CardHeader>
+        <CardContent>
+          {step === 1 ? (
+            <form onSubmit={handleStepOne} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full name</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="Jane Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="********"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 ring-2 ring-indigo-500/40 hover:ring-indigo-500/70 transition"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating account...
+                  </span>
+                ) : (
+                  "Create account"
+                )}
+              </Button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => navigate(createPageUrl("Login"))}
+                  className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  Already have an account? Sign in
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleStepTwo} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="plan">Plan</Label>
+                <select
+                  id="plan"
+                  value={plan}
+                  onChange={(e) => setPlan(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  required
+                >
+                  {PLAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">Your 7-day trial starts after this step.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Company (optional)</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Acme Inc"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="companyAddress">Company address</Label>
+                <Input
+                  id="companyAddress"
+                  type="text"
+                  placeholder="123 Main St, City, Country"
+                  value={companyAddress}
+                  onChange={(e) => setCompanyAddress(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+27 123 456 7890"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                  Trial activated. Redirecting to your dashboard...
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setStep(1)}
+                  disabled={isLoading}
+                >
+                  Back
+                </Button>
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={isLoading}>
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Finishing setup...
+                    </span>
+                  ) : (
+                    "Finish"
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
