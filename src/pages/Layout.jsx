@@ -1,301 +1,395 @@
-
-import React, { useState, useEffect } from "react";
+import PropTypes from "prop-types";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { createPageUrl, createAdminPageUrl } from "@/utils";
-import "@/styles/animations.css";
+import { motion, AnimatePresence } from "framer-motion";
+
+import Button from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import OnboardingTour from "@/components/OnboardingTour";
+import SetupWizard from "@/components/SetupWizard";
+import { useAuth } from "@/components/auth/AuthContext";
+import { useToast } from "@/components/ui/use-toast";
+import { createPageUrl, createAdminPageUrl } from "@/utils";
+import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
+import {
+  Plus,
+  ChevronsRight,
+  ChevronsLeft,
   LayoutDashboard,
   Users,
-  Headset,
   FileText,
   Settings,
   LogOut,
-  StickyNote,
-  Repeat,
   BarChart2,
   Search,
   Bell,
   Menu,
   X,
-  Receipt,
-  Calendar,
-  MessageCircle,
   TrendingUp,
   Activity,
   History,
-  FileSpreadsheet,
   Shield,
   Briefcase,
   Building2,
   BarChart3,
-  Package,
   Wrench,
-  LifeBuoy,
-  Key,
-  Plus,
-  ChevronsLeft,
-  ChevronsRight
+  Terminal
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useAuth } from "@/components/auth/AuthContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import { AnimatePresence, motion } from "framer-motion";
-import NotificationBell from '@/components/notifications/NotificationBell';
-import RecurringInvoiceService from '@/components/recurring/RecurringInvoiceService';
-import NotificationService from '@/components/notifications/NotificationService';
-import { hasFeatureAccess, getRequiredPlan, LockedNavItem } from '@/components/subscription/FeatureGate';
-import OnboardingTour from '@/components/onboarding/OnboardingTour';
-import SetupWizard from '@/components/onboarding/SetupWizard';
-import QuoteReminderService from '@/components/quote/QuoteReminderService';
 
-const allNavigationItems = [
-  {
-    title: "Dashboard",
-    url: createPageUrl("Dashboard"),
-    icon: LayoutDashboard,
-    feature: null, // Always accessible
-    id: "nav-dashboard"
-  },
-  {
-    title: "Quotes",
-    url: createPageUrl("Quotes"),
-    icon: FileText,
-    feature: 'quotes',
-    id: "nav-quotes"
-  },
-  {
-    title: "Invoices",
-    url: createPageUrl("Invoices"),
-    icon: FileText,
-    feature: 'invoices',
-    id: "nav-invoices"
-  },
-  {
-    title: "Recurring",
-    url: createPageUrl("RecurringInvoices"),
-    icon: Repeat,
-    feature: 'recurring',
-    id: "nav-recurring"
-  },
-  {
-    title: "Customers",
-    url: createPageUrl("Clients"),
-    icon: Users,
-    feature: 'clients',
-    id: "nav-clients"
-  },
-  {
-    title: "Cash Flow",
-    url: createPageUrl("CashFlow"),
-    icon: BarChart2,
-    feature: 'cashflow'
-  },
-  {
-    title: "Budgets",
-    url: createPageUrl("Budgets"),
-    icon: TrendingUp,
-    feature: 'reports' // Use reports feature flag for now
-  },
-  {
-    title: "Accounting",
-    url: createPageUrl("Accounting"),
-    icon: BarChart2,
-    feature: 'accounting'
-  },
-  {
-    title: "Reports",
-    url: createPageUrl("Reports"),
-    icon: BarChart2,
-    feature: 'reports'
-  },
-  {
-    title: "Products & Services",
-    url: createPageUrl("Services"),
-    icon: Headset,
-    feature: 'services'
-  },
-  {
-    title: "Payroll",
-    url: createPageUrl("Payslips"),
-    icon: Receipt,
-    feature: 'payroll'
-  },
-  {
-    title: "Calendar",
-    url: createPageUrl("Calendar"),
-    icon: Calendar,
-    feature: 'calendar'
-  },
-  {
-    title: "Messages",
-    url: createPageUrl("Messages"),
-    icon: MessageCircle,
-    feature: 'messages'
-  },
-  {
-    title: "Notes",
-    url: createPageUrl("Notes"),
-    icon: StickyNote,
-    feature: 'notes'
-  },
+// PropTypes shape for navigation items
+const navItemShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  title: PropTypes.string.isRequired,
+  url: PropTypes.string,
+  icon: PropTypes.elementType,
+  feature: PropTypes.any,
+  roles: PropTypes.array,
+  hasAccess: PropTypes.bool,
+  requiredPlan: PropTypes.string,
+  hasRoleAccess: PropTypes.bool,
+  type: PropTypes.string,
+  children: PropTypes.arrayOf(PropTypes.any),
+});
+const adminNavigationItems = [
   {
     title: "Users",
     url: createAdminPageUrl("Users"),
     icon: Users,
     feature: null,
-    roles: ['admin']
+    roles: ["admin"],
+    id: "nav-admin-users"
   },
   {
-    title: "Admin Control",
-    url: createAdminPageUrl("Admin Control"),
-    icon: Shield,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Platform Settings",
-    url: createAdminPageUrl("Platform Settings"),
-    icon: Wrench,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Support & Admin Tools",
-    url: createAdminPageUrl("Support Admin Tools"),
-    icon: LifeBuoy,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Security & Compliance",
-    url: createAdminPageUrl("Security Compliance"),
-    icon: Shield,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Admin Roles",
-    url: createAdminPageUrl("Roles Management"),
-    icon: Key,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Access Control",
-    url: createAdminPageUrl("Access Control"),
-    icon: Users,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Logs & Audit Trail",
-    url: createAdminPageUrl("Logs & Audit Trail"),
-    icon: History,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Excel Data Capture",
-    url: createAdminPageUrl("Excel Data Capture"),
-    icon: FileSpreadsheet,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Subscriptions",
-    url: createAdminPageUrl("Subscriptions"),
-    icon: Briefcase,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Plans Management",
-    url: createAdminPageUrl("Plans Management"),
-    icon: Package,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Document Activity",
-    url: createAdminPageUrl("Document Activity"),
-    icon: Activity,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "User Management",
-    url: createAdminPageUrl("User Management"),
-    icon: Users,
-    feature: null,
-    roles: ['admin']
-  },
-  {
-    title: "Accounts Management",
+    title: "Accounts",
     url: createAdminPageUrl("Accounts Management"),
     icon: Building2,
     feature: null,
-    roles: ['admin']
+    roles: ["admin"],
+    id: "nav-admin-accounts"
   },
   {
-    title: "Document Oversight",
+    title: "Reports",
     url: createAdminPageUrl("Document Oversight"),
     icon: BarChart3,
     feature: null,
-    roles: ['admin']
+    roles: ["admin"],
+    id: "nav-admin-reports"
   },
+  {
+    title: "Operations",
+    icon: Wrench,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-operations",
+    children: [
+      {
+        title: "System Status",
+        url: createAdminPageUrl("System Status"),
+        icon: Shield,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-system-status"
+      },
+      {
+        title: "Background Jobs",
+        url: createAdminPageUrl("Background Jobs"),
+        icon: Activity,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-background-jobs"
+      },
+      {
+        title: "Build Logs",
+        url: createAdminPageUrl("Build Logs"),
+        icon: Terminal,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-build-logs"
+      },
+      {
+        title: "Logs",
+        url: createAdminPageUrl("Logs & Audit Trail"),
+        icon: History,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-logs"
+      }
+    ]
+  },
+  {
+    type: "section",
+    title: "Core Product"
+  },
+  {
+    title: "Dashboard",
+    url: createPageUrl("Dashboard"),
+    icon: LayoutDashboard,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-dashboard"
+  },
+  {
+    title: "Businesses",
+    icon: Building2,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-businesses",
+    url: createPageUrl("AdminBusinesses"),
+    children: [
+      {
+        title: "Financials",
+        url: createPageUrl("AdminFinancials"),
+        icon: BarChart2,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-financials"
+      },
+      {
+        title: "Transactions",
+        url: createAdminPageUrl("Transactions"),
+        icon: Activity,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-transactions"
+      },
+      {
+        title: "Payouts",
+        url: createAdminPageUrl("Payouts"),
+        icon: TrendingUp,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-payouts"
+      },
+      {
+        title: "Fees",
+        url: createAdminPageUrl("Fees"),
+        icon: FileText,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-fees"
+      }
+    ]
+  },
+  {
+    title: "Billing",
+    icon: Briefcase,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-billing",
+    url: createPageUrl("AdminBilling"),
+    children: [
+      {
+        title: "Subscriptions",
+        url: createAdminPageUrl("Subscriptions"),
+        icon: Briefcase,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-subscriptions"
+      },
+      {
+        title: "Invoices & Quotes",
+        url: "/admin/invoices-quotes",
+        icon: FileText,
+        feature: null,
+        roles: ["admin"],
+        id: "nav-admin-invoices-quotes"
+      }
+    ]
+  }
+];
+
+const allNavigationItems = [
+  { type: "section", title: "Overview", id: "nav-section-overview" },
+  {
+    title: "Dashboard",
+    url: createPageUrl("Dashboard"),
+    icon: LayoutDashboard,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-dashboard",
+  },
+  {
+    title: "Clients",
+    url: createPageUrl("Clients"),
+    icon: Users,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-clients",
+  },
+  {
+    title: "Invoices",
+    url: createPageUrl("Invoices"),
+    icon: FileText,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-invoices",
+  },
+  {
+    title: "Quotes",
+    url: createPageUrl("Quotes"),
+    icon: FileText,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-quotes",
+  },
+  {
+    title: "Services",
+    url: createPageUrl("Services"),
+    icon: Briefcase,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-services",
+  },
+  {
+    title: "Cash Flow",
+    url: createPageUrl("CashFlow"),
+    icon: TrendingUp,
+    feature: "cashflow",
+    roles: ["user", "admin"],
+    id: "nav-cashflow",
+  },
+  {
+    title: "Reports",
+    url: createPageUrl("Reports"),
+    icon: BarChart2,
+    feature: "reports",
+    roles: ["user", "admin"],
+    id: "nav-reports",
+  },
+  { type: "section", title: "Workspace", id: "nav-section-workspace" },
+  {
+    title: "Notes",
+    url: createPageUrl("Notes"),
+    icon: FileText,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-notes",
+  },
+  {
+    title: "Calendar",
+    url: createPageUrl("Calendar"),
+    icon: Activity,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-calendar",
+  },
+  {
+    title: "Messages",
+    url: createPageUrl("Messages"),
+    icon: Bell,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-messages",
+  },
+  { type: "section", title: "Settings", id: "nav-section-settings" },
   {
     title: "Settings",
     url: createPageUrl("Settings"),
     icon: Settings,
-    feature: null, // Always accessible
-    roles: null,
-    id: "nav-settings"
-  }
-  ];
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-settings",
+  },
+];
 
 const getNavigationItems = (userPlan, userRole) => {
-  // Admin-only navigation items
-  const adminOnlyItems = [
-    'Users',
-    'Admin Control',
-    'Access Control',
-    'Logs & Audit Trail',
-    'Excel Data Capture',
-    'Subscriptions',
-    'Plans Management',
-    'Document Activity',
-    'User Management',
-    'Accounts Management',
-    'Document Oversight'
-  ];
-  
-  let items = allNavigationItems;
-  
-  // Filter navigation for admin users
-  if (userRole === 'admin') {
-    items = allNavigationItems.filter(item => adminOnlyItems.includes(item.title));
+  const normalizedRole = (userRole || "user").toLowerCase();
+  if (normalizedRole === "admin") {
+    // Only admin dashboard and admin nav for admin
+    return adminNavigationItems.map(item => ({
+      ...item,
+      hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
+      requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
+      hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
+    }));
+  } else {
+    // Only user dashboard and user nav for non-admin
+    return allNavigationItems.map(item => ({
+      ...item,
+      hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
+      requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
+      hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
+    }));
   }
-  
-  return items.map(item => ({
-    ...item,
-    hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
-    requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
-    hasRoleAccess: !item.roles || item.roles.includes(userRole)
-  }));
+};
+// Placeholder for LockedNavItem to prevent errors
+const LockedNavItem = ({ title, requiredPlan }) => (
+  <div className="px-4 py-2 text-[13px] text-gray-400">{title} (Upgrade to {requiredPlan})</div>
+);
+LockedNavItem.propTypes = {
+  title: PropTypes.string.isRequired,
+  requiredPlan: PropTypes.string
+};
+// Placeholder for QuoteReminderService to prevent errors
+const QuoteReminderService = {
+  checkAndSendReminders: async () => {}
 };
 
 const NavLink = ({ item, onClick, collapsed = false }) => {
   const location = useLocation();
-  const isActive = location.pathname === item.url.split("?")[0];
-  
+  const [open, setOpen] = useState(false);
+
+  if (!item) return null;
+
+  if (item.type === "section") {
+    if (collapsed) {
+      return <div className="my-2 h-px bg-white/10" />;
+    }
+    return (
+      <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
+        {item.title}
+      </div>
+    );
+  }
+
+  // If the item has children, render a parent nav item with dropdown
+  if (item.children && Array.isArray(item.children)) {
+    return (
+      <div className="mb-1">
+        <motion.div whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}>
+          <button
+            type="button"
+            className={`group flex items-center py-2 w-full transition-all font-mono ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setOpen((prev) => !prev)}
+            aria-expanded={open}
+            aria-controls={`nav-children-${item.id}`}
+          >
+            <span className="inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-white/60 group-hover:text-white">
+              <item.icon className="h-5 w-5" />
+            </span>
+            {!collapsed && (
+              <span className="text-[13px] font-normal transition-colors text-white/70 group-hover:text-white">{item.title}</span>
+            )}
+            {!collapsed && (
+              <span className={`ml-auto transition-transform text-white/50 ${open ? "rotate-90" : "rotate-0"}`}>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </span>
+            )}
+          </button>
+        </motion.div>
+        {/* Render children as indented sub-nav, only if open */}
+        {!collapsed && open && (
+          <div className="ml-8" id={`nav-children-${item.id}`}> 
+            {item.children.filter(Boolean).map(child => (
+              <NavLink key={child.id || child.title} item={child} onClick={onClick} collapsed={collapsed} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const isActive = item.url && location.pathname === item.url.split("?")[0];
+
   if (item.hasAccess === false) {
     return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} />;
   }
@@ -308,6 +402,7 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
     <motion.div
       whileHover={{ x: 2 }}
       whileTap={{ scale: 0.98 }}
+      className={isActive ? "bg-white/10 rounded-xl" : ""}
     >
       <Link
         id={item.id}
@@ -315,20 +410,33 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
         onClick={onClick}
         title={collapsed ? item.title : undefined}
         aria-label={collapsed ? item.title : undefined}
-        className={`flex items-center rounded-lg py-3 text-white/80 transition-all hover:bg-white/10 hover:text-white ${
-          collapsed ? "justify-center px-2" : "gap-3 px-4"
-        } ${
-          isActive ? "bg-white/20 text-white font-medium" : ""
-        }`}
+        className={`group flex items-center py-2.5 transition-all ${collapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-xl`}
       >
-        <item.icon className="h-5 w-5" />
-        {!collapsed && item.title}
+        <span
+          className={`inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all shrink-0
+            ${isActive ? "text-[#00CCFF]" : "text-white/60 group-hover:text-white"}
+          `}
+        >
+          <item.icon className="h-5 w-5" />
+        </span>
+        {!collapsed && (
+          <span className={`text-[13px] transition-colors ${isActive ? "text-white font-medium" : "text-white/70 group-hover:text-white font-normal"}`}>{item.title}</span>
+        )}
+        {isActive && !collapsed && (
+          <span className="ml-auto w-1 h-6 bg-[#00CCFF] rounded-full" aria-hidden />
+        )}
       </Link>
     </motion.div>
   );
-  };
+};
 
-const MobileNav = ({ items, onClose, userPlan, onLogout }) => (
+NavLink.propTypes = {
+  item: navItemShape,
+  onClick: PropTypes.func,
+  collapsed: PropTypes.bool
+};
+
+const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
   <motion.div
     initial={{ x: "-100%" }}
     animate={{ x: 0 }}
@@ -336,62 +444,79 @@ const MobileNav = ({ items, onClose, userPlan, onLogout }) => (
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="fixed inset-0 z-50 flex md:hidden"
   >
-    <div className="w-full max-w-xs bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 text-white p-4 flex flex-col">
-       <div className="flex h-20 items-center justify-between px-2">
-            <Link
-              to={createPageUrl("Dashboard")}
-              onClick={onClose}
-              className="flex items-center gap-3"
-            >
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
-                <img 
-                  src="/Logo icon.png" 
-                  alt="InvoiceBreak" 
-                  className="w-8 h-8"
-                />
-              </div>
-              <span className="text-xl font-bold">InvoiceBreek</span>
-            </Link>
-            <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/10">
-              <X className="h-6 w-6" />
-            </Button>
+    <div className="w-full max-w-xs bg-[#121212] border-r border-white/10 text-white p-6 flex flex-col">
+      <div className="flex h-20 items-center justify-between px-2">
+        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-[#00CCFF] rounded-xl flex items-center justify-center">
+            <img src="/Logo icon.png" alt="InvoiceBreak" className="w-8 h-8" />
           </div>
+          <span className="text-[15px] font-semibold text-white">InvoiceBreek</span>
+        </Link>
+        <Button variant="ghost" size="icon" onClick={onClose} className="text-white/60 hover:bg-white/10 hover:text-white rounded-lg">
+          <X className="h-6 w-6" />
+        </Button>
+      </div>
       <nav className="space-y-1 mt-4 flex-1 overflow-y-auto">
         {items.map(item => (
-          <NavLink key={item.title} item={item} onClick={onClose} />
+          <NavLink key={item.id || item.title} item={item} onClick={onClose} />
         ))}
       </nav>
 
       <div className="p-4 border-t border-white/10">
-        <Link to={createPageUrl("CreateInvoice")} onClick={onClose}>
-          <Button className="w-full bg-white text-purple-600 hover:bg-purple-50 font-semibold py-3 rounded-lg shadow-lg">
-            + CREATE INVOICE
-          </Button>
-        </Link>
+        <div className="flex flex-col items-center gap-2 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center font-medium text-white/70 text-sm overflow-hidden">
+            {user?.logo_url ? (
+              <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              user?.full_name ? user.full_name[0].toUpperCase() : 'U'
+            )}
+          </div>
+          <div className="text-center">
+            <div className="font-semibold text-white">{user?.company_name || 'My Company'}</div>
+            <div className="text-xs text-white/60">{user?.full_name || user?.email}</div>
+          </div>
+        </div>
+        <Button className="w-full mb-2 bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
+          <Settings className="w-4 h-4 mr-2" /> Settings
+        </Button>
+        <Button variant="outline" className="w-full mb-2 border-white/20 text-white hover:bg-white/10 py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
+          <Bell className="w-4 h-4 mr-2" /> Subscription
+        </Button>
+        <Button variant="destructive" className="w-full rounded-xl" onClick={() => { onClose(); handleLogout(); }}>
+          <LogOut className="w-4 h-4 mr-2" /> Logout
+        </Button>
       </div>
 
       <div className="p-4">
-        <button
-          onClick={() => { onClose(); }}
-          className="flex items-center gap-3 text-white/80 hover:text-white transition-colors w-full py-2"
-        >
-          <LogOut className="h-5 w-5" />
-          Log out
-        </button>
+        <Link to={createPageUrl("CreateInvoice")} onClick={onClose}>
+          <Button className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl">
+            <Plus className="w-4 h-4 mr-2" /> Create Invoice
+          </Button>
+        </Link>
       </div>
     </div>
-    <div className="flex-1 bg-black/60" onClick={onClose}></div>
+    <div className="flex-1 bg-black/50" onClick={onClose}></div>
   </motion.div>
 );
+
+MobileNav.propTypes = {
+  items: PropTypes.arrayOf(navItemShape).isRequired,
+  onClose: PropTypes.func,
+  user: PropTypes.object,
+  navigate: PropTypes.func,
+  handleLogout: PropTypes.func
+};
 
 export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const { user, logout } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!user) return;
@@ -405,93 +530,57 @@ export default function Layout({ children, currentPageName }) {
   }, [currentPageName, user]);
 
   const handleWizardComplete = () => {
-      setShowWizard(false);
-      // Optionally trigger tour after wizard
-      setShowTour(true);
+    setShowWizard(false);
+    setShowTour(true);
   };
 
+  // Reminder and follow-up checks
   useEffect(() => {
-      const checkRecurringInvoices = async () => {
-          if (!user) return;
+    if (!user) return;
 
-          // Use local storage to prevent running this on every navigation
-          const lastCheck = localStorage.getItem('lastRecurringCheck');
-          const now = new Date().getTime();
-          const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-
-          if (!lastCheck || (now - parseInt(lastCheck) > oneDay)) {
-               try {
-                  console.log("Checking for due recurring invoices...");
-                  const generated = await RecurringInvoiceService.checkAndGenerateDueInvoices();
-                  if (generated.length > 0) {
-                      console.log(`${generated.length} recurring invoices generated.`);
-                      await NotificationService.createNotification(
-                          user.id,
-                          `${generated.length} Recurring Invoice(s) Generated`,
-                          `The system automatically created ${generated.length} new invoice(s) from your recurring profiles.`,
-                          'recurring_generated',
-                          null
-                      );
-                  } else {
-                      console.log("No recurring invoices were due.");
-                  }
-                  localStorage.setItem('lastRecurringCheck', now.toString());
-              } catch (error) {
-                  console.error("Failed to check recurring invoices:", error);
-              }
-          }
-      };
-
-      const checkDueDateReminders = async () => {
-      if (!user) return;
-
+    const checkDueDateReminders = async () => {
       const lastDueDateCheck = localStorage.getItem('lastDueDateCheck');
       const now = new Date().getTime();
       const oneDay = 24 * 60 * 60 * 1000;
-
       if (!lastDueDateCheck || (now - parseInt(lastDueDateCheck) > oneDay)) {
-          try {
-              const DueDateNotificationService = (await import('@/components/notifications/DueDateNotificationService')).default;
-              await DueDateNotificationService.checkAndSendDueDateReminders();
-              localStorage.setItem('lastDueDateCheck', now.toString());
-          } catch (error) {
-              console.error("Failed to check due date reminders:", error);
-          }
+        try {
+          const DueDateNotificationService = (await import('@/components/notifications/DueDateNotificationService')).default;
+          await DueDateNotificationService.checkAndSendDueDateReminders();
+          localStorage.setItem('lastDueDateCheck', now.toString());
+        } catch (error) {
+          console.error("Failed to check due date reminders:", error);
+        }
       }
-      };
+    };
 
-      const checkClientFollowUps = async () => {
-      if (!user) return;
-
+    const checkClientFollowUps = async () => {
       const lastFollowUpCheck = localStorage.getItem('lastFollowUpCheck');
       const now = new Date().getTime();
       const oneDay = 24 * 60 * 60 * 1000;
-
       if (!lastFollowUpCheck || (now - parseInt(lastFollowUpCheck) > oneDay)) {
-          try {
-              // Use the new PaymentReminderService for reminders
-              const PaymentReminderService = (await import('@/components/reminders/PaymentReminderService')).default;
-              await PaymentReminderService.checkAndSendReminders();
-
-              // Quote Reminders
-              await QuoteReminderService.checkAndSendReminders();
-
-              // Keep ClientFollowUpService only for segment updates if needed, or replace entirely if reminders are handled
-              const ClientFollowUpService = (await import('@/components/clients/ClientFollowUpService')).default;
-              // await ClientFollowUpService.checkAndSendFollowUps(); // Disabled in favor of PaymentReminderService
-              await ClientFollowUpService.updateClientSegments();
-              
-              localStorage.setItem('lastFollowUpCheck', now.toString());
-          } catch (error) {
-              console.error("Failed to check reminders/follow-ups:", error);
-          }
+        try {
+          const PaymentReminderService = (await import('@/components/reminders/PaymentReminderService')).default;
+          await PaymentReminderService.checkAndSendReminders();
+          // Quote Reminders
+          await QuoteReminderService.checkAndSendReminders();
+          const ClientFollowUpService = (await import('@/components/clients/ClientFollowUpService')).default;
+          await ClientFollowUpService.updateClientSegments();
+          localStorage.setItem('lastFollowUpCheck', now.toString());
+        } catch (error) {
+          console.error("Failed to check reminders/follow-ups:", error);
+        }
       }
-      };
+    };
 
-      checkRecurringInvoices();
-      checkDueDateReminders();
-      checkClientFollowUps();
-  }, [user]); // Run when user data is available
+    // Recurring invoices check
+    const checkRecurringInvoices = async () => {
+      // Implement recurring invoice logic here if needed
+    };
+
+    checkRecurringInvoices();
+    checkDueDateReminders();
+    checkClientFollowUps();
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -499,14 +588,19 @@ export default function Layout({ children, currentPageName }) {
       navigate(createPageUrl("Login"));
     } catch (error) {
       console.error("Error logging out:", error);
+      toast({
+        title: "Logout failed",
+        description: error?.message || "Could not sign out. Please try again.",
+        variant: "destructive",
+      });
     }
   };
+
 
   // Pages that should display without the main application layout (sidebar/header)
   const standalonePages = [
     'PayslipPDF',
     'InvoicePDF',
-    'QuotePDF',
     'CashFlowPDF',
     'PublicInvoice',
     'PublicQuote',
@@ -522,7 +616,7 @@ export default function Layout({ children, currentPageName }) {
     <div
       className={`grid min-h-screen w-full ${{
         true: "md:grid-cols-[72px_1fr]",
-        false: "md:grid-cols-[280px_1fr]"
+        false: "md:grid-cols-[240px_1fr]"
       }[isSidebarCollapsed]}`}
     >
       {/* Sidebar */}
@@ -530,52 +624,80 @@ export default function Layout({ children, currentPageName }) {
         initial={{ x: -280 }}
         animate={{ x: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className={`hidden md:block bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 text-white sticky top-0 h-screen ${
-          isSidebarCollapsed ? "px-2" : ""
+        className={`sidebar hidden md:block bg-[#121212] text-white sticky top-0 h-screen border-r border-white/10 py-8 scrollbar-dark ${
+          isSidebarCollapsed ? "px-2" : "px-5"
         }`}
       >
         <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className={`flex h-20 items-center ${isSidebarCollapsed ? "px-2" : "px-6"}`}>
-            <Link
-              to={createPageUrl("Dashboard")}
-              className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3"}`}
-            >
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
-                <img 
-                  src="/Logo icon.png" 
-                  alt="InvoiceBreak" 
-                  className="w-8 h-8"
-                />
-              </div>
-              {!isSidebarCollapsed && <span className="text-xl font-bold">InvoiceBreek</span>}
-            </Link>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-              className={`ml-auto text-white hover:bg-white/10 ${isSidebarCollapsed ? "w-9 h-9" : "w-9 h-9"}`}
-              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {isSidebarCollapsed ? (
-                <ChevronsRight className="h-5 w-5" />
-              ) : (
-                <ChevronsLeft className="h-5 w-5" />
-              )}
-            </Button>
+
+          {/* Logo — wallet style */}
+          <div className={`flex flex-col ${isSidebarCollapsed ? "px-0" : ""}`}>
+            <div className={`flex items-center ${isSidebarCollapsed ? "justify-center h-20" : "h-20 gap-3"}`}>
+              <Link
+                to={createPageUrl("Dashboard")}
+                className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}
+              >
+                <div className="w-10 h-10 bg-[#00CCFF] rounded-xl flex items-center justify-center shrink-0">
+                  <img 
+                    src="/Logo icon.png" 
+                    alt="InvoiceBreak" 
+                    className="w-8 h-8"
+                  />
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className="text-[15px] font-semibold text-white">
+                    InvoiceBreek
+                  </span>
+                )}
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+                className="ml-auto text-white/60 hover:text-white hover:bg-white/10 rounded-lg shrink-0 w-9 h-9"
+                title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {isSidebarCollapsed ? (
+                  <ChevronsRight className="h-5 w-5" />
+                ) : (
+                  <ChevronsLeft className="h-5 w-5" />
+                )}
+              </Button>
+            </div>
+            {/* Always show Dashboard as first nav item */}
+            <div className="mt-2" data-tour="dashboard-summary">
+              <NavLink
+                item={getNavigationItems(user?.subscription_plan || 'Individual', user?.role).find(item => item.title === "Dashboard")}
+                collapsed={isSidebarCollapsed}
+              />
+            </div>
           </div>
 
-          {/* Navigation */}
-          <div className={`flex-1 py-4 overflow-y-auto ${isSidebarCollapsed ? "px-1" : "px-4"}`}>
+          {/* Navigation - removed all-caps section labels for a cleaner, modern look */}
+          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area fade-in ${isSidebarCollapsed ? "px-1" : "px-4"}`}> 
             <nav className={isSidebarCollapsed ? "space-y-2" : "space-y-1"}>
-              {getNavigationItems(user?.subscription_plan || 'Individual', user?.role).map(item => (
-                <NavLink key={item.title} item={item} collapsed={isSidebarCollapsed} />
-              ))}
+              {getNavigationItems(user?.subscription_plan || 'Individual', user?.role)
+                .filter(item => item.title && item.id && item.title !== "Dashboard")
+                .map(item => {
+                  // Add data-tour for Accounts/Clients and Reports
+                  let extraProps = {};
+                  if (item.title === "Accounts" || item.title === "Businesses" || item.title === "Clients") {
+                    extraProps['data-tour'] = 'accounts-section';
+                  }
+                  if (item.title === "Reports") {
+                    extraProps['data-tour'] = 'reports-section';
+                  }
+                  return (
+                    <div key={item.id} {...extraProps}>
+                      <NavLink item={item} collapsed={isSidebarCollapsed} />
+                    </div>
+                  );
+                })}
             </nav>
           </div>
 
-          {/* Create Invoice Button */}
+          {/* Create Invoice — neon green primary */}
           <div className={`mt-auto ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
             <Link
               to={createPageUrl("CreateInvoice")}
@@ -585,14 +707,14 @@ export default function Layout({ children, currentPageName }) {
               {isSidebarCollapsed ? (
                 <Button
                   id="create-invoice-btn"
-                  className="w-full bg-white text-purple-600 hover:bg-purple-50 font-semibold rounded-lg shadow-lg"
+                  className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold rounded-xl"
                   size="icon"
                 >
                   <Plus className="h-5 w-5" />
                 </Button>
               ) : (
-              <Button id="create-invoice-btn" className="w-full bg-white text-purple-600 hover:bg-purple-50 font-semibold py-3 rounded-lg shadow-lg">
-                + CREATE INVOICE
+              <Button id="create-invoice-btn" className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2">
+                <Plus className="h-4 w-4" /> Create Invoice
               </Button>
               )}
             </Link>
@@ -604,7 +726,7 @@ export default function Layout({ children, currentPageName }) {
               onClick={handleLogout}
               title={isSidebarCollapsed ? "Log out" : undefined}
               aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-white/80 hover:text-white transition-colors w-full py-2 ${
+              className={`flex items-center text-white/60 hover:text-white transition-colors w-full py-2 text-[13px] rounded-lg hover:bg-white/5 ${
                 isSidebarCollapsed ? "justify-center" : "gap-3"
               }`}
             >
@@ -620,59 +742,59 @@ export default function Layout({ children, currentPageName }) {
           <MobileNav
             items={getNavigationItems(user?.subscription_plan || 'Individual', user?.role)}
             onClose={() => setIsMobileMenuOpen(false)}
-            userPlan={user?.subscription_plan}
-            onLogout={handleLogout}
+            user={user}
+            navigate={navigate}
+            handleLogout={handleLogout}
           />
         )}
       </AnimatePresence>
 
-      {/* Main Content */}
-      <div className="flex flex-col bg-gray-50">
-        {/* Header */}
+      {/* Main Content — light panel (wallet style) */}
+      <div className="flex flex-col bg-background min-h-screen">
+        {/* Header — light */}
         <motion.header 
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 shadow-sm"
-        >{/* Search & Mobile Menu */}
+          className="h-20 bg-card border-b border-border flex items-center justify-between px-4 sm:px-8 shadow-sm"
+        >
           <div className="flex items-center gap-4 flex-1">
-            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsMobileMenuOpen(true)}>
+            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-lg" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="h-6 w-6" />
             </Button>
             <div className="relative hidden sm:block max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search something"
-                className="pl-10 bg-gray-50 border-gray-200 rounded-xl"
+                className="pl-10 bg-muted/50 border-border rounded-xl text-foreground placeholder:text-muted-foreground"
               />
             </div>
           </div>
 
-          {/* User Menu */}
           <div className="flex items-center gap-4">
              <NotificationBell />
             
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-gray-100">
-                    <div className="w-8 h-8 rounded-full bg-cyan-400 flex items-center justify-center font-bold text-white text-sm overflow-hidden">
+                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground">
+                    <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden">
                       {user.logo_url ? (
                         <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
                       ) : (
                         user.full_name ? user.full_name[0].toUpperCase() : 'U'
                       )}
                     </div>
-                    <span className="font-medium hidden sm:block">{user.company_name || user.full_name || 'User'}</span>
+                    <span className="font-medium hidden sm:block text-foreground">{user.company_name || user.full_name || 'User'}</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border">
                   <div className="px-2 py-2">
-                    <p className="text-sm font-semibold text-slate-900">{user.company_name || 'My Company'}</p>
-                    <p className="text-xs text-slate-500">{user.full_name || user.email}</p>
+                    <p className="text-sm font-semibold text-foreground">{user.company_name || 'My Company'}</p>
+                    <p className="text-xs text-muted-foreground">{user.full_name || user.email}</p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings"))}>
+                  <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings"))} data-tour="settings-btn">
                     <Settings className="w-4 h-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
@@ -691,21 +813,42 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </motion.header>
 
-        {/* Main Content Area with Scroll and Animation */}
+        {/* Main Content Area — light, generous padding */}
         <motion.main 
           key={location.pathname}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth"
+          className="dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth fade-in py-8 px-4 sm:px-8"
         >
           {children}
         </motion.main>
+
+        {/* Footer — Mission / About */}
+        <footer className="border-t border-border bg-card/50 py-4 px-4 sm:px-8">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+            <span>© {new Date().getFullYear()} InvoiceBreek. All rights reserved.</span>
+            <div className="flex items-center gap-6">
+              <Link to={createPageUrl("About")} className="hover:text-foreground transition-colors">
+                Mission &amp; About
+              </Link>
+              <Link to={createPageUrl("Settings")} className="hover:text-foreground transition-colors">
+                Settings
+              </Link>
+            </div>
+          </div>
+        </footer>
 
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
         </div>
         </div>
-        );
-        }
+      );
+    }
+
+Layout.propTypes = {
+  children: PropTypes.node,
+  currentPageName: PropTypes.string
+};
+

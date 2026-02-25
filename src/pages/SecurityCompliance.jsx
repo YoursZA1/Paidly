@@ -72,6 +72,9 @@ export default function SecurityCompliance() {
                 <p className="text-slate-600">
                   Role-based access control, audit logs, data access policies, and backup management
                 </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Access is enforced by Supabase Row Level Security (RLS) and admin role checks. See docs: SECURITY_AND_COMPLIANCE.md, SUPABASE_SECURITY.md
+                </p>
               </div>
             </div>
             <div className="flex gap-2">

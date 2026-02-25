@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { User, BankingDetail } from "@/api/entities";
-import { UploadFile } from "@/api/integrations";
-import { Loader2, UploadCloud, CheckCircle, ArrowRight, Building, CreditCard, Image as ImageIcon } from "lucide-react";
-import CurrencySelector from "../CurrencySelector";
+import { uploadToBucket } from "@/services/SupabaseMultiBucketService";
+import { Loader2, UploadCloud, CheckCircle, ArrowRight, Building, CreditCard, Image as ImageIcon, X } from "lucide-react";
+import CurrencySelector from "@/components/CurrencySelector";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function SetupWizard({ isOpen, onComplete }) {
@@ -16,6 +16,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
     const [logoFile, setLogoFile] = useState(null);
     
     const [formData, setFormData] = useState({
+        full_name: "",
         company_name: "",
         company_address: "",
         logo_url: "",
@@ -38,6 +39,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
             const user = await User.me();
             setFormData(prev => ({
                 ...prev,
+                full_name: user.full_name || user.display_name || "",
                 company_name: user.company_name || "",
                 company_address: user.company_address || "",
                 logo_url: user.logo_url || "",
@@ -73,21 +75,37 @@ export default function SetupWizard({ isOpen, onComplete }) {
     const handleFinish = async () => {
         setIsLoading(true);
         try {
-            // Upload logo if selected
+            const user = await User.me();
+            const userId = user?.id;
+            if (!userId) {
+                console.error("Setup: no user id (not authenticated)");
+                setIsLoading(false);
+                return;
+            }
             let finalLogoUrl = formData.logo_url;
             if (logoFile) {
-                const { file_url } = await UploadFile({ file: logoFile });
-                finalLogoUrl = file_url;
+                finalLogoUrl = await uploadToBucket(logoFile, 'profile-logos', `${userId}/logo.${logoFile.name.split('.').pop()}`);
             }
 
-            // Update User Profile
+            // Save to Supabase profiles table (one row per user, keyed by auth user id)
             await User.updateMyUserData({
+                full_name: formData.full_name?.trim() || user.full_name || user.display_name,
                 company_name: formData.company_name,
                 company_address: formData.company_address,
                 logo_url: finalLogoUrl,
                 currency: formData.currency,
                 onboarding_completed: true
             });
+
+            // Persist company profile info to user-specific key (fallback and display name)
+            const companyProfile = {
+                full_name: formData.full_name?.trim() || "",
+                company_name: formData.company_name,
+                company_address: formData.company_address,
+                logo_url: finalLogoUrl,
+                currency: formData.currency
+            };
+            localStorage.setItem(`breakapi_${userId}_company_profile`, JSON.stringify(companyProfile));
 
             // Create Banking Detail if filled
             if (formData.bank_name && formData.account_number) {
@@ -102,11 +120,12 @@ export default function SetupWizard({ isOpen, onComplete }) {
                 });
             }
 
+            setIsLoading(false);
             onComplete();
         } catch (error) {
             console.error("Error saving setup data:", error);
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const StepIndicator = ({ currentStep }) => (
@@ -134,7 +153,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                 <div className="bg-indigo-600 p-6 text-white text-center">
                     <DialogTitle className="text-2xl font-bold">Welcome to InvoiceBreek!</DialogTitle>
                     <DialogDescription className="text-indigo-100 mt-2">
-                        Let's get your professional profile set up in just a few steps.
+                        Get your professional profile set up in just a few steps.
                     </DialogDescription>
                 </div>
                 
@@ -152,11 +171,20 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     className="space-y-4"
                                 >
                                     <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                                        <Building className="w-5 h-5 text-indigo-600" /> Company Details
+                                        <Building className="w-5 h-5 text-indigo-600" /> Your profile & company
                                     </h3>
+
+                                    <div className="space-y-2">
+                                        <Label>Display name</Label>
+                                        <Input 
+                                            value={formData.full_name} 
+                                            onChange={(e) => handleInputChange('full_name', e.target.value)}
+                                            placeholder="Your name (for invoices and dashboard)"
+                                        />
+                                    </div>
                                     
                                     <div className="space-y-2">
-                                        <Label>Company Name</Label>
+                                        <Label>Company name</Label>
                                         <Input 
                                             value={formData.company_name} 
                                             onChange={(e) => handleInputChange('company_name', e.target.value)}
@@ -175,7 +203,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label>Default Currency</Label>
+                                        <Label>Default currency</Label>
                                         <CurrencySelector 
                                             value={formData.currency} 
                                             onChange={(val) => handleInputChange('currency', val)}

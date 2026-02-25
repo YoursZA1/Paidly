@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Package, User } from '@/api/entities';
 import SubscriptionPlanCard from './SubscriptionPlanCard';
 import PlanSelector from './PlanSelector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { ExternalLink, Crown, CheckCircle } from 'lucide-react';
+import { ExternalLink, Crown, CheckCircle, Download, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthContext';
 import { getActiveUserCount } from '@/data/planLimits';
+import { useToast } from '@/components/ui/use-toast';
+import { packagesToCsv, parsePackageCsv, csvRowToPackagePayload } from '@/utils/packageCsvMapping';
 
 export default function SubscriptionSettings() {
     const { user: currentUser } = useAuth();
@@ -15,35 +17,37 @@ export default function SubscriptionSettings() {
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSelecting, setIsSelecting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
     const [users, setUsers] = useState([]);
     const [currentPlan, setCurrentPlan] = useState('free');
+    const packageFileInputRef = useRef(null);
+    const { toast } = useToast();
+
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [packagesData, userDataResult] = await Promise.all([
+                Package.list(),
+                User.me(),
+            ]);
+            setPackages(packagesData || []);
+            setUserData(userDataResult);
+
+            const storedUsers = localStorage.getItem("breakapi_users");
+            if (storedUsers) {
+                setUsers(JSON.parse(storedUsers));
+            }
+
+            if (currentUser?.plan) {
+                setCurrentPlan(currentUser.plan);
+            }
+        } catch (error) {
+            console.error("Error loading subscription data:", error);
+        }
+        setIsLoading(false);
+    };
 
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            try {
-                const [packagesData, userDataResult] = await Promise.all([
-                    Package.list(),
-                    User.me(),
-                ]);
-                setPackages(packagesData);
-                setUserData(userDataResult);
-                
-                // Load users to count active ones
-                const storedUsers = localStorage.getItem("breakapi_users");
-                if (storedUsers) {
-                  setUsers(JSON.parse(storedUsers));
-                }
-                
-                // Get current plan from currentUser (from auth)
-                if (currentUser?.plan) {
-                  setCurrentPlan(currentUser.plan);
-                }
-            } catch (error) {
-                console.error("Error loading subscription data:", error);
-            }
-            setIsLoading(false);
-        };
         loadData();
     }, [currentUser]);
 
@@ -86,6 +90,68 @@ export default function SubscriptionSettings() {
 
     const handleManageSubscription = () => {
         window.location.href = 'https://invoicebreeksite.app';
+    };
+
+    const handleExportPackages = () => {
+        if (packages.length === 0) {
+            toast({ title: 'No packages to export', variant: 'destructive' });
+            return;
+        }
+        try {
+            const csvContent = packagesToCsv(packages);
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Package_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: 'Export complete', description: `${packages.length} package(s) exported.`, variant: 'default' });
+        } catch (error) {
+            console.error('Export packages error:', error);
+            toast({ title: 'Export failed', description: error?.message || 'Failed to export.', variant: 'destructive' });
+        }
+    };
+
+    const handleImportPackages = () => packageFileInputRef.current?.click();
+
+    const handleImportPackagesFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parsePackageCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToPackagePayload(headers, row);
+                if (!payload) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await Package.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn('Import package row failed:', payload.name, err);
+                    skipped++;
+                }
+            }
+            await loadData();
+            toast({
+                title: 'Import complete',
+                description: `${created} package(s) imported${skipped ? `, ${skipped} skipped.` : '.'}`,
+                variant: 'default',
+            });
+        } catch (error) {
+            console.error('Import packages error:', error);
+            toast({ title: 'Import failed', description: error?.message || 'Could not parse CSV.', variant: 'destructive' });
+        }
+        setIsImporting(false);
     };
 
     if (isLoading) {
@@ -149,6 +215,25 @@ export default function SubscriptionSettings() {
                       Manage Subscription on Website
                   </Button>
               </div>
+          </div>
+
+          {/* Package CSV Export / Import */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+              <input
+                  type="file"
+                  ref={packageFileInputRef}
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleImportPackagesFile}
+              />
+              <Button variant="outline" size="sm" onClick={handleImportPackages} disabled={isImporting}>
+                  <Upload className={`w-4 h-4 mr-2 ${isImporting ? 'animate-pulse' : ''}`} />
+                  {isImporting ? 'Importing…' : 'Import CSV'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportPackages} disabled={packages.length === 0}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+              </Button>
           </div>
 
           {/* Subscription Plans */}

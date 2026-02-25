@@ -138,7 +138,7 @@ export default function ClientPortal() {
         const url = type === 'invoice' 
             ? createPageUrl(`InvoicePDF?id=${id}`)
             : createPageUrl(`QuotePDF?id=${id}`);
-        window.open(url, '_blank');
+        window.location.href = url;
     };
 
     const calculateTotalPaid = (invoice) => {
@@ -146,8 +146,17 @@ export default function ClientPortal() {
         return invoice.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
     };
 
+    // Always use partial paid amount as current balance for partial_paid invoices
     const calculateOutstanding = (invoice) => {
-        return invoice.total_amount - calculateTotalPaid(invoice);
+        if (!invoice.payments || invoice.payments.length === 0) return invoice.total_amount;
+        const totalPaid = calculateTotalPaid(invoice);
+        if (invoice.status === 'partial_paid') {
+            return invoice.total_amount - totalPaid;
+        }
+        if (invoice.status === 'paid') {
+            return 0;
+        }
+        return invoice.total_amount - totalPaid;
     };
 
     // Stats
@@ -469,7 +478,7 @@ export default function ClientPortal() {
                                             </div>
                                         </div>
                                         <Button
-                                            onClick={() => window.open(createPageUrl(`ReportPDF?client=${client.id}&range=year`), '_blank')}
+                                            onClick={() => window.location.href = createPageUrl(`ReportPDF?client=${client.id}&range=year`)}
                                             variant="outline"
                                         >
                                             <Download className="w-4 h-4 mr-2" />
@@ -488,7 +497,7 @@ export default function ClientPortal() {
                                             </div>
                                         </div>
                                         <Button
-                                            onClick={() => window.open(createPageUrl(`ReportPDF?client=${client.id}&status=overdue`), '_blank')}
+                                            onClick={() => window.location.href = createPageUrl(`ReportPDF?client=${client.id}&status=overdue`)}
                                             variant="outline"
                                         >
                                             <Download className="w-4 h-4 mr-2" />

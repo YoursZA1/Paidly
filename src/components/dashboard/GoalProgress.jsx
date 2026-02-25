@@ -2,7 +2,10 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Target } from 'lucide-react';
 
-export default function GoalProgress({ year = 2024, progress = 75, title = "Plan for 2024" }) {
+const currentYear = () => new Date().getFullYear();
+
+export default function GoalProgress({ year = currentYear(), progress = 75, title }) {
+    const displayTitle = title ?? `Plan for ${year}`;
     const circumference = 2 * Math.PI * 45;
     const strokeDashoffset = circumference - (progress / 100) * circumference;
 
@@ -13,7 +16,7 @@ export default function GoalProgress({ year = 2024, progress = 75, title = "Plan
             <CardContent className="p-6 relative">
                 <div className="flex items-center justify-between">
                     <div className="flex-1">
-                        <p className="text-sm text-white/70 mb-1">{title}</p>
+                        <p className="text-sm text-white/70 mb-1">{displayTitle}</p>
                         <p className="text-xl font-bold mb-2">Completed</p>
                         <div className="flex items-center gap-2">
                             <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center">

@@ -8,12 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { X, ExternalLink, ScanLine, Paperclip, Upload, Loader2, Sparkles, MapPin, Car } from "lucide-react";
 import { format } from "date-fns";
 import { Vendor } from "@/api/entities";
-import { breakApi } from "@/api/apiClient";
+import { UploadToActivities } from "@/api/integrations";
+import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 export default function ExpenseForm({ expense, onSave, onCancel }) {
+    const { toast } = useToast();
     const [formData, setFormData] = useState(expense || {
         category: "office",
         description: "",
@@ -64,6 +66,11 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             setVendors(data);
         } catch (error) {
             console.error("Error loading vendors", error);
+            toast({
+                title: "Could not load vendors",
+                description: error?.message || "Please try again later.",
+                variant: "destructive",
+            });
         }
     };
 
@@ -93,10 +100,15 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
 
         for (const file of files) {
             try {
-                const { file_url } = await breakApi.integrations.Core.UploadFile({ file });
+                const { file_url } = await UploadToActivities({ file });
                 newAttachments.push({ name: file.name, url: file_url });
             } catch (error) {
                 console.error("File upload failed", error);
+                toast({
+                    title: "Upload failed",
+                    description: error?.message || "Could not upload file. Try again.",
+                    variant: "destructive",
+                });
             }
         }
 
@@ -109,12 +121,8 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
 
         setIsScanning(true);
         try {
-            // 1. Upload
-            const { file_url } = await breakApi.integrations.Core.UploadFile({ file });
-            
-            // 2. Add to attachments
+            const { file_url } = await UploadToActivities({ file });
             const newAttachments = [...(formData.attachments || []), { name: file.name, url: file_url }];
-            
             // 3. Extract Data
             const schema = {
                 type: "object",
@@ -179,6 +187,11 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             }
         } catch (error) {
             console.error("AI suggestion failed", error);
+            toast({
+                title: "Suggestion failed",
+                description: error?.message || "Could not suggest category. Choose manually.",
+                variant: "destructive",
+            });
         }
         setIsSuggesting(false);
     };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function MinimalTemplate({ invoice, client, user, bankingDetail, userCurrency, safeFormatDate, documentTitle }) {
     const deliveryDate = safeFormatDate(invoice.delivery_date);
@@ -15,7 +16,7 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                     <div className="max-w-sm">
                         {user?.logo_url ? (
                             <div className="mb-4">
-                                <img 
+                                <LogoImage 
                                     src={user.logo_url} 
                                     alt="Logo" 
                                     className="h-12 w-auto max-w-xs object-contain grayscale" 
@@ -82,7 +83,7 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                     <div className="col-span-4">Item</div>
                     <div className="col-span-2 text-center">Qty</div>
                     <div className="col-span-2 text-right">Rate</div>
-                    {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                    {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                         <>
                             <div className="col-span-1 text-right">Tax %</div>
                             <div className="col-span-1 text-right">Tax</div>
@@ -90,23 +91,27 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                     )}
                     <div className="col-span-2 text-right">Total</div>
                 </div>
-                {invoice.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 py-3 border-b border-gray-100">
-                        <div className="col-span-4">
-                            <p className="text-gray-900">{item.service_name}</p>
-                            {item.description && <p className="text-xs text-gray-400 mt-1">{item.description}</p>}
+                {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                    invoice.items.map((item, index) => (
+                        <div key={index} className="grid grid-cols-12 py-3 border-b border-gray-100">
+                            <div className="col-span-4">
+                                <p className="text-gray-900">{item.service_name}</p>
+                                {item.description && <p className="text-xs text-gray-400 mt-1">{item.description}</p>}
+                            </div>
+                            <div className="col-span-2 text-center text-gray-600">{item.quantity}</div>
+                            <div className="col-span-2 text-right text-gray-600">{formatCurrency(item.unit_price, userCurrency)}</div>
+                            {Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
+                                <>
+                                    <div className="col-span-1 text-right text-gray-600">{item.item_tax_rate || 0}%</div>
+                                    <div className="col-span-1 text-right text-gray-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</div>
+                                </>
+                            )}
+                            <div className="col-span-2 text-right text-gray-900">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</div>
                         </div>
-                        <div className="col-span-2 text-center text-gray-600">{item.quantity}</div>
-                        <div className="col-span-2 text-right text-gray-600">{formatCurrency(item.unit_price, userCurrency)}</div>
-                        {invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
-                            <>
-                                <div className="col-span-1 text-right text-gray-600">{item.item_tax_rate || 0}%</div>
-                                <div className="col-span-1 text-right text-gray-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</div>
-                            </>
-                        )}
-                        <div className="col-span-2 text-right text-gray-900">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</div>
-                    </div>
-                ))}
+                    ))
+                ) : (
+                    <div className="col-span-12 py-4 text-center text-gray-500">No items found</div>
+                )}
             </section>
 
             {/* Totals */}
@@ -124,7 +129,7 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                             <span className="font-medium">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
-                    {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                    {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                         <div className="flex justify-between py-2 text-sm text-gray-500">
                             <span>Item Taxes</span>
                             <span className="text-orange-600 font-medium">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>

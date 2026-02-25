@@ -385,6 +385,7 @@ export default function QuoteDetails({
                         <FileText className="w-5 h-5" />
                         Quote Details
                     </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Enter quote details.</p>
                 </CardHeader>
                 
                 <CardContent className="p-4 sm:p-8">

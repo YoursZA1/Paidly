@@ -3,6 +3,9 @@
  * Provides a flexible API for managing business entities and integrations
  */
 
+import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+
 class EntityManager {
   constructor(entityName = '', userId = null) {
     this.entityName = entityName;
@@ -50,10 +53,105 @@ class EntityManager {
     this.subscriptions.forEach(cb => cb(Object.values(this.data)));
   }
 
-  async find(query = {}) {
-    // Simulated find method
-    void query; // Acknowledge parameter
+  async find() {
+    // If local data is empty, try to pull from Supabase
+    if (Object.keys(this.data).length === 0) {
+      await this.pullFromSupabase();
+    }
     return Object.values(this.data);
+  }
+
+  async pullFromSupabase() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session?.user) return;
+
+      const userId = sessionData.session.user.id;
+
+      // Ensure user has an organization and membership
+      let orgId;
+      try {
+        orgId = await this.ensureUserHasOrganization(userId);
+      } catch (error) {
+        console.warn(`Failed to ensure organization for user ${userId}:`, error);
+        return;
+      }
+
+      if (!orgId) {
+        console.warn(`No organization found for user ${userId}`);
+        return;
+      }
+
+      // Supabase CRUD: only these entities map to Supabase tables (see docs/SUPABASE_DATA_MODEL.md)
+      const table = this.entityName.toLowerCase() + "s";
+      const supabaseTable =
+        table === "services"
+          ? "services"
+          : table === "clients"
+            ? "clients"
+            : table === "invoices"
+              ? "invoices"
+              : table === "quotes"
+                ? "quotes"
+                : table === "payments"
+                  ? "payments"
+                  : table === "bankingdetails"
+                    ? "banking_details"
+                    : table === "recurringinvoices"
+                      ? "recurring_invoices"
+                      : table === "packages"
+                        ? "packages"
+                        : table === "invoiceviews"
+                          ? "invoice_views"
+                          : table === "payrolls"
+                            ? "payslips"
+                            : table === "expenses"
+                              ? "expenses"
+                              : table === "tasks"
+                                ? "tasks"
+                                : null;
+
+      if (supabaseTable) {
+        let query = supabase.from(supabaseTable).select("*");
+        
+        // Only filter by org_id if the table has that column
+        if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+          query = query.eq('org_id', orgId);
+        }
+        // Packages: platform (org_id null) or user's org
+        if (supabaseTable === 'packages') {
+          if (orgId) {
+            query = query.or('org_id.is.null,org_id.eq.' + orgId);
+          } else {
+            query = query.is('org_id', null);
+          }
+        }
+
+        const { data, error } = await query;
+        
+        if (!error && data) {
+          // Clear existing data and reload from Supabase
+          this.data = {};
+          data.forEach(item => {
+            const rec = {
+              ...item,
+              created_date: item.created_at || item.created_date,
+              updated_date: item.updated_at || item.updated_date
+            };
+            if (supabaseTable === 'recurring_invoices' && rec.profile_name != null && rec.template_name == null) {
+              rec.template_name = rec.profile_name;
+            }
+            this.data[item.id] = rec;
+          });
+          this.saveToStorage();
+          this.notifySubscribers();
+        } else if (error) {
+          console.error(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(error, "Fetch failed"));
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Sync failed"));
+    }
   }
 
   async findOne(id) {
@@ -61,16 +159,151 @@ class EntityManager {
     return this.data[id] || null;
   }
 
+  /** Returns true if id looks like a UUID (used by Supabase); false for legacy numeric ids */
+  static isLikelyUuid(id) {
+    if (id == null || typeof id !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id.trim());
+  }
+
   async get(id) {
-    // Alias for findOne - fetches a single record by ID
-    const record = this.data[id];
+    const idStr = String(id);
+    // Supabase uses UUIDs; legacy numeric ids will never match in DB — fail fast with a clear error
+    if (this.entityName === 'Client' && !EntityManager.isLikelyUuid(idStr)) {
+      throw new Error(`${this.entityName} with id ${id} not found. The client may be from an older version. Please open them from the Clients list.`);
+    }
+
+    // Try to fetch from Supabase first if not in local cache
+    if (!this.data[idStr]) {
+      await this.pullFromSupabase();
+    }
+
+    const record = this.data[idStr];
     if (!record) {
+      // Try direct Supabase fetch as fallback
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user) {
+          const userId = sessionData.session.user.id;
+          let orgId;
+          try {
+            orgId = await this.ensureUserHasOrganization(userId);
+          } catch (error) {
+            console.error('Error ensuring organization in get():', error);
+            // Continue without org_id filter if we can't ensure organization
+          }
+
+          if (orgId) {
+            const table = this.entityName.toLowerCase() + 's';
+            const supabaseTable = table === 'services' ? 'services' :
+                                 table === 'clients' ? 'clients' :
+                                 table === 'invoices' ? 'invoices' :
+                                 table === 'quotes' ? 'quotes' :
+                                 table === 'payments' ? 'payments' :
+                                 table === 'bankingdetails' ? 'banking_details' :
+                                 table === 'recurringinvoices' ? 'recurring_invoices' :
+                                 table === 'packages' ? 'packages' :
+                                 table === 'invoiceviews' ? 'invoice_views' :
+                                 table === 'payrolls' ? 'payslips' :
+                                 table === 'expenses' ? 'expenses' :
+                                 table === 'tasks' ? 'tasks' : null;
+
+            if (supabaseTable) {
+              let query = supabase.from(supabaseTable).select('*').eq('id', idStr);
+              if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+                query = query.eq('org_id', orgId);
+              }
+              // packages: RLS enforces visibility (platform or own org)
+
+              const { data, error } = await query.single();
+              if (!error && data) {
+                const record = {
+                  ...data,
+                  created_date: data.created_at || data.created_date,
+                  updated_date: data.updated_at || data.updated_date
+                };
+                if (supabaseTable === 'recurring_invoices' && record.profile_name != null && record.template_name == null) {
+                  record.template_name = record.profile_name;
+                }
+                // Attach line items for invoices and quotes (stored in separate tables)
+                if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
+                  const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
+                  const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
+                  const { data: itemsData, error: itemsError } = await supabase
+                    .from(itemsTable)
+                    .select('*')
+                    .eq(parentIdField, idStr);
+                  if (!itemsError && Array.isArray(itemsData)) {
+                    record.items = itemsData.map(row => ({
+                      service_name: row.service_name,
+                      description: row.description || '',
+                      quantity: Number(row.quantity ?? 1),
+                      unit_price: Number(row.unit_price ?? 0),
+                      total_price: Number(row.total_price ?? 0)
+                    }));
+                  } else {
+                    record.items = [];
+                  }
+                }
+                this.data[idStr] = record;
+                this.saveToStorage();
+                return record;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch ${this.entityName} ${id} from Supabase:`, e);
+      }
+
       throw new Error(`${this.entityName} with id ${id} not found`);
+    }
+    // Ensure invoice/quote from cache has line items (pullFromSupabase does not load invoice_items/quote_items)
+    if (record && (this.entityName === 'Invoice' || this.entityName === 'Quote') && !Array.isArray(record.items)) {
+      const itemsTable = this.entityName === 'Invoice' ? 'invoice_items' : 'quote_items';
+      const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
+      try {
+        const { data: itemsData, error: itemsError } = await supabase
+          .from(itemsTable)
+          .select('*')
+          .eq(parentIdField, idStr);
+        if (!itemsError && Array.isArray(itemsData)) {
+          record.items = itemsData.map(row => ({
+            service_name: row.service_name,
+            description: row.description || '',
+            quantity: Number(row.quantity ?? 1),
+            unit_price: Number(row.unit_price ?? 0),
+            total_price: Number(row.total_price ?? 0)
+          }));
+        } else {
+          record.items = [];
+        }
+        this.data[idStr] = record;
+        this.saveToStorage();
+      } catch (e) {
+        console.warn(`Failed to fetch line items for ${this.entityName} ${id}:`, e);
+        record.items = [];
+      }
     }
     return record;
   }
 
+  /** Filter records by criteria (e.g. { id: 'x', client_id: 'y' }). Returns array. */
+  async filter(criteria = {}, sortBy = '') {
+    const records = await this.list(sortBy);
+    if (!criteria || typeof criteria !== 'object') return records;
+    return records.filter((record) => {
+      return Object.entries(criteria).every(([key, value]) => {
+        const recordVal = record[key];
+        if (Array.isArray(value)) return value.includes(recordVal);
+        return recordVal === value;
+      });
+    });
+  }
+
   async list(sortBy = '') {
+    // Always pull fresh from Supabase first
+    await this.pullFromSupabase();
+    
     // List all records, optionally sorted
     let records = Object.values(this.data);
     
@@ -91,39 +324,811 @@ class EntityManager {
     return records;
   }
 
+  async ensureUserHasOrganization(userId) {
+    try {
+      // Check if user has a membership
+      const { data: existingMembership, error: membershipCheckError } = await supabase
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      // If error is not "not found" (PGRST116), log it but continue
+      if (membershipCheckError && !membershipCheckError.message.includes('0 rows')) {
+        console.warn('Error checking membership:', membershipCheckError);
+      }
+
+      if (existingMembership?.org_id) {
+        return existingMembership.org_id;
+      }
+
+      // Check if user has an organization as owner
+      const { data: existingOrg, error: orgCheckError } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      // If error is not "not found", log it but continue
+      if (orgCheckError && !orgCheckError.message.includes('0 rows')) {
+        console.warn('Error checking organization:', orgCheckError);
+      }
+
+      let orgId = existingOrg?.id;
+
+      // Create organization if it doesn't exist
+      if (!orgId) {
+        // Try to get user profile, but don't fail if it doesn't exist
+        let orgName = 'My Organization';
+        try {
+          const { data: userProfile, error: profileError } = await supabase
+            .from('profiles')
+            .select('company_name, full_name')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (!profileError && userProfile) {
+            orgName = userProfile.company_name || userProfile.full_name || 'My Organization';
+          }
+        } catch (profileErr) {
+          console.warn('Could not fetch profile for org name, using default:', profileErr);
+        }
+        
+        const { data: newOrg, error: orgError } = await supabase
+          .from('organizations')
+          .insert({
+            name: orgName,
+            owner_id: userId
+          })
+          .select('id')
+          .single();
+
+        if (orgError) {
+          const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
+          console.error("Failed to create organization:", msg);
+          if (/permission|policy|RLS/i.test(msg)) {
+            throw new Error("Permission denied: Unable to create organization. Please ensure RLS policies allow organization creation.");
+          }
+          throw new Error(`Failed to create organization: ${msg}`);
+        }
+
+        if (!newOrg?.id) {
+          throw new Error('Organization was created but ID was not returned');
+        }
+
+        orgId = newOrg.id;
+      }
+
+      // Create membership if it doesn't exist
+      if (!existingMembership) {
+        const { error: membershipError } = await supabase
+          .from('memberships')
+          .insert({
+            org_id: orgId,
+            user_id: userId,
+            role: 'owner'
+          });
+
+        if (membershipError) {
+          // If it's a unique constraint violation, membership already exists, which is fine
+          if (membershipError.code === '23505' || 
+              membershipError.message.includes('unique') || 
+              membershipError.message.includes('duplicate')) {
+            // Membership already exists, try to fetch it
+            const { data: existingMem } = await supabase
+              .from('memberships')
+              .select('org_id')
+              .eq('user_id', userId)
+              .eq('org_id', orgId)
+              .maybeSingle();
+            
+            if (existingMem?.org_id) {
+              return existingMem.org_id;
+            }
+          } else {
+            const msg = getSupabaseErrorMessage(membershipError, "Create membership failed");
+            if (/permission|policy|RLS/i.test(msg)) {
+              throw new Error("Permission denied: Unable to create membership. Please ensure RLS policies allow membership creation.");
+            }
+            console.error("Failed to create membership:", msg);
+            throw new Error(`Failed to create membership: ${msg}`);
+          }
+        }
+      }
+
+      if (!orgId) {
+        throw new Error('Unable to determine organization ID');
+      }
+
+      return orgId;
+    } catch (error) {
+      console.error('Error in ensureUserHasOrganization:', error);
+      // Re-throw with more context
+      throw error;
+    }
+  }
+
   async create(data) {
-    // Simulated create method with persistence
-    const id = Date.now().toString();
-    const record = {
-      id,
-      ...data,
-      created_date: new Date().toISOString(),
-      updated_date: new Date().toISOString(),
-      is_pinned: false
-    };
-    
-    this.data[id] = record;
-    this.saveToStorage();
-    this.notifySubscribers();
-    return record;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session?.user) {
+        throw new Error('Not authenticated');
+      }
+
+      const userId = sessionData.session.user.id;
+
+      // Ensure user has an organization and membership
+      let orgId;
+      try {
+        orgId = await this.ensureUserHasOrganization(userId);
+      } catch (error) {
+        console.error('Error ensuring organization:', error);
+        throw new Error(`Failed to set up organization: ${error.message}. Please contact support.`);
+      }
+
+      if (!orgId) {
+        throw new Error('No organization found for user. Please contact support.');
+      }
+
+      const table = this.entityName.toLowerCase() + "s";
+      const supabaseTable =
+        table === "services"
+          ? "services"
+          : table === "clients"
+            ? "clients"
+            : table === "invoices"
+              ? "invoices"
+              : table === "quotes"
+                ? "quotes"
+                : table === "payments"
+                  ? "payments"
+                  : table === "bankingdetails"
+                    ? "banking_details"
+                    : table === "recurringinvoices"
+                      ? "recurring_invoices"
+                      : table === "packages"
+                        ? "packages"
+                        : table === "invoiceviews"
+                          ? "invoice_views"
+                          : table === "payrolls"
+                            ? "payslips"
+                            : table === "expenses"
+                              ? "expenses"
+                              : table === "tasks"
+                                ? "tasks"
+                                : null;
+
+      // Prepare data for Supabase (field names match schema: created_at, updated_at, org_id, etc.)
+      const supabaseData = {
+        ...data,
+        updated_at: new Date().toISOString()
+      };
+      if (supabaseTable !== 'packages') {
+        supabaseData.org_id = orgId;
+      }
+      if (supabaseTable === 'packages') {
+        supabaseData.org_id = data.org_id !== undefined ? data.org_id : null;
+      }
+
+      // Only add created_by if the table has that column (invoices, quotes)
+      if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
+        supabaseData.created_by = sessionData.session.user.id;
+        // These tables have items in separate tables
+        delete supabaseData.items;
+      }
+      if (supabaseTable === 'banking_details') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'services') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'recurring_invoices') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'packages') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'invoice_views') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'payslips') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'expenses') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      if (supabaseTable === 'tasks') {
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      // Map payment payload to DB columns (payments table has paid_at, method, reference, not payment_date etc.)
+      if (supabaseTable === 'payments') {
+        if (supabaseData.payment_date !== undefined) {
+          supabaseData.paid_at = supabaseData.payment_date;
+          delete supabaseData.payment_date;
+        }
+        if (supabaseData.payment_method !== undefined) {
+          supabaseData.method = supabaseData.payment_method;
+          delete supabaseData.payment_method;
+        }
+        if (supabaseData.reference_number !== undefined) {
+          supabaseData.reference = supabaseData.reference_number;
+          delete supabaseData.reference_number;
+        }
+        delete supabaseData.created_date;
+        if (!supabaseData.status) supabaseData.status = 'completed';
+      }
+
+      // Only add created_at if not already set (let database handle defaults)
+      if (!supabaseData.created_at) {
+        supabaseData.created_at = new Date().toISOString();
+      }
+
+      // Clean up data: remove undefined/null/empty strings for optional fields
+      // Keep required fields even if empty
+      const requiredFields = {
+        'clients': ['name', 'org_id'],
+        'services': ['name', 'org_id', 'item_type', 'default_unit', 'default_rate'],
+        'invoices': ['org_id', 'status'],
+        'quotes': ['org_id', 'status'],
+        'banking_details': ['bank_name', 'org_id'],
+        'recurring_invoices': ['org_id', 'status'],
+        'packages': ['name', 'price'],
+        'invoice_views': ['org_id', 'invoice_id'],
+        'payslips': ['org_id', 'employee_name'],
+        'expenses': ['org_id', 'amount', 'date'],
+        'tasks': ['org_id', 'title']
+      };
+
+      // Ensure required fields for services
+      if (supabaseTable === 'services') {
+        if (!supabaseData.item_type) {
+          supabaseData.item_type = 'service';
+        }
+        if (!supabaseData.default_unit) {
+          supabaseData.default_unit = 'unit';
+        }
+        if (supabaseData.default_rate === undefined || supabaseData.default_rate === null) {
+          supabaseData.default_rate = 0;
+        }
+        // Ensure default_rate is a number
+        supabaseData.default_rate = Number(supabaseData.default_rate) || 0;
+      }
+
+      Object.keys(supabaseData).forEach(key => {
+        const value = supabaseData[key];
+        const isRequired = requiredFields[supabaseTable]?.includes(key);
+        
+        // Remove undefined, null, or empty string for optional fields
+        if (!isRequired && (value === undefined || value === null || value === '')) {
+          delete supabaseData[key];
+        }
+      });
+
+      // Whitelist columns for clients table (match schema + user activity / Client_export.csv)
+      const CLIENT_INSERT_COLUMNS = [
+        'org_id', 'name', 'email', 'phone', 'address', 'contact_person', 'website',
+        'tax_id', 'fax', 'alternate_email', 'notes', 'internal_notes', 'industry',
+        'payment_terms', 'payment_terms_days', 'follow_up_enabled',
+        'segment', 'total_spent', 'last_invoice_date', 'created_by_id',
+        'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'clients') {
+        if (!supabaseData.created_by_id) {
+          supabaseData.created_by_id = sessionData.session.user.id;
+        }
+        Object.keys(supabaseData).forEach(key => {
+          if (!CLIENT_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const BANKING_DETAIL_INSERT_COLUMNS = [
+        'org_id', 'bank_name', 'account_name', 'account_number', 'routing_number', 'swift_code',
+        'payment_method', 'additional_info', 'payment_gateway_url', 'is_default', 'created_by_id',
+        'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'banking_details') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!BANKING_DETAIL_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const INVOICE_INSERT_COLUMNS = [
+        'org_id', 'client_id', 'invoice_number', 'status', 'project_title', 'project_description',
+        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
+        'currency', 'notes', 'terms_conditions', 'created_by', 'created_at', 'updated_at',
+        'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
+        'pdf_url', 'recurring_invoice_id', 'public_share_token', 'sent_to_email',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency'
+      ];
+      if (supabaseTable === 'invoices') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!INVOICE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+      const RECURRING_INVOICE_INSERT_COLUMNS = [
+        'org_id', 'profile_name', 'client_id', 'invoice_template', 'frequency',
+        'start_date', 'end_date', 'next_generation_date', 'status', 'last_generated_invoice_id',
+        'created_by_id', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'recurring_invoices') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!RECURRING_INVOICE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const PACKAGE_INSERT_COLUMNS = [
+        'org_id', 'name', 'price', 'currency', 'frequency', 'features', 'is_recommended',
+        'website_link', 'created_by_id', 'created_at', 'updated_at', 'is_sample'
+      ];
+      if (supabaseTable === 'packages') {
+        if (typeof supabaseData.features === 'string') {
+          try {
+            supabaseData.features = JSON.parse(supabaseData.features);
+          } catch (_) {
+            supabaseData.features = [];
+          }
+        }
+        if (supabaseData.features === undefined || supabaseData.features === null) supabaseData.features = [];
+        Object.keys(supabaseData).forEach(key => {
+          if (!PACKAGE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const INVOICE_VIEW_INSERT_COLUMNS = [
+        'org_id', 'invoice_id', 'client_id', 'viewed_at', 'ip_address', 'user_agent',
+        'is_read', 'created_by_id', 'created_at', 'updated_at', 'is_sample'
+      ];
+      if (supabaseTable === 'invoice_views') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!INVOICE_VIEW_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const PAYSLIP_INSERT_COLUMNS = [
+        'org_id', 'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
+        'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
+        'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
+        'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
+        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token',
+        'created_by_id', 'created_at', 'updated_at', 'is_sample'
+      ];
+      if (supabaseTable === 'payslips') {
+        if (typeof supabaseData.allowances === 'string') {
+          try { supabaseData.allowances = JSON.parse(supabaseData.allowances); } catch (_) { supabaseData.allowances = []; }
+        }
+        if (typeof supabaseData.other_deductions === 'string') {
+          try { supabaseData.other_deductions = JSON.parse(supabaseData.other_deductions); } catch (_) { supabaseData.other_deductions = []; }
+        }
+        Object.keys(supabaseData).forEach(key => {
+          if (!PAYSLIP_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const EXPENSE_INSERT_COLUMNS = [
+        'org_id', 'expense_number', 'category', 'description', 'amount', 'date',
+        'payment_method', 'vendor', 'receipt_url', 'is_claimable', 'claimed', 'notes',
+        'created_by_id', 'created_at', 'updated_at', 'is_sample'
+      ];
+      if (supabaseTable === 'expenses') {
+        if (typeof supabaseData.is_claimable === 'string') supabaseData.is_claimable = supabaseData.is_claimable === 'true';
+        if (typeof supabaseData.claimed === 'string') supabaseData.claimed = supabaseData.claimed === 'true';
+        Object.keys(supabaseData).forEach(key => {
+          if (!EXPENSE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const TASK_INSERT_COLUMNS = [
+        'org_id', 'title', 'description', 'client_id', 'assigned_to', 'due_date',
+        'priority', 'status', 'category', 'parent_task_id', 'depends_on', 'estimated_hours', 'tags',
+        'created_by_id', 'created_at', 'updated_at', 'is_sample'
+      ];
+      if (supabaseTable === 'tasks') {
+        if (typeof supabaseData.depends_on === 'string') {
+          try { supabaseData.depends_on = JSON.parse(supabaseData.depends_on); } catch (_) { supabaseData.depends_on = []; }
+        }
+        if (!Array.isArray(supabaseData.depends_on)) supabaseData.depends_on = [];
+        if (typeof supabaseData.tags === 'string') {
+          try { supabaseData.tags = JSON.parse(supabaseData.tags); } catch (_) { supabaseData.tags = []; }
+        }
+        if (!Array.isArray(supabaseData.tags)) supabaseData.tags = [];
+        Object.keys(supabaseData).forEach(key => {
+          if (!TASK_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const QUOTE_INSERT_COLUMNS = [
+        'org_id', 'client_id', 'quote_number', 'status', 'project_title', 'project_description',
+        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
+        'notes', 'terms_conditions', 'created_by', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'quotes') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!QUOTE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      // Whitelist columns for services table to avoid "column does not exist" when DB schema differs
+      const SERVICE_INSERT_COLUMNS = [
+        'org_id', 'name', 'description', 'item_type', 'default_unit', 'default_rate', 'tax_category', 'is_active',
+        'rate', 'unit', 'unit_price', 'unit_of_measure', 'service_type',
+        'sku', 'price', 'billing_unit', 'role', 'hourly_rate', 'unit_type', 'cost_rate', 'cost_type', 'default_cost',
+        'category', 'pricing_type', 'min_quantity', 'tags', 'estimated_duration', 'requirements',
+        'price_locked', 'price_locked_at', 'price_locked_reason', 'usage_count', 'last_used_date', 'type_specific_data',
+        'created_by_id', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'services') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!SERVICE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      // Log for debugging
+      console.log(`Creating ${this.entityName}:`, { supabaseTable, supabaseData });
+
+      let createdRecord;
+      if (supabaseTable) {
+        const { data: inserted, error } = await supabase
+          .from(supabaseTable)
+          .insert(supabaseData)
+          .select()
+          .single();
+
+        if (error) {
+          const msg = getSupabaseErrorMessage(error, `Create ${this.entityName} failed`);
+          console.error(`Failed to create ${this.entityName} in Supabase:`, msg);
+          throw new Error(`Failed to create ${this.entityName}: ${msg}`);
+        }
+
+        createdRecord = inserted;
+      } else {
+        // Fallback for entities without Supabase table
+        const id = data.id || `temp_${Date.now()}`;
+        createdRecord = {
+          id,
+          ...data,
+          created_date: new Date().toISOString(),
+          updated_date: new Date().toISOString()
+        };
+      }
+
+      // Store locally
+      const record = {
+        ...createdRecord,
+        created_date: createdRecord.created_at || createdRecord.created_date,
+        updated_date: createdRecord.updated_at || createdRecord.updated_date
+      };
+      if (supabaseTable === 'recurring_invoices' && record.profile_name != null && record.template_name == null) {
+        record.template_name = record.profile_name;
+      }
+      if (supabaseTable === 'packages' && record.features && typeof record.features === 'object' && !Array.isArray(record.features)) {
+        record.features = Array.isArray(record.features) ? record.features : [];
+      }
+
+      this.data[record.id] = record;
+      this.saveToStorage();
+      this.notifySubscribers();
+
+      // Handle child records (invoice_items, quote_items)
+      if ((supabaseTable === 'invoices' || supabaseTable === 'quotes') && data.items && Array.isArray(data.items)) {
+        const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
+        const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
+        
+        const itemsToInsert = data.items.map(item => ({
+          [parentIdField]: record.id,
+          service_name: item.service_name || item.name,
+          description: item.description || '',
+          quantity: Number(item.quantity || item.qty || 1),
+          unit_price: Number(item.unit_price || item.rate || item.price || 0),
+          total_price: Number(item.total_price || item.total || 0)
+        }));
+
+        if (itemsToInsert.length > 0) {
+          const { error: itemsError } = await supabase
+            .from(itemsTable)
+            .insert(itemsToInsert);
+
+          if (itemsError) {
+            console.error(`Failed to create ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Create items failed"));
+          }
+        }
+      }
+
+      return record;
+    } catch (e) {
+      console.error(`Failed to create ${this.entityName}:`, e);
+      throw e;
+    }
   }
 
   async update(id, data) {
-    // Simulated update method with persistence
-    if (!this.data[id]) {
-      throw new Error(`${this.entityName} with id ${id} not found`);
+    const idStr = String(id);
+    if (this.entityName === 'Client' && !EntityManager.isLikelyUuid(idStr)) {
+      throw new Error(`${this.entityName} with id ${id} not found. The client may be from an older version. Please open them from the Clients list.`);
     }
-    
-    const record = {
-      ...this.data[id],
-      ...data,
-      updated_date: new Date().toISOString()
-    };
-    
-    this.data[id] = record;
-    this.saveToStorage();
-    this.notifySubscribers();
-    return record;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session?.user) {
+        throw new Error('Not authenticated');
+      }
+
+      const userId = sessionData.session.user.id;
+
+      // Ensure user has an organization and membership
+      let orgId;
+      try {
+        orgId = await this.ensureUserHasOrganization(userId);
+      } catch (error) {
+        console.error('Error ensuring organization:', error);
+        throw new Error(`Failed to set up organization: ${error.message}. Please contact support.`);
+      }
+
+      if (!orgId) {
+        throw new Error('No organization found for user. Please contact support.');
+      }
+
+      // Verify record exists and belongs to user's org
+      const existingRecord = this.data[idStr];
+      if (!existingRecord) {
+        // Try to fetch from Supabase
+        await this.get(idStr);
+        if (!this.data[idStr]) {
+          throw new Error(`${this.entityName} with id ${id} not found`);
+        }
+      }
+
+      const table = this.entityName.toLowerCase() + 's';
+      const supabaseTable = table === 'services' ? 'services' : 
+                           table === 'clients' ? 'clients' : 
+                           table === 'invoices' ? 'invoices' : 
+                           table === 'quotes' ? 'quotes' : 
+                           table === 'payments' ? 'payments' : 
+                           table === 'recurringinvoices' ? 'recurring_invoices' : 
+                           table === 'packages' ? 'packages' : 
+                           table === 'invoiceviews' ? 'invoice_views' : 
+                           table === 'payrolls' ? 'payslips' :
+                           table === 'expenses' ? 'expenses' :
+                           table === 'tasks' ? 'tasks' : null;
+
+      // Prepare update data
+      const updateData = {
+        ...data,
+        updated_at: new Date().toISOString()
+      };
+
+      // Whitelist columns for clients table (match schema + segment/total_spent/last_invoice_date)
+      const CLIENT_UPDATE_COLUMNS = [
+        'name', 'email', 'phone', 'address', 'contact_person', 'website',
+        'tax_id', 'fax', 'alternate_email', 'notes', 'internal_notes', 'industry',
+        'payment_terms', 'payment_terms_days', 'follow_up_enabled',
+        'segment', 'total_spent', 'last_invoice_date', 'updated_at'
+      ];
+      if (supabaseTable === 'clients') {
+        Object.keys(updateData).forEach(key => {
+          if (!CLIENT_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const BANKING_DETAIL_UPDATE_COLUMNS = [
+        'bank_name', 'account_name', 'account_number', 'routing_number', 'swift_code',
+        'payment_method', 'additional_info', 'payment_gateway_url', 'is_default', 'updated_at'
+      ];
+      if (supabaseTable === 'banking_details') {
+        Object.keys(updateData).forEach(key => {
+          if (!BANKING_DETAIL_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const INVOICE_UPDATE_COLUMNS = [
+        'client_id', 'invoice_number', 'status', 'project_title', 'project_description',
+        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
+        'currency', 'notes', 'terms_conditions', 'updated_at',
+        'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
+        'pdf_url', 'recurring_invoice_id', 'public_share_token', 'sent_to_email',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency'
+      ];
+      if (supabaseTable === 'invoices') {
+        Object.keys(updateData).forEach(key => {
+          if (!INVOICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const QUOTE_UPDATE_COLUMNS = [
+        'client_id', 'quote_number', 'status', 'project_title', 'project_description',
+        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
+        'notes', 'terms_conditions', 'updated_at'
+      ];
+      if (supabaseTable === 'quotes') {
+        Object.keys(updateData).forEach(key => {
+          if (!QUOTE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const RECURRING_INVOICE_UPDATE_COLUMNS = [
+        'profile_name', 'client_id', 'invoice_template', 'frequency',
+        'start_date', 'end_date', 'next_generation_date', 'status', 'last_generated_invoice_id', 'updated_at'
+      ];
+      if (supabaseTable === 'recurring_invoices') {
+        Object.keys(updateData).forEach(key => {
+          if (!RECURRING_INVOICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const PACKAGE_UPDATE_COLUMNS = [
+        'org_id', 'name', 'price', 'currency', 'frequency', 'features', 'is_recommended',
+        'website_link', 'is_sample', 'updated_at'
+      ];
+      if (supabaseTable === 'packages') {
+        if (typeof updateData.features === 'string') {
+          try {
+            updateData.features = JSON.parse(updateData.features);
+          } catch (_) {
+            updateData.features = [];
+          }
+        }
+        Object.keys(updateData).forEach(key => {
+          if (!PACKAGE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const INVOICE_VIEW_UPDATE_COLUMNS = [
+        'invoice_id', 'client_id', 'viewed_at', 'ip_address', 'user_agent', 'is_read', 'is_sample', 'updated_at'
+      ];
+      if (supabaseTable === 'invoice_views') {
+        Object.keys(updateData).forEach(key => {
+          if (!INVOICE_VIEW_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const PAYSLIP_UPDATE_COLUMNS = [
+        'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
+        'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
+        'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
+        'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
+        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'is_sample', 'updated_at'
+      ];
+      if (supabaseTable === 'payslips') {
+        if (typeof updateData.allowances === 'string') {
+          try { updateData.allowances = JSON.parse(updateData.allowances); } catch (_) { updateData.allowances = []; }
+        }
+        if (typeof updateData.other_deductions === 'string') {
+          try { updateData.other_deductions = JSON.parse(updateData.other_deductions); } catch (_) { updateData.other_deductions = []; }
+        }
+        Object.keys(updateData).forEach(key => {
+          if (!PAYSLIP_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const EXPENSE_UPDATE_COLUMNS = [
+        'expense_number', 'category', 'description', 'amount', 'date',
+        'payment_method', 'vendor', 'receipt_url', 'is_claimable', 'claimed', 'notes', 'is_sample', 'updated_at'
+      ];
+      if (supabaseTable === 'expenses') {
+        if (typeof updateData.is_claimable === 'string') updateData.is_claimable = updateData.is_claimable === 'true';
+        if (typeof updateData.claimed === 'string') updateData.claimed = updateData.claimed === 'true';
+        Object.keys(updateData).forEach(key => {
+          if (!EXPENSE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const TASK_UPDATE_COLUMNS = [
+        'title', 'description', 'client_id', 'assigned_to', 'due_date',
+        'priority', 'status', 'category', 'parent_task_id', 'depends_on', 'estimated_hours', 'tags', 'is_sample', 'updated_at'
+      ];
+      if (supabaseTable === 'tasks') {
+        if (typeof updateData.depends_on === 'string') {
+          try { updateData.depends_on = JSON.parse(updateData.depends_on); } catch (_) { updateData.depends_on = []; }
+        }
+        if (updateData.depends_on !== undefined && !Array.isArray(updateData.depends_on)) updateData.depends_on = [];
+        if (typeof updateData.tags === 'string') {
+          try { updateData.tags = JSON.parse(updateData.tags); } catch (_) { updateData.tags = []; }
+        }
+        if (updateData.tags !== undefined && !Array.isArray(updateData.tags)) updateData.tags = [];
+        Object.keys(updateData).forEach(key => {
+          if (!TASK_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+
+      // Whitelist columns for services table to avoid "column does not exist"
+      const SERVICE_UPDATE_COLUMNS = [
+        'name', 'description', 'item_type', 'default_unit', 'default_rate', 'tax_category', 'is_active',
+        'rate', 'unit', 'unit_price', 'unit_of_measure', 'service_type',
+        'sku', 'price', 'billing_unit', 'role', 'hourly_rate', 'unit_type', 'cost_rate', 'cost_type', 'default_cost',
+        'category', 'pricing_type', 'min_quantity', 'tags', 'estimated_duration', 'requirements',
+        'price_locked', 'price_locked_at', 'price_locked_reason', 'usage_count', 'last_used_date', 'type_specific_data',
+        'created_by_id', 'updated_at'
+      ];
+      if (supabaseTable === 'services') {
+        Object.keys(updateData).forEach(key => {
+          if (!SERVICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+
+      // Remove items from update data (handled separately)
+      let itemsToUpdate = null;
+      if ((supabaseTable === 'invoices' || supabaseTable === 'quotes') && data.items && Array.isArray(data.items)) {
+        itemsToUpdate = data.items;
+        delete updateData.items;
+      }
+
+      // Update in Supabase
+      if (supabaseTable) {
+        let query = supabase.from(supabaseTable).update(updateData).eq('id', id);
+        
+        // Ensure we only update records belonging to user's org (packages: RLS enforces)
+        if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+          query = query.eq('org_id', orgId);
+        }
+
+        const { data: updated, error } = await query.select().single();
+
+        if (error) {
+          const msg = getSupabaseErrorMessage(error, `Update ${this.entityName} failed`);
+          console.error(`Failed to update ${this.entityName} in Supabase:`, msg);
+          throw new Error(`Failed to update ${this.entityName}: ${msg}`);
+        }
+
+        // Update local cache
+        const record = {
+          ...updated,
+          created_date: updated.created_at || updated.created_date,
+          updated_date: updated.updated_at || updated.updated_date
+        };
+        if (supabaseTable === 'recurring_invoices' && record.profile_name != null && record.template_name == null) {
+          record.template_name = record.profile_name;
+        }
+        if (supabaseTable === 'packages' && record.features && typeof record.features === 'object' && !Array.isArray(record.features)) {
+          record.features = Array.isArray(record.features) ? record.features : [];
+        }
+
+        this.data[id] = record;
+        this.saveToStorage();
+
+        // Handle items update
+        if (itemsToUpdate) {
+          const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
+          const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
+
+          const { error: deleteItemsError } = await supabase
+            .from(itemsTable)
+            .delete()
+            .eq(parentIdField, id);
+          if (deleteItemsError) {
+            console.error(`Failed to delete existing ${itemsTable}:`, getSupabaseErrorMessage(deleteItemsError, "Delete items failed"));
+          }
+
+          const itemsToInsert = itemsToUpdate.map(item => ({
+            [parentIdField]: id,
+            service_name: item.service_name || item.name,
+            description: item.description || '',
+            quantity: Number(item.quantity || item.qty || 1),
+            unit_price: Number(item.unit_price || item.rate || item.price || 0),
+            total_price: Number(item.total_price || item.total || 0)
+          }));
+
+          if (itemsToInsert.length > 0) {
+            const { error: itemsError } = await supabase
+              .from(itemsTable)
+              .insert(itemsToInsert);
+
+            if (itemsError) {
+              console.error(`Failed to update ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Update items failed"));
+            }
+          }
+        }
+
+        this.notifySubscribers();
+        return record;
+      } else {
+        // Fallback for entities without Supabase table
+        const record = {
+          ...this.data[id],
+          ...data,
+          updated_date: new Date().toISOString()
+        };
+        
+        this.data[id] = record;
+        this.saveToStorage();
+        this.notifySubscribers();
+        return record;
+      }
+    } catch (e) {
+      console.error(`Failed to update ${this.entityName}:`, e);
+      throw e;
+    }
   }
 
   async delete(id) {
@@ -131,6 +1136,42 @@ class EntityManager {
     if (this.data[id]) {
       delete this.data[id];
       this.saveToStorage();
+
+      // Optionally sync to Supabase if authenticated
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user && id.includes('-')) {
+          const table = this.entityName.toLowerCase() + 's';
+          const supabaseTable = table === 'services' ? 'services' : 
+                               table === 'clients' ? 'clients' :
+                               table === 'invoices' ? 'invoices' :
+                               table === 'quotes' ? 'quotes' :
+                               table === 'payments' ? 'payments' :
+                               table === 'bankingdetails' ? 'banking_details' :
+                               table === 'recurringinvoices' ? 'recurring_invoices' :
+                               table === 'packages' ? 'packages' :
+                               table === 'invoiceviews' ? 'invoice_views' :
+                               table === 'payrolls' ? 'payslips' :
+                               table === 'expenses' ? 'expenses' :
+                               table === 'tasks' ? 'tasks' : null;
+
+          if (supabaseTable) {
+            let deleteQuery = supabase.from(supabaseTable).delete().eq("id", id);
+            if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+              const orgId = await this.ensureUserHasOrganization(sessionData.session.user.id);
+              if (orgId) deleteQuery = deleteQuery.eq('org_id', orgId);
+            }
+            // packages: RLS enforces who can delete
+            const { error: deleteError } = await deleteQuery;
+            if (deleteError) {
+              console.warn(`Failed to delete ${this.entityName} from Supabase:`, getSupabaseErrorMessage(deleteError, "Delete failed"));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to delete ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Delete failed"));
+      }
+
       this.notifySubscribers();
     }
     return { success: true };
@@ -187,27 +1228,66 @@ class AuthManager {
   async login(credentials) {
     // Simulated login method
     const email = (credentials.email || '').trim().toLowerCase();
-    const adminAllowlist = ['admin@invoicebreek.com'];
-    const isAdminEmail = adminAllowlist.includes(email);
-
-    if (credentials.role === 'admin' && !isAdminEmail) {
-      throw new Error('Admin access is restricted to approved accounts.');
-    }
-
+    // Use role from credentials (which is now always synced with Supabase)
     const userId = this.generateUserId(email);
     console.log(`👤 User login: ${email} → Database ID: ${userId}`);
 
+    let companyProfile = {};
+    let supabaseUserId = null;
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
+      } else if (sessionData?.session?.user?.id) {
+        supabaseUserId = sessionData.session.user.id;
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", sessionData.session.user.id)
+          .maybeSingle();
+        if (profileError) {
+          console.warn("Failed to load profile for login:", getSupabaseErrorMessage(profileError, "Load profile failed"));
+        }
+        if (profile) {
+          companyProfile = {
+            full_name: profile.full_name,
+            company_name: profile.company_name,
+            company_address: profile.company_address,
+            currency: profile.currency,
+            logo_url: profile.logo_url,
+            timezone: profile.timezone,
+            invoice_template: profile.invoice_template,
+            invoice_header: profile.invoice_header,
+          };
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to load profile from Supabase, trying localStorage:", getSupabaseErrorMessage(error, "Load profile failed"));
+      // Fallback to localStorage
+      try {
+        const storedProfile = localStorage.getItem(`breakapi_${userId}_company_profile`);
+        if (storedProfile) {
+          companyProfile = JSON.parse(storedProfile);
+        }
+      } catch {
+        // Ignore errors loading company profile from localStorage
+      }
+    }
+
     this.isAuthenticated = true;
     this.user = {
-      id: userId,
+      id: supabaseUserId || userId,
       email,
-      role: isAdminEmail ? 'admin' : 'user',
-      full_name: credentials.full_name || credentials.email?.split('@')[0] || 'User',
-      company_name: credentials.company_name || 'Company Name',
-      company_address: credentials.company_address || '',
-      currency: credentials.currency || 'ZAR',
-      timezone: credentials.timezone || 'UTC',
-      logo_url: '',
+      role: credentials.role || 'user',
+      full_name: companyProfile.full_name || credentials.full_name || credentials.email?.split('@')[0] || 'User',
+      display_name: companyProfile.full_name || credentials.full_name || credentials.email?.split('@')[0] || 'User',
+      company_name: companyProfile.company_name || credentials.company_name || 'Company Name',
+      company_address: companyProfile.company_address || credentials.company_address || '',
+      currency: companyProfile.currency || credentials.currency || 'ZAR',
+      logo_url: companyProfile.logo_url || '',
+      timezone: companyProfile.timezone || credentials.timezone || 'UTC',
+      invoice_template: companyProfile.invoice_template || 'classic',
+      invoice_header: companyProfile.invoice_header || '',
       plan: credentials.plan || 'free' // Default to free plan
     };
     this.saveUserToStorage();
@@ -222,27 +1302,166 @@ class AuthManager {
 
   async me() {
     // Return current user if authenticated
-    if (this.user && this.isAuthenticated) {
-      return this.user;
+    if (!this.user || !this.isAuthenticated) {
+      throw new Error('Not authenticated');
     }
-    throw new Error('Not authenticated');
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.warn("Failed to get session in me():", getSupabaseErrorMessage(sessionError, "Session failed"));
+      } else if (sessionData?.session?.user?.id) {
+        const authUserId = sessionData.session.user.id;
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", authUserId)
+          .maybeSingle();
+        if (error) {
+          console.warn("Failed to load profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
+        }
+        if (!error && profile) {
+          // Merge Supabase profile (one row per user, id = auth.users.id) into local user
+          const fullName = profile.full_name || this.user.full_name;
+          this.user = {
+            ...this.user,
+            id: authUserId,
+            supabase_id: authUserId,
+            full_name: fullName,
+            display_name: fullName,
+            email: profile.email || this.user.email,
+            avatar_url: profile.avatar_url || this.user.avatar_url,
+            logo_url: profile.logo_url || this.user.logo_url || '',
+            company_name: profile.company_name || this.user.company_name || '',
+            company_address: profile.company_address || this.user.company_address || '',
+            currency: profile.currency || this.user.currency || 'USD',
+            timezone: profile.timezone || this.user.timezone || 'UTC',
+            invoice_template: profile.invoice_template || this.user.invoice_template || 'classic',
+            invoice_header: profile.invoice_header || this.user.invoice_header || '',
+          };
+          this.saveUserToStorage();
+        } else {
+          // Session exists but no profile row yet: ensure local user has correct id
+          this.user = { ...this.user, id: authUserId, supabase_id: authUserId };
+          this.saveUserToStorage();
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to load profile from Supabase:", getSupabaseErrorMessage(error, "Load profile failed"));
+    }
+    return this.user;
   }
 
   async getCurrentUser() {
     return this.user;
   }
 
+  /**
+   * Restore user state from Supabase session when localStorage was cleared.
+   * Loads profile from Supabase profiles table (one row per user, id = auth.users.id).
+   * @returns {Promise<object|null>} Restored user or null
+   */
+  async restoreFromSupabaseSession() {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data?.session?.user) return null;
+      const su = data.session.user;
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", su.id).maybeSingle();
+      const profileData = profile || {};
+      const fullName = profileData.full_name || su.user_metadata?.full_name || (su.email || "").split("@")[0] || "User";
+      this.user = {
+        id: su.id,
+        supabase_id: su.id,
+        auth_id: su.id,
+        email: (su.email || "").toLowerCase(),
+        role: su.app_metadata?.role || "user",
+        full_name: fullName,
+        display_name: fullName,
+        company_name: profileData.company_name || "",
+        company_address: profileData.company_address || "",
+        currency: profileData.currency || "ZAR",
+        logo_url: profileData.logo_url || "",
+        timezone: profileData.timezone || "UTC",
+        invoice_template: profileData.invoice_template || "classic",
+        invoice_header: profileData.invoice_header || "",
+        plan: su.app_metadata?.plan || "free",
+      };
+      this.isAuthenticated = true;
+      this.saveUserToStorage();
+      return this.user;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get the current auth user id from Supabase session (used to key profile and storage per user).
+   * @returns {Promise<string|null>} auth.users id or null if not authenticated
+   */
+  async getAuthUserId() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.user?.id ?? null;
+  }
+
+  /**
+   * Update current user and persist to Supabase profiles table.
+   * Profile is stored per user: one row per auth user, keyed by auth.users(id). Only writes when session exists.
+   */
   async updateMyUserData(data) {
-    // Update current user data
     if (!this.user) {
       this.user = {};
     }
-    this.user = {
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authUserId = sessionData?.session?.user?.id ?? null;
+
+    // Keep id as auth user id when available so all consumers get the real user id
+    const updatedUser = {
       ...this.user,
       ...data,
-      id: this.user.id || '1'
+      id: authUserId ?? this.user.id,
+      supabase_id: authUserId ?? this.user.supabase_id,
     };
+    this.user = updatedUser;
     this.saveUserToStorage();
+
+    // Persist to Supabase profiles table (per-user row keyed by auth user id)
+    if (!authUserId) {
+      return this.user;
+    }
+    try {
+      const profileData = {
+        full_name: data.full_name ?? data.display_name ?? updatedUser.full_name,
+        email: data.email ?? updatedUser.email,
+        avatar_url: data.avatar_url ?? updatedUser.avatar_url,
+        logo_url: data.logo_url !== undefined ? data.logo_url : updatedUser.logo_url,
+        company_name: data.company_name !== undefined ? data.company_name : updatedUser.company_name,
+        company_address: data.company_address !== undefined ? data.company_address : updatedUser.company_address,
+        currency: data.currency ?? updatedUser.currency ?? 'USD',
+        timezone: data.timezone ?? updatedUser.timezone ?? 'UTC',
+        invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? 'classic',
+        invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
+        updated_at: new Date().toISOString(),
+      };
+
+      Object.keys(profileData).forEach(key => {
+        if (profileData[key] === undefined) delete profileData[key];
+      });
+
+      const { error } = await supabase
+        .from('profiles')
+        .upsert(
+          { id: authUserId, ...profileData },
+          { onConflict: 'id' }
+        );
+
+      if (error) {
+        console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
+      }
+    } catch (error) {
+      console.warn("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
+    }
+
     return this.user;
   }
 
@@ -253,6 +1472,199 @@ class AuthManager {
 
 class IntegrationManager {
   constructor() {
+    const storageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "invoicebreek";
+
+    const getLocalUserId = () => {
+      try {
+        const stored = localStorage.getItem("breakapi_user");
+        if (!stored) return null;
+        const parsed = JSON.parse(stored);
+        return parsed?.id || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const getSessionUser = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw new Error(getSupabaseErrorMessage(error, "Failed to get session"));
+      return data?.session?.user ?? null;
+    };
+
+    const getOrgIdForUser = async (userId) => {
+      const { data: existingMembership, error: membershipCheckError } = await supabase
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+      if (membershipCheckError && !/0 rows|PGRST116/i.test(membershipCheckError.message || '')) {
+        console.warn('IntegrationManager: check membership failed', getSupabaseErrorMessage(membershipCheckError, 'Check failed'));
+      }
+      if (existingMembership?.org_id) {
+        return existingMembership.org_id;
+      }
+
+      // Check if user has an organization as owner
+      const { data: existingOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      let orgId = existingOrg?.id;
+
+      // Create organization if it doesn't exist
+      if (!orgId) {
+        let orgName = 'My Organization';
+        try {
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('company_name, full_name')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (userProfile) {
+            orgName = userProfile.company_name || userProfile.full_name || 'My Organization';
+          }
+        } catch (profileErr) {
+          console.warn('Could not fetch profile for org name:', profileErr);
+        }
+        
+        const { data: newOrg, error: orgError } = await supabase
+          .from('organizations')
+          .insert({
+            name: orgName,
+            owner_id: userId
+          })
+          .select('id')
+          .single();
+
+        if (orgError) {
+          const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
+          console.error("Failed to create organization:", msg);
+          throw new Error(`Failed to create organization: ${msg}`);
+        }
+
+        orgId = newOrg?.id;
+      }
+
+      // Create membership if it doesn't exist
+      if (!existingMembership && orgId) {
+        const { error: membershipError } = await supabase
+          .from('memberships')
+          .insert({
+            org_id: orgId,
+            user_id: userId,
+            role: 'owner'
+          });
+
+        if (membershipError) {
+          const msg = getSupabaseErrorMessage(membershipError, "Create membership failed");
+          const isUnique = membershipError.code === "23505" || /unique|duplicate/i.test(msg);
+          if (!isUnique) {
+            console.error("Failed to create membership:", msg);
+            throw new Error(`Failed to create membership: ${msg}`);
+          }
+        }
+      }
+
+      if (!orgId) {
+        throw new Error("No organization found for user");
+      }
+
+      return orgId;
+    };
+
+    const buildUploadPath = (orgId, file, folder = "uploads") => {
+      const safeName = file?.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_") : "upload";
+      return `${orgId}/${folder}/${Date.now()}-${safeName}`;
+    };
+
+    const buildFileUrl = async ({ filePath, preferSigned }) => {
+      if (preferSigned) {
+        const { data: signed, error: signedError } = await supabase
+          .storage
+          .from(storageBucket)
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365);
+
+        if (!signedError && signed?.signedUrl) {
+          return signed.signedUrl;
+        }
+      }
+
+      const { data: publicData } = supabase
+        .storage
+        .from(storageBucket)
+        .getPublicUrl(filePath);
+
+      if (publicData?.publicUrl) {
+        return publicData.publicUrl;
+      }
+
+      if (!preferSigned) {
+        const { data: signed, error: signedError } = await supabase
+          .storage
+          .from(storageBucket)
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365);
+
+        if (!signedError && signed?.signedUrl) {
+          return signed.signedUrl;
+        }
+      }
+
+      return null;
+    };
+
+    const uploadToStorage = async ({ file, folder, bucket: bucketOverride }) => {
+      if (!file) {
+        throw new Error("No file provided");
+      }
+      const bucket = bucketOverride || storageBucket;
+
+      const sessionUser = await getSessionUser();
+      const orgId = sessionUser?.id
+        ? await getOrgIdForUser(sessionUser.id)
+        : `local-${getLocalUserId() || "guest"}`;
+      const filePath = buildUploadPath(orgId, file, folder);
+
+      const { error: uploadError } = await supabase
+        .storage
+        .from(bucket)
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type || undefined
+        });
+
+      if (uploadError) {
+        throw new Error(getSupabaseErrorMessage(uploadError, "File upload failed"));
+      }
+
+      const fileUrl = bucketOverride
+        ? await buildFileUrlWithBucket({ filePath, preferSigned: !!sessionUser?.id }, bucket)
+        : await buildFileUrl({ filePath, preferSigned: !!sessionUser?.id });
+
+      if (!fileUrl) {
+        throw new Error(`Upload succeeded but no file URL was generated. Configure the ${bucket} bucket as public or allow signed URLs.`);
+      }
+
+      return { file_url: fileUrl, file_path: filePath };
+    };
+
+    const buildFileUrlWithBucket = async (opts, bucketName) => {
+      const { filePath, preferSigned } = opts;
+      const b = bucketName || storageBucket;
+      if (preferSigned) {
+        const { data: signed, error: signedError } = await supabase.storage.from(b).createSignedUrl(filePath, 60 * 60 * 24 * 365);
+        if (!signedError && signed?.signedUrl) return signed.signedUrl;
+      }
+      const { data: publicData } = supabase.storage.from(b).getPublicUrl(filePath);
+      if (publicData?.publicUrl) return publicData.publicUrl;
+      const { data: signed, error: signedError } = await supabase.storage.from(b).createSignedUrl(filePath, 60 * 60 * 24 * 365);
+      return !signedError && signed?.signedUrl ? signed.signedUrl : null;
+    };
+
     this.Core = {
       InvokeLLM: async (prompt) => {
         void prompt; // Acknowledge parameter
@@ -265,14 +1677,15 @@ class IntegrationManager {
         return { success: true };
       },
       UploadFile: async ({ file }) => {
-        console.log('UploadFile called with file:', file?.name);
-        if (!file) {
-          throw new Error('No file provided');
-        }
-        // Create a blob URL for preview
-        const file_url = URL.createObjectURL(file);
-        console.log('Generated file_url:', file_url);
-        return { file_url };
+        return uploadToStorage({ file, folder: "branding" });
+      },
+      /** Upload to activities bucket (receipts, attachments); path = org_id/activities/... */
+      UploadToActivities: async ({ file }) => {
+        return uploadToStorage({ file, folder: "activities", bucket: "activities" });
+      },
+      /** Upload to bank-details bucket (statements, imports); path = org_id/bank-details/... */
+      UploadToBankDetails: async ({ file }) => {
+        return uploadToStorage({ file, folder: "bank-details", bucket: "bank-details" });
       },
       GenerateImage: async (prompt) => {
         void prompt; // Acknowledge parameter
@@ -291,11 +1704,7 @@ class IntegrationManager {
       },
       UploadPrivateFile: async ({ file }) => {
         console.log('UploadPrivateFile called with file:', file?.name);
-        if (!file) {
-          throw new Error('No file provided');
-        }
-        const file_url = URL.createObjectURL(file);
-        return { file_url };
+        return uploadToStorage({ file, folder: "private" });
       }
     };
   }

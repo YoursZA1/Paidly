@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; // Corrected from react-outer-dom
 import { Quote, Client, User } from '@/api/entities'; // Consolidated imports as per outline
-import { formatCurrency } from '../components/CurrencySelector'; // New import
+import { formatCurrency } from '@/components/CurrencySelector'; // New import
 import { format } from 'date-fns'; // New import
 import { Skeleton } from '@/components/ui/skeleton'; // New import
-import DocumentLayout from '../components/shared/DocumentLayout'; // New import
+import DocumentLayout from '@/components/shared/DocumentLayout'; // New import
 import { createPageUrl } from '@/utils';
 
 // New component introduced in the outline

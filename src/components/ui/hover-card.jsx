@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import PropTypes from "prop-types"
 import * as HoverCardPrimitive from "@radix-ui/react-hover-card"
 
 import { cn } from "@/lib/utils"
@@ -21,5 +22,11 @@ const HoverCardContent = React.forwardRef(({ className, align = "center", sideOf
     {...props} />
 ))
 HoverCardContent.displayName = HoverCardPrimitive.Content.displayName
+
+HoverCardContent.propTypes = {
+  className: PropTypes.string,
+  align: PropTypes.string,
+  sideOffset: PropTypes.number
+}
 
 export { HoverCard, HoverCardTrigger, HoverCardContent }

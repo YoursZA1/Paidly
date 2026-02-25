@@ -5,10 +5,10 @@ import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 
 // Import templates
-import ClassicTemplate from '../components/invoice/templates/ClassicTemplate';
-import ModernTemplate from '../components/invoice/templates/ModernTemplate';
-import MinimalTemplate from '../components/invoice/templates/MinimalTemplate';
-import BoldTemplate from '../components/invoice/templates/BoldTemplate';
+import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
+import ModernTemplate from '@/components/invoice/templates/ModernTemplate';
+import MinimalTemplate from '@/components/invoice/templates/MinimalTemplate';
+import BoldTemplate from '@/components/invoice/templates/BoldTemplate';
 
 const TEMPLATES = {
     classic: ClassicTemplate,
@@ -17,10 +17,13 @@ const TEMPLATES = {
     bold: BoldTemplate
 };
 
+const DRAFT_STORAGE_KEY = 'invoiceDraft';
+
 export default function InvoicePDF() {
     const location = useLocation();
     const urlParams = new URLSearchParams(location.search);
     const invoiceId = urlParams.get('id');
+    const isDraft = urlParams.get('draft') === '1';
     const autoDownload = urlParams.get('download') === 'true';
     const [invoice, setInvoice] = useState(null);
     const [client, setClient] = useState(null);
@@ -29,10 +32,49 @@ export default function InvoicePDF() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (isDraft) {
+            try {
+                const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+                if (raw) {
+                    const draft = JSON.parse(raw);
+                    const { invoiceData, client: draftClient, user: draftUser } = draft;
+                    if (invoiceData && draftClient && draftUser) {
+                        const mappedInvoice = {
+                            invoice_number: invoiceData.reference_number || invoiceData.invoice_number || 'Draft',
+                            delivery_date: invoiceData.delivery_date,
+                            created_date: invoiceData.invoice_date || invoiceData.delivery_date,
+                            items: (invoiceData.items || []).map((item) => ({
+                                service_name: item.name || item.service_name || 'Item',
+                                description: item.description || '',
+                                quantity: Number(item.quantity ?? item.qty ?? 1),
+                                unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
+                                total_price: Number(item.total_price ?? item.total ?? 0),
+                            })),
+                            subtotal: Number(invoiceData.subtotal ?? 0),
+                            tax_rate: Number(invoiceData.tax_rate ?? 0),
+                            tax_amount: Number(invoiceData.tax_amount ?? 0),
+                            total_amount: Number(invoiceData.total_amount ?? 0),
+                            notes: invoiceData.notes || '',
+                            terms_conditions: invoiceData.terms_conditions || '',
+                            project_title: invoiceData.project_title || '',
+                            project_description: invoiceData.project_description || '',
+                        };
+                        setInvoice(mappedInvoice);
+                        setClient(draftClient);
+                        setUser(draftUser);
+                        setBankingDetail(draft.bankingDetail || null);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load draft invoice:', e);
+            }
+            setIsLoading(false);
+            return;
+        }
         if (invoiceId) {
             loadInvoiceData();
         }
-    }, [invoiceId]);
+    }, [invoiceId, isDraft]);
 
     useEffect(() => {
         if (autoDownload && !isLoading && invoice) {
@@ -80,7 +122,14 @@ export default function InvoicePDF() {
     }
 
     if (!invoice || !client || !user) {
-        return <div className="flex items-center justify-center min-h-screen">Document not found.</div>;
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+                <p className="text-gray-600">
+                    {isDraft ? 'No draft data found. Please try downloading from the Create Invoice page again.' : 'Document not found.'}
+                </p>
+                <Button variant="outline" onClick={() => window.close()} className="rounded-lg">Close</Button>
+            </div>
+        );
     }
     
     const userCurrency = user?.currency || 'ZAR';
@@ -121,15 +170,15 @@ export default function InvoicePDF() {
                 <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
                     <div className="no-print mb-4 flex justify-end gap-2">
                         <Button
-                            onClick={() => window.history.back()}
+                            onClick={() => (isDraft ? window.close() : window.history.back())}
                             variant="outline"
                             className="px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
-                            Back
+                            {isDraft ? 'Close' : 'Back'}
                         </Button>
                         <Button
                             onClick={() => window.print()}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 py-2 rounded-lg text-sm"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
                             Download PDF
                         </Button>

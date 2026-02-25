@@ -31,7 +31,7 @@ export default function ViewPayslip() {
 
     const handleDownloadPDF = () => {
         const pdfUrl = createPageUrl(`PayslipPDF?id=${payslipId}`);
-        window.open(pdfUrl, '_blank');
+        window.location.href = pdfUrl;
     };
 
     const handleShare = async () => {

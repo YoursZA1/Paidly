@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react"
+import PropTypes from "prop-types"
 import { Slot } from "@radix-ui/react-slot"
 import { Controller, FormProvider, useFormContext } from "react-hook-form";
 
@@ -121,6 +122,34 @@ const FormMessage = React.forwardRef(({ className, children, ...props }, ref) =>
   );
 })
 FormMessage.displayName = "FormMessage"
+
+FormField.propTypes = {
+  name: PropTypes.string.isRequired
+}
+
+FormItem.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+FormLabel.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+FormControl.propTypes = {
+  children: PropTypes.node
+}
+
+FormDescription.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+FormMessage.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
 
 export {
   useFormField,

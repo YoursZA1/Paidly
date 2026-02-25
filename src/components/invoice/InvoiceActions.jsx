@@ -279,9 +279,9 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
         try {
             InvoiceService.previewInvoicePDF(invoice.id);
             toast({
-                title: "Preview opened",
-                description: "PDF preview opening in a new window",
-                duration: 3000
+                title: "Opening preview",
+                description: "Loading PDF preview...",
+                duration: 2000
             });
         } catch (error) {
             console.error("Failed to preview PDF:", error);

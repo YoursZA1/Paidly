@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Quote, Client, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Download, Printer, Mail, ArrowLeft, Edit, ArrowRightSquare } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
-import { formatCurrency } from '../components/CurrencySelector';
-import QuoteActions from '../components/quote/QuoteActions';
+import { formatCurrency } from '@/components/CurrencySelector';
+import QuoteActions from '@/components/quote/QuoteActions';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function ViewQuote() {
     const [quote, setQuote] = useState(null);
@@ -53,7 +55,7 @@ export default function ViewQuote() {
     };
 
     const handleDownloadPDF = () => {
-        window.open(createPageUrl(`QuotePDF?id=${quote.id}`), '_blank');
+        window.location.href = createPageUrl(`QuotePDF?id=${quote.id}`);
     };
 
     const handlePrint = () => {
@@ -78,10 +80,22 @@ export default function ViewQuote() {
     }
 
     const userCurrency = company?.currency || 'USD';
+    const items = Array.isArray(quote?.items) ? quote.items : [];
 
     return (
-        <div className="bg-slate-50 min-h-screen">
+        <div className="min-h-screen bg-background">
             <div className="p-4 sm:p-8 max-w-5xl mx-auto">
+                <Breadcrumb className="mb-4">
+                    <BreadcrumbList>
+                        <BreadcrumbItem>
+                            <BreadcrumbLink asChild><Link to={createPageUrl('Quotes')}>Quotes</Link></BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                            <BreadcrumbPage>#{quote.quote_number}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                    </BreadcrumbList>
+                </Breadcrumb>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div className="flex items-center gap-4">
@@ -117,7 +131,7 @@ export default function ViewQuote() {
                                 <div className="flex flex-col sm:flex-row justify-between items-start mb-8 pb-6 border-b-2 border-indigo-600">
                                     <div className="flex items-start gap-6 mb-4 sm:mb-0">
                                         {company?.logo_url && (
-                                            <img 
+                                            <LogoImage 
                                                 src={company.logo_url} 
                                                 alt={company?.company_name || 'Company'} 
                                                 className="w-24 h-24 object-contain rounded-xl shadow-lg"
@@ -159,7 +173,7 @@ export default function ViewQuote() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {quote.items.map((item, index) => (
+                                        {items.map((item, index) => (
                                             <tr key={index} className="border-b">
                                                 <td className="p-3">
                                                     <p className="font-bold">{item.service_name}</p>

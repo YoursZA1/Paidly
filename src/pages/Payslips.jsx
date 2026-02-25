@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Payroll, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, Receipt, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
+import { useToast } from "@/components/ui/use-toast";
+import { payslipsToCsv, parsePayslipCsv, csvRowToPayslipPayload } from "@/utils/payslipCsvMapping";
 import {
     Table,
     TableBody,
@@ -41,6 +43,10 @@ export default function PayslipsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const payslipFileInputRef = useRef(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         loadData();
@@ -57,8 +63,64 @@ export default function PayslipsPage() {
             setUser(userData);
         } catch (error) {
             console.error("Error loading data:", error);
+            toast({ title: "Could not load payslips", description: error?.message, variant: "destructive" });
         }
         setIsLoading(false);
+    };
+
+    const handleExportCsv = async () => {
+        setIsExporting(true);
+        try {
+            const list = await Payroll.list("-created_date");
+            if (!list?.length) {
+                toast({ title: "No payslips to export", variant: "destructive" });
+                return;
+            }
+            const csv = payslipsToCsv(list);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Payslip_export.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${list.length} payslip(s) exported.`, variant: "default" });
+        } catch (error) {
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+        setIsExporting(false);
+    };
+
+    const handleImportCsv = (e) => {
+        const file = e?.target?.files?.[0];
+        if (!file) return;
+        setIsImporting(true);
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const text = ev.target?.result ?? "";
+                const { headers, rows } = parsePayslipCsv(text);
+                if (!headers?.length || !rows?.length) {
+                    toast({ title: "Import failed", description: "CSV is empty or invalid.", variant: "destructive" });
+                    return;
+                }
+                let created = 0;
+                for (const row of rows) {
+                    const payload = csvRowToPayslipPayload(headers, row);
+                    if (payload.employee_name) {
+                        await Payroll.create(payload);
+                        created++;
+                    }
+                }
+                toast({ title: "Import complete", description: `${created} payslip(s) imported.`, variant: "default" });
+                loadData();
+            } catch (err) {
+                toast({ title: "Import failed", description: err?.message || "Could not parse CSV.", variant: "destructive" });
+            }
+            setIsImporting(false);
+            if (payslipFileInputRef.current) payslipFileInputRef.current.value = "";
+        };
+        reader.readAsText(file, "UTF-8");
     };
 
     const userCurrency = user?.currency || 'ZAR';
@@ -110,14 +172,31 @@ export default function PayslipsPage() {
                     <CardHeader>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <CardTitle>Payslip List</CardTitle>
-                            <div className="relative w-full sm:max-w-xs">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <Input
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Search payslips..."
-                                    className="pl-10 h-10 rounded-xl w-full"
+                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                <input
+                                    type="file"
+                                    ref={payslipFileInputRef}
+                                    accept=".csv"
+                                    className="hidden"
+                                    onChange={handleImportCsv}
                                 />
+                                <Button variant="outline" size="sm" disabled={isImporting} onClick={() => payslipFileInputRef.current?.click()}>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {isImporting ? "Importing…" : "Import CSV"}
+                                </Button>
+                                <Button variant="outline" size="sm" disabled={isExporting} onClick={handleExportCsv}>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {isExporting ? "Exporting…" : "Export CSV"}
+                                </Button>
+                                <div className="relative w-full sm:max-w-xs">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Input
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        placeholder="Search payslips..."
+                                        className="pl-10 h-10 rounded-xl w-full"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </CardHeader>

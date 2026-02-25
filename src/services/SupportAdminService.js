@@ -4,10 +4,21 @@
  * Handles user impersonation, activity logs, error tracking, admin notes, and data exports
  */
 
+import AuditLogService from '@/services/AuditLogService';
+
 const IMPERSONATION_KEY = 'breakapi_impersonation';
 const ADMIN_NOTES_KEY = 'breakapi_admin_notes';
 const ERROR_TRACKING_KEY = 'breakapi_error_tracking';
 const ACTIVITY_LOG_KEY = 'breakapi_global_activity_log';
+const WEBHOOK_FAILURES_KEY = 'breakapi_webhook_failures';
+const RETENTION_SETTINGS_KEY = 'breakapi_support_log_retention';
+
+const DEFAULT_RETENTION_SETTINGS = {
+  activityDays: 90,
+  errorDays: 180,
+  webhookDays: 90,
+  auditLogDays: 180
+};
 
 class SupportAdminService {
   // ==================== User Impersonation ====================
@@ -372,6 +383,103 @@ class SupportAdminService {
     };
   }
 
+  // ==================== Webhook Failures ====================
+
+  /**
+   * Log a webhook failure
+   */
+  static logWebhookFailure(failureData) {
+    const failures = this.loadWebhookFailures();
+
+    const failure = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      webhookId: failureData.webhookId || 'unknown',
+      eventType: failureData.eventType || 'unknown',
+      endpoint: failureData.endpoint || '',
+      statusCode: failureData.statusCode || null,
+      errorMessage: failureData.errorMessage || 'Webhook delivery failed',
+      attempts: failureData.attempts || 1,
+      lastAttemptAt: failureData.lastAttemptAt || new Date().toISOString(),
+      retryable: failureData.retryable ?? true,
+      environment: failureData.environment || 'production',
+      payload: failureData.payload || {},
+      resolved: false,
+      resolvedAt: null,
+      resolvedBy: null
+    };
+
+    failures.push(failure);
+    this.saveWebhookFailures(failures);
+
+    this.logActivity({
+      type: 'WEBHOOK_FAILURE',
+      action: 'Webhook Delivery Failed',
+      severity: 'high',
+      webhookId: failure.webhookId,
+      eventType: failure.eventType,
+      statusCode: failure.statusCode
+    });
+
+    return failure;
+  }
+
+  /**
+   * Update webhook failure
+   */
+  static updateWebhookFailure(failureId, updates, adminId, adminName) {
+    const failures = this.loadWebhookFailures();
+    const index = failures.findIndex(f => f.id === failureId);
+
+    if (index !== -1) {
+      failures[index] = {
+        ...failures[index],
+        ...updates
+      };
+
+      if (updates.resolved) {
+        failures[index].resolvedAt = new Date().toISOString();
+        failures[index].resolvedBy = adminName;
+      }
+
+      this.saveWebhookFailures(failures);
+
+      this.logActivity({
+        type: 'WEBHOOK_UPDATED',
+        action: 'Webhook Failure Updated',
+        performedBy: adminName,
+        performedById: adminId,
+        webhookFailureId: failureId,
+        severity: 'medium'
+      });
+
+      return failures[index];
+    }
+    return null;
+  }
+
+  /**
+   * Get all webhook failures
+   */
+  static getWebhookFailures() {
+    return this.loadWebhookFailures()
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  /**
+   * Get webhook failure statistics
+   */
+  static getWebhookFailureStats() {
+    const failures = this.loadWebhookFailures();
+    return {
+      total: failures.length,
+      unresolved: failures.filter(f => !f.resolved).length,
+      byEventType: this.groupByField(failures, 'eventType'),
+      byStatusCode: this.groupByField(failures, 'statusCode'),
+      retryable: failures.filter(f => f.retryable).length
+    };
+  }
+
   // ==================== Activity Logs ====================
 
   /**
@@ -470,7 +578,8 @@ class SupportAdminService {
       activities: this.exportActivitiesCSV(),
       errors: this.exportErrorsCSV(),
       notes: this.exportNotesCSV(),
-      impersonation: this.exportImpersonationCSV()
+      impersonation: this.exportImpersonationCSV(),
+      webhookFailures: this.exportWebhookFailuresCSV()
     };
   }
 
@@ -582,6 +691,55 @@ class SupportAdminService {
   }
 
   /**
+   * Export user actions (audit logs) as CSV
+   */
+  static exportUserActionsCSV() {
+    const logs = AuditLogService.getAllLogs();
+
+    const headers = ['ID', 'Timestamp', 'Type', 'Action', 'User', 'Entity', 'Severity', 'Details'];
+    const rows = logs.map(log => {
+      const detailsText = typeof log.details === 'string'
+        ? log.details
+        : (log.details?.message || JSON.stringify(log.details || {}));
+      return [
+        log.id,
+        log.timestamp,
+        log.type || '',
+        log.action || '',
+        log.userName || '',
+        log.entityName || '',
+        log.severity || '',
+        detailsText
+      ];
+    });
+
+    return this.arrayToCSV([headers, ...rows]);
+  }
+
+  /**
+   * Export webhook failures as CSV
+   */
+  static exportWebhookFailuresCSV() {
+    const failures = this.getWebhookFailures();
+
+    const headers = ['ID', 'Timestamp', 'Webhook ID', 'Event Type', 'Endpoint', 'Status Code', 'Attempts', 'Retryable', 'Resolved', 'Error Message'];
+    const rows = failures.map(f => [
+      f.id,
+      f.timestamp,
+      f.webhookId,
+      f.eventType,
+      f.endpoint,
+      f.statusCode || '',
+      f.attempts || 0,
+      f.retryable ? 'Yes' : 'No',
+      f.resolved ? 'Yes' : 'No',
+      f.errorMessage || ''
+    ]);
+
+    return this.arrayToCSV([headers, ...rows]);
+  }
+
+  /**
    * Download CSV file
    */
   static downloadCSV(csvContent, filename) {
@@ -596,6 +754,96 @@ class SupportAdminService {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // ==================== Log Retention & Purge ====================
+
+  static getRetentionSettings() {
+    const stored = localStorage.getItem(RETENTION_SETTINGS_KEY);
+    if (!stored) return { ...DEFAULT_RETENTION_SETTINGS };
+    try {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_RETENTION_SETTINGS, ...parsed };
+    } catch (error) {
+      console.error('Failed to parse retention settings:', error);
+      return { ...DEFAULT_RETENTION_SETTINGS };
+    }
+  }
+
+  static updateRetentionSettings(updates) {
+    const current = this.getRetentionSettings();
+    const next = { ...current, ...updates };
+    localStorage.setItem(RETENTION_SETTINGS_KEY, JSON.stringify(next));
+    return next;
+  }
+
+  static purgeOldLogs(settings = null) {
+    const retention = settings || this.getRetentionSettings();
+
+    const results = {
+      activities: this.purgeByKey(ACTIVITY_LOG_KEY, retention.activityDays),
+      errors: this.purgeByKey(ERROR_TRACKING_KEY, retention.errorDays),
+      webhookFailures: this.purgeByKey(WEBHOOK_FAILURES_KEY, retention.webhookDays),
+      auditLogs: AuditLogService.purgeLogs(retention.auditLogDays)
+    };
+
+    return results;
+  }
+
+  static purgeByKey(storageKey, days) {
+    if (!Number.isFinite(days) || days <= 0) return { removed: 0, kept: 0 };
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return { removed: 0, kept: 0 };
+    try {
+      const logs = JSON.parse(stored);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const retained = logs.filter(entry => new Date(entry.timestamp || entry.createdAt || entry.created_at) >= cutoff);
+      const removed = logs.length - retained.length;
+      localStorage.setItem(storageKey, JSON.stringify(retained));
+      return { removed, kept: retained.length };
+    } catch (error) {
+      console.error('Failed to purge logs:', error);
+      return { removed: 0, kept: 0 };
+    }
+  }
+
+  // ==================== Webhook Retry ====================
+
+  static retryWebhookFailure(failureId, adminId, adminName) {
+    const failures = this.loadWebhookFailures();
+    const index = failures.findIndex(f => f.id === failureId);
+
+    if (index === -1) {
+      return { success: false, message: 'Webhook failure not found' };
+    }
+
+    const failure = failures[index];
+    if (!failure.retryable || failure.resolved) {
+      return { success: false, message: 'Webhook is not retryable' };
+    }
+
+    const updated = {
+      ...failure,
+      attempts: (failure.attempts || 0) + 1,
+      lastAttemptAt: new Date().toISOString(),
+      statusCode: failure.statusCode || 202,
+      errorMessage: 'Manual retry queued'
+    };
+
+    failures[index] = updated;
+    this.saveWebhookFailures(failures);
+
+    this.logActivity({
+      type: 'WEBHOOK_RETRY',
+      action: 'Webhook Retry Requested',
+      performedBy: adminName,
+      performedById: adminId,
+      webhookFailureId: failureId,
+      severity: 'medium'
+    });
+
+    return { success: true, failure: updated };
   }
 
   /**
@@ -616,8 +864,13 @@ class SupportAdminService {
   // ==================== Helper Methods ====================
 
   static loadAdminNotes() {
-    const stored = localStorage.getItem(ADMIN_NOTES_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(ADMIN_NOTES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to load admin notes:', error);
+      return [];
+    }
   }
 
   static saveAdminNotes(notes) {
@@ -625,8 +878,13 @@ class SupportAdminService {
   }
 
   static loadErrors() {
-    const stored = localStorage.getItem(ERROR_TRACKING_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(ERROR_TRACKING_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to load error tracking data:', error);
+      return [];
+    }
   }
 
   static saveErrors(errors) {
@@ -634,12 +892,31 @@ class SupportAdminService {
   }
 
   static loadActivities() {
-    const stored = localStorage.getItem(ACTIVITY_LOG_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(ACTIVITY_LOG_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to load activity logs:', error);
+      return [];
+    }
   }
 
   static saveActivities(activities) {
     localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activities));
+  }
+
+  static loadWebhookFailures() {
+    try {
+      const stored = localStorage.getItem(WEBHOOK_FAILURES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to load webhook failures:', error);
+      return [];
+    }
+  }
+
+  static saveWebhookFailures(failures) {
+    localStorage.setItem(WEBHOOK_FAILURES_KEY, JSON.stringify(failures));
   }
 
   static calculateDuration(startTime, endTime) {
@@ -744,6 +1021,29 @@ class SupportAdminService {
     sampleNotes.forEach(note => 
       this.addAdminNote(note.targetType, note.targetId, note.targetName, note.note, note.adminId, note.adminName, note.priority)
     );
+
+    const sampleWebhookFailures = [
+      {
+        webhookId: 'wh_001',
+        eventType: 'invoice.created',
+        endpoint: 'https://client.example.com/webhooks/invoices',
+        statusCode: 500,
+        errorMessage: 'Internal Server Error',
+        attempts: 3,
+        retryable: true
+      },
+      {
+        webhookId: 'wh_002',
+        eventType: 'payment.failed',
+        endpoint: 'https://billing.example.com/webhooks/payments',
+        statusCode: 404,
+        errorMessage: 'Endpoint not found',
+        attempts: 1,
+        retryable: false
+      }
+    ];
+
+    sampleWebhookFailures.forEach(failure => this.logWebhookFailure(failure));
   }
 }
 

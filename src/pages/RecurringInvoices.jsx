@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RecurringInvoice, Client } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Plus, Repeat, AlertCircle, CheckCircle, Loader2, LayoutGrid, List, Zap, BarChart3, ArrowLeft } from 'lucide-react';
+import { Plus, Repeat, AlertCircle, CheckCircle, Loader2, LayoutGrid, List, Zap, BarChart3, ArrowLeft, Download, Upload } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { recurringInvoicesToCsv, parseRecurringInvoiceCsv, csvRowToRecurringInvoicePayload } from '@/utils/recurringInvoiceCsvMapping';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
@@ -41,6 +43,9 @@ export default function RecurringInvoices() {
     const [selectedInvoiceForEdit, setSelectedInvoiceForEdit] = useState(null);
     const [selectedInvoiceForHistory, setSelectedInvoiceForHistory] = useState(null);
     const [isCycleHistoryOpen, setIsCycleHistoryOpen] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const recurringFileInputRef = useRef(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         loadData();
@@ -94,6 +99,68 @@ export default function RecurringInvoices() {
         setIsCycleHistoryOpen(true);
     };
 
+    const handleExportRecurringInvoices = () => {
+        if (recurringInvoices.length === 0) {
+            toast({ title: 'No recurring invoices to export', variant: 'destructive' });
+            return;
+        }
+        try {
+            const csvContent = recurringInvoicesToCsv(recurringInvoices);
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `RecurringInvoice_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: 'Export complete', description: `${recurringInvoices.length} recurring invoice(s) exported.`, variant: 'default' });
+        } catch (error) {
+            console.error('Export recurring invoices error:', error);
+            toast({ title: 'Export failed', description: error?.message || 'Failed to export.', variant: 'destructive' });
+        }
+    };
+
+    const handleImportRecurringInvoices = () => recurringFileInputRef.current?.click();
+
+    const handleImportRecurringInvoicesFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseRecurringInvoiceCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToRecurringInvoicePayload(headers, row);
+                if (!payload) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await RecurringInvoice.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn('Import recurring invoice row failed:', payload.profile_name, err);
+                    skipped++;
+                }
+            }
+            await loadData();
+            toast({
+                title: 'Import complete',
+                description: `${created} recurring invoice(s) imported${skipped ? `, ${skipped} skipped.` : '.'}`,
+                variant: 'default',
+            });
+        } catch (error) {
+            console.error('Import recurring invoices error:', error);
+            toast({ title: 'Import failed', description: error?.message || 'Could not parse CSV.', variant: 'destructive' });
+        }
+        setIsImporting(false);
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
             <CreateRecurringInvoice
@@ -116,7 +183,32 @@ export default function RecurringInvoices() {
                         </h1>
                         <p className="text-gray-600">Manage automated invoice templates and schedules.</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                        <input
+                            type="file"
+                            ref={recurringFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportRecurringInvoicesFile}
+                        />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleImportRecurringInvoices}
+                            disabled={isImporting}
+                        >
+                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? 'animate-pulse' : ''}`} />
+                            {isImporting ? 'Importing…' : 'Import CSV'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportRecurringInvoices}
+                            disabled={recurringInvoices.length === 0}
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Export CSV
+                        </Button>
                         <Button
                             onClick={handleGenerateDue}
                             disabled={isGenerating}

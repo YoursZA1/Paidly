@@ -1,4 +1,5 @@
 import * as React from "react"
+import PropTypes from "prop-types"
 import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 import { PanelLeft } from "lucide-react"
@@ -590,6 +591,122 @@ const SidebarMenuSubButton = React.forwardRef(
   }
 )
 SidebarMenuSubButton.displayName = "SidebarMenuSubButton"
+
+SidebarProvider.propTypes = {
+  defaultOpen: PropTypes.bool,
+  open: PropTypes.bool,
+  onOpenChange: PropTypes.func,
+  className: PropTypes.string,
+  style: PropTypes.object,
+  children: PropTypes.node
+}
+
+Sidebar.propTypes = {
+  side: PropTypes.string,
+  variant: PropTypes.string,
+  collapsible: PropTypes.string,
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+SidebarTrigger.propTypes = {
+  className: PropTypes.string,
+  onClick: PropTypes.func
+}
+
+SidebarRail.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarInset.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+SidebarInput.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarHeader.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarFooter.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarSeparator.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarContent.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarGroup.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarGroupLabel.propTypes = {
+  className: PropTypes.string,
+  asChild: PropTypes.bool
+}
+
+SidebarGroupAction.propTypes = {
+  className: PropTypes.string,
+  asChild: PropTypes.bool
+}
+
+SidebarGroupContent.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenu.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenuItem.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenuButton.propTypes = {
+  asChild: PropTypes.bool,
+  isActive: PropTypes.bool,
+  variant: PropTypes.string,
+  size: PropTypes.string,
+  tooltip: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+  className: PropTypes.string
+}
+
+SidebarMenuAction.propTypes = {
+  className: PropTypes.string,
+  asChild: PropTypes.bool,
+  showOnHover: PropTypes.bool
+}
+
+SidebarMenuBadge.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenuSkeleton.propTypes = {
+  className: PropTypes.string,
+  showIcon: PropTypes.bool
+}
+
+SidebarMenuSub.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenuSubItem.propTypes = {
+  className: PropTypes.string
+}
+
+SidebarMenuSubButton.propTypes = {
+  asChild: PropTypes.bool,
+  size: PropTypes.string,
+  isActive: PropTypes.bool,
+  className: PropTypes.string
+}
 
 export {
   Sidebar,

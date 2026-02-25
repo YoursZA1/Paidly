@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Send, Paperclip, X, FileText } from 'lucide-react';
 import ReactQuill from 'react-quill';
-import { breakApi } from '@/api/apiClient';
+import { useToast } from '@/components/ui/use-toast';
+import { UploadToActivities } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { Invoice, Quote } from '@/api/entities';
 
 export default function MessageComposer({ open, onClose, onSend, clients = [], invoices = [], quotes = [], preselectedClient = null, preselectedInvoice = null }) {
+    const { toast } = useToast();
     const [formData, setFormData] = useState({
         client_id: preselectedClient || '',
         invoice_id: preselectedInvoice || '',
@@ -60,10 +62,15 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
         const files = Array.from(e.target.files);
         for (const file of files) {
             try {
-                const { file_url } = await breakApi.integrations.Core.UploadFile({ file });
+                const { file_url } = await UploadToActivities({ file });
                 setAttachments(prev => [...prev, { name: file.name, url: file_url }]);
             } catch (error) {
                 console.error('Error uploading file:', error);
+                toast({
+                    title: 'Upload failed',
+                    description: error?.message || 'Could not upload file. Try again.',
+                    variant: 'destructive',
+                });
             }
         }
     };
@@ -92,6 +99,11 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                             await Invoice.update(invoice.id, { public_share_token: token });
                         } catch (e) {
                             console.error("Failed to update invoice token", e);
+                            toast({
+                                title: 'Share link issue',
+                                description: 'Could not generate invoice link. You can still send the message.',
+                                variant: 'destructive',
+                            });
                         }
                     }
 
@@ -114,6 +126,11 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                             await Quote.update(quote.id, { public_share_token: token });
                         } catch (e) {
                             console.error("Failed to update quote token", e);
+                            toast({
+                                title: 'Share link issue',
+                                description: 'Could not generate quote link. You can still send the message.',
+                                variant: 'destructive',
+                            });
                         }
                     }
                     const quoteUrl = `${window.location.origin}${createPageUrl('PublicQuote')}?token=${token || quote.id}`;
@@ -132,6 +149,11 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
             onClose();
         } catch (error) {
             console.error('Error sending message:', error);
+            toast({
+                title: 'Message failed',
+                description: error?.message || 'Could not send message. Try again.',
+                variant: 'destructive',
+            });
         }
         setIsSending(false);
     };

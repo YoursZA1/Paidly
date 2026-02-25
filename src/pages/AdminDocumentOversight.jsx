@@ -3,7 +3,7 @@
  * Operational insight into platform document usage and user activity
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import AdminDataService from '@/services/AdminDataService';
 import { exportDataAsJSON } from '@/services/AdminCommonService';
 import { generateUserId, getAllUsersInvoices, getAllUsersQuotes } from '@/utils/adminDataAggregator';
 import {
-  formatCurrency, formatRelativeTime,
+  formatCurrency, formatRelativeTime, formatDate,
   calculateGrowth,
   getChartDataForDocumentTypes, getChartDataForActivityStatus
 } from '@/utils/documentOversightUtils';
@@ -30,6 +30,13 @@ export default function AdminDocumentOversight() {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [userFilter, setUserFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
 
   // Data states
   const [summary, setSummary] = useState(null);
@@ -42,6 +49,7 @@ export default function AdminDocumentOversight() {
   const [activityStatus, setActivityStatus] = useState(null);
   const [engagement, setEngagement] = useState(null);
   const [distribution, setDistribution] = useState(null);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
   // Helper: Build summary from real user data
   const buildSummaryStats = () => {
@@ -306,6 +314,7 @@ export default function AdminDocumentOversight() {
       setActivityStatus(buildActivityStatus());
       setEngagement(buildEngagementMetrics());
       setDistribution(buildDistribution());
+      setDataRefreshKey((prev) => prev + 1);
     } catch (error) {
       console.error('Error loading document oversight data:', error);
     } finally {
@@ -345,6 +354,100 @@ export default function AdminDocumentOversight() {
     (user.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const statusBadgeClass = (status) => {
+    const value = String(status || '').toLowerCase();
+    if (['paid', 'active', 'succeeded'].includes(value)) return 'bg-emerald-100 text-emerald-700';
+    if (['pending', 'sent', 'trial'].includes(value)) return 'bg-amber-100 text-amber-700';
+    if (['overdue', 'failed', 'cancelled', 'canceled'].includes(value)) return 'bg-rose-100 text-rose-700';
+    return 'bg-slate-100 text-slate-700';
+  };
+
+  const allDocuments = useMemo(() => {
+    void dataRefreshKey;
+    const users = AdminDataService.getAllUsers();
+    const usersById = new Map();
+    const usersByEmail = new Map();
+    users.forEach(user => {
+      if (user.id) usersById.set(user.id, user);
+      if (user.email) usersByEmail.set(user.email, user);
+    });
+
+    const mapDocument = (doc, type) => {
+      const userId = doc.user_id || doc.created_by || doc.owner_id || doc.userId || '';
+      const userEmail = doc.user_email || doc.owner_email || doc.userEmail || '';
+      const user = usersById.get(userId) || usersByEmail.get(userEmail);
+      const createdAt = doc.created_date || doc.created_at || doc.createdAt || doc.date || '';
+      const total = Number(doc.total_amount || doc.total || 0);
+      const status = String(doc.status || doc.payment_status || doc.state || 'unknown').toLowerCase();
+
+      return {
+        id: `${type}-${doc.id || doc.invoice_number || doc.quote_number || createdAt}`,
+        type,
+        number: doc.invoice_number || doc.quote_number || doc.id || '—',
+        userId: user?.id || userId || '',
+        userName: user?.full_name || user?.display_name || user?.email || userEmail || 'Unknown',
+        userEmail: user?.email || userEmail || '',
+        total,
+        status,
+        createdAt
+      };
+    };
+
+    const invoices = getAllUsersInvoices().map(inv => mapDocument(inv, 'invoice'));
+    const quotes = getAllUsersQuotes().map(quote => mapDocument(quote, 'quote'));
+
+    return [...invoices, ...quotes].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }, [dataRefreshKey]);
+
+  const statusOptions = useMemo(() => {
+    const values = new Set();
+    allDocuments.forEach(doc => values.add(doc.status || 'unknown'));
+    return ['all', ...Array.from(values).sort()];
+  }, [allDocuments]);
+
+  const userOptions = useMemo(() => {
+    const users = AdminDataService.getAllUsers();
+    return users.map(user => ({
+      id: user.id || user.email,
+      name: user.full_name || user.display_name || user.email,
+      email: user.email
+    }));
+  }, []);
+
+  const filteredDocuments = useMemo(() => {
+    const minAmount = amountMin ? Number(amountMin) : null;
+    const maxAmount = amountMax ? Number(amountMax) : null;
+    const fromDate = dateFrom ? new Date(dateFrom) : null;
+    const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+
+    return allDocuments.filter(doc => {
+      if (documentTypeFilter !== 'all' && doc.type !== documentTypeFilter) return false;
+      if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
+      if (userFilter !== 'all' && doc.userId !== userFilter) return false;
+
+      if (fromDate || toDate) {
+        if (!doc.createdAt) return false;
+        const created = new Date(doc.createdAt);
+        if (fromDate && created < fromDate) return false;
+        if (toDate && created > toDate) return false;
+      }
+
+      if (minAmount !== null && !Number.isNaN(minAmount) && doc.total < minAmount) return false;
+      if (maxAmount !== null && !Number.isNaN(maxAmount) && doc.total > maxAmount) return false;
+
+      return true;
+    });
+  }, [
+    allDocuments,
+    documentTypeFilter,
+    statusFilter,
+    userFilter,
+    dateFrom,
+    dateTo,
+    amountMin,
+    amountMax
+  ]);
 
   if (loading) {
     return <div className="p-8 text-center">Loading document oversight data...</div>;
@@ -436,12 +539,13 @@ export default function AdminDocumentOversight() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">Per User</TabsTrigger>
           <TabsTrigger value="accounts">Per Account</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
+          <TabsTrigger value="documents">Invoices & Quotes</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -630,6 +734,135 @@ export default function AdminDocumentOversight() {
             {filteredDocumentsPerUser.length === 0 && (
               <div className="text-center py-8 text-slate-500">
                 No users found matching your search
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* Invoices & Quotes Tab */}
+        <TabsContent value="documents" className="space-y-6">
+          <Card className="bg-white border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                <select
+                  value={documentTypeFilter}
+                  onChange={(e) => setDocumentTypeFilter(e.target.value)}
+                  className="bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                >
+                  <option value="all">Invoice / Quote</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="quote">Quote</option>
+                </select>
+
+                <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full bg-transparent border-none outline-none"
+                  />
+                  <span className="text-xs text-slate-500">to</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full bg-transparent border-none outline-none"
+                  />
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                >
+                  {statusOptions.map(option => (
+                    <option key={option} value={option}>
+                      {option === 'all' ? 'Status' : option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={userFilter}
+                  onChange={(e) => setUserFilter(e.target.value)}
+                  className="bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                >
+                  <option value="all">User</option>
+                  {userOptions.map(user => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Min amount"
+                  value={amountMin}
+                  onChange={(e) => setAmountMin(e.target.value)}
+                  className="bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                />
+
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Max amount"
+                  value={amountMax}
+                  onChange={(e) => setAmountMax(e.target.value)}
+                  className="bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Number</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">User</th>
+                    <th className="text-right px-6 py-3 text-sm font-semibold text-slate-600">Total</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Status</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Created date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDocuments.map(doc => (
+                    <tr key={doc.id} className="border-b hover:bg-slate-50 transition">
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="font-medium text-slate-900">{doc.number}</p>
+                          <p className="text-xs text-slate-500">{doc.type}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="font-medium text-slate-900">{doc.userName}</p>
+                          <p className="text-sm text-slate-500">{doc.userEmail}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right text-slate-900 font-medium">
+                        {formatCurrency(doc.total)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge className={statusBadgeClass(doc.status)}>{doc.status}</Badge>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {formatDate(doc.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {filteredDocuments.length === 0 && (
+              <div className="text-center py-8 text-slate-500">
+                No documents match your filters.
               </div>
             )}
           </Card>

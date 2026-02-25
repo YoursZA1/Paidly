@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Save } from 'lucide-react';
-import ProjectDetails from '../components/invoice/ProjectDetails'; // Re-using this component for item entry
-import HelpTooltip from '../components/shared/HelpTooltip';
+import ProjectDetails from '@/components/invoice/ProjectDetails'; // Re-using this component for item entry
+import HelpTooltip from '@/components/shared/HelpTooltip';
 import { formatISO, add } from 'date-fns';
 import { createPageUrl } from '@/utils';
 

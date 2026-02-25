@@ -19,6 +19,10 @@ export const CreateFileSignedUrl = breakApi.integrations.Core.CreateFileSignedUr
 
 export const UploadPrivateFile = breakApi.integrations.Core.UploadPrivateFile;
 
+export const UploadToActivities = breakApi.integrations.Core.UploadToActivities;
+
+export const UploadToBankDetails = breakApi.integrations.Core.UploadToBankDetails;
+
 
 
 

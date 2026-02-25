@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Plus, ArrowLeft, Search, Trash2, Bookmark, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import NotesList from '../components/notes/NotesList';
-import NoteEditor from '../components/notes/NoteEditor';
+import NotesList from '@/components/notes/NotesList';
+import NoteEditor from '@/components/notes/NoteEditor';
 import {
     DropdownMenu,
     DropdownMenuContent,

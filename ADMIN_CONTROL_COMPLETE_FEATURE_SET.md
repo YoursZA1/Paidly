@@ -435,3 +435,154 @@ Ready for:
 **Version**: 2.0.0  
 **Total Lines of Code**: 1000+ (AdminControl.jsx)  
 **Documentation Pages**: 4
+
+---
+
+## 2️⃣ Businesses
+
+**Purpose:** View and manage all registered companies.
+
+### Main Table Includes:
+- **Business Name**
+- **Owner**
+- **Status** (Active / Suspended / Trial)
+- **Plan Type**
+- **MRR value**
+- **Created Date**
+- **Last Activity**
+
+### Business Detail View:
+- **Subscription status**
+- **Total revenue generated**
+- **Total invoices created**
+- **Payment gateway connected?**
+- **Activity logs**
+- **Ability to suspend / upgrade / reset password**
+
+**Status:** ✅ Complete (see Admin > Businesses)
+
+The Businesses admin page allows platform admins to view, search, and manage all companies on the platform. Each business can be selected for a detailed view, including subscription, revenue, invoice, and activity information, as well as admin actions (suspend, upgrade, reset password).
+
+---
+
+## 3️⃣ Financials
+
+**Purpose:** Platform-wide financial control center (overview level).
+
+### Main Metrics:
+- **Total Gross Volume (GMV)**
+- **Net Platform Revenue**
+- **Total Fees Collected**
+- **Total Payouts Processed**
+- **Outstanding Payout Liability**
+- **Refunds**
+
+### Charts:
+- **Revenue over time**
+- **Fees over time**
+
+**Status:** ✅ Complete (see Admin > Businesses > Financials)
+
+The Financials admin page provides a comprehensive overview of platform-wide financial metrics, including GMV, net revenue, fees, payouts, liabilities, and refunds. Interactive charts display revenue and fees trends over time for high-level financial control and analysis.
+
+---
+
+## Admin Payouts
+
+**Purpose:** Manage all money going out to businesses (payouts).
+
+**Features:**
+- Table of all payouts with columns:
+  - Business
+  - Payout Amount
+  - Fee deducted
+  - Bank / Method
+  - Status (Pending / Processed / Failed)
+  - Scheduled Date
+  - Reference number
+- Filters:
+  - Status
+  - Date range
+  - Business
+  - Amount
+- Actions:
+  - Manual override
+  - Retry payout
+  - Freeze payout ability
+- Accessible from the admin navigation as "Payouts".
+
+**Implementation:**
+- Data is sourced from userService (ExcelUserService) and user payout records.
+- Table supports sorting, filtering, and admin actions.
+- Status is color-coded for clarity.
+
+---
+
+## Admin Transactions
+
+**Purpose:** View all payment events (transactions) across the platform.
+
+**Features:**
+- Table of all payment transactions with columns:
+  - Transaction ID
+  - Business
+  - Customer
+  - Amount
+  - Fee
+  - Net
+  - Status (Success / Failed / Refunded)
+  - Gateway reference
+  - Date
+- Filters:
+  - Status
+  - Date range
+  - Business
+  - Amount
+- Accessible from the admin navigation as "Transactions".
+
+**Implementation:**
+- Data is sourced from userService (ExcelUserService) and invoice records.
+- Table supports sorting and filtering.
+- Status is color-coded for clarity.
+
+---
+
+## Admin Fees
+
+**Purpose:** Manage and analyze platform earnings and fee structures.
+
+**Features:**
+- Table of all fee structures with columns:
+  - Fee structure per plan
+  - Percentage fee
+  - Fixed fee
+  - Custom overrides per business
+  - Total fees collected (filterable)
+- Filters:
+  - Plan
+  - Business
+  - Total fees (min/max)
+- Fee simulation calculator (optional, included)
+- Accessible from the admin navigation as "Fees".
+
+**Implementation:**
+- Data is sourced from userService (ExcelUserService) and user fee structures.
+- Table supports sorting, filtering, and simulation.
+
+---
+
+## 7️⃣ Billing (Subscription Revenue Control)
+
+**Purpose:**
+Track and manage recurring subscription revenue (not transactional revenue).
+
+**Features:**
+- **Total MRR:** Displays the current Monthly Recurring Revenue from all active subscriptions.
+- **Churn Rate:** Shows the percentage of users who have cancelled their subscriptions.
+- **Active vs Cancelled:** Visual breakdown of active and cancelled subscriptions.
+- **Failed Recurring Payments:** Highlights the number of failed recurring payment attempts.
+- **Plan Breakdown:** Lists all subscription plans and the number of users on each.
+
+**Notes:**
+- This dashboard is focused on recurring income and does not include one-time or transactional payments.
+- Accessible to admin users from the Billing section in the admin navigation.

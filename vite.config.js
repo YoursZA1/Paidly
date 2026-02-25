@@ -3,22 +3,14 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vite.dev/config/
+// Environment: Vite loads .env, .env.local, .env.[mode] from project root.
+// Only variables prefixed with VITE_ are exposed to the client (e.g. import.meta.env.VITE_SUPABASE_URL).
 export default defineConfig({
   plugins: [react()],
-  server: {
-    allowedHosts: true
-  },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      loader: {
-        '.js': 'jsx',
-      },
+      "@": path.resolve(__dirname, "./src"),
     },
   },
-}) 
+  envDir: '.',
+});

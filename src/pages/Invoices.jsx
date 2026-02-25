@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { Invoice, Client, User, Payment } from "@/api/entities";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Invoice, Client, User, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { invoicesToCsv, parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
+import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import InvoiceList from "../components/invoice/InvoiceList";
 import InvoiceGrid from "../components/invoice/InvoiceGrid";
 import InvoiceFilters, { applyInvoiceFilters } from "../components/filters/InvoiceFilters";
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 
 export default function InvoicesPage() {
     const [invoices, setInvoices] = useState([]);
@@ -22,19 +27,23 @@ export default function InvoicesPage() {
     const [paymentsMap, setPaymentsMap] = useState(new Map());
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [invoiceViews, setInvoiceViews] = useState([]);
+    const [isImportingViews, setIsImportingViews] = useState(false);
+    const invoiceFileInputRef = useRef(null);
+    const invoiceViewsFileInputRef = useRef(null);
+    const { toast } = useToast();
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [invoicesData, clientsData, userData, paymentsData] = await Promise.all([
+            const [invoicesData, clientsData, userData, paymentsData, viewsData] = await Promise.all([
                 Invoice.list("-created_date"),
                 Client.list(),
                 User.me(),
-                Payment.list()
+                Payment.list(),
+                InvoiceView.list().catch(() => [])
             ]);
             const updates = invoicesData
                 .map((inv) => ({ inv, update: getAutoStatusUpdate(inv) }))
@@ -64,11 +73,29 @@ export default function InvoicesPage() {
 
             setClients(clientsData);
             setUser(userData);
+            setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
         } catch (error) {
             console.error("Error loading data:", error);
+            toast({
+                title: "Could not load invoices",
+                description: error?.message || "Please check your connection and try again.",
+                variant: "destructive",
+            });
         }
         setIsLoading(false);
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useSupabaseRealtime(
+        ["invoices", "payments"],
+        () => {
+            loadData();
+        },
+        { channelName: "invoices-page" }
+    );
 
     const getClientName = (clientId) => {
         const client = clients.find(c => c.id === clientId);
@@ -91,8 +118,171 @@ export default function InvoicesPage() {
         setCurrentPage(1);
     }, [filters]);
 
+    const handleExportInvoices = async () => {
+        const listToExport = filteredInvoices;
+        if (listToExport.length === 0) {
+            toast({ title: "No invoices to export", variant: "destructive" });
+            return;
+        }
+        setIsExporting(true);
+        try {
+            const ids = listToExport.map((i) => i.id);
+            const { data: itemsData } = await supabase.from("invoice_items").select("*").in("invoice_id", ids);
+            const itemsByInvoiceId = new Map();
+            if (Array.isArray(itemsData)) {
+                itemsData.forEach((row) => {
+                    if (!itemsByInvoiceId.has(row.invoice_id)) itemsByInvoiceId.set(row.invoice_id, []);
+                    itemsByInvoiceId.get(row.invoice_id).push({
+                        service_name: row.service_name,
+                        description: row.description || "",
+                        quantity: Number(row.quantity ?? 1),
+                        unit_price: Number(row.unit_price ?? 0),
+                        total_price: Number(row.total_price ?? 0),
+                    });
+                });
+            }
+            const invoicesWithItems = listToExport.map((inv) => ({
+                ...inv,
+                items: itemsByInvoiceId.get(inv.id) || [],
+            }));
+            const csvContent = invoicesToCsv(invoicesWithItems, paymentsMap);
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `Invoice_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${listToExport.length} invoice(s) exported.`, variant: "default" });
+        } catch (error) {
+            console.error("Export invoices error:", error);
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+        setIsExporting(false);
+    };
+
+    const handleImportInvoices = () => invoiceFileInputRef.current?.click();
+
+    const handleImportInvoicesFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseInvoiceCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const { payload, payments: rowPayments } = csvRowToInvoicePayload(headers, row);
+                if (!payload || (payload.subtotal === undefined && !payload.total_amount && !payload.items?.length)) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    const createdInvoice = await Invoice.create(payload);
+                    created++;
+                    if (Array.isArray(rowPayments) && rowPayments.length > 0 && createdInvoice?.id) {
+                        for (const p of rowPayments) {
+                            if (!p.amount) continue;
+                            try {
+                                await Payment.create({
+                                    invoice_id: createdInvoice.id,
+                                    amount: p.amount,
+                                    paid_at: p.paid_at || undefined,
+                                    method: p.method || undefined,
+                                    reference: p.notes || undefined,
+                                    status: "completed",
+                                });
+                            } catch (err) {
+                                console.warn("Import payment failed for invoice", createdInvoice.id, err);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Import invoice row failed:", payload?.invoice_number, err);
+                    skipped++;
+                }
+            }
+            await loadData();
+            toast({
+                title: "Import complete",
+                description: `${created} invoice(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
+                variant: "default",
+            });
+        } catch (error) {
+            console.error("Import invoices error:", error);
+            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        }
+        setIsImporting(false);
+    };
+
+    const handleExportInvoiceViews = () => {
+        if (invoiceViews.length === 0) {
+            toast({ title: "No invoice views to export", variant: "destructive" });
+            return;
+        }
+        try {
+            const csvContent = invoiceViewsToCsv(invoiceViews);
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `InvoiceView_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${invoiceViews.length} view(s) exported.`, variant: "default" });
+        } catch (error) {
+            console.error("Export invoice views error:", error);
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+    };
+
+    const handleImportInvoiceViews = () => invoiceViewsFileInputRef.current?.click();
+
+    const handleImportInvoiceViewsFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setIsImportingViews(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseInvoiceViewCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToInvoiceViewPayload(headers, row);
+                if (!payload) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await InvoiceView.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn("Import invoice view row failed:", payload?.invoice_id, err);
+                    skipped++;
+                }
+            }
+            await loadData();
+            toast({
+                title: "Import complete",
+                description: `${created} view(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
+                variant: "default",
+            });
+        } catch (error) {
+            console.error("Import invoice views error:", error);
+            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        }
+        setIsImportingViews(false);
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background">
             <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -101,20 +291,76 @@ export default function InvoicesPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                            All Invoices
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1">
+                            Invoices
                         </h1>
-                        <p className="text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Track, manage, and download all your invoices.
                         </p>
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                        <div className="flex bg-white p-1 rounded-lg border shadow-sm h-10">
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                        <input
+                            type="file"
+                            ref={invoiceFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportInvoicesFile}
+                        />
+                        <input
+                            type="file"
+                            ref={invoiceViewsFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportInvoiceViewsFile}
+                        />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleImportInvoices}
+                            disabled={isImporting}
+                            className="rounded-xl"
+                        >
+                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                            {isImporting ? "Importing…" : "Import CSV"}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportInvoices}
+                            disabled={isExporting || filteredInvoices.length === 0}
+                            className="rounded-xl"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            {isExporting ? "Exporting…" : "Export CSV"}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleImportInvoiceViews}
+                            disabled={isImportingViews}
+                            className="rounded-xl"
+                            title="Import invoice view activity (InvoiceView_export.csv)"
+                        >
+                            <Upload className={`w-4 h-4 mr-2 ${isImportingViews ? "animate-pulse" : ""}`} />
+                            {isImportingViews ? "Importing…" : "Import views CSV"}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportInvoiceViews}
+                            disabled={invoiceViews.length === 0}
+                            className="rounded-xl"
+                            title="Export invoice view activity"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Export views CSV
+                        </Button>
+                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -122,24 +368,24 @@ export default function InvoicesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-lg ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <List className="w-4 h-4" />
                             </Button>
                         </div>
                         <Link to={createPageUrl("CreateInvoice")} className="flex-1 sm:flex-none">
-                            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Create New Invoice
+                            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 w-full sm:w-auto rounded-xl gap-2">
+                                <Plus className="w-4 h-4" />
+                                Create Invoice
                             </Button>
                         </Link>
                     </div>
                 </motion.div>
 
-                <Card className="bg-white border border-gray-200">
+                <Card className="rounded-xl overflow-hidden">
                     <CardHeader>
                         <div className="space-y-4">
-                            <CardTitle>Invoice List</CardTitle>
+                            <CardTitle className="text-base font-semibold text-foreground">Invoice List</CardTitle>
                             <InvoiceFilters 
                                 onFilterChange={setFilters} 
                                 clients={clients}
@@ -155,12 +401,12 @@ export default function InvoicesPage() {
                              )
                         ) : filteredInvoices.length === 0 ? (
                             <div className="text-center py-12">
-                                <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                                <h3 className="mt-2 text-sm font-medium text-gray-900">No invoices found</h3>
-                                <p className="mt-1 text-sm text-gray-500">Create your first invoice to see it here.</p>
+                                <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                                <h3 className="mt-2 text-sm font-medium text-foreground">No invoices found</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">Create your first invoice to see it here.</p>
                                 <div className="mt-6">
                                     <Link to={createPageUrl("CreateInvoice")}>
-                                        <Button>
+                                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />
                                             New Invoice
                                         </Button>
@@ -189,65 +435,57 @@ export default function InvoicesPage() {
                                 
                                 {/* Pagination Controls */}
                                 {totalPages > 1 && (
-                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-slate-600">Show</span>
+                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <span>Show</span>
                                             <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                                                <SelectTrigger className="w-[70px] h-9">
+                                                <SelectTrigger className="w-[70px] h-9 rounded-lg">
                                                     <SelectValue />
                                                 </SelectTrigger>
-                                                <SelectContent>
+                                                <SelectContent className="rounded-xl">
                                                     <SelectItem value="10">10</SelectItem>
                                                     <SelectItem value="25">25</SelectItem>
                                                     <SelectItem value="50">50</SelectItem>
                                                     <SelectItem value="100">100</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                            <span className="text-sm text-slate-600">
-                                                of {filteredInvoices.length} invoices
-                                            </span>
+                                            <span>of {filteredInvoices.length} invoices</span>
                                         </div>
-                                        
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
+                                                className="rounded-lg"
                                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                                 disabled={currentPage === 1}
                                             >
                                                 <ChevronLeft className="w-4 h-4 mr-1" />
                                                 Previous
                                             </Button>
-                                            
                                             <div className="flex items-center gap-1">
                                                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                                     let pageNum;
-                                                    if (totalPages <= 5) {
-                                                        pageNum = i + 1;
-                                                    } else if (currentPage <= 3) {
-                                                        pageNum = i + 1;
-                                                    } else if (currentPage >= totalPages - 2) {
-                                                        pageNum = totalPages - 4 + i;
-                                                    } else {
-                                                        pageNum = currentPage - 2 + i;
-                                                    }
+                                                    if (totalPages <= 5) pageNum = i + 1;
+                                                    else if (currentPage <= 3) pageNum = i + 1;
+                                                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                                    else pageNum = currentPage - 2 + i;
                                                     return (
                                                         <Button
                                                             key={i}
                                                             variant={currentPage === pageNum ? "default" : "outline"}
                                                             size="sm"
                                                             onClick={() => setCurrentPage(pageNum)}
-                                                            className="w-9 h-9"
+                                                            className="w-9 h-9 rounded-lg"
                                                         >
                                                             {pageNum}
                                                         </Button>
                                                     );
                                                 })}
                                             </div>
-                                            
                                             <Button
                                                 variant="outline"
                                                 size="sm"
+                                                className="rounded-lg"
                                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                                 disabled={currentPage === totalPages}
                                             >

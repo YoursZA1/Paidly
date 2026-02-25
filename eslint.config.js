@@ -5,9 +5,18 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
   {
-    files: ['**/*.{js,jsx}'],
+    ignores: [
+      'dist',
+      'node_modules',
+      'supabase/.temp',
+      'supabase/.temp/**',
+      'supabase/functions/**/dist',
+    ],
+  },
+  {
+    // Frontend (React) files only.
+    files: ['src/**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -28,11 +37,48 @@ export default [
       ...react.configs.recommended.rules,
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
+      // This codebase is JavaScript-first; enforcing PropTypes everywhere creates
+      // noise without improving runtime safety (we rely on runtime validation / Zod).
+      'react/prop-types': 'off',
       'react/jsx-no-target-blank': 'off',
+      // Keep lint useful but non-blocking for unused vars while we stabilize.
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    // Backend (Node) files.
+    files: ['server/**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // Node-run config / tooling files at repo root.
+    files: ['*.config.js', 'vite.config.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
 ]

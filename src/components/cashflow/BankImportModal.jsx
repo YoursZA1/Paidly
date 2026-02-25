@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { breakApi } from '@/api/apiClient';
+import { UploadToBankDetails } from '@/api/integrations';
 import { Expense } from '@/api/entities';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,11 +21,10 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
 
         setIsProcessing(true);
         try {
-            // 1. Upload File
-            const { file_url } = await breakApi.integrations.Core.UploadFile({ file });
-            
-            // 2. Extract & Categorize with AI
-            // We ask the AI to map the CSV columns to our schema and categorize automatically
+            const { file_url } = await UploadToBankDetails({ file });
+
+            // 2. Extract & Categorize with AI (if you have this API)
+            // Move schema definition outside of JSX/JS context to avoid reserved word error
             const schema = {
                 type: "object",
                 properties: {
@@ -38,8 +37,8 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
                                 description: { type: "string" },
                                 amount: { type: "number" },
                                 vendor: { type: "string" },
-                                category: { 
-                                    type: "string", 
+                                category: {
+                                    type: "string",
                                     enum: ["office", "travel", "utilities", "supplies", "salary", "marketing", "software", "consulting", "legal", "maintenance", "vehicle", "meals", "other"]
                                 }
                             },

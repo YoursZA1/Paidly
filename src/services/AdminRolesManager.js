@@ -1,3 +1,5 @@
+import { Crown, Settings, Lock, CheckCircle, Handshake, ClipboardList, Eye } from 'lucide-react';
+
 /**
  * Admin Roles Manager Service
  * Comprehensive role-based access control with detailed permission management
@@ -16,7 +18,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'CRITICAL',
     description: 'Full system access - manages entire platform, users, security, compliance',
     color: '#DC2626',
-    icon: '👑',
+    icon: Crown,
     
     // Core System Permissions
     systemPermissions: {
@@ -108,7 +110,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'HIGH',
     description: 'Full administrative access with most management capabilities',
     color: '#EA580C',
-    icon: '⚙️',
+    icon: Settings,
     
     systemPermissions: {
       // System Management (limited)
@@ -201,7 +203,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'HIGH',
     description: 'Manages security policies, access control, and compliance',
     color: '#F59E0B',
-    icon: '🔒',
+    icon: Lock,
     
     systemPermissions: {
       manage_system_settings: false,
@@ -283,7 +285,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'MEDIUM',
     description: 'Manages compliance, audit trails, and regulatory requirements',
     color: '#10B981',
-    icon: '✅',
+    icon: CheckCircle,
     
     systemPermissions: {
       manage_system_settings: false,
@@ -365,7 +367,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'MEDIUM',
     description: 'Limited admin access for support team - impersonation and user assistance',
     color: '#3B82F6',
-    icon: '🤝',
+    icon: Handshake,
     
     systemPermissions: {
       manage_system_settings: false,
@@ -447,7 +449,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'LOW',
     description: 'Read-only access to audit logs and compliance data',
     color: '#8B5CF6',
-    icon: '📋',
+    icon: ClipboardList,
     
     systemPermissions: {
       manage_system_settings: false,
@@ -529,7 +531,7 @@ export const ROLE_DEFINITIONS = {
     riskLevel: 'LOW',
     description: 'Minimal read-only access for viewing reports and data',
     color: '#6B7280',
-    icon: '👁️',
+    icon: Eye,
     
     systemPermissions: {
       manage_system_settings: false,

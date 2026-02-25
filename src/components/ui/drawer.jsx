@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import PropTypes from "prop-types"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
@@ -77,6 +78,35 @@ const DrawerDescription = React.forwardRef(({ className, ...props }, ref) => (
     {...props} />
 ))
 DrawerDescription.displayName = DrawerPrimitive.Description.displayName
+
+Drawer.propTypes = {
+  shouldScaleBackground: PropTypes.bool
+}
+
+DrawerOverlay.propTypes = {
+  className: PropTypes.string
+}
+
+DrawerContent.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+DrawerHeader.propTypes = {
+  className: PropTypes.string
+}
+
+DrawerFooter.propTypes = {
+  className: PropTypes.string
+}
+
+DrawerTitle.propTypes = {
+  className: PropTypes.string
+}
+
+DrawerDescription.propTypes = {
+  className: PropTypes.string
+}
 
 export {
   Drawer,

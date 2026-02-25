@@ -436,6 +436,26 @@ export const AuditLogService = {
   },
 
   /**
+   * Purge logs older than a number of days
+   */
+  purgeLogs(days) {
+    if (!Number.isFinite(days) || days <= 0) {
+      return { removed: 0, kept: this.getAllLogs().length };
+    }
+
+    const logs = this.getAllLogs();
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const retained = logs.filter(log => new Date(log.timestamp) >= cutoffDate);
+    const removed = logs.length - retained.length;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(retained));
+    window.dispatchEvent(new CustomEvent('auditLogsPurged', { detail: { removed, kept: retained.length } }));
+
+    return { removed, kept: retained.length };
+  },
+
+  /**
    * Migrate old logs from previous systems
    */
   migrateLegacyLogs() {

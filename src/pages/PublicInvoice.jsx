@@ -282,17 +282,23 @@ export default function PublicInvoice() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {invoice.items.map((item, index) => (
-                                        <tr key={index} className="border-b border-slate-100">
-                                            <td className="p-3">
-                                                <p className="font-medium text-slate-800">{item.service_name}</p>
-                                                {item.description && <p className="text-xs text-slate-500 mt-1">{item.description}</p>}
-                                            </td>
-                                            <td className="p-3 text-center">{item.quantity}</td>
-                                            <td className="p-3 text-right">{formatCurrency(item.unit_price, ownerCurrency)}</td>
-                                            <td className="p-3 text-right font-medium">{formatCurrency(item.total_price, ownerCurrency)}</td>
+                                    {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                                        invoice.items.map((item, index) => (
+                                            <tr key={index} className="border-b border-slate-100">
+                                                <td className="p-3">
+                                                    <p className="font-medium text-slate-800">{item.service_name}</p>
+                                                    {item.description && <p className="text-xs text-slate-500 mt-1">{item.description}</p>}
+                                                </td>
+                                                <td className="p-3 text-center">{item.quantity}</td>
+                                                <td className="p-3 text-right">{formatCurrency(item.unit_price, ownerCurrency)}</td>
+                                                <td className="p-3 text-right font-medium">{formatCurrency(item.total_price, ownerCurrency)}</td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="4" className="p-3 text-center text-slate-500">No items found</td>
                                         </tr>
-                                    ))}
+                                    )}
                                 </tbody>
                             </table>
                         </div>

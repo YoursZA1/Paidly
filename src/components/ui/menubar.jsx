@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import PropTypes from "prop-types"
 import * as MenubarPrimitive from "@radix-ui/react-menubar"
 import { Check, ChevronRight, Circle } from "lucide-react"
 
@@ -179,6 +180,61 @@ const MenubarShortcut = ({
   );
 }
 MenubarShortcut.displayname = "MenubarShortcut"
+
+Menubar.propTypes = {
+  className: PropTypes.string
+}
+
+MenubarTrigger.propTypes = {
+  className: PropTypes.string
+}
+
+MenubarSubTrigger.propTypes = {
+  className: PropTypes.string,
+  inset: PropTypes.bool,
+  children: PropTypes.node
+}
+
+MenubarSubContent.propTypes = {
+  className: PropTypes.string
+}
+
+MenubarContent.propTypes = {
+  className: PropTypes.string,
+  align: PropTypes.string,
+  alignOffset: PropTypes.number,
+  sideOffset: PropTypes.number
+}
+
+MenubarItem.propTypes = {
+  className: PropTypes.string,
+  inset: PropTypes.bool
+}
+
+MenubarCheckboxItem.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node,
+  checked: PropTypes.oneOfType([PropTypes.bool, PropTypes.string])
+}
+
+MenubarRadioItem.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+MenubarLabel.propTypes = {
+  className: PropTypes.string,
+  inset: PropTypes.bool
+}
+
+MenubarSeparator.propTypes = {
+  className: PropTypes.string
+}
+
+MenubarShortcut.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
 
 export {
   Menubar,

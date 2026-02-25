@@ -8,6 +8,7 @@ import { formatCurrency } from "../CurrencySelector";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { getPriceLockStatus } from "@/services/ItemPermissionsService";
 import { getUsageBadge } from "@/services/ItemUsageService";
+import { renderIcon } from "@/utils/renderIcon";
 
 const serviceTypeLabels = {
     hourly: "Per Hour",
@@ -46,7 +47,7 @@ export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0
                                     const itemType = ITEM_TYPES.find(t => t.value === (service.item_type || 'service'));
                                     return itemType ? (
                                         <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-300">
-                                            {itemType.icon} {itemType.label}
+                                            {renderIcon(itemType.icon, {style: {width: 16, height: 16}, className: "inline-block align-middle mr-1"})} {itemType.label}
                                         </Badge>
                                     ) : null;
                                 })()}

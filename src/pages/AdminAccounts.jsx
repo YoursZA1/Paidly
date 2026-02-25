@@ -14,14 +14,28 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Download, Edit2, Pause, Play, AlertCircle,
-  TrendingUp, Building2, HardDrive
+  TrendingUp, Building2, HardDrive, AlertTriangle, Check, X,
+  FileText, RefreshCw
 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import AdminDataService from '@/services/AdminDataService';
+import { syncAdminData } from '@/services/AdminSupabaseSyncService';
+import { getAllUsersInvoices } from '@/utils/adminDataAggregator';
+import { createPageUrl } from '@/utils';
 import AuditLogService from '@/services/AuditLogService';
-import { exportDataAsJSON } from '@/services/AdminCommonService';
-import { PLANS } from '@/data/planLimits';
+import NotificationService from '@/components/notifications/NotificationService';
+import EmailNotificationService from '@/services/EmailNotificationService';
+import { exportDataAsJSON, exportDataAsCSV } from '@/services/AdminCommonService';
+import { PLANS, getFeatureCatalog, getPlanOrder } from '@/data/planLimits';
 import { generateUserId, getUserStatistics } from '@/utils/adminDataAggregator';
 import {
   getAccountStatusColor, getAccountStatusLabel,
@@ -35,14 +49,19 @@ import {
 
 export default function AdminAccounts() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const urlParams = new URLSearchParams(window.location.search);
   const initialSearchQuery = urlParams.get('search') || '';
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [filterPlan, setFilterPlan] = useState('all');
   const [filterHealth, setFilterHealth] = useState('all');
+  const [accountInvoicesDrawer, setAccountInvoicesDrawer] = useState(null);
+  const [allInvoicesForDrawer, setAllInvoicesForDrawer] = useState([]);
 
   // Data states
   const [summary, setSummary] = useState(null);
@@ -76,6 +95,24 @@ export default function AdminAccounts() {
     return invoiceLimit + quoteLimit;
   };
 
+  const formatLimitValue = (value) => {
+    if (value === null || value === undefined) return 'Unlimited';
+    if (typeof value === 'string' && value.toLowerCase() === 'unlimited') return 'Unlimited';
+    return Number.isFinite(Number(value)) ? Number(value).toLocaleString() : 'Unlimited';
+  };
+
+  const formatUsagePercent = (value) => {
+    if (!Number.isFinite(value)) return 'Unlimited';
+    return `${value}%`;
+  };
+
+  const getUsageBadge = (percent) => {
+    if (!Number.isFinite(percent)) return 'bg-slate-100 text-slate-700';
+    if (percent >= 100) return 'bg-red-100 text-red-800';
+    if (percent >= 90) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-green-100 text-green-800';
+  };
+
   const getAccountHealth = (account) => {
     if (account.status === 'suspended' || account.status === 'inactive') return 'flagged';
     if (account.pending_payment_count > 0 || account.failed_payment_count > 0) return 'flagged';
@@ -93,11 +130,23 @@ export default function AdminAccounts() {
     return users.map((user) => {
       const planKey = user.plan || 'free';
       const stats = user.email ? getUserStatistics(generateUserId(user.email)) : null;
-      const documentCount = (stats?.totalInvoices || 0) + (stats?.totalQuotes || 0);
+      const invoiceCount = stats?.totalInvoices || 0;
+      const quoteCount = stats?.totalQuotes || 0;
+      const documentCount = invoiceCount + quoteCount;
       const subscriptionStatus = user.subscription_status || (user.status === 'suspended' ? 'paused' : 'active');
       const createdAt = user.created_at || user.createdAt || new Date().toISOString();
       const monthlyRate = user.monthly_rate ?? getPlanMonthlyRate(planKey);
       const renewalDate = user.subscription_renewal_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const plan = PLANS[planKey] || PLANS.free;
+      const invoiceLimit = toNumericLimit(plan?.invoices_limit);
+      const quoteLimit = toNumericLimit(plan?.quotes_limit);
+      const invoiceUsagePercent = Number.isFinite(invoiceLimit) && invoiceLimit > 0
+        ? Math.round((invoiceCount / invoiceLimit) * 100)
+        : Infinity;
+      const quoteUsagePercent = Number.isFinite(quoteLimit) && quoteLimit > 0
+        ? Math.round((quoteCount / quoteLimit) * 100)
+        : Infinity;
 
       const account = {
         id: user.id,
@@ -107,6 +156,12 @@ export default function AdminAccounts() {
         status: user.status || 'active',
         user_count: user.user_count || 1,
         document_count: documentCount,
+        invoice_count: invoiceCount,
+        quote_count: quoteCount,
+        invoice_limit: invoiceLimit,
+        quote_limit: quoteLimit,
+        invoice_usage_percent: invoiceUsagePercent,
+        quote_usage_percent: quoteUsagePercent,
         billing_cycle: user.billing_cycle || 'monthly',
         subscription_status: subscriptionStatus,
         subscription_renewal_date: renewalDate,
@@ -147,30 +202,110 @@ export default function AdminAccounts() {
     }));
   };
 
+  const getLimitAlertStorageKey = (accountId, alertType) => {
+    return `breakapi_limit_alert_${accountId}_${alertType}`;
+  };
+
+  const shouldLogLimitAlert = (storageKey) => {
+    const lastLogged = localStorage.getItem(storageKey);
+    if (!lastLogged) return true;
+    const lastTime = new Date(lastLogged).getTime();
+    if (!Number.isFinite(lastTime)) return true;
+    return Date.now() - lastTime > 24 * 60 * 60 * 1000;
+  };
+
+  const logLimitAlert = (account, payload) => {
+    AuditLogService.logEvent({
+      type: 'ADMIN_ACTION',
+      action: 'USAGE_LIMIT_REACHED',
+      severity: payload.severity || 'high',
+      entityType: 'account',
+      entityId: account.id,
+      entityName: account.name,
+      userId: account.id,
+      userName: account.name,
+      performedBy: user?.email || 'System',
+      details: {
+        message: payload.message,
+        plan: account.plan,
+        invoiceCount: account.invoice_count,
+        invoiceLimit: account.invoice_limit,
+        invoiceUsagePercent: account.invoice_usage_percent,
+        quoteCount: account.quote_count,
+        quoteLimit: account.quote_limit,
+        quoteUsagePercent: account.quote_usage_percent
+      }
+    });
+
+    const title = 'Usage limit reached';
+    const message = payload.message;
+    NotificationService.createNotification(
+      account.id,
+      title,
+      message,
+      'usage_limit_reached',
+      account.id
+    );
+
+    EmailNotificationService.sendEmail({
+      to: account.email,
+      subject: 'Usage limit reached on your plan',
+      body: `${account.name},\n\n${message}\n\nPlan: ${getPlanTypeLabel(account.plan)}\nInvoices: ${account.invoice_count}/${formatLimitValue(account.invoice_limit)} (${formatUsagePercent(account.invoice_usage_percent)})\nQuotes: ${account.quote_count}/${formatLimitValue(account.quote_limit)} (${formatUsagePercent(account.quote_usage_percent)})\n\nPlease review your plan limits or upgrade as needed.`,
+      metadata: {
+        accountId: account.id,
+        plan: account.plan,
+        invoiceUsagePercent: account.invoice_usage_percent,
+        quoteUsagePercent: account.quote_usage_percent
+      }
+    });
+  };
+
+  const applyHardLimitActions = (accountsList) => {
+    const updatedAccounts = accountsList.map((account) => ({ ...account }));
+
+    updatedAccounts.forEach((account) => {
+      const invoiceHardLimit = Number.isFinite(account.invoice_usage_percent) && account.invoice_usage_percent >= 100;
+      const quoteHardLimit = Number.isFinite(account.quote_usage_percent) && account.quote_usage_percent >= 100;
+      if (!invoiceHardLimit && !quoteHardLimit) return;
+
+      const alertType = invoiceHardLimit && quoteHardLimit ? 'both' : invoiceHardLimit ? 'invoice' : 'quote';
+      const alertKey = getLimitAlertStorageKey(account.id, alertType);
+      if (shouldLogLimitAlert(alertKey)) {
+        const message = `Usage limit reached (${alertType}). Notification sent.`;
+        logLimitAlert(account, { message, severity: 'critical' });
+        localStorage.setItem(alertKey, new Date().toISOString());
+      }
+    });
+
+    return { updatedAccounts };
+  };
+
   const loadData = () => {
     setLoading(true);
     try {
       const users = AdminDataService.getAllUsers();
       const allAccounts = buildAccountsFromUsers(users);
-      setAccounts(allAccounts);
+      const { updatedAccounts } = applyHardLimitActions(allAccounts);
+      setAccounts(updatedAccounts);
 
-      const accountSummary = buildSummary(allAccounts);
+      const accountSummary = buildSummary(updatedAccounts);
       setSummary(accountSummary);
 
       const activity = buildActivityLog();
       setActivityLog(activity);
 
-      // Calculate health distribution
       const healthStatus = {
         normal: 0,
         high_usage: 0,
         flagged: 0
       };
-      allAccounts.forEach(account => {
+      updatedAccounts.forEach(account => {
         const health = account.health || 'normal';
         healthStatus[health]++;
       });
       setHealthCounts(healthStatus);
+
+      setAllInvoicesForDrawer(getAllUsersInvoices());
     } catch (error) {
       console.error('Error loading accounts data:', error);
     } finally {
@@ -178,9 +313,38 @@ export default function AdminAccounts() {
     }
   };
 
-  const handleChangePlan = (account) => {
-    alert(`Todo: Implement plan change for ${account.name}`);
+  const handleSyncFromSupabase = async () => {
+    setSyncing(true);
+    try {
+      await syncAdminData();
+      loadData();
+      toast({
+        title: 'Sync complete',
+        description: 'Accounts list has been updated from Supabase.',
+        variant: 'default',
+      });
+    } catch (err) {
+      toast({
+        title: 'Sync failed',
+        description: err?.message || 'Could not sync. Check your connection and admin access.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncing(false);
+    }
   };
+
+  const handleChangePlan = (account) => {
+    navigate(`${createPageUrl('AdminSubscriptions')}?search=${encodeURIComponent(account.email || '')}&tab=subscriptions`);
+  };
+
+  const invoicesForAccount = accountInvoicesDrawer
+    ? allInvoicesForDrawer.filter(
+        (inv) =>
+          (inv.user_id && String(inv.user_id) === String(accountInvoicesDrawer.id)) ||
+          (inv.created_by && String(inv.created_by) === String(accountInvoicesDrawer.id))
+      )
+    : [];
 
   const handlePauseSubscription = (accountId) => {
     if (window.confirm('Pause this subscription?')) {
@@ -215,6 +379,36 @@ export default function AdminAccounts() {
     exportDataAsJSON(data, `accounts_${timestamp}.json`);
   };
 
+  const handleExportBillingLimits = () => {
+    const rows = accounts.map((account) => ({
+      account: account.name,
+      email: account.email,
+      plan: getPlanTypeLabel(account.plan),
+      invoice_limit: formatLimitValue(account.invoice_limit),
+      invoice_count: account.invoice_count,
+      invoice_usage_percent: formatUsagePercent(account.invoice_usage_percent),
+      quote_limit: formatLimitValue(account.quote_limit),
+      quote_count: account.quote_count,
+      quote_usage_percent: formatUsagePercent(account.quote_usage_percent),
+      status: getAccountStatusLabel(account.status),
+      subscription_status: account.subscription_status
+    }));
+    const timestamp = new Date().toISOString().split('T')[0];
+    exportDataAsCSV(rows, `billing_limits_${timestamp}.csv`, [
+      'account',
+      'email',
+      'plan',
+      'invoice_limit',
+      'invoice_count',
+      'invoice_usage_percent',
+      'quote_limit',
+      'quote_count',
+      'quote_usage_percent',
+      'status',
+      'subscription_status'
+    ]);
+  };
+
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           account.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -228,6 +422,34 @@ export default function AdminAccounts() {
   }
 
   const mrr = calculateMRR(accounts);
+  const planOrder = getPlanOrder();
+  const featureCatalog = getFeatureCatalog();
+  const planSummaries = planOrder.map((planKey) => {
+    const plan = PLANS[planKey] || {};
+    const enabledFeatures = Object.values(plan.features || {}).filter(Boolean).length;
+    return {
+      key: planKey,
+      name: plan.name || getPlanTypeLabel(planKey),
+      invoiceLimit: plan.invoices_limit,
+      quoteLimit: plan.quotes_limit,
+      userLimit: plan.userLimit ?? plan.users,
+      storage: plan.storage || 'N/A',
+      enabledFeatures
+    };
+  });
+  const overUsageAlerts = accounts
+    .filter((account) => {
+      const invoiceAlert = Number.isFinite(account.invoice_usage_percent) && account.invoice_usage_percent >= 90;
+      const quoteAlert = Number.isFinite(account.quote_usage_percent) && account.quote_usage_percent >= 90;
+      return invoiceAlert || quoteAlert;
+    })
+    .map((account) => {
+      const invoicePercent = Number.isFinite(account.invoice_usage_percent) ? account.invoice_usage_percent : null;
+      const quotePercent = Number.isFinite(account.quote_usage_percent) ? account.quote_usage_percent : null;
+      const maxPercent = Math.max(invoicePercent ?? 0, quotePercent ?? 0);
+      return { ...account, maxPercent };
+    })
+    .sort((a, b) => b.maxPercent - a.maxPercent);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-6 lg:p-8">
@@ -240,9 +462,24 @@ export default function AdminAccounts() {
               <Badge className="bg-slate-900 text-white">Admin Account</Badge>
             )}
           </div>
-          <Button onClick={handleExportAccounts} variant="outline" className="flex items-center gap-2">
-            <Download size={18} /> Export Accounts
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSyncFromSupabase}
+              disabled={syncing}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing…' : 'Sync from Supabase'}
+            </Button>
+            <Button onClick={handleExportAccounts} variant="outline" className="flex items-center gap-2">
+              <Download size={18} /> Export Accounts
+            </Button>
+            <Button onClick={handleExportBillingLimits} variant="outline" className="flex items-center gap-2">
+              <Download size={18} /> Consolidated report (CSV)
+            </Button>
+          </div>
         </div>
         <p className="text-slate-600">Monitor and manage business accounts, usage, and subscriptions</p>
       </div>
@@ -314,7 +551,7 @@ export default function AdminAccounts() {
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="accounts">All Accounts</TabsTrigger>
-          <TabsTrigger value="billing">Billing & Renewal</TabsTrigger>
+          <TabsTrigger value="billing">Billing & Limits</TabsTrigger>
           <TabsTrigger value="activity">Activity Log</TabsTrigger>
         </TabsList>
 
@@ -512,6 +749,15 @@ export default function AdminAccounts() {
                           <Button
                             size="sm"
                             variant="ghost"
+                            onClick={() => setAccountInvoicesDrawer(account)}
+                            className="text-slate-600 hover:bg-slate-100"
+                            title="View invoices"
+                          >
+                            <FileText size={16} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => handleChangePlan(account)}
                             className="text-blue-600 hover:bg-blue-50"
                             title="Change plan"
@@ -554,8 +800,142 @@ export default function AdminAccounts() {
           </Card>
         </TabsContent>
 
-        {/* Billing & Renewal Tab */}
+        {/* Billing & Limits Tab */}
         <TabsContent value="billing" className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">Billing & Limits</h2>
+              <p className="text-sm text-slate-600">Enforce plan limits, features, and usage thresholds</p>
+            </div>
+            <Button onClick={handleExportBillingLimits} variant="outline" className="flex items-center gap-2">
+              <Download size={16} /> Export Billing CSV
+            </Button>
+          </div>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle>Plan Limits Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Plan</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Invoice Limit</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Quote Limit</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User Limit</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Storage</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Features Enabled</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {planSummaries.map((plan) => (
+                    <tr key={plan.key} className="border-b">
+                      <td className="px-4 py-3">
+                        <Badge className={getPlanColor(plan.key)}>{plan.name}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{formatLimitValue(plan.invoiceLimit)}</td>
+                      <td className="px-4 py-3 text-slate-700">{formatLimitValue(plan.quoteLimit)}</td>
+                      <td className="px-4 py-3 text-slate-700">{formatLimitValue(plan.userLimit)}</td>
+                      <td className="px-4 py-3 text-slate-700">{plan.storage}</td>
+                      <td className="px-4 py-3 text-slate-700">{plan.enabledFeatures}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle>Feature Toggles by Plan</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Feature</th>
+                    {planSummaries.map((plan) => (
+                      <th key={plan.key} className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{plan.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {featureCatalog.map((feature) => (
+                    <tr key={feature.key} className="border-b">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900">{feature.label}</p>
+                        <p className="text-xs text-slate-500">{feature.description}</p>
+                      </td>
+                      {planSummaries.map((plan) => {
+                        const enabled = Boolean(PLANS[plan.key]?.features?.[feature.key]);
+                        return (
+                          <td key={`${feature.key}-${plan.key}`} className="px-4 py-3">
+                            <Badge className={enabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'}>
+                              {enabled ? <Check size={14} className="mr-1" /> : <X size={14} className="mr-1" />}
+                              {enabled ? 'Enabled' : 'Disabled'}
+                            </Badge>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-yellow-600" /> Over-Usage Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {overUsageAlerts.length === 0 ? (
+                <p className="text-sm text-slate-500">No accounts are near or over their limits.</p>
+              ) : (
+                <div className="space-y-4">
+                  {overUsageAlerts.map((account) => (
+                    <div key={account.id} className="rounded-lg border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                          <p className="font-medium text-slate-900">{account.name}</p>
+                          <p className="text-sm text-slate-500">{account.email}</p>
+                        </div>
+                        <Badge className={getPlanColor(account.plan)}>{getPlanTypeLabel(account.plan)}</Badge>
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                          <div>
+                            <p className="text-xs text-slate-500">Invoices</p>
+                            <p className="text-sm font-medium text-slate-900">
+                              {account.invoice_count} / {formatLimitValue(account.invoice_limit)}
+                            </p>
+                          </div>
+                          <Badge className={getUsageBadge(account.invoice_usage_percent)}>
+                            {Number.isFinite(account.invoice_usage_percent) ? `${account.invoice_usage_percent}%` : 'Unlimited'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                          <div>
+                            <p className="text-xs text-slate-500">Quotes</p>
+                            <p className="text-sm font-medium text-slate-900">
+                              {account.quote_count} / {formatLimitValue(account.quote_limit)}
+                            </p>
+                          </div>
+                          <Badge className={getUsageBadge(account.quote_usage_percent)}>
+                            {Number.isFinite(account.quote_usage_percent) ? `${account.quote_usage_percent}%` : 'Unlimited'}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="space-y-4">
             {accounts
               .sort((a, b) => {
@@ -649,6 +1029,44 @@ export default function AdminAccounts() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Invoices drawer for selected account */}
+      <Sheet open={!!accountInvoicesDrawer} onOpenChange={(open) => !open && setAccountInvoicesDrawer(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
+              Invoices {accountInvoicesDrawer ? `— ${accountInvoicesDrawer.name}` : ''}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            {!accountInvoicesDrawer ? null : invoicesForAccount.length === 0 ? (
+              <p className="text-sm text-slate-500">No invoices found for this account.</p>
+            ) : (
+              <ul className="space-y-2">
+                {invoicesForAccount
+                  .sort((a, b) => new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0))
+                  .slice(0, 50)
+                  .map((inv) => (
+                    <li key={inv.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{inv.invoice_number || inv.id}</p>
+                        <p className="text-xs text-slate-500">
+                          {inv.total_amount != null ? formatCurrency(inv.total_amount) : '—'} · {inv.status || 'draft'}
+                        </p>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {formatDate(inv.created_date || inv.created_at)}
+                      </p>
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {accountInvoicesDrawer && invoicesForAccount.length > 50 && (
+              <p className="text-xs text-slate-500 mt-2">Showing latest 50 of {invoicesForAccount.length}</p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

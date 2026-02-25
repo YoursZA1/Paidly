@@ -1,3 +1,5 @@
+import { Briefcase, Package, Hammer, BrickWall, Wallet } from 'lucide-react';
+
 /**
  * Item Type Helper Functions
  * Utility functions for item and unit type lookups
@@ -11,11 +13,11 @@
  */
 
 const ITEM_TYPES = [
-  { value: 'service', label: 'Service', icon: '💼', description: 'Consulting, maintenance, professional work' },
-  { value: 'product', label: 'Product', icon: '📦', description: 'Retail goods, inventory items' },
-  { value: 'labor', label: 'Labor', icon: '👨‍🔧', description: 'Construction, repair work' },
-  { value: 'material', label: 'Material', icon: '🧱', description: 'Construction, manufacturing materials' },
-  { value: 'expense', label: 'Expense', icon: '💸', description: 'Business expenses, reimbursements' }
+  { value: 'service', label: 'Service', icon: Briefcase, description: 'Consulting, maintenance, professional work' },
+  { value: 'product', label: 'Product', icon: Package, description: 'Retail goods, inventory items' },
+  { value: 'labor', label: 'Labor', icon: Hammer, description: 'Construction, repair work' },
+  { value: 'material', label: 'Material', icon: BrickWall, description: 'Construction, manufacturing materials' },
+  { value: 'expense', label: 'Expense', icon: Wallet, description: 'Business expenses, reimbursements' }
 ];
 
 const UNIT_TYPES = {

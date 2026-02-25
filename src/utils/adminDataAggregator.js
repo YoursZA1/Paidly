@@ -6,6 +6,38 @@
 
 import AdminDataService from '@/services/AdminDataService';
 
+const SUPABASE_KEYS = {
+  USERS: 'breakapi_supabase_users',
+  CLIENTS: 'breakapi_supabase_clients',
+  SERVICES: 'breakapi_supabase_services',
+  INVOICES: 'breakapi_supabase_invoices',
+  QUOTES: 'breakapi_supabase_quotes',
+  PAYMENTS: 'breakapi_supabase_payments'
+};
+
+const getSupabaseData = (key) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getSupabaseUserMap = () => {
+  const users = getSupabaseData(SUPABASE_KEYS.USERS);
+  const map = new Map();
+  users.forEach((user) => {
+    if (user?.id) {
+      map.set(user.id, {
+        email: user.email,
+        full_name: user.profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || ""
+      });
+    }
+  });
+  return map;
+};
+
 /**
  * Get all users from the global users list
  */
@@ -44,6 +76,20 @@ export function getUserEntityData(userId, entityName) {
  * Get all invoices from all users
  */
 export function getAllUsersInvoices() {
+  const supabaseInvoices = getSupabaseData(SUPABASE_KEYS.INVOICES);
+  if (supabaseInvoices.length) {
+    const userMap = getSupabaseUserMap();
+    return supabaseInvoices.map((invoice) => {
+      const user = userMap.get(invoice.user_id) || {};
+      return {
+        ...invoice,
+        user_id: invoice.user_id || invoice.created_by || invoice.org_owner_id || null,
+        user_email: user.email || null,
+        user_name: user.full_name || null
+      };
+    });
+  }
+
   const users = getAllUsers();
   const allInvoices = [];
 
@@ -69,6 +115,21 @@ export function getAllUsersInvoices() {
  * Get all clients from all users
  */
 export function getAllUsersClients() {
+  const supabaseClients = getSupabaseData(SUPABASE_KEYS.CLIENTS);
+  if (supabaseClients.length) {
+    const userMap = getSupabaseUserMap();
+    return supabaseClients.map((client) => {
+      const userId = client.user_id || client.org_owner_id || null;
+      const user = userId ? (userMap.get(userId) || {}) : {};
+      return {
+        ...client,
+        user_id: userId,
+        user_email: user.email || null,
+        user_name: user.full_name || null
+      };
+    });
+  }
+
   const users = getAllUsers();
   const allClients = [];
 
@@ -93,6 +154,21 @@ export function getAllUsersClients() {
  * Get all quotes from all users
  */
 export function getAllUsersQuotes() {
+  const supabaseQuotes = getSupabaseData(SUPABASE_KEYS.QUOTES);
+  if (supabaseQuotes.length) {
+    const userMap = getSupabaseUserMap();
+    return supabaseQuotes.map((quote) => {
+      const userId = quote.user_id || quote.created_by || quote.org_owner_id || null;
+      const user = userId ? (userMap.get(userId) || {}) : {};
+      return {
+        ...quote,
+        user_id: userId,
+        user_email: user.email || null,
+        user_name: user.full_name || null
+      };
+    });
+  }
+
   const users = getAllUsers();
   const allQuotes = [];
 

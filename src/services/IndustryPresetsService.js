@@ -1,3 +1,5 @@
+import { Car, Building2, ShoppingBag, Briefcase, Factory, Settings } from 'lucide-react';
+
 /**
  * Industry Presets Service
  * Provides industry-specific configurations for catalog setup
@@ -11,9 +13,9 @@
 export const INDUSTRY_PRESETS_CONFIG = {
     automotive: {
         code: 'automotive',
-        name: '🚗 Automotive',
+        name: 'Automotive',
         description: 'Auto repair, mechanic shops, and service centers',
-        icon: '🚗',
+        icon: Car,
         color: 'blue',
         
         // Recommended item types to use
@@ -76,9 +78,9 @@ export const INDUSTRY_PRESETS_CONFIG = {
     
     construction: {
         code: 'construction',
-        name: '🏗️ Construction',
+        name: 'Construction',
         description: 'Construction, contracting, and building services',
-        icon: '🏗️',
+        icon: Building2,
         color: 'orange',
         
         recommendedItemTypes: ['labor', 'material', 'product', 'expense'],
@@ -145,9 +147,9 @@ export const INDUSTRY_PRESETS_CONFIG = {
     
     retail: {
         code: 'retail',
-        name: '🛍️ Retail',
+        name: 'Retail',
         description: 'Retail stores, e-commerce, and product sales',
-        icon: '🛍️',
+        icon: ShoppingBag,
         color: 'red',
         
         recommendedItemTypes: ['product'],
@@ -198,9 +200,9 @@ export const INDUSTRY_PRESETS_CONFIG = {
     
     professional_services: {
         code: 'professional_services',
-        name: '💼 Professional Services',
+        name: 'Professional Services',
         description: 'Consulting, agencies, and professional firms',
-        icon: '💼',
+        icon: Briefcase,
         color: 'purple',
         
         recommendedItemTypes: ['service', 'labor'],
@@ -267,9 +269,9 @@ export const INDUSTRY_PRESETS_CONFIG = {
     
     manufacturing: {
         code: 'manufacturing',
-        name: '🏭 Manufacturing',
+        name: 'Manufacturing',
         description: 'Manufacturing, production, and distribution',
-        icon: '🏭',
+        icon: Factory,
         color: 'gray',
         
         recommendedItemTypes: ['product', 'material', 'labor', 'expense'],
@@ -336,9 +338,9 @@ export const INDUSTRY_PRESETS_CONFIG = {
     
     custom: {
         code: 'custom',
-        name: '⚙️ Custom Setup',
+        name: 'Custom Setup',
         description: 'Set up your own items manually',
-        icon: '⚙️',
+        icon: Settings,
         color: 'slate',
         
         recommendedItemTypes: ['service', 'product', 'labor', 'material', 'expense'],

@@ -11,6 +11,7 @@ import { X, Save, Headset, DollarSign, Plus, Trash2, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { getPriceLockStatus } from "@/services/ItemPermissionsService";
+import { renderIcon } from "@/utils/renderIcon";
 
 const predefinedCategories = [
     "Design & Creative",
@@ -85,13 +86,13 @@ const typeSpecificConfig = {
     }
 };
 
-export default function ServiceForm({ service, onSave, onCancel }) {
+export default function ServiceForm({ service, onSave, onCancel, isSaving = false }) {
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState({
         // Base Fields
         name: service?.name || "",
         item_type: service?.item_type || "service",
-        default_unit: service?.default_unit || service?.unit_of_measure || "",
+        default_unit: service?.default_unit || service?.unit_of_measure || "unit",
         default_rate: service?.default_rate || service?.unit_price || 0,
         tax_category: service?.tax_category || "standard",
         is_active: service?.is_active !== undefined ? service.is_active : true,
@@ -173,23 +174,99 @@ export default function ServiceForm({ service, onSave, onCancel }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        
+        // Validate required fields
+        if (!isValid) {
+            return; // Button should be disabled, but double-check
+        }
+        
+        // Ensure required fields are present and properly formatted
         const finalData = {
-            ...formData,
-            category: showCustomCategory ? customCategory : formData.category,
+            name: formData.name.trim(),
+            item_type: formData.item_type || 'service',
+            default_unit: formData.default_unit.trim() || 'unit',
+            default_rate: Number(formData.default_rate) || 0,
+            tax_category: formData.tax_category || 'standard',
+            is_active: formData.is_active !== false,
+            
             // Backwards compatibility: map new base fields to old field names for API
-            unit_price: formData.default_rate,
-            unit_of_measure: formData.default_unit,
-            service_type: formData.pricing_type
+            unit_price: Number(formData.default_rate) || 0,
+            unit_of_measure: formData.default_unit.trim() || 'unit',
+            service_type: formData.pricing_type || 'fixed',
+            
+            // Optional fields (only include if they have values)
+            ...(formData.description && { description: formData.description }),
+            ...(showCustomCategory && customCategory ? { category: customCategory } : formData.category ? { category: formData.category } : {}),
+            ...(formData.pricing_type && { pricing_type: formData.pricing_type }),
+            ...(formData.min_quantity && formData.min_quantity > 0 && { min_quantity: Number(formData.min_quantity) }),
+            ...(formData.tags && formData.tags.length > 0 && { tags: formData.tags }),
+            ...(formData.estimated_duration && { estimated_duration: formData.estimated_duration }),
+            ...(formData.requirements && { requirements: formData.requirements }),
+            
+            // Type-specific fields
+            ...(formData.item_type === 'product' && {
+                ...(formData.sku && { sku: formData.sku }),
+                ...(formData.unit && { unit: formData.unit }),
+                ...(formData.price !== undefined && { price: Number(formData.price) || 0 })
+            }),
+            ...(formData.item_type === 'service' && {
+                ...(formData.billing_unit && { billing_unit: formData.billing_unit }),
+                ...(formData.rate !== undefined && { rate: Number(formData.rate) || 0 })
+            }),
+            ...(formData.item_type === 'labor' && {
+                ...(formData.role && { role: formData.role }),
+                ...(formData.hourly_rate !== undefined && { hourly_rate: Number(formData.hourly_rate) || 0 })
+            }),
+            ...(formData.item_type === 'material' && {
+                ...(formData.unit_type && { unit_type: formData.unit_type }),
+                ...(formData.cost_rate !== undefined && { cost_rate: Number(formData.cost_rate) || 0 })
+            }),
+            ...(formData.item_type === 'expense' && {
+                ...(formData.cost_type && { cost_type: formData.cost_type }),
+                ...(formData.default_cost !== undefined && { default_cost: Number(formData.default_cost) || 0 })
+            }),
+            
+            // Pricing controls
+            price_locked: formData.price_locked || false
         };
+        
+        // Remove any undefined/null values
+        Object.keys(finalData).forEach(key => {
+            if (finalData[key] === undefined || finalData[key] === null) {
+                delete finalData[key];
+            }
+        });
+        
+        console.log('Submitting service data:', finalData);
         onSave(finalData);
     };
 
     const selectedPricingType = pricingTypes.find(type => type.value === formData.pricing_type);
     // BASE FIELDS VALIDATION: All must be present for save
-    const isValid = formData.name.trim() && 
-                    formData.item_type && 
-                    formData.default_unit.trim() && 
-                    formData.default_rate >= 0;
+    const hasName = formData.name.trim().length > 0;
+    const hasItemType = formData.item_type && formData.item_type.length > 0;
+    const hasDefaultUnit = formData.default_unit && formData.default_unit.trim().length > 0;
+    const hasValidRate = formData.default_rate !== null && 
+                        formData.default_rate !== undefined && 
+                        !isNaN(formData.default_rate) && 
+                        formData.default_rate >= 0;
+    
+    const isValid = hasName && hasItemType && hasDefaultUnit && hasValidRate;
+    
+    // Get validation errors for tooltip
+    const validationErrors = [];
+    if (!hasName) validationErrors.push("Name is required");
+    if (!hasItemType) validationErrors.push("Item type is required");
+    if (!hasDefaultUnit) validationErrors.push("Default unit is required");
+    if (!hasValidRate) {
+        if (formData.default_rate === null || formData.default_rate === undefined) {
+            validationErrors.push("Default rate is required");
+        } else if (isNaN(formData.default_rate)) {
+            validationErrors.push("Default rate must be a number");
+        } else if (formData.default_rate < 0) {
+            validationErrors.push("Default rate must be 0 or greater");
+        }
+    }
 
     return (
         <motion.div
@@ -233,7 +310,7 @@ export default function ServiceForm({ service, onSave, onCancel }) {
                                         {ITEM_TYPES.map(type => (
                                             <SelectItem key={type.value} value={type.value}>
                                                 <span className="flex items-center gap-2">
-                                                    <span>{type.icon}</span>
+                                                    {renderIcon(type.icon, { className: "w-4 h-4" })}
                                                     <span>{type.label}</span>
                                                 </span>
                                             </SelectItem>
@@ -276,10 +353,16 @@ export default function ServiceForm({ service, onSave, onCancel }) {
                                 </Label>
                                 <Input
                                     id="default_unit"
-                                    value={formData.default_unit}
-                                    onChange={(e) => handleInputChange('default_unit', e.target.value)}
+                                    value={formData.default_unit || ''}
+                                    onChange={(e) => handleInputChange('default_unit', e.target.value || 'unit')}
                                     placeholder="e.g., hour, piece, kg, day, unit, etc."
-                                    className="h-12 rounded-xl"
+                                    className={`h-12 rounded-xl ${!hasDefaultUnit ? 'border-red-300 border-2' : ''}`}
+                                    onBlur={(e) => {
+                                        // Ensure default_unit is never empty
+                                        if (!e.target.value.trim()) {
+                                            handleInputChange('default_unit', 'unit');
+                                        }
+                                    }}
                                 />
                                 <p className="text-xs text-slate-500">How quantities are measured (hour, piece, kg, etc.)</p>
                             </div>
@@ -296,10 +379,13 @@ export default function ServiceForm({ service, onSave, onCancel }) {
                                         type="number"
                                         min="0"
                                         step="0.01"
-                                        value={formData.default_rate}
-                                        onChange={(e) => handleInputChange('default_rate', parseFloat(e.target.value) || 0)}
+                                        value={formData.default_rate || ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                                            handleInputChange('default_rate', value);
+                                        }}
                                         placeholder="0.00"
-                                        className="h-12 pl-10 rounded-xl"
+                                        className={`h-12 pl-10 rounded-xl ${!hasValidRate ? 'border-red-300 border-2' : ''}`}
                                     />
                                 </div>
                                 <p className="text-xs text-slate-500">Price per unit (synced to all invoices)</p>
@@ -689,9 +775,14 @@ export default function ServiceForm({ service, onSave, onCancel }) {
                             <Button type="button" variant="outline" onClick={onCancel} className="px-6 py-3 rounded-xl">
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={!isValid} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl disabled:opacity-50" title={!isValid ? "Fill all required base fields" : ""}>
-                                <Save className="w-4 h-4 mr-2" />
-                                {service ? "Update Item" : "Save Item"}
+                            <Button 
+                                type="submit" 
+                                disabled={!isValid || isSaving} 
+                                className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all" 
+                                title={!isValid ? validationErrors.join(", ") : isSaving ? "Saving..." : ""}
+                            >
+                                <Save className={`w-4 h-4 mr-2 ${isSaving ? 'animate-spin' : ''}`} />
+                                {isSaving ? "Saving..." : service ? "Update Item" : "Create Item"}
                             </Button>
                         </div>
                     </form>

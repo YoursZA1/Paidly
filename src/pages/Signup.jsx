@@ -99,6 +99,23 @@ export default function Signup() {
         return;
       }
 
+      // Create Supabase user
+      try {
+        const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
+        await SupabaseAuthService.signUpWithEmail(normalizedEmail, password, {
+          full_name: fullName.trim(),
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim(),
+          phone: phone.trim(),
+          plan,
+          role: "user"
+        });
+      } catch (supabaseErr) {
+        setError(supabaseErr?.message || "Failed to create Supabase user");
+        setIsLoading(false);
+        return;
+      }
+
       const now = new Date();
       const newUserRecord = {
         id: Date.now().toString(),
@@ -108,9 +125,9 @@ export default function Signup() {
         role: "user",
         plan,
         status: "pending",
-        company_name: "",
-        company_address: "",
-        phone: "",
+        company_name: companyName.trim(),
+        company_address: companyAddress.trim(),
+        phone: phone.trim(),
         currency: "ZAR",
         timezone: "UTC",
         logo_url: null,
@@ -125,14 +142,14 @@ export default function Signup() {
         email: normalizedEmail,
         full_name: fullName.trim(),
         display_name: fullName.trim(),
-        company_name: "",
-        company_address: "",
+        company_name: companyName.trim(),
+        company_address: companyAddress.trim(),
         role: "user",
         plan,
         status: "pending",
         currency: "ZAR",
         timezone: "UTC",
-        phone: ""
+        phone: phone.trim()
       });
 
       setCreatedUserId(newUserRecord.id);
@@ -165,6 +182,7 @@ export default function Signup() {
         throw new Error("Unable to find your account. Please try again.");
       }
 
+
       storedUsers[userIndex] = {
         ...storedUsers[userIndex],
         plan,
@@ -188,7 +206,9 @@ export default function Signup() {
           trial_ends_at: trialEndsAt.toISOString(),
           company_name: companyName.trim(),
           company_address: companyAddress.trim(),
-          phone: phone.trim()
+          phone: phone.trim(),
+          full_name: fullName.trim(),
+          display_name: fullName.trim()
         });
       }
 
@@ -221,7 +241,28 @@ export default function Signup() {
           <p className="text-sm text-slate-500">Step {step} of 2</p>
         </CardHeader>
         <CardContent>
-          {step === 1 ? (
+          {success ? (
+            <div className="text-center space-y-6 py-8">
+              <div className="text-3xl text-green-600">🎉</div>
+              <div className="text-lg font-semibold">Account created!</div>
+              <div className="text-slate-700">Please check your email and click the confirmation link to activate your account before logging in.</div>
+              <div className="text-slate-500 text-sm">If you don&apos;t see the email, check your spam or junk folder.</div>
+              <Button
+                className="mt-4"
+                onClick={async () => {
+                  try {
+                    const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
+                    await SupabaseAuthService.signInWithMagicLink(email);
+                    alert("Confirmation email resent! Please check your inbox.");
+                  } catch (err) {
+                    alert(err?.message || "Failed to resend confirmation email.");
+                  }
+                }}
+              >
+                Resend confirmation email
+              </Button>
+            </div>
+          ) : step === 1 ? (
             <form onSubmit={handleStepOne} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full name</Label>

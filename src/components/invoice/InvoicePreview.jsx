@@ -1,364 +1,389 @@
 import PropTypes from "prop-types";
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle, FileText, User, CreditCard, Truck, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle, FileText, Download } from "lucide-react";
 import { motion } from "framer-motion";
-import { format, addDays } from "date-fns";
-import InvoiceSaveActions from "./InvoiceSaveActions";
+import { format } from "date-fns";
+import { formatCurrency } from "../CurrencySelector";
+import LogoImage from "@/components/shared/LogoImage";
+import { createPageUrl } from "@/utils";
+import { getUnitLabel, getItemTypeLabel } from "./itemTypeHelpers";
 
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Repeat } from "lucide-react";
-import { bankingDetailPropType, clientPropType, invoiceDataPropType } from "./propTypes";
-
-export default function InvoicePreview({ 
-    invoiceData, 
-    clients, 
-    bankingDetails, 
-    onPrevious, 
-    onCreate,
-    isEditing = false,
-    showBack = true,
-    ...props
+export default function InvoicePreview({
+  invoiceData,
+  clients,
+  onPrevious,
+  onCreate,
+  onClose,
+  showBack = true,
+  user, // Pass user/company object with logo_url, currency if available
+  loading = false,
+  previewOnly = false,
 }) {
-    const [loading, setLoading] = useState(false);
-    
-    const client = clients.find(c => c.id === invoiceData.client_id);
-    const bankingDetail = bankingDetails.find(b => b.id === invoiceData.banking_detail_id);
-    
-    const totalAmount = invoiceData.total_amount || 0;
-    const upfrontAmount = totalAmount * 0.5;
-    const milestoneAmount = (totalAmount - upfrontAmount) * 0.5;
-    const finalAmount = (totalAmount - upfrontAmount) * 0.5;
-
-    const deliveryDate = new Date(invoiceData.delivery_date);
-    const milestoneDate = addDays(deliveryDate, -30);
-    const finalDate = addDays(deliveryDate, 30);
-
-    // Recurring state from props
-    const { 
-        isRecurring, setIsRecurring, 
-        frequency, setFrequency, 
-        startDate, setStartDate, 
-        endDate, setEndDate,
-        profileName, setProfileName
-    } = props;
-
+  // Ensure invoiceData exists and has required structure
+  if (!invoiceData) {
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-        >
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="border-b border-slate-100 pb-6">
-                    <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
-                        Invoice Preview
-                    </CardTitle>
-                    <p className="text-slate-600 mt-2">
-                        Review all details before creating your professional invoice
-                    </p>
-                </CardHeader>
-                
-                <CardContent className="p-8">
-                    <div className="space-y-8">
-                        {/* Client Information */}
-                        <div className="bg-slate-50 rounded-2xl p-6">
-                            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <User className="w-4 h-4" />
-                                Client Information
-                            </h3>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-slate-600">Client Name</p>
-                                    <p className="font-semibold text-slate-900">{client?.name}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Email</p>
-                                    <p className="font-semibold text-slate-900">{client?.email}</p>
-                                </div>
-                                {client?.phone && (
-                                    <div>
-                                        <p className="text-sm text-slate-600">Phone</p>
-                                        <p className="font-semibold text-slate-900">{client.phone}</p>
-                                    </div>
-                                )}
-                                {client?.address && (
-                                    <div>
-                                        <p className="text-sm text-slate-600">Address</p>
-                                        <p className="font-semibold text-slate-900">{client.address}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Project Details */}
-                        <div className="bg-blue-50 rounded-2xl p-6">
-                            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <FileText className="w-4 h-4" />
-                                Project Details
-                            </h3>
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="text-sm text-slate-600">Project Title</p>
-                                    <p className="font-semibold text-slate-900 text-lg">{invoiceData.project_title}</p>
-                                </div>
-                                {invoiceData.project_description && (
-                                    <div>
-                                        <p className="text-sm text-slate-600">Description</p>
-                                        <p className="text-slate-800">{invoiceData.project_description}</p>
-                                    </div>
-                                )}
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div>
-                                        <p className="text-sm text-slate-600">Total Amount</p>
-                                        <p className="font-bold text-slate-900 text-2xl">
-                                            ${totalAmount.toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm text-slate-600">Delivery Date</p>
-                                        <p className="font-semibold text-slate-900">
-                                            {format(deliveryDate, "MMMM d, yyyy")}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {invoiceData.delivery_address && (
-                            <div className="bg-slate-50 rounded-2xl p-6">
-                                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                    <Truck className="w-4 h-4" />
-                                    Deliver To
-                                </h3>
-                                <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.delivery_address}</p>
-                            </div>
-                        )}
-
-                        {/* Payment Schedule */}
-                        <div className="bg-emerald-50 rounded-2xl p-6">
-                            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <CheckCircle className="w-4 h-4" />
-                                Payment Schedule
-                            </h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center p-4 bg-white rounded-xl">
-                                    <div>
-                                        <p className="font-semibold text-slate-900">Upfront Payment (50%)</p>
-                                        <p className="text-sm text-slate-600">Due upon contract signing</p>
-                                    </div>
-                                    <p className="font-bold text-slate-900 text-lg">
-                                        ${upfrontAmount.toLocaleString()}
-                                    </p>
-                                </div>
-                                <div className="flex justify-between items-center p-4 bg-white rounded-xl">
-                                    <div>
-                                        <p className="font-semibold text-slate-900">Milestone Payment (25%)</p>
-                                        <p className="text-sm text-slate-600">
-                                            Due {format(milestoneDate, "MMM d, yyyy")}
-                                        </p>
-                                    </div>
-                                    <p className="font-bold text-slate-900 text-lg">
-                                        ${milestoneAmount.toLocaleString()}
-                                    </p>
-                                </div>
-                                <div className="flex justify-between items-center p-4 bg-white rounded-xl">
-                                    <div>
-                                        <p className="font-semibold text-slate-900">Final Payment (25%)</p>
-                                        <p className="text-sm text-slate-600">
-                                            Due {format(finalDate, "MMM d, yyyy")}
-                                        </p>
-                                    </div>
-                                    <p className="font-bold text-slate-900 text-lg">
-                                        ${finalAmount.toLocaleString()}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Payment Method */}
-                        <div className="bg-purple-50 rounded-2xl p-6">
-                            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <CreditCard className="w-4 h-4" />
-                                Payment Method
-                            </h3>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-slate-600">Bank Name</p>
-                                    <p className="font-semibold text-slate-900">{bankingDetail?.bank_name}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Account Holder</p>
-                                    <p className="font-semibold text-slate-900">{bankingDetail?.account_name}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Payment Type</p>
-                                    <p className="font-semibold text-slate-900 capitalize">
-                                        {bankingDetail?.payment_method.replace('_', ' ')}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {invoiceData.notes && (
-                            <div className="bg-amber-50 rounded-2xl p-6">
-                                <h3 className="font-bold text-slate-900 mb-4">Additional Notes</h3>
-                                <p className="text-slate-800">{invoiceData.notes}</p>
-                            </div>
-                        )}
-
-                        {invoiceData.terms_conditions && (
-                            <div className="bg-slate-50 rounded-2xl p-6">
-                                <h3 className="font-bold text-slate-900 mb-4">Terms &amp; Conditions</h3>
-                                <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.terms_conditions}</p>
-                            </div>
-                        )}
-
-                        {/* Recurring Options */}
-                        {!isEditing && props.setIsRecurring && (
-                            <div className="bg-indigo-50 rounded-2xl p-6 border border-indigo-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-indigo-100 p-2 rounded-lg">
-                                            <Repeat className="w-5 h-5 text-indigo-600" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-slate-900">Recurring Schedule</h3>
-                                            <p className="text-sm text-slate-600">Create a recurring profile from this invoice</p>
-                                        </div>
-                                    </div>
-                                    <Switch 
-                                        checked={isRecurring} 
-                                        onCheckedChange={setIsRecurring} 
-                                    />
-                                </div>
-                                
-                                {isRecurring && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        className="grid md:grid-cols-2 gap-4 pt-4 border-t border-indigo-200/50"
-                                    >
-                                        <div className="space-y-2">
-                                            <Label>Profile Name</Label>
-                                            <Input 
-                                                value={profileName} 
-                                                onChange={(e) => setProfileName(e.target.value)} 
-                                                placeholder="e.g. Monthly Retainer" 
-                                                className="bg-white"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Frequency</Label>
-                                            <Select value={frequency} onValueChange={setFrequency}>
-                                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="weekly">Weekly</SelectItem>
-                                                    <SelectItem value="monthly">Monthly</SelectItem>
-                                                    <SelectItem value="yearly">Yearly</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Start Date</Label>
-                                            <Input 
-                                                type="date" 
-                                                value={startDate} 
-                                                onChange={(e) => setStartDate(e.target.value)} 
-                                                className="bg-white"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>End Date (Optional)</Label>
-                                            <Input 
-                                                type="date" 
-                                                value={endDate} 
-                                                onChange={(e) => setEndDate(e.target.value)} 
-                                                className="bg-white"
-                                            />
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className={`flex ${showBack ? 'justify-between' : 'justify-end'} mt-8`}>
-                        {showBack && (
-                            <Button
-                                onClick={onPrevious}
-                                variant="outline"
-                                disabled={loading}
-                                className="px-8 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-2" />
-                                Back
-                            </Button>
-                        )}
-                        
-                        {isEditing ? (
-                            <InvoiceSaveActions
-                                onSaveDraft={async () => {
-                                    setLoading(true);
-                                    await onCreate(true); // true = save as draft
-                                    setLoading(false);
-                                }}
-                                onSendNow={async () => {
-                                    setLoading(true);
-                                    await onCreate(false); // false = send immediately
-                                    setLoading(false);
-                                }}
-                                loading={loading}
-                                disabled={false}
-                                buttonText={{
-                                    draft: "Update Draft",
-                                    send: "Update & Send"
-                                }}
-                            />
-                        ) : (
-                            <InvoiceSaveActions
-                                onSaveDraft={async () => {
-                                    setLoading(true);
-                                    await onCreate(true); // true = save as draft
-                                    setLoading(false);
-                                }}
-                                onSendNow={async () => {
-                                    setLoading(true);
-                                    await onCreate(false); // false = send immediately
-                                    setLoading(false);
-                                }}
-                                loading={loading}
-                                disabled={false}
-                            />
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-        </motion.div>
+      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+        <CardContent className="p-8">
+          <p className="text-red-600">Error: Invoice data is missing</p>
+        </CardContent>
+      </Card>
     );
+  }
+
+  const clientList = Array.isArray(clients) ? clients : [];
+  const client = clientList.find(c => c.id === invoiceData?.client_id) ?? null;
+  const items = Array.isArray(invoiceData?.items) ? invoiceData.items : [];
+  const deliveryDate = invoiceData?.delivery_date ? new Date(invoiceData.delivery_date) : null;
+  const invoiceDate = invoiceData?.invoice_date ? new Date(invoiceData.invoice_date) : null;
+  const currency = invoiceData?.currency || user?.currency || "USD";
+  const subtotal = Number(invoiceData?.subtotal ?? 0);
+  const taxRate = Number(invoiceData?.tax_rate ?? 0);
+  const taxAmount = Number(invoiceData?.tax_amount ?? 0);
+  const totalAmount = Number(invoiceData?.total_amount ?? 0);
+  const showTax = taxAmount > 0;
+  const discountAmount = Number(invoiceData?.discount_amount ?? 0);
+  const showDiscount = discountAmount > 0;
+  const hasItemTax = items.some(
+    (item) => (Number(item.item_tax_rate) || 0) > 0 || (Number(item.item_tax_amount) || 0) > 0
+  );
+
+  const handleDownloadPDF = () => {
+    try {
+      sessionStorage.setItem(
+        "invoiceDraft",
+        JSON.stringify({
+          invoiceData: {
+            ...invoiceData,
+            invoice_number: invoiceData.invoice_number || invoiceData.reference_number || "Draft",
+          },
+          client: client || {},
+          user: user || {},
+        })
+      );
+      window.open(createPageUrl("InvoicePDF") + "?draft=1", "_blank", "noopener,noreferrer");
+    } catch (e) {
+      console.error("Failed to open PDF preview:", e);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+        <CardHeader className="border-b border-slate-100 pb-6">
+          {/* Logo Display */}
+          {user?.logo_url && (
+            <div className="mb-4 flex justify-center">
+              <LogoImage
+                src={user.logo_url}
+                alt="Company Logo"
+                className="h-16 w-auto max-w-xs object-contain rounded shadow"
+                style={{ maxHeight: '64px' }}
+              />
+            </div>
+          )}
+          <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            {previewOnly ? "Invoice" : "Invoice Preview"}
+          </CardTitle>
+          {!previewOnly && (
+            <p className="text-slate-600 mt-2">
+              Review all details before creating your professional invoice
+            </p>
+          )}
+          {previewOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadPDF}
+              className="mt-3 rounded-xl border-border bg-card text-foreground hover:bg-muted"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download PDF
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="p-8">
+          <div className="space-y-8">
+            {/* Billed by / Billed to - full details */}
+            <div className="grid md:grid-cols-2 gap-6 border-b border-slate-200 pb-6">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed by</h3>
+                <div className="space-y-1">
+                  {user?.logo_url && (
+                    <LogoImage src={user.logo_url} alt="" className="h-10 w-auto mb-2" style={{ maxHeight: "40px" }} />
+                  )}
+                  <p className="font-semibold text-slate-900">{user?.company_name || "Your Company"}</p>
+                  {user?.company_address && (
+                    <p className="text-sm text-slate-600 whitespace-pre-line">{user.company_address}</p>
+                  )}
+                  {user?.email && (
+                    <p className="text-sm text-slate-600">{user.email}</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed to</h3>
+                <div className="space-y-1">
+                  <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
+                  {client?.contact_person && <p className="text-sm text-slate-600">Attn: {client.contact_person}</p>}
+                  {client?.address && <p className="text-sm text-slate-600 whitespace-pre-line">{client.address}</p>}
+                  {client?.email && <p className="text-sm text-slate-600">{client.email}</p>}
+                  {client?.phone && <p className="text-sm text-slate-600">{client.phone}</p>}
+                  {client?.tax_id && <p className="text-sm text-slate-600">Tax ID: {client.tax_id}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Information - all details */}
+            <div className="bg-slate-50 rounded-2xl p-6">
+              <h3 className="font-bold text-slate-900 mb-4">Invoice Information</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-slate-600">Client</p>
+                  <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">Project Title</p>
+                  <p className="font-semibold text-slate-900">{invoiceData?.project_title || "—"}</p>
+                </div>
+                {invoiceData?.invoice_number && (
+                  <div>
+                    <p className="text-sm text-slate-600">Invoice Number</p>
+                    <p className="font-semibold text-slate-900">{invoiceData.invoice_number}</p>
+                  </div>
+                )}
+                {(invoiceData?.reference_number ?? "") !== "" && (
+                  <div>
+                    <p className="text-sm text-slate-600">Reference Number</p>
+                    <p className="font-medium text-slate-900">{invoiceData.reference_number}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-slate-600">Currency</p>
+                  <p className="font-medium text-slate-900">{currency}</p>
+                </div>
+                {invoiceDate && (
+                  <div>
+                    <p className="text-sm text-slate-600">Invoice Date</p>
+                    <p className="font-semibold text-slate-900">{format(invoiceDate, "MMMM d, yyyy")}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-slate-600">Due Date</p>
+                  <p className="font-semibold text-slate-900">
+                    {deliveryDate ? format(deliveryDate, "MMMM d, yyyy") : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">Total Amount</p>
+                  <p className="font-bold text-slate-900 text-xl">
+                    {formatCurrency(totalAmount, currency)}
+                  </p>
+                </div>
+              </div>
+              {invoiceData?.project_description && (
+                <div className="mt-4">
+                  <p className="text-sm text-slate-600">Project Description</p>
+                  <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.project_description}</p>
+                </div>
+              )}
+              {invoiceData?.delivery_address && (
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <p className="text-sm text-slate-600">Delivery / Billing Address</p>
+                  <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.delivery_address}</p>
+                </div>
+              )}
+            </div>
+            {/* Products & Services - full details */}
+            <div className="bg-primary/5 rounded-2xl p-6 border border-primary/10">
+              <h3 className="font-bold text-slate-900 mb-2">Products &amp; Services</h3>
+              <p className="text-sm text-slate-600 mb-4">Line items with full product/service details.</p>
+              {items.length === 0 ? (
+                <p className="text-slate-500 text-center py-6">No items added</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="py-2 pr-4 text-xs font-semibold text-slate-600 uppercase">Product / Service</th>
+                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-center w-14">Qty</th>
+                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase w-24">Unit</th>
+                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right">Rate</th>
+                          {hasItemTax && (
+                            <>
+                              <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right w-16">Tax %</th>
+                              <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right">Item Tax</th>
+                            </>
+                          )}
+                          <th className="py-2 pl-2 text-xs font-semibold text-slate-600 uppercase text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, index) => {
+                          const qty = Number(item.quantity ?? item.qty ?? 1);
+                          const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
+                          const lineTotal = Number(item.total_price ?? item.total ?? qty * unitPrice);
+                          const itemTaxRate = Number(item.item_tax_rate ?? 0);
+                          const itemTaxAmt = Number(item.item_tax_amount ?? 0);
+                          const totalWithTax = lineTotal + itemTaxAmt;
+                          const name = item.service_name || item.name || "Item";
+                          const itemType = item.item_type || "service";
+                          const unitType = item.unit_type || "unit";
+                          const unitLabel = getUnitLabel(itemType, unitType);
+                          const typeLabel = getItemTypeLabel(itemType);
+                          return (
+                            <tr key={index} className="border-b border-slate-100 align-top">
+                              <td className="py-3 pr-4">
+                                <p className="font-medium text-slate-900">{name}</p>
+                                {(item.sku || item.part_number) && (
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    {item.sku && <span>SKU: {item.sku}</span>}
+                                    {item.sku && item.part_number && " · "}
+                                    {item.part_number && <span>Part #: {item.part_number}</span>}
+                                  </p>
+                                )}
+                                {item.description && (
+                                  <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{item.description}</p>
+                                )}
+                                {item.details && (
+                                  <p className="text-xs text-slate-500 mt-1 italic">{item.details}</p>
+                                )}
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Type: {typeLabel} · Unit: {unitLabel}
+                                </p>
+                              </td>
+                              <td className="py-3 px-2 text-center text-slate-700">{qty}</td>
+                              <td className="py-3 px-2 text-slate-700 text-sm">{unitLabel}</td>
+                              <td className="py-3 px-2 text-right text-slate-700">{formatCurrency(unitPrice, currency)}</td>
+                              {hasItemTax && (
+                                <>
+                                  <td className="py-3 px-2 text-right text-slate-600">{itemTaxRate ? `${itemTaxRate}%` : "—"}</td>
+                                  <td className="py-3 px-2 text-right text-slate-700">{formatCurrency(itemTaxAmt, currency)}</td>
+                                </>
+                              )}
+                              <td className="py-3 pl-2 text-right font-medium text-slate-900">
+                                {formatCurrency(hasItemTax ? totalWithTax : lineTotal, currency)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-200 space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span>Subtotal ({currency}):</span>
+                      <span>{formatCurrency(subtotal, currency)}</span>
+                    </div>
+                    {showDiscount && (
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>
+                          Discount
+                          {invoiceData?.discount_type === "percentage" && invoiceData?.discount_value != null
+                            ? ` (${invoiceData.discount_value}%)`
+                            : ""}
+                          :
+                        </span>
+                        <span>-{formatCurrency(discountAmount, currency)}</span>
+                      </div>
+                    )}
+                    {showTax && (
+                      <div className="flex justify-between text-sm">
+                        <span>Tax ({taxRate}%):</span>
+                        <span>{formatCurrency(taxAmount, currency)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg font-bold mt-2 pt-2 border-t border-slate-200">
+                      <span>Total ({currency}):</span>
+                      <span>{formatCurrency(totalAmount, currency)}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Notes & Terms */}
+            {(invoiceData?.notes || invoiceData?.terms_conditions) && (
+              <div className="grid md:grid-cols-2 gap-6">
+                {invoiceData?.notes && (
+                  <div className="bg-amber-50 rounded-2xl p-6">
+                    <h3 className="font-bold text-slate-900 mb-4">Additional Notes</h3>
+                    <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.notes}</p>
+                  </div>
+                )}
+                {invoiceData?.terms_conditions && (
+                  <div className="bg-purple-50 rounded-2xl p-6">
+                    <h3 className="font-bold text-slate-900 mb-4">Terms & Conditions</h3>
+                    <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.terms_conditions}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className={`flex ${showBack && !previewOnly ? "justify-between" : "justify-end"} mt-8 gap-3`}>
+            {showBack && !previewOnly && (
+              <Button
+                onClick={onPrevious}
+                variant="outline"
+                className="px-8 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            )}
+            {previewOnly && onClose && (
+              <Button
+                onClick={onClose}
+                variant="outline"
+                className="px-8 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+              >
+                Close Preview
+              </Button>
+            )}
+            {!previewOnly && (
+              <Button
+                onClick={onCreate}
+                disabled={loading}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <motion.div
+                      className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full inline-block"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Create Invoice
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
 }
 
 InvoicePreview.propTypes = {
-    invoiceData: invoiceDataPropType.isRequired,
-    clients: PropTypes.arrayOf(clientPropType).isRequired,
-    bankingDetails: PropTypes.arrayOf(bankingDetailPropType).isRequired,
-    onPrevious: PropTypes.func,
-    onCreate: PropTypes.func.isRequired,
-    isEditing: PropTypes.bool,
-    showBack: PropTypes.bool,
-    isRecurring: PropTypes.bool,
-    setIsRecurring: PropTypes.func,
-    frequency: PropTypes.string,
-    setFrequency: PropTypes.func,
-    startDate: PropTypes.string,
-    setStartDate: PropTypes.func,
-    endDate: PropTypes.string,
-    setEndDate: PropTypes.func,
-    profileName: PropTypes.string,
-    setProfileName: PropTypes.func
+  invoiceData: PropTypes.object.isRequired,
+  clients: PropTypes.array,
+  onPrevious: PropTypes.func,
+  onCreate: PropTypes.func,
+  onClose: PropTypes.func,
+  showBack: PropTypes.bool,
+  user: PropTypes.object,
+  loading: PropTypes.bool,
+  previewOnly: PropTypes.bool,
 };

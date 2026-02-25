@@ -46,12 +46,12 @@ class InvoiceService {
   }
 
   /**
-   * Preview invoice PDF in new window
+   * Preview invoice PDF in same tab
    */
   static previewInvoicePDF(invoiceId) {
     try {
       const pdfUrl = this.getInvoicePdfUrl(invoiceId);
-      window.open(pdfUrl, '_blank');
+      window.location.href = pdfUrl;
       return true;
     } catch (error) {
       console.error('Failed to preview PDF:', error);

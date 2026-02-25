@@ -1,3 +1,5 @@
+import { Sparkles, Star, BarChart3, MapPin, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
+
 /**
  * Item Usage Service
  * Tracks item usage across invoices and prevents deletion of used items
@@ -277,7 +279,7 @@ export const getUsageBadge = (item) => {
             show: false,
             label: 'Unused',
             shortLabel: 'New',
-            icon: '✨',
+            icon: Sparkles,
             color: 'blue',
             className: 'bg-blue-50 border-blue-200 text-blue-700'
         };
@@ -289,7 +291,7 @@ export const getUsageBadge = (item) => {
             show: true,
             label: `${stats.count}x (Frequently Used)`,
             shortLabel: `${stats.count}x`,
-            icon: '⭐',
+            icon: Star,
             color: 'yellow',
             className: 'bg-yellow-50 border-yellow-200 text-yellow-700'
         };
@@ -301,7 +303,7 @@ export const getUsageBadge = (item) => {
             show: true,
             label: `${stats.count}x (Popular)`,
             shortLabel: `${stats.count}x`,
-            icon: '📊',
+            icon: BarChart3,
             color: 'purple',
             className: 'bg-purple-50 border-purple-200 text-purple-700'
         };
@@ -312,7 +314,7 @@ export const getUsageBadge = (item) => {
         show: true,
         label: `${stats.count}x`,
         shortLabel: `${stats.count}x`,
-        icon: '📍',
+        icon: MapPin,
         color: 'slate',
         className: 'bg-slate-50 border-slate-200 text-slate-700'
     };
@@ -326,22 +328,17 @@ export const getUsageBadge = (item) => {
  * @returns {object} Trend information
  */
 export const getUsageTrend = (item, recentDays = 30) => {
-    // TODO: Implement actual trend calculation from invoice items
-    // Would need to query invoice_items grouped by date range
-    
     const stats = getUsageStats(item);
     
-    // Simple trend logic based on current stats
-    // TODO: Replace with actual time-series analysis
     if (stats.isRecent && stats.avgUsagePerMonth > 2) {
         return {
             direction: 'up',
             label: 'Growing',
-            icon: '↑',
+            icon: ArrowUp,
             color: 'green',
             change: stats.avgUsagePerMonth,
             message: `Used frequently (${stats.avgUsagePerMonth.toFixed(1)}/month)`,
-            analysisWindow: recentDays // Days analyzed for trend
+            analysisWindow: recentDays
         };
     }
     
@@ -349,7 +346,7 @@ export const getUsageTrend = (item, recentDays = 30) => {
         return {
             direction: 'down',
             label: 'Declining',
-            icon: '↓',
+            icon: ArrowDown,
             color: 'orange',
             change: -stats.avgUsagePerMonth,
             message: 'Not used recently',
@@ -360,7 +357,7 @@ export const getUsageTrend = (item, recentDays = 30) => {
     return {
         direction: 'stable',
         label: 'Stable',
-        icon: '→',
+        icon: ArrowRight,
         color: 'slate',
         change: 0,
         message: 'Usage is stable',

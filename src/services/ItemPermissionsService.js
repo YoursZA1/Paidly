@@ -1,3 +1,5 @@
+import { Lock, Unlock } from 'lucide-react';
+
 /**
  * Item Permissions Service
  * Handles pricing locks, permissions, and access controls for catalog items
@@ -223,16 +225,15 @@ export const filterItemsByDeletability = (items) => {
 /**
  * Format pricing lock status for UI display
  * @param {object} item - Catalog item
- * @returns {object} { isLocked: boolean, label: string, icon: string, color: string, className: string }
+ * @returns {object} { isLocked: boolean, label: string, shortLabel: string, icon: string, color: string, className: string }
  */
 export const getPriceLockStatus = (item) => {
     const isLocked = isItemPriceLocked(item);
-    
     return {
         isLocked,
         label: isLocked ? 'Pricing Locked' : 'Pricing Unlocked',
         shortLabel: isLocked ? 'Locked' : 'Unlocked',
-        icon: isLocked ? '🔒' : '🔓',
+        icon: isLocked ? Lock : Unlock,
         color: isLocked ? 'orange' : 'slate',
         className: isLocked 
             ? 'bg-orange-100 border-orange-300 text-orange-700' 

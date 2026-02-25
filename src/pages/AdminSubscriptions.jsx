@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,10 +11,10 @@ import {
 } from 'recharts';
 import {
   Search, Download, Pause, Play, Trash2, AlertCircle,
-  CheckCircle2, Clock, TrendingUp, Zap, RefreshCw, CreditCard
+  CheckCircle2, Clock, TrendingUp, Zap, RefreshCw, Flag, ArrowUpRight
 } from 'lucide-react';
-import SubscriptionManagementService from '@/services/SubscriptionManagementService';
-import { exportDataAsJSON, subscribeToAdminDataChanges } from '@/services/AdminCommonService';
+import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseErrorMessage } from '@/utils/supabaseErrorUtils';
 import {
   getStatusBadgeColor, getStatusLabel, getPlanBadgeColor,
   getPaymentStatusBadgeColor,
@@ -24,8 +24,6 @@ import {
   sortSubscriptions, getPlanPrice
 } from '@/utils/subscriptionManagementUtils';
 import { PLANS, getPlanOrder } from '@/data/planLimits';
-import UserCurrencyService from '@/services/UserCurrencyService';
-import PayfastService from '@/services/PayfastService';
 import { createPageUrl } from '@/utils';
 
 // Generate dynamic plan colors, with fallback for custom plans
@@ -75,7 +73,6 @@ export default function AdminSubscriptions() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPlan, setFilterPlan] = useState('all');
   const [sortBy, setSortBy] = useState('createdAt');
-  const [payfastLoadingId, setPayfastLoadingId] = useState(null);
 
   // Data states
   const [summary, setSummary] = useState(null);
@@ -84,6 +81,14 @@ export default function AdminSubscriptions() {
   const [billingHistory, setBillingHistory] = useState([]);
   const [historySearchQuery, setHistorySearchQuery] = useState(initialHistorySearch);
   const [historyEventType, setHistoryEventType] = useState(initialHistoryEvent);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [upgradeTarget, setUpgradeTarget] = useState(null);
+  const [upgradePlan, setUpgradePlan] = useState('');
+  const [upgradeReason, setUpgradeReason] = useState('');
+  const [isFlagModalOpen, setIsFlagModalOpen] = useState(false);
+  const [flagTarget, setFlagTarget] = useState(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [flagError, setFlagError] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -142,49 +147,27 @@ export default function AdminSubscriptions() {
     searchQuery
   ]);
 
-  // Load data on mount
-  useEffect(() => {
-    loadData();
+  const [loadError, setLoadError] = useState(null);
 
-    // Subscribe to data changes from other admin pages
-    const unsubscribe = subscribeToAdminDataChanges((data) => {
-      if (data.eventType === 'userUpdated' || data.eventType === 'planChanged' || data.eventType === 'dataRefreshed') {
-        console.log('🔄 AdminSubscriptions: Data changed, reloading', data);
-        loadData();
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const loadData = () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const allSubs = SubscriptionManagementService.getAllSubscriptions();
-      console.log('📊 Admin Subscriptions - Loaded data:', {
-        count: allSubs.length,
-        subscriptions: allSubs
-      });
-      setSubscriptions(allSubs);
-
-      const summaryData = SubscriptionManagementService.getSubscriptionSummary();
-      console.log('💰 Subscription Summary:', summaryData);
-      setSummary(summaryData);
-
-      const renewals = SubscriptionManagementService.getUpcomingRenewals();
-      setUpcomingRenewals(renewals);
-
-      const failed = SubscriptionManagementService.getFailedAndPendingPayments();
-      setFailedPayments(failed);
-
-      const history = SubscriptionManagementService.getBillingHistory();
-      setBillingHistory(history);
+      const { data: allSubs, error: subError } = await supabase.from('subscriptions').select('*');
+      if (subError) throw new Error(getSupabaseErrorMessage(subError, 'Failed to load subscriptions'));
+      setSubscriptions(allSubs || []);
     } catch (error) {
-      console.error('Error loading subscription data:', error);
+      const msg = getSupabaseErrorMessage(error, 'Failed to load subscription data');
+      setLoadError(msg);
+      console.error('AdminSubscriptions loadData:', msg);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const getBillingEventLabel = (eventType) => {
     const labels = {
@@ -240,6 +223,35 @@ export default function AdminSubscriptions() {
     });
   }, [billingHistory, historyEventType, historySearchQuery, subscriptions]);
 
+  const planChangeHistory = useMemo(() => {
+    const planOrder = getPlanOrder();
+    return billingHistory
+      .filter(entry => entry.eventType === 'plan_change')
+      .map(entry => {
+        const fromPlan = entry.details?.from || 'free';
+        const toPlan = entry.details?.to || 'free';
+        const fromIndex = planOrder.indexOf(fromPlan);
+        const toIndex = planOrder.indexOf(toPlan);
+        let changeType = 'change';
+        if (fromIndex !== -1 && toIndex !== -1) {
+          if (toIndex > fromIndex) changeType = 'upgrade';
+          if (toIndex < fromIndex) changeType = 'downgrade';
+        }
+        const subscription = subscriptions.find(sub => sub.id === entry.subscriptionId);
+
+        return {
+          id: entry.id,
+          userName: subscription?.userName || 'Unknown',
+          userEmail: subscription?.userEmail || '',
+          fromPlan,
+          toPlan,
+          changeType,
+          timestamp: entry.timestamp
+        };
+      })
+      .slice(0, 6);
+  }, [billingHistory, subscriptions]);
+
   // Filter and sort subscriptions
   const filteredSubscriptions = useMemo(() => {
     let filtered = subscriptions;
@@ -262,87 +274,142 @@ export default function AdminSubscriptions() {
     return sortSubscriptions(filtered, sortBy, 'desc');
   }, [subscriptions, searchQuery, filterStatus, filterPlan, sortBy]);
 
-  const handlePauseSubscription = (subscriptionId) => {
-    if (window.confirm('Pause this subscription?')) {
-      SubscriptionManagementService.pauseSubscription(subscriptionId, 'Paused by admin');
-      loadData();
-    }
+  const reloadSubscriptions = async () => {
+    const { data, error } = await supabase.from('subscriptions').select('*');
+    if (!error) setSubscriptions(data ?? []);
+    return error;
   };
 
-  const handleResumeSubscription = (subscriptionId) => {
-    if (window.confirm('Resume this subscription?')) {
-      SubscriptionManagementService.resumeSubscription(subscriptionId, 'Resumed by admin');
-      loadData();
-    }
-  };
-
-  const handleCancelSubscription = (subscriptionId) => {
-    if (window.confirm('Cancel this subscription immediately?')) {
-      SubscriptionManagementService.cancelSubscription(subscriptionId, 'Cancelled by admin', true);
-      loadData();
-    }
-  };
-
-  const handleManualPaymentUpdate = (payment, status) => {
-    if (!payment?.subscriptionId) return;
-
-    const statusLabel = status === 'succeeded' ? 'mark as paid' : 'mark as failed';
-    if (!window.confirm(`Confirm ${statusLabel} for ${payment.userName}?`)) {
-      return;
-    }
-
-    SubscriptionManagementService.recordPaymentStatus(
-      payment.subscriptionId,
-      status,
-      payment.amount || 0,
-      { manual: true, updatedBy: 'admin' }
-    );
-
-    loadData();
-  };
-
-  const handleStartPayfastSubscription = async (sub) => {
-    const cycle = sub.billingCycle === 'annual' ? 'annual' : 'monthly';
-    const basePrice = getPlanPrice(sub.currentPlan, cycle) || 0;
-    const amount = sub.customPrice || basePrice;
-
-    if (!amount || amount <= 0) {
-      alert('Plan price must be greater than 0 to start a subscription.');
-      return;
-    }
-
-    setPayfastLoadingId(sub.id);
+  const handlePauseSubscription = async (subscriptionId) => {
+    if (!window.confirm('Pause this subscription?')) return;
     try {
-      await PayfastService.startSubscription({
-        subscriptionId: sub.id,
-        userId: sub.userId,
-        userEmail: sub.userEmail,
-        userName: sub.userName,
-        plan: sub.currentPlan,
-        billingCycle: cycle,
-        amount,
-        currency: 'ZAR'
-      });
-
-      SubscriptionManagementService.recordPaymentStatus(
-        sub.id,
-        'pending',
-        amount,
-        { gateway: 'payfast' }
-      );
-      loadData();
-    } catch (error) {
-      console.error('Error starting Payfast subscription:', error);
-      alert(error.message || 'Failed to start Payfast subscription.');
-    } finally {
-      setPayfastLoadingId(null);
+      const { error: updateError } = await supabase.from('subscriptions').update({ status: 'paused' }).eq('id', subscriptionId);
+      if (updateError) throw new Error(getSupabaseErrorMessage(updateError, 'Failed to pause subscription'));
+      await reloadSubscriptions();
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Pause failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to pause subscription.'));
     }
   };
 
-  const handleExportData = () => {
-    const data = SubscriptionManagementService.exportSubscriptions();
-    const timestamp = new Date().toISOString().split('T')[0];
-    exportDataAsJSON(data, `subscriptions_${timestamp}.json`);
+  const handleResumeSubscription = async (subscriptionId) => {
+    if (!window.confirm('Resume this subscription?')) return;
+    try {
+      const { error: updateError } = await supabase.from('subscriptions').update({ status: 'active' }).eq('id', subscriptionId);
+      if (updateError) throw new Error(getSupabaseErrorMessage(updateError, 'Failed to resume subscription'));
+      await reloadSubscriptions();
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Resume failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to resume subscription.'));
+    }
+  };
+
+  const handleCancelSubscription = async (subscriptionId) => {
+    if (!window.confirm('Cancel this subscription immediately?')) return;
+    try {
+      const { error: updateError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', subscriptionId);
+      if (updateError) throw new Error(getSupabaseErrorMessage(updateError, 'Failed to cancel subscription'));
+      await reloadSubscriptions();
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Cancel failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to cancel subscription.'));
+    }
+  };
+
+  const handleUpgradeSubscription = (sub) => {
+    const planOrder = getPlanOrder();
+    const currentIndex = planOrder.indexOf(sub.currentPlan);
+    const suggestion = currentIndex >= 0 && currentIndex < planOrder.length - 1
+      ? planOrder[currentIndex + 1]
+      : sub.currentPlan;
+    setUpgradeTarget(sub);
+    setUpgradePlan(suggestion);
+    setUpgradeReason('');
+    setIsUpgradeModalOpen(true);
+  };
+
+  const confirmUpgrade = async () => {
+    if (!upgradeTarget || !upgradePlan) return;
+    if (upgradePlan === upgradeTarget.currentPlan) {
+      setIsUpgradeModalOpen(false);
+      return;
+    }
+    try {
+      const { error: updateError } = await supabase.from('subscriptions').update({ currentPlan: upgradePlan }).eq('id', upgradeTarget.id);
+      if (updateError) throw new Error(getSupabaseErrorMessage(updateError, 'Failed to upgrade plan'));
+      setIsUpgradeModalOpen(false);
+      setUpgradeTarget(null);
+      setUpgradeReason('');
+      await reloadSubscriptions();
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Upgrade failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to upgrade plan.'));
+    }
+  };
+
+  const handleFlagAccount = (sub) => {
+    setFlagTarget(sub);
+    setFlagReason('');
+    setFlagError('');
+    setIsFlagModalOpen(true);
+  };
+
+  const getPlanPreviewPrice = (planKey, cycle) => {
+    const price = getPlanPrice(planKey, cycle) || 0;
+    return formatCurrency(price);
+  };
+
+  const confirmFlag = async () => {
+    if (!flagTarget) return;
+    const reason = flagReason.trim();
+    if (!reason) {
+      setFlagError('Reason is required.');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('users').update({ health: 'flagged', flag_reason: reason }).eq('id', flagTarget.userId);
+      if (error) throw new Error(getSupabaseErrorMessage(error, 'Failed to flag account'));
+      setIsFlagModalOpen(false);
+      setFlagTarget(null);
+      setFlagReason('');
+      setFlagError('');
+    } catch (err) {
+      setFlagError(getSupabaseErrorMessage(err, 'Failed to flag account.'));
+    }
+  };
+
+  const handleManualPaymentUpdate = async (payment, status) => {
+    if (!payment?.subscriptionId) return;
+    const statusLabel = status === 'succeeded' ? 'mark as paid' : 'mark as failed';
+    if (!window.confirm(`Confirm ${statusLabel} for ${payment.userName}?`)) return;
+    try {
+      const { error } = await supabase.from('payments').update({ status }).eq('subscription_id', payment.subscriptionId);
+      if (error) throw new Error(getSupabaseErrorMessage(error, 'Failed to update payment status'));
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Payment update failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to update payment status.'));
+    }
+  };
+
+
+  const handleExportData = async () => {
+    try {
+      const { data, error } = await supabase.from('subscriptions').select('*');
+      if (error) throw new Error(getSupabaseErrorMessage(error, 'Failed to load subscriptions for export'));
+      if (data?.length) {
+        const timestamp = new Date().toISOString().split('T')[0];
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `subscriptions_${timestamp}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error(getSupabaseErrorMessage(err, 'Export failed'));
+      alert(getSupabaseErrorMessage(err, 'Failed to export data.'));
+    }
   };
 
   if (loading) {
@@ -358,10 +425,15 @@ export default function AdminSubscriptions() {
     );
   }
 
-  // Empty state
+  // Empty state (no subscriptions)
   if (!loading && subscriptions.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
+        {loadError && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-4 text-amber-800" role="alert">
+            {loadError}
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-slate-900 mb-2">Subscription Management</h1>
           <p className="text-slate-600">Manage all platform subscriptions, plans, and billing cycles</p>
@@ -554,6 +626,68 @@ export default function AdminSubscriptions() {
             </Card>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="bg-white border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle>Active vs Cancelled</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Active</span>
+                  <span className="text-sm font-semibold text-slate-900">{summary?.active || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Cancelled</span>
+                  <span className="text-sm font-semibold text-slate-900">{summary?.cancelled || 0}</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-2 bg-emerald-500"
+                    style={{
+                      width: `${summary?.total ? Math.round((summary.active / summary.total) * 100) : 0}%`
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  {summary?.total ? Math.round((summary.active / summary.total) * 100) : 0}% active
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle>Upgrade / Downgrade History</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {planChangeHistory.length === 0 ? (
+                  <p className="text-sm text-slate-500">No plan changes logged.</p>
+                ) : (
+                  planChangeHistory.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">{entry.userName}</p>
+                        <p className="text-xs text-slate-500">
+                          {(PLANS[entry.fromPlan]?.name || entry.fromPlan)} → {(PLANS[entry.toPlan]?.name || entry.toPlan)}
+                        </p>
+                      </div>
+                      <Badge
+                        className={
+                          entry.changeType === 'upgrade'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : entry.changeType === 'downgrade'
+                              ? 'bg-rose-100 text-rose-700 border-rose-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }
+                      >
+                        {entry.changeType}
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Status Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="bg-white border-0 shadow-sm">
@@ -670,11 +804,9 @@ export default function AdminSubscriptions() {
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">User</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Plan</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Status</th>
-                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Billing</th>
-                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Price Preview</th>
-                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">User Currency</th>
-                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Renewal</th>
-                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Amount (ZAR)</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Start Date</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Renewal Date</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Amount</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-600">Actions</th>
                   </tr>
                 </thead>
@@ -706,54 +838,16 @@ export default function AdminSubscriptions() {
                           </Badge>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">
-                          {getBillingCycleLabel(sub.billingCycle)}
+                          {formatDate(sub.createdAt)}
                         </td>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="space-y-1">
-                            <p className="text-slate-600">
-                              <span className="font-medium">Monthly:</span> {formatCurrency(getPlanPrice(sub.currentPlan, 'monthly') || 0)}
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="font-medium">Annual:</span> {formatCurrency(getPlanPrice(sub.currentPlan, 'annual') || 0)}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex items-center flex-col gap-1">
-                            <span className="font-medium text-slate-900">
-                              {UserCurrencyService.getUserCurrency(sub.userId) || 'ZAR'}
-                            </span>
-                            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                              Admin: ZAR
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className={`text-sm font-medium ${getRenewalStatusColor(sub.renewalDate)}`}>
-                            {getRenewalStatusText(sub.renewalDate)}
-                          </p>
-                          <div className="w-24 bg-slate-200 rounded-full h-2 mt-2">
-                            <div
-                              className="h-2 rounded-full bg-blue-500"
-                              style={{ width: `${calculateCycleProgress(sub.currentCycleStart, sub.renewalDate)}%` }}
-                            />
-                          </div>
+                        <td className="px-6 py-4 text-sm text-slate-600">
+                          {formatDate(sub.renewalDate)}
                         </td>
                         <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                          {formatCurrency(amount)} ZAR
+                          {formatCurrency(amount)}
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleStartPayfastSubscription(sub)}
-                              title="Start Payfast subscription"
-                              className="text-blue-600 hover:bg-blue-50"
-                              disabled={payfastLoadingId === sub.id || sub.status === 'cancelled'}
-                            >
-                              <CreditCard size={16} />
-                            </Button>
                             {sub.status === 'active' ? (
                               <Button
                                 size="sm"
@@ -775,6 +869,24 @@ export default function AdminSubscriptions() {
                                 <Play size={16} />
                               </Button>
                             ) : null}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleUpgradeSubscription(sub)}
+                              title="Upgrade"
+                              className="text-indigo-600 hover:bg-indigo-50"
+                            >
+                              <ArrowUpRight size={16} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleFlagAccount(sub)}
+                              title="Flag account"
+                              className="text-amber-600 hover:bg-amber-50"
+                            >
+                              <Flag size={16} />
+                            </Button>
                             {sub.status !== 'cancelled' && (
                               <Button
                                 size="sm"
@@ -1023,6 +1135,135 @@ export default function AdminSubscriptions() {
           )}
         </TabsContent>
       </Tabs>
+
+      {isUpgradeModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md shadow-2xl">
+            <CardHeader>
+              <CardTitle>Upgrade subscription</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-slate-600">
+                {upgradeTarget?.userName} · {upgradeTarget?.userEmail}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">New plan</label>
+                <select
+                  value={upgradePlan}
+                  onChange={(e) => setUpgradePlan(e.target.value)}
+                  className="w-full bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
+                >
+                  {getPlanOrder().map((planKey) => (
+                    <option key={planKey} value={planKey}>
+                      {PLANS[planKey]?.name || planKey.charAt(0).toUpperCase() + planKey.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span>Current plan</span>
+                  <span className="font-medium text-slate-900">
+                    {PLANS[upgradeTarget?.currentPlan]?.name || upgradeTarget?.currentPlan || '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Billing cycle</span>
+                  <span className="font-medium text-slate-900">
+                    {upgradeTarget?.billingCycle ? getBillingCycleLabel(upgradeTarget.billingCycle) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Selected plan (monthly)</span>
+                  <span className="font-medium text-slate-900">
+                    {getPlanPreviewPrice(upgradePlan, 'monthly')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Selected plan (annual)</span>
+                  <span className="font-medium text-slate-900">
+                    {getPlanPreviewPrice(upgradePlan, 'annual')}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
+                <textarea
+                  value={upgradeReason}
+                  onChange={(e) => setUpgradeReason(e.target.value)}
+                  placeholder="Why are you upgrading this account?"
+                  className="min-h-[100px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsUpgradeModalOpen(false);
+                    setUpgradeTarget(null);
+                    setUpgradeReason('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" className="bg-indigo-600 hover:bg-indigo-700" onClick={confirmUpgrade}>
+                  Upgrade
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isFlagModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md shadow-2xl">
+            <CardHeader>
+              <CardTitle>Flag account</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-slate-600">
+                {flagTarget?.userName} · {flagTarget?.userEmail}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Reason</label>
+                <textarea
+                  value={flagReason}
+                  onChange={(e) => {
+                    setFlagReason(e.target.value);
+                    if (flagError) setFlagError('');
+                  }}
+                  placeholder="Add a reason for flagging this account"
+                  className="min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              {flagError && (
+                <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                  {flagError}
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsFlagModalOpen(false);
+                    setFlagTarget(null);
+                    setFlagReason('');
+                    setFlagError('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" className="bg-amber-600 hover:bg-amber-700" onClick={confirmFlag}>
+                  Flag account
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

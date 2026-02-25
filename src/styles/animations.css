@@ -172,6 +172,19 @@ html {
   }
 }
 
+.sidebar {
+  animation: sidebarEnter 0.3s ease-out;
+}
+.sidebar-nav-scroll-area {
+  scroll-behavior: smooth;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.dashboard-scroll-area {
+  scroll-behavior: smooth;
+  animation: fadeIn 0.3s ease-out;
+}
+
 .table-row {
   animation: rowEnter 0.2s ease-out;
 }

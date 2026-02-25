@@ -2,6 +2,7 @@ import PropTypes from 'prop-types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ITEM_TYPES, UNIT_TYPES } from './itemTypeHelpers';
+import { renderIcon } from "@/utils/renderIcon";
 
 export function ItemTypeSelector({ value, onChange, label = "Item Type" }) {
     const selectedType = ITEM_TYPES.find(t => t.value === value);
@@ -21,7 +22,9 @@ export function ItemTypeSelector({ value, onChange, label = "Item Type" }) {
                             className="flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 cursor-pointer"
                         >
                             <div className="flex items-center gap-3 w-full">
-                                <span className="text-xl">{type.icon}</span>
+                                <span className="text-xl">
+                                    {renderIcon(type.icon, { className: "w-5 h-5" })}
+                                </span>
                                 <div className="flex-1">
                                     <div className="font-medium text-slate-900">{type.label}</div>
                                     <div className="text-xs text-slate-500">{type.description}</div>
@@ -33,7 +36,9 @@ export function ItemTypeSelector({ value, onChange, label = "Item Type" }) {
             </Select>
             {selectedType && (
                 <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg text-sm text-slate-600">
-                    <span className="text-lg">{selectedType.icon}</span>
+                    <span className="text-lg inline-flex items-center">
+                        {renderIcon(selectedType.icon, { className: "w-5 h-5" })}
+                    </span>
                     <span>{selectedType.description}</span>
                 </div>
             )}

@@ -1,3 +1,5 @@
+import { Building2, Banknote, CreditCard, Smartphone, FileCheck, HelpCircle } from 'lucide-react';
+
 /**
  * PaymentMethodService
  * Comprehensive payment method tracking and analytics
@@ -9,7 +11,7 @@ export const PaymentMethodService = {
     bank_transfer: {
       id: 'bank_transfer',
       label: 'Bank Transfer',
-      icon: 'Building2',
+      icon: Building2,
       color: '#3b82f6',
       description: 'Electronic bank transfer or wire payment',
       processingTime: 1, // days
@@ -18,7 +20,7 @@ export const PaymentMethodService = {
     cash: {
       id: 'cash',
       label: 'Cash',
-      icon: 'Banknote',
+      icon: Banknote,
       color: '#10b981',
       description: 'Physical cash payment',
       processingTime: 0,
@@ -27,7 +29,7 @@ export const PaymentMethodService = {
     credit_card: {
       id: 'credit_card',
       label: 'Credit Card',
-      icon: 'CreditCard',
+      icon: CreditCard,
       color: '#f59e0b',
       description: 'Credit card payment',
       processingTime: 2,
@@ -36,7 +38,7 @@ export const PaymentMethodService = {
     debit_card: {
       id: 'debit_card',
       label: 'Debit Card',
-      icon: 'CreditCard',
+      icon: CreditCard,
       color: '#8b5cf6',
       description: 'Debit card payment',
       processingTime: 1,
@@ -45,7 +47,7 @@ export const PaymentMethodService = {
     mobile_payment: {
       id: 'mobile_payment',
       label: 'Mobile Payment',
-      icon: 'Smartphone',
+      icon: Smartphone,
       color: '#ec4899',
       description: 'Mobile wallet or app payment',
       processingTime: 0,
@@ -54,7 +56,7 @@ export const PaymentMethodService = {
     check: {
       id: 'check',
       label: 'Check',
-      icon: 'FileCheck',
+      icon: FileCheck,
       color: '#06b6d4',
       description: 'Paper check payment',
       processingTime: 5,
@@ -63,7 +65,7 @@ export const PaymentMethodService = {
     other: {
       id: 'other',
       label: 'Other',
-      icon: 'HelpCircle',
+      icon: HelpCircle,
       color: '#6b7280',
       description: 'Other payment method',
       processingTime: 3,

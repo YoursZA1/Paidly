@@ -5,9 +5,9 @@ import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 
 // Import templates
-import ClassicTemplate from '../components/invoice/templates/ClassicTemplate';
-import ModernTemplate from '../components/invoice/templates/ModernTemplate';
-import MinimalTemplate from '../components/invoice/templates/MinimalTemplate';
+import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
+import ModernTemplate from '@/components/invoice/templates/ModernTemplate';
+import MinimalTemplate from '@/components/invoice/templates/MinimalTemplate';
 import BoldTemplate from '../components/invoice/templates/BoldTemplate';
 
 const TEMPLATES = {
@@ -17,10 +17,13 @@ const TEMPLATES = {
     bold: BoldTemplate
 };
 
+const DRAFT_STORAGE_KEY = 'quoteDraft';
+
 export default function QuotePDF() {
     const location = useLocation();
     const urlParams = new URLSearchParams(location.search);
     const quoteId = urlParams.get('id');
+    const isDraft = urlParams.get('draft') === '1';
     const autoDownload = urlParams.get('download') === 'true';
     const [quote, setQuote] = useState(null);
     const [client, setClient] = useState(null);
@@ -28,10 +31,47 @@ export default function QuotePDF() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (isDraft) {
+            try {
+                const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+                if (raw) {
+                    const draft = JSON.parse(raw);
+                    const { quoteData, client: draftClient, user: draftUser } = draft;
+                    if (quoteData && draftClient && draftUser) {
+                        const mappedQuote = {
+                            quote_number: quoteData.quote_number || 'Draft',
+                            valid_until: quoteData.valid_until,
+                            items: (quoteData.items || []).map((item) => ({
+                                service_name: item.name || item.service_name || 'Item',
+                                description: item.description || '',
+                                quantity: Number(item.quantity ?? item.qty ?? 1),
+                                unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
+                                total_price: Number(item.total_price ?? item.total ?? 0),
+                            })),
+                            subtotal: Number(quoteData.subtotal ?? 0),
+                            tax_rate: Number(quoteData.tax_rate ?? 0),
+                            tax_amount: Number(quoteData.tax_amount ?? 0),
+                            total_amount: Number(quoteData.total_amount ?? 0),
+                            notes: quoteData.notes || '',
+                            terms_conditions: quoteData.terms_conditions || '',
+                            project_title: quoteData.project_title || '',
+                            project_description: quoteData.project_description || '',
+                        };
+                        setQuote(mappedQuote);
+                        setClient(draftClient);
+                        setUser(draftUser);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load draft quote:', e);
+            }
+            setIsLoading(false);
+            return;
+        }
         if (quoteId) {
             loadQuoteData();
         }
-    }, [quoteId]);
+    }, [quoteId, isDraft]);
 
     useEffect(() => {
         if (autoDownload && !isLoading && quote) {
@@ -69,7 +109,14 @@ export default function QuotePDF() {
     }
 
     if (!quote || !client || !user) {
-        return <div className="flex items-center justify-center min-h-screen">Document not found.</div>;
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+                <p className="text-gray-600">
+                    {isDraft ? 'No draft data found. Please try downloading from the Create Quote page again.' : 'Document not found.'}
+                </p>
+                <Button variant="outline" onClick={() => window.close()} className="rounded-lg">Close</Button>
+            </div>
+        );
     }
 
     const userCurrency = user?.currency || 'ZAR';
@@ -79,6 +126,7 @@ export default function QuotePDF() {
     // Map quote data to invoice structure for template compatibility
     const mappedInvoice = {
         ...quote,
+        items: Array.isArray(quote?.items) ? quote.items : [],
         invoice_number: quote.quote_number, // Use quote number as invoice number
         status: quote.status,
         type: 'QUOTE', // Add type to distinguish in template if needed
@@ -119,15 +167,15 @@ export default function QuotePDF() {
                 <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
                     <div className="no-print mb-4 flex justify-end gap-2">
                         <Button
-                            onClick={() => window.history.back()}
+                            onClick={() => (isDraft ? window.close() : window.history.back())}
                             variant="outline"
                             className="px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
-                            Back
+                            {isDraft ? 'Close' : 'Back'}
                         </Button>
                         <Button
                             onClick={() => window.print()}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 py-2 rounded-lg text-sm"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
                             Download PDF
                         </Button>

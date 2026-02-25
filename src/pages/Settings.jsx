@@ -1,25 +1,27 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { User, BankingDetail } from "@/api/entities";
-import { UploadFile } from "@/api/integrations";
+import SupabaseStorageService from "@/services/SupabaseStorageService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Globe, Bell, Award, Check, FileText, DollarSign, User as UserIcon } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Globe, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
+import LogoImage from "@/components/shared/LogoImage";
 
-import BankingCard from "../components/banking/BankingCard";
-import HelpTooltip from "../components/shared/HelpTooltip";
-import BankingForm from "../components/banking/BankingForm";
-import CurrencySelector from "../components/CurrencySelector";
-import PaymentReminderSettings from "../components/reminders/PaymentReminderSettings";
-import SubscriptionSettings from "../components/subscription/SubscriptionSettings";
-import CurrencyConfiguration from "../components/currency/CurrencyConfiguration";
+import BankingCard from "@/components/banking/BankingCard";
+import HelpTooltip from "@/components/shared/HelpTooltip";
+import BankingForm from "@/components/banking/BankingForm";
+import CurrencySelector from "@/components/CurrencySelector";
+import PaymentReminderSettings from "@/components/reminders/PaymentReminderSettings";
+import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
+import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
+import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 
 const DOCUMENT_TEMPLATES = [
     {
@@ -64,11 +66,38 @@ function CompanyProfileSettings() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
-    const { refreshUser } = useAuth();
+    const { user: authUser, refreshUser } = useAuth();
 
     useEffect(() => {
         loadUserData();
     }, []);
+
+    // When profile updates (e.g. Realtime from another tab or after save), keep form in sync so logo and fields auto-update
+    useEffect(() => {
+        if (!authUser) return;
+        setFormData(prev => ({
+            ...prev,
+            display_name: authUser.full_name || authUser.display_name || "",
+            company_name: authUser.company_name ?? prev.company_name,
+            company_address: authUser.company_address ?? prev.company_address,
+            logo_url: authUser.logo_url ?? prev.logo_url,
+            currency: authUser.currency || "USD",
+            country: authUser.country ?? prev.country,
+            timezone: authUser.timezone ?? prev.timezone,
+            invoice_template: authUser.invoice_template || "classic",
+            invoice_header: authUser.invoice_header ?? prev.invoice_header,
+        }));
+    }, [
+        authUser?.id,
+        authUser?.logo_url,
+        authUser?.company_name,
+        authUser?.company_address,
+        authUser?.full_name,
+        authUser?.currency,
+        authUser?.timezone,
+        authUser?.invoice_template,
+        authUser?.invoice_header,
+    ]);
 
     // Cleanup blob URLs on unmount to prevent memory leaks
     useEffect(() => {
@@ -82,9 +111,10 @@ function CompanyProfileSettings() {
     const loadUserData = async () => {
         setIsLoading(true);
         try {
+            // User.me() loads profile from Supabase profiles table (one row per user, keyed by auth user id)
             const currentUser = await User.me();
             setFormData({
-                display_name: currentUser.display_name || "",
+                display_name: currentUser.full_name || currentUser.display_name || "",
                 company_name: currentUser.company_name || "",
                 company_address: currentUser.company_address || "",
                 logo_url: currentUser.logo_url || "",
@@ -108,12 +138,12 @@ function CompanyProfileSettings() {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             
-            // Validate file type
-            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+            // Validate file type (match bucket allowed types: jpeg, png, gif, webp, svg)
+            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
             if (!validTypes.includes(file.type)) {
                 toast({
                     title: "Invalid file type",
-                    description: "Please upload a PNG, JPG, or SVG image.",
+                    description: "Please upload a PNG, JPG, GIF, WebP, or SVG image.",
                     variant: "destructive"
                 });
                 return;
@@ -149,6 +179,19 @@ function CompanyProfileSettings() {
         }
     };
 
+    const handleRemoveLogo = () => {
+        if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
+            URL.revokeObjectURL(formData.logo_url);
+        }
+        setFormData(prev => ({ ...prev, logo_url: "" }));
+        setLogoFile(null);
+        toast({
+            title: "Logo removed",
+            description: "Click \"Save Changes\" to confirm removal.",
+            variant: "default"
+        });
+    };
+
     const handleSave = async (e) => {
         e.preventDefault();
         setIsSaving(true);
@@ -157,21 +200,24 @@ function CompanyProfileSettings() {
         try {
             if (logoFile) {
                 console.log("Uploading logo file:", logoFile.name);
-                
                 // Revoke previous preview URL if it exists
                 if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
                     URL.revokeObjectURL(formData.logo_url);
                 }
-                
                 try {
-                    const uploadResult = await UploadFile({ file: logoFile });
-                    console.log("Upload result:", uploadResult);
-                    
-                    if (!uploadResult || !uploadResult.file_url) {
-                        throw new Error("Upload failed - no file URL returned");
+                    const currentUser = await User.me();
+                    const userId = currentUser?.id;
+                    if (!userId) {
+                        toast({
+                            title: "Not signed in",
+                            description: "You must be signed in to update profile. Please sign in and try again.",
+                            variant: "destructive"
+                        });
+                        setIsSaving(false);
+                        return;
                     }
-                    
-                    updatedData.logo_url = uploadResult.file_url;
+                    const publicUrl = await SupabaseStorageService.uploadProfileLogo(logoFile, userId);
+                    updatedData.logo_url = publicUrl;
                 } catch (uploadError) {
                     console.error("Logo upload error:", uploadError);
                     toast({
@@ -184,8 +230,13 @@ function CompanyProfileSettings() {
                 }
             }
             
-            console.log("Updating user data:", updatedData);
-            await User.updateMyUserData(updatedData);
+            // Map display_name to full_name for Supabase profile (saved per user, restored on login)
+            const payload = {
+                ...updatedData,
+                full_name: updatedData.display_name ?? updatedData.full_name,
+            };
+            console.log("Updating user data:", payload);
+            await User.updateMyUserData(payload);
             setFormData(updatedData);
             setLogoFile(null);
             await refreshUser();
@@ -353,7 +404,11 @@ function CompanyProfileSettings() {
                         <div className="text-center">
                             <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-2 border-slate-300 shadow-sm overflow-hidden mb-2">
                                 {formData.logo_url ? (
-                                    <img src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
+                                    formData.logo_url.startsWith('blob:') ? (
+                                        <img src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
+                                    ) : (
+                                        <LogoImage src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
+                                    )
                                 ) : (
                                     <UserIcon className="w-10 h-10 text-slate-300" />
                                 )}
@@ -365,7 +420,11 @@ function CompanyProfileSettings() {
                         <div className="text-center">
                             <div className="w-28 h-20 rounded-lg bg-white flex items-center justify-center border-2 border-dashed border-slate-300 shadow-sm mb-2">
                                 {formData.logo_url ? (
-                                    <img src={formData.logo_url} alt="Logo" className="object-contain w-full h-full p-2" />
+                                    formData.logo_url.startsWith('blob:') ? (
+                                        <img src={formData.logo_url} alt="Logo" className="object-contain w-full h-full p-2" />
+                                    ) : (
+                                        <LogoImage src={formData.logo_url} alt="Logo" className="object-contain w-full h-full p-2" />
+                                    )
                                 ) : (
                                     <div className="text-center">
                                         <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
@@ -375,12 +434,26 @@ function CompanyProfileSettings() {
                             <p className="text-[10px] font-semibold text-slate-600">Invoice Logo</p>
                         </div>
 
-                        {/* Upload Button */}
-                        <div className="flex-1">
-                            <label htmlFor="logo-upload" className="cursor-pointer bg-white border-2 border-blue-300 rounded-xl px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 flex items-center justify-center gap-2 transition-all shadow-sm w-full">
-                                <UploadCloud className="w-5 h-5" />
-                                <span>{logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}</span>
-                            </label>
+                        {/* Upload Button & Remove */}
+                        <div className="flex-1 flex flex-col gap-2">
+                            <div className="flex gap-2">
+                                <label htmlFor="logo-upload" className="cursor-pointer flex-1 bg-white border-2 border-blue-300 rounded-xl px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 flex items-center justify-center gap-2 transition-all shadow-sm">
+                                    <UploadCloud className="w-5 h-5" />
+                                    <span>{logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}</span>
+                                </label>
+                                {formData.logo_url && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="default"
+                                        className="shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+                                        onClick={handleRemoveLogo}
+                                    >
+                                        <Trash2 className="w-4 h-4 mr-1" />
+                                        Remove
+                                    </Button>
+                                )}
+                            </div>
                             <input 
                                 id="logo-upload" 
                                 type="file" 
@@ -388,8 +461,9 @@ function CompanyProfileSettings() {
                                 className="hidden" 
                                 onChange={handleLogoChange}
                             />
+                            <p className="text-xs text-slate-500">PNG, JPG or SVG, max 2MB</p>
                             {logoFile && (
-                                <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                                <p className="text-xs text-green-600 flex items-center gap-1">
                                     <Check className="w-3 h-3" />
                                     Ready to save: {logoFile.name}
                                 </p>
@@ -417,6 +491,10 @@ function CompanyProfileSettings() {
                     </div>
                 </div>
             </div>
+
+            {/* Branding & documents */}
+            <h3 className="text-base font-semibold text-slate-800 pt-2 border-t border-slate-200 mt-6">Branding & documents</h3>
+            <p className="text-xs text-slate-500 -mt-1 mb-2">These options apply to invoices and quotes.</p>
 
             {/* Invoice Header Message */}
             <div className="space-y-2">
@@ -526,6 +604,8 @@ function PaymentMethodsSettings() {
     const [showForm, setShowForm] = useState(false);
     const [editingDetail, setEditingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isImporting, setIsImporting] = useState(false);
+    const bankingFileInputRef = useRef(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -604,9 +684,86 @@ function PaymentMethodsSettings() {
         }
     };
 
+    const handleExportBanking = () => {
+        try {
+            const csvContent = bankingDetailsToCsv(bankingDetails);
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `BankingDetail_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${bankingDetails.length} payment method(s) exported.`, variant: "default" });
+        } catch (error) {
+            console.error("Export banking error:", error);
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+    };
+
+    const handleImportBanking = () => bankingFileInputRef.current?.click();
+
+    const handleImportBankingFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseBankingCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToBankingDetailPayload(headers, row);
+                if (!payload) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await BankingDetail.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn("Import banking row failed:", payload.bank_name, err);
+                    skipped++;
+                }
+            }
+            await loadBankingDetails();
+            toast({
+                title: "Import complete",
+                description: `${created} payment method(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
+                variant: "default"
+            });
+        } catch (error) {
+            console.error("Import banking error:", error);
+            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        }
+        setIsImporting(false);
+    };
+
     return (
         <div>
-            <div className="flex justify-end mb-6">
+            <input
+                type="file"
+                ref={bankingFileInputRef}
+                accept=".csv"
+                className="hidden"
+                onChange={handleImportBankingFile}
+            />
+            <div className="flex flex-wrap justify-end gap-2 mb-6">
+                <Button
+                    variant="outline"
+                    onClick={handleImportBanking}
+                    disabled={isImporting}
+                >
+                    <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                    {isImporting ? "Importing…" : "Import CSV"}
+                </Button>
+                <Button variant="outline" onClick={handleExportBanking} disabled={bankingDetails.length === 0}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                </Button>
                 <Button
                     onClick={() => setShowForm(true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white"

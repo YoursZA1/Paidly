@@ -1,4 +1,5 @@
 import * as React from "react"
+import PropTypes from "prop-types"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -88,6 +89,38 @@ const PaginationEllipsis = ({
   </span>
 )
 PaginationEllipsis.displayName = "PaginationEllipsis"
+
+Pagination.propTypes = {
+  className: PropTypes.string
+}
+
+PaginationContent.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+PaginationItem.propTypes = {
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+PaginationLink.propTypes = {
+  className: PropTypes.string,
+  isActive: PropTypes.bool,
+  size: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+}
+
+PaginationPrevious.propTypes = {
+  className: PropTypes.string
+}
+
+PaginationNext.propTypes = {
+  className: PropTypes.string
+}
+
+PaginationEllipsis.propTypes = {
+  className: PropTypes.string
+}
 
 export {
   Pagination,

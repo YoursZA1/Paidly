@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail, Payment } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Download, Printer, Eye, ArrowLeft, Edit, Share2, Clock, DollarSign, Mail } from 'lucide-react';
 import RecordPaymentModal from '@/components/invoice/RecordPaymentModal';
 import PaymentHistory from '@/components/payments/PaymentHistory';
@@ -15,6 +16,7 @@ import { formatCurrency } from '@/utils/currencyCalculations';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function ViewInvoice() {
     const [invoice, setInvoice] = useState(null);
@@ -46,30 +48,51 @@ export default function ViewInvoice() {
 
     const loadInvoiceData = async (invoiceId) => {
         setIsLoading(true);
+        setError(null);
         try {
             const invoiceData = await Invoice.get(invoiceId);
             if (!invoiceData) throw new Error("Invoice not found");
 
-            const [clientData, companyData, bankingData, allPayments] = await Promise.all([
-                Client.get(invoiceData.client_id),
-                User.me(),
-                // Use invoiceData.banking_detail_id only if it exists, otherwise pass null or handle
-                invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id) : Promise.resolve(null),
-                Payment.list('-payment_date')
-            ]);
+            // Ensure invoice has items array (default to empty array if undefined)
+            const invoiceWithItems = {
+                ...invoiceData,
+                items: Array.isArray(invoiceData.items) ? invoiceData.items : []
+            };
 
-            // Filter payments for this invoice
-            const paymentsData = (allPayments || []).filter(p => p.invoice_id === invoiceId);
+            // Load related data with error handling for each
+            try {
+                const results = await Promise.allSettled([
+                    Client.get(invoiceData.client_id).catch(() => null),
+                    User.me().catch(() => null),
+                    invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
+                    Payment.list('-payment_date').catch(() => [])
+                ]);
 
-            setInvoice(invoiceData);
-            setClient(clientData);
-            setCompany(companyData);
-            setBankingDetail(bankingData);
-            setPayments(paymentsData || []);
-            setPaymentSchedule(invoiceData.payment_schedule || []);
+                const clientData = results[0].status === 'fulfilled' ? results[0].value : null;
+                const companyData = results[1].status === 'fulfilled' ? results[1].value : null;
+                const bankingData = results[2].status === 'fulfilled' ? results[2].value : null;
+                const allPayments = results[3].status === 'fulfilled' ? results[3].value : [];
+
+                // Filter payments for this invoice
+                const paymentsData = Array.isArray(allPayments) 
+                    ? allPayments.filter(p => p && p.invoice_id === invoiceId)
+                    : [];
+
+                setInvoice(invoiceWithItems);
+                setClient(clientData);
+                setCompany(companyData);
+                setBankingDetail(bankingData);
+                setPayments(paymentsData || []);
+                setPaymentSchedule(invoiceData.payment_schedule || []);
+            } catch (relatedErr) {
+                // If related data fails to load, still set the invoice
+                console.warn("Some related data failed to load:", relatedErr);
+                setInvoice(invoiceWithItems);
+            }
         } catch (err) {
             console.error("Error loading invoice:", err);
             setError(err.message || "Failed to load invoice");
+            setInvoice(null);
         }
         setIsLoading(false);
     };
@@ -202,18 +225,36 @@ export default function ViewInvoice() {
         return <div className="p-8 text-center text-red-500">Error: {error}</div>;
     }
 
+    if (!invoice) {
+        return <div className="p-8 text-center text-red-500">Error: Invoice not found</div>;
+    }
+
     const userCurrency = company?.currency || 'USD';
     const history = Array.isArray(invoice?.version_history) ? invoice.version_history : [];
 
     return (
-        <div className="bg-slate-50 min-h-screen">
+        <div className="min-h-screen bg-background">
+            {/* Breadcrumb */}
+            <div className="no-print max-w-5xl mx-auto px-4 sm:px-8 pt-2">
+                <Breadcrumb>
+                    <BreadcrumbList>
+                        <BreadcrumbItem>
+                            <BreadcrumbLink asChild><Link to={createPageUrl('Invoices')}>Invoices</Link></BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                            <BreadcrumbPage>#{invoice.invoice_number}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                    </BreadcrumbList>
+                </Breadcrumb>
+            </div>
             {/* Action Bar - No Print */}
-            <div className="no-print bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
-                <div className="max-w-4xl mx-auto flex justify-between items-center">
+            <div className="no-print bg-card border-b border-border p-4 sticky top-0 z-10 shadow-sm">
+                <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <Button
                         variant="outline"
-                        onClick={() => navigate(-1)}
-                        className="flex items-center gap-2"
+                        onClick={() => navigate(createPageUrl('Invoices'))}
+                        className="flex items-center gap-2 rounded-xl"
                     >
                         <ArrowLeft className="w-4 h-4" />
                         Back
@@ -289,7 +330,7 @@ export default function ViewInvoice() {
                                 <div className="flex flex-col sm:flex-row justify-between items-start mb-8 pb-6 border-b-2 border-indigo-600">
                                     <div className="flex items-start gap-6 mb-4 sm:mb-0">
                                         {company?.logo_url && (
-                                            <img 
+                                            <LogoImage 
                                                 src={company.logo_url} 
                                                 alt={company?.company_name || 'Company'} 
                                                 className="w-24 h-24 object-contain rounded-xl shadow-lg"
@@ -336,17 +377,23 @@ export default function ViewInvoice() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {invoice.items.map((item, index) => (
-                                            <tr key={index} className="border-b border-slate-100">
-                                                <td className="p-3">
-                                                    <p className="font-medium text-slate-800">{item.service_name}</p>
-                                                    <p className="text-sm text-slate-500">{item.description}</p>
-                                                </td>
-                                                <td className="p-3 text-center">{item.quantity}</td>
-                                                <td className="p-3 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                                <td className="p-3 text-right">{formatCurrency(item.total_price, userCurrency)}</td>
+                                        {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                                            invoice.items.map((item, index) => (
+                                                <tr key={index} className="border-b border-slate-100">
+                                                    <td className="p-3">
+                                                        <p className="font-medium text-slate-800">{item.service_name}</p>
+                                                        <p className="text-sm text-slate-500">{item.description}</p>
+                                                    </td>
+                                                    <td className="p-3 text-center">{item.quantity}</td>
+                                                    <td className="p-3 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                                    <td className="p-3 text-right">{formatCurrency(item.total_price, userCurrency)}</td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan="4" className="p-3 text-center text-slate-500">No items found</td>
                                             </tr>
-                                        ))}
+                                        )}
                                     </tbody>
                                 </table>
 

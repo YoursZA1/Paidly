@@ -9,8 +9,8 @@ import { ArrowLeft, Save, Plus, Trash2, Calculator, Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
-import { formatCurrency } from "../components/CurrencySelector";
-import { calculateFullPayroll } from "../components/payroll/PayeTaxCalculator";
+import { formatCurrency } from "@/components/CurrencySelector";
+import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();

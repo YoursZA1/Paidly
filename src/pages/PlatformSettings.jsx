@@ -1,32 +1,34 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
 import SystemSettingsService from "@/services/SystemSettingsService";
+import PlanManagementService from "@/services/PlanManagementService";
 import { 
   Mail, FileText, DollarSign, Zap, Shield, 
   Bell, Link2, Palette, Save, RotateCcw, Download, Upload,
-  AlertTriangle, CheckCircle, Globe, Server, Wrench
+  CheckCircle, Globe, Server, Search, Lock,
+  CreditCard, BarChart3, LineChart, MailCheck
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { renderIcon } from "@/utils/renderIcon";
+
 
 export default function PlatformSettings() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("system");
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadSettings();
@@ -53,7 +55,7 @@ export default function PlatformSettings() {
   const handleSaveSection = async (section, data) => {
     setSaving(true);
     try {
-      const updated = SystemSettingsService.updateSection(section, data, currentUser?.id);
+      const updated = SystemSettingsService.updateSection(section, data, user?.id);
       setSettings(updated);
       toast({
         title: "Success",
@@ -105,7 +107,7 @@ export default function PlatformSettings() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const imported = SystemSettingsService.importSettings(e.target.result, currentUser?.id);
+        const imported = SystemSettingsService.importSettings(e.target.result, user?.id);
         setSettings(imported);
         toast({
           title: "Success",
@@ -145,183 +147,663 @@ export default function PlatformSettings() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 sm:p-6 lg:p-8">
-      <div className="container mx-auto max-w-7xl">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Wrench className="h-8 w-8 text-primary" />
-              Platform Settings
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Configure system-wide settings and platform behavior
+  const isRestrictedAdmin = ["super_admin", "founder"].includes(user?.role);
+
+  if (!isRestrictedAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <Card className="max-w-md w-full border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-900">
+              <Lock className="h-5 w-5" />
+              Restricted Settings
+            </CardTitle>
+            <CardDescription>
+              Only founders and super administrators can access this area.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600">
+              If you need access, contact a founder or super admin to update your role.
             </p>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file').click()}>
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
-            <input
-              id="import-file"
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              className="hidden"
-            />
-            <Button variant="outline" size="sm" onClick={handleReset}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-        {settings?.system?.maintenanceMode && (
-          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
-            <span className="font-semibold text-amber-900">Maintenance Mode Active</span>
-          </div>
-        )}
-      </motion.div>
+  const handleSaveSystem = (data) => {
+    handleSaveSection('system', data);
+  };
 
-      {/* Settings Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-5 lg:grid-cols-9 gap-2">
-          <TabsTrigger value="system" className="flex items-center gap-1">
-            <Globe className="h-4 w-4" />
-            <span className="hidden sm:inline">System</span>
-          </TabsTrigger>
-          <TabsTrigger value="email" className="flex items-center gap-1">
-            <Mail className="h-4 w-4" />
-            <span className="hidden sm:inline">Email</span>
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-1">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Documents</span>
-          </TabsTrigger>
-          <TabsTrigger value="defaults" className="flex items-center gap-1">
-            <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Defaults</span>
-          </TabsTrigger>
-          <TabsTrigger value="features" className="flex items-center gap-1">
-            <Zap className="h-4 w-4" />
-            <span className="hidden sm:inline">Features</span>
-          </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-1">
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Security</span>
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-1">
-            <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Notifications</span>
-          </TabsTrigger>
-          <TabsTrigger value="integrations" className="flex items-center gap-1">
-            <Link2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Integrations</span>
-          </TabsTrigger>
-          <TabsTrigger value="branding" className="flex items-center gap-1">
-            <Palette className="h-4 w-4" />
-            <span className="hidden sm:inline">Branding</span>
-          </TabsTrigger>
+  const handleSaveBranding = (data) => {
+    handleSaveSection('branding', data);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+      <Tabs defaultValue="restricted" className="max-w-6xl mx-auto">
+        <TabsList className="mb-6 grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="restricted">Restricted settings</TabsTrigger>
+          <TabsTrigger value="system">System & branding</TabsTrigger>
         </TabsList>
-
-        {/* System Settings Tab */}
-        <TabsContent value="system">
-          <SystemSettingsTab 
-            settings={settings?.system} 
-            onSave={(data) => handleSaveSection('system', data)}
+        <TabsContent value="restricted">
+          <RestrictedSettingsView
+            settings={settings}
             saving={saving}
+            onSaveSection={handleSaveSection}
+            onExport={handleExport}
+            onImport={handleImport}
+            onReset={handleReset}
+            updatedBy={user?.email || user?.full_name || "admin"}
           />
         </TabsContent>
-
-        {/* Email Templates Tab */}
-        <TabsContent value="email">
-          <EmailTemplatesTab 
-            templates={settings?.emailTemplates}
-            onSave={(data) => handleSaveSection('emailTemplates', data)}
+        <TabsContent value="system" className="space-y-6">
+          <SystemSettingsTab
+            settings={settings?.system}
+            onSave={handleSaveSystem}
             saving={saving}
           />
-        </TabsContent>
-
-        {/* Document Numbering Tab */}
-        <TabsContent value="documents">
-          <DocumentNumberingTab 
-            numbering={settings?.documentNumbering}
-            onSave={(data) => handleSaveSection('documentNumbering', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Defaults Tab */}
-        <TabsContent value="defaults">
-          <DefaultSettingsTab 
-            defaults={settings?.defaults}
-            onSave={(data) => handleSaveSection('defaults', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Features Tab */}
-        <TabsContent value="features">
-          <FeaturesTab 
-            features={settings?.features}
-            onSave={(data) => handleSaveSection('features', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Security Tab */}
-        <TabsContent value="security">
-          <SecurityTab 
-            security={settings?.security}
-            onSave={(data) => handleSaveSection('security', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Notifications Tab */}
-        <TabsContent value="notifications">
-          <NotificationsTab 
-            notifications={settings?.notifications}
-            onSave={(data) => handleSaveSection('notifications', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Integrations Tab */}
-        <TabsContent value="integrations">
-          <IntegrationsTab 
-            integrations={settings?.integrations}
-            onSave={(data) => handleSaveSection('integrations', data)}
-            saving={saving}
-          />
-        </TabsContent>
-
-        {/* Branding Tab */}
-        <TabsContent value="branding">
-          <BrandingTab 
+          <BrandingTab
             branding={settings?.branding}
-            onSave={(data) => handleSaveSection('branding', data)}
+            onSave={handleSaveBranding}
             saving={saving}
           />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function RestrictedSettingsView({
+  settings,
+  saving,
+  onSaveSection,
+  onExport,
+  onImport,
+  onReset,
+  updatedBy
+}) {
+  const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [plans, setPlans] = useState([]);
+  const [planDrafts, setPlanDrafts] = useState([]);
+  const [defaultsDraft, setDefaultsDraft] = useState(settings?.defaults || {});
+  const [numberingDraft, setNumberingDraft] = useState(settings?.documentNumbering || {});
+  const [featuresDraft, setFeaturesDraft] = useState(settings?.features || {});
+  const [supportedCurrencies, setSupportedCurrencies] = useState(
+    Array.isArray(settings?.defaults?.supportedCurrencies)
+      ? settings.defaults.supportedCurrencies.join(', ')
+      : (settings?.defaults?.supportedCurrencies || '')
+  );
+
+  useEffect(() => {
+    const list = PlanManagementService.getPlans();
+    setPlans(list);
+    setPlanDrafts(list.map(plan => ({
+      ...plan,
+      userLimit: plan.userLimit === null ? "" : plan.userLimit,
+      invoices_limit: plan.invoices_limit === "Unlimited" ? "" : plan.invoices_limit,
+      quotes_limit: plan.quotes_limit === "Unlimited" ? "" : plan.quotes_limit
+    })));
+  }, []);
+
+  useEffect(() => {
+    setDefaultsDraft(settings?.defaults || {});
+    setNumberingDraft(settings?.documentNumbering || {});
+    setFeaturesDraft(settings?.features || {});
+    if (Array.isArray(settings?.defaults?.supportedCurrencies)) {
+      setSupportedCurrencies(settings.defaults.supportedCurrencies.join(', '));
+    } else {
+      setSupportedCurrencies(settings?.defaults?.supportedCurrencies || '');
+    }
+  }, [settings]);
+
+  const searchLower = searchQuery.trim().toLowerCase();
+  const matches = (value) => {
+    if (!searchLower) return true;
+    return (value || '').toLowerCase().includes(searchLower);
+  };
+
+  const formatLabel = (value) =>
+    (value || '')
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  const normalizeNumber = (value) => {
+    if (value === "" || value === null || value === undefined) return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  };
+
+  const normalizeUnlimited = (value) => {
+    if (value === "" || value === null || value === undefined) return null;
+    if (value === "Unlimited") return null;
+    return normalizeNumber(value);
+  };
+
+  const getPlanPayload = (draft) => ({
+    priceMonthly: normalizeNumber(draft.priceMonthly) || 0,
+    priceYearly: normalizeNumber(draft.priceYearly) || 0,
+    userLimit: draft.userLimit === "" ? null : normalizeNumber(draft.userLimit),
+    invoices_limit: draft.invoices_limit === "" ? "Unlimited" : normalizeNumber(draft.invoices_limit),
+    quotes_limit: draft.quotes_limit === "" ? "Unlimited" : normalizeNumber(draft.quotes_limit),
+    recommended: Boolean(draft.recommended),
+    status: draft.status || "active"
+  });
+
+  const hasPlanChanged = (original, draft) => {
+    const payload = getPlanPayload(draft);
+    return (
+      normalizeNumber(original.priceMonthly) !== normalizeNumber(payload.priceMonthly) ||
+      normalizeNumber(original.priceYearly) !== normalizeNumber(payload.priceYearly) ||
+      normalizeUnlimited(original.userLimit) !== normalizeUnlimited(payload.userLimit) ||
+      normalizeUnlimited(original.invoices_limit) !== normalizeUnlimited(payload.invoices_limit) ||
+      normalizeUnlimited(original.quotes_limit) !== normalizeUnlimited(payload.quotes_limit) ||
+      Boolean(original.recommended) !== Boolean(payload.recommended) ||
+      (original.status || "active") !== payload.status
+    );
+  };
+
+  const handlePlanChange = (key, field, value) => {
+    setPlanDrafts((prev) => prev.map((plan) => (
+      plan.key === key ? { ...plan, [field]: value } : plan
+    )));
+  };
+
+  const handleSavePlans = () => {
+    planDrafts.forEach((draft) => {
+      const original = plans.find((plan) => plan.key === draft.key);
+      if (!original || !hasPlanChanged(original, draft)) return;
+      PlanManagementService.updatePlan(draft.key, getPlanPayload(draft), {
+        updatedBy,
+        changeNote: "Restricted settings update"
+      });
+    });
+
+    const refreshed = PlanManagementService.getPlans();
+    setPlans(refreshed);
+    setPlanDrafts(refreshed.map(plan => ({
+      ...plan,
+      userLimit: plan.userLimit === null ? "" : plan.userLimit,
+      invoices_limit: plan.invoices_limit === "Unlimited" ? "" : plan.invoices_limit,
+      quotes_limit: plan.quotes_limit === "Unlimited" ? "" : plan.quotes_limit
+    })));
+    toast({
+      title: "Plans Updated",
+      description: "Pricing and limits saved",
+    });
+  };
+
+  const handleSaveDefaults = () => {
+    const supportedList = supportedCurrencies
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    onSaveSection('defaults', {
+      ...defaultsDraft,
+      supportedCurrencies: supportedList
+    });
+  };
+
+  const handleSaveNumbering = () => {
+    onSaveSection('documentNumbering', numberingDraft);
+  };
+
+  const handleSaveFeatures = () => {
+    onSaveSection('features', featuresDraft);
+  };
+
+  const matchingPlans = planDrafts.filter((plan) => (
+    matches(`${plan.name} ${plan.key}`)
+  ));
+
+  const featureEntries = Object.entries(featuresDraft.enabled || {})
+    .filter(([key]) => matches(key))
+    .map(([key, value]) => ({ key, value, scope: 'enabled' }));
+
+  const betaEntries = Object.entries(featuresDraft.beta || {})
+    .filter(([key]) => matches(key))
+    .map(([key, value]) => ({ key, value, scope: 'beta' }));
+
+  const showPlans = matches('plans pricing invoices quotes limits') || matchingPlans.length > 0;
+  const showTax = matches('tax defaults vat') || matches(defaultsDraft?.taxName || '');
+  const showCurrency = matches('currency support') || matches(defaultsDraft?.currency || '') || matches(supportedCurrencies);
+  const showNumbering = matches('invoice numbering document') || matches(numberingDraft?.invoice?.prefix || '');
+  const showFeatures = matches('feature rollout toggles') || featureEntries.length > 0 || betaEntries.length > 0;
+
+  const visibleSections = [showPlans, showTax, showCurrency, showNumbering, showFeatures].some(Boolean);
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold text-slate-900">Restricted Settings</h1>
+              <p className="text-sm text-slate-600">Founder-only configuration for pricing, tax, and rollout controls.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={onExport}>
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => document.getElementById('restricted-import').click()}>
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </Button>
+              <input
+                id="restricted-import"
+                type="file"
+                accept=".json"
+                onChange={onImport}
+                className="hidden"
+              />
+              <Button variant="outline" size="sm" onClick={onReset}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset
+              </Button>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search plans, currencies, tax, numbering, or features..."
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        {!visibleSections && (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-slate-500">
+              No settings match your search.
+            </CardContent>
+          </Card>
+        )}
+
+        {showPlans && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Plans & Pricing</CardTitle>
+              <CardDescription>Adjust pricing and usage limits. Entrepreneur plan is highlighted.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-slate-500">
+                    <tr>
+                      <th className="py-2">Plan</th>
+                      <th className="py-2">Monthly</th>
+                      <th className="py-2">Yearly</th>
+                      <th className="py-2">Users</th>
+                      <th className="py-2">Invoices</th>
+                      <th className="py-2">Quotes</th>
+                      <th className="py-2">Recommended</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-700">
+                    {matchingPlans.map((plan) => {
+                      const isEntrepreneur = plan.key === 'professional' || plan.name?.toLowerCase().includes('entrepreneur');
+                      return (
+                        <tr key={plan.key} className={isEntrepreneur ? 'bg-amber-50 border border-amber-200' : 'border-b border-slate-100'}>
+                          <td className="py-2 pr-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-900">{plan.name}</span>
+                              {isEntrepreneur && (
+                                <Badge className="bg-amber-100 text-amber-800">Entrepreneur</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              type="number"
+                              value={plan.priceMonthly}
+                              onChange={(e) => handlePlanChange(plan.key, 'priceMonthly', e.target.value)}
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              type="number"
+                              value={plan.priceYearly}
+                              onChange={(e) => handlePlanChange(plan.key, 'priceYearly', e.target.value)}
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              value={plan.userLimit}
+                              onChange={(e) => handlePlanChange(plan.key, 'userLimit', e.target.value)}
+                              placeholder="Unlimited"
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              value={plan.invoices_limit}
+                              onChange={(e) => handlePlanChange(plan.key, 'invoices_limit', e.target.value)}
+                              placeholder="Unlimited"
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              value={plan.quotes_limit}
+                              onChange={(e) => handlePlanChange(plan.key, 'quotes_limit', e.target.value)}
+                              placeholder="Unlimited"
+                            />
+                          </td>
+                          <td className="py-2">
+                            <Switch
+                              checked={Boolean(plan.recommended)}
+                              onCheckedChange={(checked) => handlePlanChange(plan.key, 'recommended', checked)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSavePlans} disabled={saving} className="gap-2">
+                  <Save className="h-4 w-4" />
+                  Save Plans
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {showTax && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Tax Defaults</CardTitle>
+              <CardDescription>Set default tax behavior for all invoices.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tax Name</Label>
+                  <Input
+                    value={defaultsDraft.taxName || ''}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxName: e.target.value })}
+                    placeholder="VAT"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tax Rate (%)</Label>
+                  <Input
+                    type="number"
+                    value={defaultsDraft.taxRate ?? ''}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxRate: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tax Number</Label>
+                  <Input
+                    value={defaultsDraft.taxNumber || ''}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxNumber: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                  <div>
+                    <Label>Tax Enabled</Label>
+                    <p className="text-xs text-slate-500">Apply tax by default</p>
+                  </div>
+                  <Switch
+                    checked={Boolean(defaultsDraft.taxEnabled)}
+                    onCheckedChange={(checked) => setDefaultsDraft({ ...defaultsDraft, taxEnabled: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                  <div>
+                    <Label>Tax Inclusive</Label>
+                    <p className="text-xs text-slate-500">Prices include tax</p>
+                  </div>
+                  <Switch
+                    checked={Boolean(defaultsDraft.taxInclusive)}
+                    onCheckedChange={(checked) => setDefaultsDraft({ ...defaultsDraft, taxInclusive: checked })}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveDefaults} disabled={saving} className="gap-2">
+                  <Save className="h-4 w-4" />
+                  Save Tax Defaults
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {showCurrency && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Currency Support</CardTitle>
+              <CardDescription>Define supported currencies and formatting defaults.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Default Currency</Label>
+                  <Input
+                    value={defaultsDraft.currency || ''}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, currency: e.target.value.toUpperCase() })}
+                    placeholder="ZAR"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Currency Symbol</Label>
+                  <Input
+                    value={defaultsDraft.currencySymbol || ''}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, currencySymbol: e.target.value })}
+                    placeholder="R"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Decimal Places</Label>
+                  <Input
+                    type="number"
+                    value={defaultsDraft.decimalPlaces ?? 2}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, decimalPlaces: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Thousands Separator</Label>
+                  <Input
+                    value={defaultsDraft.thousandsSeparator || ','}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, thousandsSeparator: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Decimal Separator</Label>
+                  <Input
+                    value={defaultsDraft.decimalSeparator || '.'}
+                    onChange={(e) => setDefaultsDraft({ ...defaultsDraft, decimalSeparator: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Supported Currencies</Label>
+                  <Input
+                    value={supportedCurrencies}
+                    onChange={(e) => setSupportedCurrencies(e.target.value)}
+                    placeholder="ZAR, USD, EUR"
+                  />
+                  <p className="text-xs text-slate-500">Comma-separated ISO codes.</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveDefaults} disabled={saving} className="gap-2">
+                  <Save className="h-4 w-4" />
+                  Save Currency Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {showNumbering && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Invoice Numbering</CardTitle>
+              <CardDescription>Standardize prefixes and sequencing rules.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-slate-500">
+                    <tr>
+                      <th className="py-2">Document</th>
+                      <th className="py-2">Prefix</th>
+                      <th className="py-2">Format</th>
+                      <th className="py-2">Start</th>
+                      <th className="py-2">Padding</th>
+                      <th className="py-2">Reset</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-700">
+                    {Object.entries(numberingDraft || {}).map(([docKey, doc]) => (
+                      <tr key={docKey} className="border-b border-slate-100">
+                        <td className="py-2 pr-3 font-medium text-slate-900">{formatLabel(docKey)}</td>
+                        <td className="py-2 pr-3">
+                          <Input
+                            value={doc.prefix || ''}
+                            onChange={(e) => setNumberingDraft({
+                              ...numberingDraft,
+                              [docKey]: { ...doc, prefix: e.target.value }
+                            })}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Input
+                            value={doc.format || ''}
+                            onChange={(e) => setNumberingDraft({
+                              ...numberingDraft,
+                              [docKey]: { ...doc, format: e.target.value }
+                            })}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Input
+                            type="number"
+                            value={doc.startNumber ?? ''}
+                            onChange={(e) => setNumberingDraft({
+                              ...numberingDraft,
+                              [docKey]: { ...doc, startNumber: Number(e.target.value) }
+                            })}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Input
+                            type="number"
+                            value={doc.padding ?? ''}
+                            onChange={(e) => setNumberingDraft({
+                              ...numberingDraft,
+                              [docKey]: { ...doc, padding: Number(e.target.value) }
+                            })}
+                          />
+                        </td>
+                        <td className="py-2">
+                          <Input
+                            value={doc.resetPeriod || ''}
+                            onChange={(e) => setNumberingDraft({
+                              ...numberingDraft,
+                              [docKey]: { ...doc, resetPeriod: e.target.value }
+                            })}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveNumbering} disabled={saving} className="gap-2">
+                  <Save className="h-4 w-4" />
+                  Save Numbering
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {showFeatures && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Feature Rollout Toggles</CardTitle>
+              <CardDescription>Control availability of platform features.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-700">Released Features</p>
+                  {featureEntries.map((feature) => (
+                    <div key={feature.key} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">{formatLabel(feature.key)}</p>
+                        <p className="text-xs text-slate-500">Enabled</p>
+                      </div>
+                      <Switch
+                        checked={Boolean(feature.value)}
+                        onCheckedChange={(checked) => setFeaturesDraft({
+                          ...featuresDraft,
+                          enabled: { ...featuresDraft.enabled, [feature.key]: checked }
+                        })}
+                      />
+                    </div>
+                  ))}
+                  {featureEntries.length === 0 && (
+                    <p className="text-sm text-slate-500">No released features match your search.</p>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-700">Rollout (Beta)</p>
+                  {betaEntries.map((feature) => (
+                    <div key={feature.key} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">{formatLabel(feature.key)}</p>
+                        <p className="text-xs text-slate-500">Beta</p>
+                      </div>
+                      <Switch
+                        checked={Boolean(feature.value)}
+                        onCheckedChange={(checked) => setFeaturesDraft({
+                          ...featuresDraft,
+                          beta: { ...featuresDraft.beta, [feature.key]: checked }
+                        })}
+                      />
+                    </div>
+                  ))}
+                  {betaEntries.length === 0 && (
+                    <p className="text-sm text-slate-500">No beta features match your search.</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveFeatures} disabled={saving} className="gap-2">
+                  <Save className="h-4 w-4" />
+                  Save Feature Toggles
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
 }
+
+RestrictedSettingsView.propTypes = {
+  settings: PropTypes.object,
+  saving: PropTypes.bool,
+  onSaveSection: PropTypes.func.isRequired,
+  onExport: PropTypes.func.isRequired,
+  onImport: PropTypes.func.isRequired,
+  onReset: PropTypes.func.isRequired,
+  updatedBy: PropTypes.string
+};
 
 // System Settings Tab Component
 function SystemSettingsTab({ settings, onSave, saving }) {
@@ -1400,12 +1882,12 @@ function IntegrationsTab({ integrations, onSave, saving }) {
   }, [integrations]);
 
   const integrationsList = [
-    { value: 'stripe', label: 'Stripe', icon: '💳' },
-    { value: 'paypal', label: 'PayPal', icon: '💰' },
-    { value: 'quickbooks', label: 'QuickBooks', icon: '📊' },
-    { value: 'xero', label: 'Xero', icon: '📈' },
-    { value: 'mailgun', label: 'Mailgun', icon: '✉️' },
-    { value: 'sendgrid', label: 'SendGrid', icon: '📧' }
+    { value: 'stripe', label: 'Stripe', icon: CreditCard },
+    { value: 'paypal', label: 'PayPal', icon: DollarSign },
+    { value: 'quickbooks', label: 'QuickBooks', icon: BarChart3 },
+    { value: 'xero', label: 'Xero', icon: LineChart },
+    { value: 'mailgun', label: 'Mailgun', icon: Mail },
+    { value: 'sendgrid', label: 'SendGrid', icon: MailCheck }
   ];
 
   const currentIntegration = formData[selectedIntegration] || {};
@@ -1435,7 +1917,10 @@ function IntegrationsTab({ integrations, onSave, saving }) {
             <SelectContent>
               {integrationsList.map(int => (
                 <SelectItem key={int.value} value={int.value}>
-                  {int.icon} {int.label}
+                  <span className="inline-flex items-center gap-2">
+                    {renderIcon(int.icon, { className: "w-4 h-4" })}
+                    <span>{int.label}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

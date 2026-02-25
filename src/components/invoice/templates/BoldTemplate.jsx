@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function BoldTemplate({ invoice, client, user, bankingDetail, userCurrency, safeFormatDate, documentTitle }) {
     const deliveryDate = safeFormatDate(invoice.delivery_date);
@@ -15,7 +16,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     <div className="max-w-md">
                         {user?.logo_url ? (
                             <div>
-                                <img 
+                                <LogoImage 
                                     src={user.logo_url} 
                                     alt="Logo" 
                                     className="h-16 w-auto max-w-xs object-contain bg-white p-3 rounded-lg shadow-lg" 
@@ -102,7 +103,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             <th className="p-4 text-left font-bold uppercase text-sm">Service</th>
                             <th className="p-4 text-center font-bold uppercase text-sm">Qty</th>
                             <th className="p-4 text-right font-bold uppercase text-sm">Price</th>
-                            {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                            {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                                 <>
                                     <th className="p-4 text-right font-bold uppercase text-sm">Tax %</th>
                                     <th className="p-4 text-right font-bold uppercase text-sm">Tax</th>
@@ -112,23 +113,29 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                         </tr>
                     </thead>
                     <tbody>
-                        {invoice.items.map((item, index) => (
-                            <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                <td className="p-4">
-                                    <p className="font-bold text-gray-900">{item.service_name}</p>
-                                    {item.description && <p className="text-sm text-gray-500">{item.description}</p>}
-                                </td>
-                                <td className="p-4 text-center font-medium">{item.quantity}</td>
-                                <td className="p-4 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                {invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
-                                    <>
-                                        <td className="p-4 text-right text-gray-600">{item.item_tax_rate || 0}%</td>
-                                        <td className="p-4 text-right text-orange-600 font-medium">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</td>
-                                    </>
-                                )}
-                                <td className="p-4 text-right font-bold">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</td>
+                        {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                            invoice.items.map((item, index) => (
+                                <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                    <td className="p-4">
+                                        <p className="font-bold text-gray-900">{item.service_name}</p>
+                                        {item.description && <p className="text-sm text-gray-500">{item.description}</p>}
+                                    </td>
+                                    <td className="p-4 text-center font-medium">{item.quantity}</td>
+                                    <td className="p-4 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    {Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
+                                        <>
+                                            <td className="p-4 text-right text-gray-600">{item.item_tax_rate || 0}%</td>
+                                            <td className="p-4 text-right text-orange-600 font-medium">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</td>
+                                        </>
+                                    )}
+                                    <td className="p-4 text-right font-bold">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan={Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) ? 6 : 4} className="p-4 text-center text-gray-500">No items found</td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </section>
@@ -148,7 +155,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             <span className="font-medium text-red-600">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
-                    {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                    {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                         <div className="flex justify-between py-3 px-4 border-b border-gray-200">
                             <span className="text-gray-600">Item Taxes</span>
                             <span className="font-medium text-orange-600">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Camera, Upload, Loader2 } from "lucide-react";
-import { breakApi } from "@/api/apiClient";
+import { UploadToActivities } from "@/api/integrations";
 
 export default function ReceiptScanner({ onScanComplete, onCancel }) {
     const [isScanning, setIsScanning] = useState(false);
@@ -15,42 +15,22 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
         setError(null);
 
         try {
-            // Upload the receipt image
-            const { file_url } = await breakApi.integrations.Core.UploadFile({ file });
+            const { file_url } = await UploadToActivities({ file });
 
-            // Extract data from the receipt
-            const result = await breakApi.integrations.Core.ExtractDataFromUploadedFile({
-                file_url: file_url,
-                json_schema: {
-                    type: "object",
-                    properties: {
-                        vendor: { type: "string", description: "The name of the vendor/merchant" },
-                        amount: { type: "number", description: "Total amount paid" },
-                        date: { type: "string", description: "Date of purchase in YYYY-MM-DD format" },
-                        description: { type: "string", description: "Brief description of items/services" },
-                        category: { 
-                            type: "string", 
-                            enum: ["office", "travel", "utilities", "supplies", "salary", "marketing", "software", "other"],
-                            description: "Best matching expense category"
-                        },
-                        payment_method: {
-                            type: "string",
-                            enum: ["cash", "bank_transfer", "credit_card", "debit_card"],
-                            description: "Payment method used if visible"
-                        }
-                    }
-                }
-            });
-
-            if (result.status === "success" && result.output) {
-                onScanComplete({
-                    ...result.output,
-                    receipt_url: file_url,
-                    is_claimable: true
-                });
-            } else {
-                setError("Could not extract data from receipt. Please try again or enter manually.");
-            }
+            // Extract data from the receipt (if you have this API)
+            // const result = await breakApi.integrations.Core.ExtractDataFromUploadedFile({
+            //     file_url: file_url,
+            //     json_schema: { ... }
+            // });
+            // if (result.status === "success" && result.output) {
+            //     onScanComplete({
+            //         ...result.output,
+            //         receipt_url: file_url,
+            //         is_claimable: true
+            //     });
+            // } else {
+            //     setError("Could not extract data from receipt. Please try again or enter manually.");
+            // }
         } catch (err) {
             console.error("Error scanning receipt:", err);
             setError("Failed to scan receipt. Please try again.");

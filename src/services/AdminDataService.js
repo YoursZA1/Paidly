@@ -1,8 +1,11 @@
 /**
  * AdminDataService
- * Unified data service for all admin operations
- * Centralizes data access, caching, and synchronization across admin pages
- * Ensures consistent data communication throughout the application
+ * Unified data service for all admin operations.
+ * Centralizes data access, caching, and synchronization across admin pages.
+ * Canonical source for users and reporting is Supabase: data is loaded via
+ * sync (GET /api/admin/sync-users or sync-data) into localStorage; this
+ * service prefers Supabase-sourced keys (breakapi_supabase_*) when present.
+ * See docs/SUPABASE_INTEGRATION_CHECKLIST.md § Database Operations.
  */
 
 import AuditLogService, { EVENT_TYPES, SEVERITY_LEVELS } from './AuditLogService';
@@ -15,6 +18,18 @@ const STORAGE_KEYS = {
   PLAN_CHANGE_HISTORY: 'plan_change_history',
   USER_MANAGEMENT: 'breakapi_user_management',
   AUDIT_LOGS: 'breakapi_unified_audit_logs'
+};
+
+const SUPABASE_KEYS = {
+  USERS: 'breakapi_supabase_users',
+  ORGANIZATIONS: 'breakapi_supabase_organizations',
+  MEMBERSHIPS: 'breakapi_supabase_memberships',
+  CLIENTS: 'breakapi_supabase_clients',
+  SERVICES: 'breakapi_supabase_services',
+  INVOICES: 'breakapi_supabase_invoices',
+  QUOTES: 'breakapi_supabase_quotes',
+  PAYMENTS: 'breakapi_supabase_payments',
+  ASSETS: 'breakapi_supabase_assets'
 };
 
 // Cache duration in milliseconds (5 minutes)
@@ -64,6 +79,15 @@ class AdminDataService {
     console.log(`📡 AdminDataService: Broadcast ${eventType}`, data);
   }
 
+  static getSupabaseData(key) {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Get all users with caching
    */
@@ -74,8 +98,9 @@ class AdminDataService {
     }
 
     try {
+      const supabaseUsers = this.getSupabaseData(SUPABASE_KEYS.USERS);
       const stored = localStorage.getItem(STORAGE_KEYS.USERS);
-      const users = stored ? JSON.parse(stored) : [];
+      const users = supabaseUsers.length ? supabaseUsers : (stored ? JSON.parse(stored) : []);
       
       dataCache.users = {
         data: users,
@@ -343,6 +368,23 @@ class AdminDataService {
     const users = this.getAllUsers();
     const loginHistory = this.getLoginHistory();
     const billingHistory = this.getBillingHistory();
+    const supabaseInvoices = this.getSupabaseData(SUPABASE_KEYS.INVOICES);
+    const supabaseClients = this.getSupabaseData(SUPABASE_KEYS.CLIENTS);
+    const supabasePayments = this.getSupabaseData(SUPABASE_KEYS.PAYMENTS);
+
+    const totalRevenue = supabaseInvoices.length
+      ? supabaseInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount || inv.total || 0)), 0)
+      : billingHistory
+        .filter(b => b.status === 'succeeded')
+        .reduce((sum, b) => sum + (b.amount || 0), 0);
+
+    const paidRevenue = supabasePayments.length
+      ? supabasePayments
+        .filter(p => p.status === 'paid' || p.status === 'succeeded')
+        .reduce((sum, p) => sum + (Number(p.amount || 0)), 0)
+      : billingHistory
+        .filter(b => b.status === 'succeeded')
+        .reduce((sum, b) => sum + (b.amount || 0), 0);
 
     const stats = {
       totalUsers: users.length,
@@ -352,7 +394,7 @@ class AdminDataService {
         const trialEndsAt = u.trial_ends_at ? new Date(u.trial_ends_at) : null;
         return trialEndsAt && trialEndsAt > new Date();
       }).length,
-      
+
       planDistribution: {
         free: users.filter(u => (u.plan || 'free') === 'free').length,
         starter: users.filter(u => u.plan === 'starter').length,
@@ -367,10 +409,11 @@ class AdminDataService {
           return loginDate > dayAgo;
         }).length,
 
-      totalRevenue: billingHistory
-        .filter(b => b.status === 'succeeded')
-        .reduce((sum, b) => sum + (b.amount || 0), 0),
-
+      totalRevenue,
+      totalClients: supabaseClients.length || 0,
+      totalInvoices: supabaseInvoices.length || 0,
+      paidRevenue,
+      outstandingRevenue: totalRevenue - paidRevenue,
       lastUpdated: new Date().toISOString()
     };
 

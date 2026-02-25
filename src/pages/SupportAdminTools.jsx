@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AdminRolesManagement from "./AdminRolesManagement";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -14,27 +15,38 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
 import SupportAdminService from "@/services/SupportAdminService";
 import UserManagementService from "@/services/UserManagementService";
+import AuditLogService from "@/services/AuditLogService";
 import {
   Users, Eye, EyeOff, Activity, AlertTriangle, FileText, Download,
   Search, Filter, Clock, User, AlertCircle, CheckCircle, Pin, X,
-  Play, Square, ChevronRight, Bug, Database, ArrowLeft, Shield, Key
+  Play, Square, ChevronRight, Bug, Database, ArrowLeft, Shield, Trash
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function SupportAdminTools() {
-  const [activeTab, setActiveTab] = useState("impersonation");
+  const [activeTab, setActiveTab] = useState("admin-activity");
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    setLoading(false);
-    // Generate sample data if needed
-    if (SupportAdminService.getAllErrors().length === 0) {
-      SupportAdminService.generateSampleData();
+    try {
+      // Generate sample data if needed
+      if (SupportAdminService.getAllErrors().length === 0) {
+        SupportAdminService.generateSampleData();
+      }
+    } catch (error) {
+      console.error('Failed to load support tools:', error);
+      toast({
+        title: 'Support Tools Error',
+        description: 'Failed to load support data. Try refreshing the page.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   const handleExportAll = async () => {
     try {
@@ -80,13 +92,6 @@ export default function SupportAdminTools() {
             </div>
             <div className="flex gap-3">
               <Button 
-                onClick={() => navigate('/admin/roles-management')}
-                className="gap-2 bg-indigo-600 hover:bg-indigo-700"
-              >
-                <Key className="w-4 h-4" />
-                Admin Roles
-              </Button>
-              <Button 
                 onClick={() => navigate('/admin/security-compliance')}
                 className="gap-2 bg-amber-600 hover:bg-amber-700"
               >
@@ -111,22 +116,34 @@ export default function SupportAdminTools() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-white shadow-sm">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 xl:grid-cols-8 bg-white shadow-sm">
             <TabsTrigger value="impersonation" className="gap-2">
               <Eye className="w-4 h-4" />
               Impersonation
             </TabsTrigger>
-            <TabsTrigger value="activity" className="gap-2">
+            <TabsTrigger value="admin-activity" className="gap-2">
               <Activity className="w-4 h-4" />
-              Activity Logs
+              Admin Activity
             </TabsTrigger>
-            <TabsTrigger value="errors" className="gap-2">
+            <TabsTrigger value="user-actions" className="gap-2">
+              <User className="w-4 h-4" />
+              User Actions
+            </TabsTrigger>
+            <TabsTrigger value="system-errors" className="gap-2">
               <AlertTriangle className="w-4 h-4" />
-              Error Tracking
+              System Errors
+            </TabsTrigger>
+            <TabsTrigger value="webhook-failures" className="gap-2">
+              <AlertCircle className="w-4 h-4" />
+              Webhook Failures
             </TabsTrigger>
             <TabsTrigger value="notes" className="gap-2">
               <FileText className="w-4 h-4" />
               Admin Notes
+            </TabsTrigger>
+            <TabsTrigger value="admin-roles" className="gap-2">
+              <Shield className="w-4 h-4" />
+              Admin Roles
             </TabsTrigger>
             <TabsTrigger value="export" className="gap-2">
               <Database className="w-4 h-4" />
@@ -139,14 +156,24 @@ export default function SupportAdminTools() {
             <ImpersonationTab currentUser={user} toast={toast} />
           </TabsContent>
 
-          {/* Activity Logs Tab */}
-          <TabsContent value="activity">
-            <ActivityLogsTab toast={toast} />
+          {/* Admin Activity Tab */}
+          <TabsContent value="admin-activity">
+            <AdminActivityLogsTab toast={toast} />
           </TabsContent>
 
-          {/* Error Tracking Tab */}
-          <TabsContent value="errors">
+          {/* User Actions Tab */}
+          <TabsContent value="user-actions">
+            <UserActionsLogTab toast={toast} />
+          </TabsContent>
+
+          {/* System Errors Tab */}
+          <TabsContent value="system-errors">
             <ErrorTrackingTab currentUser={user} toast={toast} />
+          </TabsContent>
+
+          {/* Webhook Failures Tab */}
+          <TabsContent value="webhook-failures">
+            <WebhookFailuresTab currentUser={user} toast={toast} />
           </TabsContent>
 
           {/* Admin Notes Tab */}
@@ -154,6 +181,12 @@ export default function SupportAdminTools() {
             <AdminNotesTab currentUser={user} toast={toast} />
           </TabsContent>
 
+          {/* Admin Roles Tab */}
+          <TabsContent value="admin-roles">
+            <div className="py-4">
+              <AdminRolesManagement embedded />
+            </div>
+          </TabsContent>
           {/* Data Export Tab */}
           <TabsContent value="export">
             <DataExportTab toast={toast} />
@@ -426,8 +459,8 @@ ImpersonationTab.propTypes = {
   toast: PropTypes.func.isRequired
 };
 
-// ==================== Activity Logs Tab ====================
-function ActivityLogsTab({ toast }) {
+// ==================== Admin Activity Logs Tab ====================
+function AdminActivityLogsTab({ toast }) {
   const [activities, setActivities] = useState([]);
   const [filteredActivities, setFilteredActivities] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -651,7 +684,199 @@ function ActivityLogsTab({ toast }) {
   );
 }
 
-ActivityLogsTab.propTypes = {
+AdminActivityLogsTab.propTypes = {
+  toast: PropTypes.func.isRequired
+};
+
+// ==================== User Actions Log Tab ====================
+function UserActionsLogTab({ toast }) {
+  const [logs, setLogs] = useState([]);
+  const [filteredLogs, setFilteredLogs] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
+
+  useEffect(() => {
+    setLogs(AuditLogService.getAllLogs());
+  }, []);
+
+  useEffect(() => {
+    let filtered = [...logs];
+    const query = searchQuery.toLowerCase();
+
+    if (query) {
+      filtered = filtered.filter((log) => {
+        const detailsText = typeof log.details === 'string'
+          ? log.details
+          : (log.details?.message || JSON.stringify(log.details || {}));
+        return (
+          (log.action || '').toLowerCase().includes(query) ||
+          (log.type || '').toLowerCase().includes(query) ||
+          (log.userName || '').toLowerCase().includes(query) ||
+          (log.entityName || '').toLowerCase().includes(query) ||
+          detailsText.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(log => log.type === typeFilter);
+    }
+
+    if (severityFilter !== 'all') {
+      filtered = filtered.filter(log => log.severity === severityFilter);
+    }
+
+    setFilteredLogs(filtered);
+  }, [logs, searchQuery, typeFilter, severityFilter]);
+
+  const availableTypes = useMemo(() => (
+    Array.from(new Set(logs.map(log => log.type).filter(Boolean)))
+  ), [logs]);
+
+  const availableSeverities = useMemo(() => (
+    Array.from(new Set(logs.map(log => log.severity).filter(Boolean)))
+  ), [logs]);
+
+  const handleExport = () => {
+    const headers = ['ID', 'Timestamp', 'Type', 'Action', 'User', 'Entity', 'Severity', 'Details'];
+    const rows = filteredLogs.map((log) => {
+      const detailsText = typeof log.details === 'string'
+        ? log.details
+        : (log.details?.message || JSON.stringify(log.details || {}));
+      return [
+        log.id,
+        log.timestamp,
+        log.type || '',
+        log.action || '',
+        log.userName || '',
+        log.entityName || '',
+        log.severity || '',
+        detailsText
+      ];
+    });
+    const csv = SupportAdminService.arrayToCSV([headers, ...rows]);
+    const timestamp = new Date().toISOString().split('T')[0];
+    SupportAdminService.downloadCSV(csv, `user_actions_${timestamp}.csv`);
+    toast({
+      title: "Export Complete",
+      description: "User actions exported successfully",
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>User Actions Log</CardTitle>
+            <Button onClick={handleExport} variant="outline" className="gap-2">
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="userActionsSearch">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  id="userActionsSearch"
+                  placeholder="Search by user, action, or entity..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="userActionType">Type</Label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger id="userActionType">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {availableTypes.map((type) => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="userActionSeverity">Severity</Label>
+              <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <SelectTrigger id="userActionSeverity">
+                  <SelectValue placeholder="All Severities" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Severities</SelectItem>
+                  {availableSeverities.map((severity) => (
+                    <SelectItem key={severity} value={severity}>{severity}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Entries ({filteredLogs.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredLogs.length > 0 ? (
+            <div className="space-y-3">
+              {filteredLogs.slice(0, 120).map((log) => {
+                const detailsText = typeof log.details === 'string'
+                  ? log.details
+                  : (log.details?.message || JSON.stringify(log.details || {}));
+                return (
+                  <div key={log.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <User className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="font-medium text-slate-900">{log.action || log.type}</p>
+                            {log.severity && (
+                              <Badge variant="outline">{log.severity}</Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-slate-600 space-y-1">
+                            {log.userName && <p>User: <strong>{log.userName}</strong></p>}
+                            {log.entityName && <p>Entity: <strong>{log.entityName}</strong></p>}
+                            {detailsText && <p className="text-slate-500">{detailsText}</p>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              No user actions found
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+UserActionsLogTab.propTypes = {
   toast: PropTypes.func.isRequired
 };
 
@@ -998,6 +1223,329 @@ ErrorTrackingTab.propTypes = {
   toast: PropTypes.func.isRequired
 };
 
+// ==================== Webhook Failures Tab ====================
+function WebhookFailuresTab({ currentUser, toast }) {
+  const [failures, setFailures] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [filterResolved, setFilterResolved] = useState("unresolved");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFailure, setSelectedFailure] = useState(null);
+
+  useEffect(() => {
+    loadFailures();
+  }, []);
+
+  const loadFailures = () => {
+    setFailures(SupportAdminService.getWebhookFailures());
+    setStats(SupportAdminService.getWebhookFailureStats());
+  };
+
+  const filteredFailures = useMemo(() => {
+    let filtered = [...failures];
+
+    if (filterResolved === "resolved") {
+      filtered = filtered.filter(f => f.resolved);
+    }
+
+    if (filterResolved === "unresolved") {
+      filtered = filtered.filter(f => !f.resolved);
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(f => (
+        f.webhookId?.toLowerCase().includes(query) ||
+        f.eventType?.toLowerCase().includes(query) ||
+        f.endpoint?.toLowerCase().includes(query) ||
+        f.errorMessage?.toLowerCase().includes(query)
+      ));
+    }
+
+    return filtered;
+  }, [failures, filterResolved, searchQuery]);
+
+  const handleResolve = (failureId) => {
+    SupportAdminService.updateWebhookFailure(
+      failureId,
+      { resolved: true },
+      currentUser?.id || 'admin',
+      currentUser?.full_name || 'Admin User'
+    );
+    toast({
+      title: "Webhook Updated",
+      description: "Webhook failure marked as resolved",
+    });
+    loadFailures();
+    setSelectedFailure(null);
+  };
+
+  const handleExport = () => {
+    const csv = SupportAdminService.exportWebhookFailuresCSV();
+    const timestamp = new Date().toISOString().split('T')[0];
+    SupportAdminService.downloadCSV(csv, `webhook_failures_${timestamp}.csv`);
+    toast({
+      title: "Export Complete",
+      description: "Webhook failures exported successfully",
+    });
+  };
+
+  const handleRetry = (failure) => {
+    const result = SupportAdminService.retryWebhookFailure(
+      failure.id,
+      currentUser?.id || 'admin',
+      currentUser?.full_name || 'Admin User'
+    );
+
+    if (!result.success) {
+      toast({
+        title: "Retry Failed",
+        description: result.message || "Unable to retry webhook",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Retry Queued",
+      description: "Webhook retry has been queued",
+    });
+    loadFailures();
+    setSelectedFailure(result.failure);
+  };
+
+  return (
+    <div className="space-y-6">
+      {stats && (
+        <div className="grid grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
+                <p className="text-sm text-slate-600 mt-1">Total Failures</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-red-600">{stats.unresolved}</p>
+                <p className="text-sm text-red-800 mt-1">Unresolved</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-indigo-600">{stats.retryable}</p>
+                <p className="text-sm text-slate-600 mt-1">Retryable</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-amber-600">
+                  {Object.keys(stats.byEventType || {}).length}
+                </p>
+                <p className="text-sm text-slate-600 mt-1">Event Types</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Webhook Failure Filters</CardTitle>
+            <Button onClick={handleExport} variant="outline" className="gap-2">
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="webhookSearch">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  id="webhookSearch"
+                  placeholder="Search by endpoint or event type..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Resolution</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={filterResolved === "unresolved" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterResolved("unresolved")}
+                >
+                  Unresolved
+                </Button>
+                <Button
+                  variant={filterResolved === "resolved" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterResolved("resolved")}
+                >
+                  Resolved
+                </Button>
+                <Button
+                  variant={filterResolved === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterResolved("all")}
+                >
+                  All
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Failures ({filteredFailures.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredFailures.length > 0 ? (
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {filteredFailures.map((failure) => (
+                  <div
+                    key={failure.id}
+                    onClick={() => setSelectedFailure(failure)}
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      selectedFailure?.id === failure.id
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge className="bg-amber-100 text-amber-800">{failure.eventType}</Badge>
+                            {failure.resolved && (
+                              <Badge className="bg-green-100 text-green-800">Resolved</Badge>
+                            )}
+                          </div>
+                          <p className="font-medium text-slate-900 text-sm">{failure.endpoint}</p>
+                          <p className="text-xs text-slate-500 mt-1">Status: {failure.statusCode || 'N/A'}</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {new Date(failure.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-500">
+                No webhook failures found
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Failure Details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedFailure ? (
+              <div className="space-y-4">
+                <div>
+                  <Badge className="bg-amber-100 text-amber-800 mb-2">{selectedFailure.eventType}</Badge>
+                  <p className="font-medium text-slate-900">{selectedFailure.endpoint}</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {new Date(selectedFailure.timestamp).toLocaleString()}
+                  </p>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <p className="text-slate-600 font-medium">Webhook ID:</p>
+                    <p className="text-slate-900">{selectedFailure.webhookId}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Status Code:</p>
+                    <p className="text-slate-900">{selectedFailure.statusCode || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Attempts:</p>
+                    <p className="text-slate-900">{selectedFailure.attempts}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Retryable:</p>
+                    <p className="text-slate-900">{selectedFailure.retryable ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Error Message:</p>
+                    <p className="text-slate-900">{selectedFailure.errorMessage}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Payload:</p>
+                    <pre className="bg-slate-100 p-3 rounded text-xs overflow-x-auto">
+                      {JSON.stringify(selectedFailure.payload || {}, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+
+                {!selectedFailure.resolved && (
+                  <>
+                    <Separator />
+                    {selectedFailure.retryable && (
+                      <Button
+                        onClick={() => handleRetry(selectedFailure)}
+                        variant="outline"
+                        className="w-full gap-2"
+                      >
+                        <Play className="w-4 h-4" />
+                        Retry Now
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => handleResolve(selectedFailure.id)}
+                      className="w-full gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Mark as Resolved
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-500">
+                Select a failure to view details
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+WebhookFailuresTab.propTypes = {
+  currentUser: PropTypes.object,
+  toast: PropTypes.func.isRequired
+};
+
 // ==================== Admin Notes Tab ====================
 function AdminNotesTab({ currentUser, toast }) {
   const [notes, setNotes] = useState([]);
@@ -1321,6 +1869,9 @@ AdminNotesTab.propTypes = {
 
 // ==================== Data Export Tab ====================
 function DataExportTab({ toast }) {
+  const [retentionSettings, setRetentionSettings] = useState(
+    SupportAdminService.getRetentionSettings()
+  );
   const handleExport = (type) => {
     let csv, filename;
     const timestamp = new Date().toISOString().split('T')[0];
@@ -1346,6 +1897,14 @@ function DataExportTab({ toast }) {
         csv = SupportAdminService.exportImpersonationCSV();
         filename = `impersonation_${timestamp}.csv`;
         break;
+      case 'userActions':
+        csv = SupportAdminService.exportUserActionsCSV();
+        filename = `user_actions_${timestamp}.csv`;
+        break;
+      case 'webhookFailures':
+        csv = SupportAdminService.exportWebhookFailuresCSV();
+        filename = `webhook_failures_${timestamp}.csv`;
+        break;
       default:
         return;
     }
@@ -1366,6 +1925,13 @@ function DataExportTab({ toast }) {
       description: 'Export all user accounts with details',
       icon: User,
       color: 'blue'
+    },
+    {
+      id: 'userActions',
+      title: 'User Actions',
+      description: 'Export unified audit logs of user activity',
+      icon: Activity,
+      color: 'emerald'
     },
     {
       id: 'activities',
@@ -1394,11 +1960,111 @@ function DataExportTab({ toast }) {
       description: 'Export impersonation session logs',
       icon: Eye,
       color: 'pink'
+    },
+    {
+      id: 'webhookFailures',
+      title: 'Webhook Failures',
+      description: 'Export failed webhook deliveries',
+      icon: AlertTriangle,
+      color: 'amber'
     }
   ];
 
   return (
     <div className="space-y-6">
+      <Card className="border-slate-200">
+        <CardHeader>
+          <CardTitle>Log Retention & Purge</CardTitle>
+          <CardDescription>Configure how long logs are retained before purge</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="retentionActivities">Activity Logs (days)</Label>
+              <Input
+                id="retentionActivities"
+                type="number"
+                min="1"
+                value={retentionSettings.activityDays}
+                onChange={(e) => setRetentionSettings({
+                  ...retentionSettings,
+                  activityDays: Number(e.target.value)
+                })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="retentionErrors">System Errors (days)</Label>
+              <Input
+                id="retentionErrors"
+                type="number"
+                min="1"
+                value={retentionSettings.errorDays}
+                onChange={(e) => setRetentionSettings({
+                  ...retentionSettings,
+                  errorDays: Number(e.target.value)
+                })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="retentionWebhooks">Webhook Failures (days)</Label>
+              <Input
+                id="retentionWebhooks"
+                type="number"
+                min="1"
+                value={retentionSettings.webhookDays}
+                onChange={(e) => setRetentionSettings({
+                  ...retentionSettings,
+                  webhookDays: Number(e.target.value)
+                })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="retentionAudit">User Actions (days)</Label>
+              <Input
+                id="retentionAudit"
+                type="number"
+                min="1"
+                value={retentionSettings.auditLogDays}
+                onChange={(e) => setRetentionSettings({
+                  ...retentionSettings,
+                  auditLogDays: Number(e.target.value)
+                })}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() => {
+                const next = SupportAdminService.updateRetentionSettings(retentionSettings);
+                setRetentionSettings(next);
+                toast({
+                  title: "Retention Updated",
+                  description: "Log retention settings saved",
+                });
+              }}
+              className="gap-2"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Save Retention
+            </Button>
+            <Button
+              onClick={() => {
+                const result = SupportAdminService.purgeOldLogs(retentionSettings);
+                toast({
+                  title: "Purge Complete",
+                  description: `Removed: activities ${result.activities.removed}, errors ${result.errors.removed}, webhooks ${result.webhookFailures.removed}, audit ${result.auditLogs.removed}`,
+                });
+              }}
+              variant="outline"
+              className="gap-2"
+            >
+              <Trash className="w-4 h-4" />
+              Purge Now
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-blue-900">

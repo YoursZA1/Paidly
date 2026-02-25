@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Invoice, Quote, Client, Task, User } from '@/api/entities';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format, parseISO, isSameDay } from 'date-fns';
-import { CalendarIcon, FileText, DollarSign, Plus, CheckSquare, ListTodo, BarChart2, Settings } from 'lucide-react';
+import { CalendarIcon, FileText, DollarSign, Plus, CheckSquare, ListTodo, BarChart2, Settings, Download, Upload } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { tasksToCsv, parseTaskCsv, csvRowToTaskPayload } from '@/utils/taskCsvMapping';
 import { formatCurrency } from '../components/CurrencySelector';
 import { motion } from 'framer-motion';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,6 +31,10 @@ export default function CalendarPage() {
     const [editingTask, setEditingTask] = useState(null);
     const [activeTab, setActiveTab] = useState('all');
     const [viewMode, setViewMode] = useState('tasks'); // 'tasks' | 'analytics'
+    const [isExportingTasks, setIsExportingTasks] = useState(false);
+    const [isImportingTasks, setIsImportingTasks] = useState(false);
+    const taskFileInputRef = useRef(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         loadData();
@@ -56,8 +62,64 @@ export default function CalendarPage() {
             }
         } catch (error) {
             console.error('Error loading calendar data:', error);
+            toast({ title: 'Could not load calendar data', description: error?.message, variant: 'destructive' });
         }
         setIsLoading(false);
+    };
+
+    const handleExportTaskCsv = async () => {
+        setIsExportingTasks(true);
+        try {
+            const list = await Task.list('-due_date');
+            if (!list?.length) {
+                toast({ title: 'No tasks to export', variant: 'destructive' });
+                return;
+            }
+            const csv = tasksToCsv(list);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Task_export.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+            toast({ title: 'Export complete', description: `${list.length} task(s) exported.`, variant: 'default' });
+        } catch (error) {
+            toast({ title: 'Export failed', description: error?.message || 'Failed to export.', variant: 'destructive' });
+        }
+        setIsExportingTasks(false);
+    };
+
+    const handleImportTaskCsv = (e) => {
+        const file = e?.target?.files?.[0];
+        if (!file) return;
+        setIsImportingTasks(true);
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const text = ev.target?.result ?? '';
+                const { headers, rows } = parseTaskCsv(text);
+                if (!headers?.length || !rows?.length) {
+                    toast({ title: 'Import failed', description: 'CSV is empty or invalid.', variant: 'destructive' });
+                    return;
+                }
+                let created = 0;
+                for (const row of rows) {
+                    const payload = csvRowToTaskPayload(headers, row);
+                    if (payload.title) {
+                        await Task.create(payload);
+                        created++;
+                    }
+                }
+                toast({ title: 'Import complete', description: `${created} task(s) imported.`, variant: 'default' });
+                loadData();
+            } catch (err) {
+                toast({ title: 'Import failed', description: err?.message || 'Could not parse CSV.', variant: 'destructive' });
+            }
+            setIsImportingTasks(false);
+            if (taskFileInputRef.current) taskFileInputRef.current.value = '';
+        };
+        reader.readAsText(file, 'UTF-8');
     };
 
     const handleSaveTask = async (taskData) => {
@@ -504,14 +566,31 @@ export default function CalendarPage() {
                                         <ListTodo className="w-5 h-5" />
                                         Task Management
                                     </CardTitle>
-                                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                                        <TabsList>
-                                            <TabsTrigger value="all">All</TabsTrigger>
-                                            <TabsTrigger value="pending">Pending</TabsTrigger>
-                                            <TabsTrigger value="blocked">Blocked</TabsTrigger>
-                                            <TabsTrigger value="completed">Completed</TabsTrigger>
-                                        </TabsList>
-                                    </Tabs>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                            type="file"
+                                            ref={taskFileInputRef}
+                                            accept=".csv"
+                                            className="hidden"
+                                            onChange={handleImportTaskCsv}
+                                        />
+                                        <Button variant="outline" size="sm" disabled={isImportingTasks} onClick={() => taskFileInputRef.current?.click()}>
+                                            <Upload className="w-4 h-4 mr-2" />
+                                            {isImportingTasks ? 'Importing…' : 'Import CSV'}
+                                        </Button>
+                                        <Button variant="outline" size="sm" disabled={isExportingTasks} onClick={handleExportTaskCsv}>
+                                            <Download className="w-4 h-4 mr-2" />
+                                            {isExportingTasks ? 'Exporting…' : 'Export CSV'}
+                                        </Button>
+                                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+                                            <TabsList>
+                                                <TabsTrigger value="all">All</TabsTrigger>
+                                                <TabsTrigger value="pending">Pending</TabsTrigger>
+                                                <TabsTrigger value="blocked">Blocked</TabsTrigger>
+                                                <TabsTrigger value="completed">Completed</TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-6">

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Client, User, Invoice } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Plus, Users, Crown, Star, Sparkles, AlertTriangle, RefreshCw, LayoutGrid, List, Download, Filter, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Users, Crown, Star, Sparkles, AlertTriangle, RefreshCw, LayoutGrid, List, Download, Filter, X, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import ClientFollowUpService from "../components/clients/ClientFollowUpService";
 import ClientFilters, { applyClientFilters } from "../components/filters/ClientFilters";
 import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
+import { clientsToCsv, parseCsv, csvRowToClientPayload } from "@/utils/clientCsvMapping";
 
 export default function Clients() {
     const [clients, setClients] = useState([]);
@@ -33,14 +34,57 @@ export default function Clients() {
     const [showFilters, setShowFilters] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(24);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [lastLoadTime, setLastLoadTime] = useState(Date.now());
     const { toast } = useToast();
 
+    // Load clients on mount
     useEffect(() => {
         loadClients();
     }, []);
 
-    const loadClients = async () => {
-        setIsLoading(true);
+    // Auto-refresh when page becomes visible (user switches back to tab)
+    // Only refresh if page was hidden for more than 5 seconds
+    useEffect(() => {
+        let hiddenTime = null;
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                hiddenTime = Date.now();
+            } else if (document.visibilityState === 'visible' && !isLoading) {
+                // Only refresh if page was hidden for more than 5 seconds
+                if (hiddenTime && Date.now() - hiddenTime > 5000) {
+                    loadClients(false);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isLoading]);
+
+    // Auto-refresh when window regains focus (only if last load was more than 30 seconds ago)
+    useEffect(() => {
+        const handleFocus = () => {
+            if (!isLoading && Date.now() - lastLoadTime > 30000) {
+                loadClients(false);
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [isLoading, lastLoadTime]);
+
+    const loadClients = async (showLoadingState = true) => {
+        if (showLoadingState) {
+            setIsLoading(true);
+        } else {
+            setIsRefreshing(true);
+        }
         try {
             const [clientsData, userData] = await Promise.all([
                 Client.list("-created_date"),
@@ -48,10 +92,30 @@ export default function Clients() {
             ]);
             setClients(clientsData);
             setUser(userData);
+            setLastLoadTime(Date.now());
         } catch (error) {
             console.error("Error loading clients:", error);
+            toast({
+                title: "Could not load clients",
+                description: error?.message || "Please check your connection and try again.",
+                variant: "destructive",
+            });
+        } finally {
+            if (showLoadingState) {
+                setIsLoading(false);
+            } else {
+                setIsRefreshing(false);
+            }
         }
-        setIsLoading(false);
+    };
+
+    const handleRefreshClients = async () => {
+        await loadClients(false);
+        toast({
+            title: "✓ Clients Refreshed",
+            description: "Client list has been updated.",
+            variant: "success"
+        });
     };
 
     const handleUpdateSegments = async () => {
@@ -76,6 +140,36 @@ export default function Clients() {
     };
 
     const handleSaveClient = async (clientData) => {
+        // Validation
+        if (!clientData.name || !clientData.name.trim()) {
+            toast({
+                title: "✗ Validation Error",
+                description: "Client name is required.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        if (!clientData.email || !clientData.email.trim()) {
+            toast({
+                title: "✗ Validation Error",
+                description: "Email address is required.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(clientData.email.trim())) {
+            toast({
+                title: "✗ Validation Error",
+                description: "Please enter a valid email address.",
+                variant: "destructive"
+            });
+            return;
+        }
+
         try {
             if (editingClient) {
                 await Client.update(editingClient.id, clientData);
@@ -98,9 +192,18 @@ export default function Clients() {
             await loadClients();
         } catch (error) {
             console.error("Error saving client:", error);
+            const errorMessage = error.message || error.toString();
             toast({
                 title: "✗ Error",
-                description: "Failed to save client. Please try again.",
+                description: errorMessage.includes('organization') 
+                    ? "No organization found. Please contact support or try logging out and back in."
+                    : errorMessage.includes('permission') || errorMessage.includes('RLS')
+                    ? "Permission denied. Please check your account permissions."
+                    : errorMessage.includes('column') || errorMessage.includes('does not exist')
+                    ? "Database schema mismatch. In Supabase go to SQL Editor and run: scripts/ensure-clients-schema.sql (or supabase/schema.postgres.sql if the clients table is missing)."
+                    : errorMessage.includes('duplicate') || errorMessage.includes('unique')
+                    ? "A client with this email already exists."
+                    : `Failed to save client: ${errorMessage}`,
                 variant: "destructive"
             });
         }
@@ -201,39 +304,68 @@ export default function Clients() {
 
     const handleExportClients = () => {
         try {
-            const csvContent = [
-                ['Name', 'Email', 'Phone', 'Contact Person', 'Address', 'Industry', 'Segment', 'Total Spent'],
-                ...filteredClients.map(client => [
-                    client.name || '',
-                    client.email || '',
-                    client.phone || '',
-                    client.contact_person || '',
-                    client.address || '',
-                    client.industry || '',
-                    client.segment || 'new',
-                    client.total_spent || 0
-                ])
-            ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-
+            const csvContent = clientsToCsv(filteredClients);
             const blob = new Blob([csvContent], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `clients-${new Date().getTime()}.csv`;
+            link.download = `Client_export_${new Date().getTime()}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            toast.success('Clients exported successfully!');
+            toast({ title: "Export complete", description: `${filteredClients.length} clients exported (Client_export format).`, variant: "default" });
         } catch (error) {
             console.error('Error exporting clients:', error);
-            toast.error('Failed to export clients');
+            toast({ title: "Export failed", description: error?.message || "Failed to export clients", variant: "destructive" });
         }
     };
 
+    const fileInputRef = useRef(null);
+    const [isImporting, setIsImporting] = useState(false);
+    const handleImportClients = () => {
+        fileInputRef.current?.click();
+    };
+    const handleImportFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToClientPayload(headers, row);
+                if (!payload) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await Client.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn("Import row failed:", payload.name, err);
+                    skipped++;
+                }
+            }
+            await loadClients();
+            toast({
+                title: "Import complete",
+                description: `${created} clients imported${skipped ? `, ${skipped} skipped.` : "."}`,
+                variant: "default"
+            });
+        } catch (error) {
+            console.error("Import error:", error);
+            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        }
+        setIsImporting(false);
+    };
+
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-            <div className="max-w-6xl mx-auto">
+        <div className="min-h-screen bg-background">
+            <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -422,6 +554,23 @@ export default function Clients() {
                                 <List className="w-4 h-4" />
                             </Button>
                         </div>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportFile}
+                        />
+                        <Button
+                            onClick={handleImportClients}
+                            variant="outline"
+                            disabled={isImporting}
+                            className="h-10 rounded-xl"
+                            title="Import clients from Client_export.csv format"
+                        >
+                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? 'animate-pulse' : ''}`} />
+                            {isImporting ? "Importing…" : "Import CSV"}
+                        </Button>
                         <Button
                             onClick={handleExportClients}
                             variant="outline"
@@ -430,6 +579,16 @@ export default function Clients() {
                         >
                             <Download className="w-4 h-4 mr-2" />
                             Export CSV
+                        </Button>
+                        <Button
+                            onClick={handleRefreshClients}
+                            variant="outline"
+                            disabled={isRefreshing || isLoading}
+                            className="h-10 rounded-xl"
+                            title="Refresh client list"
+                        >
+                            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            Refresh
                         </Button>
                         <Button
                             onClick={handleUpdateSegments}

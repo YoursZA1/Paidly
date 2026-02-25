@@ -1,26 +1,29 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
+import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Camera, Download, Mail, Building2, Upload, ArrowUpRight, ArrowDownLeft, Wallet } from "lucide-react";
-import { formatCurrency } from "../components/CurrencySelector";
+import { Badge } from "@/components/ui/badge";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Camera, Download, Mail, Building2, Upload, ArrowUpRight, ArrowDownLeft, Wallet, LayoutGrid, List } from "lucide-react";
+import { formatCurrency } from "@/components/CurrencySelector";
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import ExpenseForm from "../components/cashflow/ExpenseForm";
-import ExpenseList from "../components/cashflow/ExpenseList";
-import ReceiptScanner from "../components/cashflow/ReceiptScanner";
-import BankImportModal from "../components/cashflow/BankImportModal";
-import ExpenseFilters, { applyExpenseFilters } from "../components/filters/ExpenseFilters";
-import CashFlowAccuracy from "../components/cashflow/CashFlowAccuracy";
-import PaymentTimingAnalysis from "../components/payments/PaymentTimingAnalysis";
-import OverduePaymentTracker from "../components/payments/OverduePaymentTracker";
-import PaymentMethodAnalytics from "../components/payments/PaymentMethodAnalytics";
-import OutstandingBalanceDashboard from "../components/payments/OutstandingBalanceDashboard";
+import ExpenseForm from "@/components/cashflow/ExpenseForm";
+import ExpenseList from "@/components/cashflow/ExpenseList";
+import ReceiptScanner from "@/components/cashflow/ReceiptScanner";
+import BankImportModal from "@/components/cashflow/BankImportModal";
+import ExpenseFilters, { applyExpenseFilters } from "@/components/filters/ExpenseFilters";
+import CashFlowAccuracy from "@/components/cashflow/CashFlowAccuracy";
+import PaymentTimingAnalysis from "@/components/payments/PaymentTimingAnalysis";
+import OverduePaymentTracker from "@/components/payments/OverduePaymentTracker";
+import PaymentMethodAnalytics from "@/components/payments/PaymentMethodAnalytics";
+import OutstandingBalanceDashboard from "@/components/payments/OutstandingBalanceDashboard";
 import { breakApi } from "@/api/apiClient";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { createPageUrl } from "@/utils";
 import { useNavigate } from 'react-router-dom';
+import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -28,6 +31,7 @@ const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'
 
 export default function CashFlowPage() {
     const navigate = useNavigate();
+    const { toast } = useToast();
     const [expenses, setExpenses] = useState([]);
     const [payments, setPayments] = useState([]);
     const [invoices, setInvoices] = useState([]);
@@ -42,6 +46,10 @@ export default function CashFlowPage() {
     const [recipientEmail, setRecipientEmail] = useState('');
     const [expenseFilters, setExpenseFilters] = useState({});
     const [activeTab, setActiveTab] = useState('overview');
+    const [expenseViewMode, setExpenseViewMode] = useState('list');
+    const [isExportingExpenses, setIsExportingExpenses] = useState(false);
+    const [isImportingExpenses, setIsImportingExpenses] = useState(false);
+    const expenseFileInputRef = useRef(null);
 
     useEffect(() => {
         loadData();
@@ -62,8 +70,66 @@ export default function CashFlowPage() {
             setUser(userData);
         } catch (error) {
             console.error("Error loading cash flow data:", error);
+            toast({
+                title: "Could not load cash flow data",
+                description: error?.message || "Please check your connection and try again.",
+                variant: "destructive",
+            });
         }
         setIsLoading(false);
+    };
+
+    const handleExportExpenseCsv = async () => {
+        setIsExportingExpenses(true);
+        try {
+            const list = await Expense.list("-date");
+            if (!list?.length) {
+                toast({ title: "No expenses to export", variant: "destructive" });
+                return;
+            }
+            const csv = expensesToCsv(list);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Expense_export.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${list.length} expense(s) exported.`, variant: "default" });
+        } catch (error) {
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+        setIsExportingExpenses(false);
+    };
+
+    const handleImportExpenseCsv = (e) => {
+        const file = e?.target?.files?.[0];
+        if (!file) return;
+        setIsImportingExpenses(true);
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const text = ev.target?.result ?? "";
+                const { headers, rows } = parseExpenseCsv(text);
+                if (!headers?.length || !rows?.length) {
+                    toast({ title: "Import failed", description: "CSV is empty or invalid.", variant: "destructive" });
+                    return;
+                }
+                let created = 0;
+                for (const row of rows) {
+                    const payload = csvRowToExpensePayload(headers, row);
+                    await Expense.create(payload);
+                    created++;
+                }
+                toast({ title: "Import complete", description: `${created} expense(s) imported.`, variant: "default" });
+                loadData();
+            } catch (err) {
+                toast({ title: "Import failed", description: err?.message || "Could not parse CSV.", variant: "destructive" });
+            }
+            setIsImportingExpenses(false);
+            if (expenseFileInputRef.current) expenseFileInputRef.current.value = "";
+        };
+        reader.readAsText(file, "UTF-8");
     };
 
     const calculateMetrics = () => {
@@ -454,16 +520,82 @@ export default function CashFlowPage() {
                             </Card>
                         </div>
 
-                        {/* Filters & Expense List */}
                         <ExpenseFilters onFilterChange={setExpenseFilters} />
-                        <ExpenseList 
-                            expenses={applyExpenseFilters(expenses, expenseFilters)}
-                            isLoading={isLoading}
-                            onEdit={handleEditExpense}
-                            onDelete={handleDeleteExpense}
-                            currency={userCurrency}
-                            onActionSuccess={loadData}
-                        />
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="file"
+                                    ref={expenseFileInputRef}
+                                    accept=".csv"
+                                    className="hidden"
+                                    onChange={handleImportExpenseCsv}
+                                />
+                                <Button variant="outline" size="sm" disabled={isImportingExpenses} onClick={() => expenseFileInputRef.current?.click()}>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {isImportingExpenses ? "Importing…" : "Import CSV"}
+                                </Button>
+                                <Button variant="outline" size="sm" disabled={isExportingExpenses} onClick={handleExportExpenseCsv}>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {isExportingExpenses ? "Exporting…" : "Export CSV"}
+                                </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground">View</span>
+                                <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-9">
+                                <button
+                                    type="button"
+                                    onClick={() => setExpenseViewMode('list')}
+                                    className={`inline-flex items-center justify-center h-7 px-3 rounded-lg text-sm font-medium transition-colors ${expenseViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                >
+                                    <List className="w-4 h-4 mr-1" /> List
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setExpenseViewMode('grid')}
+                                    className={`inline-flex items-center justify-center h-7 px-3 rounded-lg text-sm font-medium transition-colors ${expenseViewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                >
+                                    <LayoutGrid className="w-4 h-4 mr-1" /> Grid
+                                </button>
+                                </div>
+                            </div>
+                        </div>
+                        {expenseViewMode === 'grid' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {isLoading ? (
+                                    [...Array(6)].map((_, i) => (
+                                        <Card key={i} className="rounded-xl"><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+                                    ))
+                                ) : applyExpenseFilters(expenses, expenseFilters).length === 0 ? (
+                                    <div className="col-span-full text-center py-12 text-muted-foreground">No expenses match the filters.</div>
+                                ) : (
+                                    applyExpenseFilters(expenses, expenseFilters).map((exp) => (
+                                        <Card key={exp.id} className="rounded-xl border border-border shadow-sm">
+                                            <CardContent className="p-4">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="font-semibold text-foreground">{formatCurrency(exp.amount, userCurrency)}</span>
+                                                    <Badge variant="outline" className="text-xs capitalize">{exp.category || 'other'}</Badge>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground line-clamp-2">{exp.description || '—'}</p>
+                                                <p className="text-xs text-muted-foreground mt-2">{exp.date ? format(parseISO(exp.date), 'MMM d, yyyy') : '—'}</p>
+                                                <div className="flex gap-2 mt-3">
+                                                    <Button variant="outline" size="sm" className="rounded-lg flex-1" onClick={() => handleEditExpense(exp)}>Edit</Button>
+                                                    <Button variant="outline" size="sm" className="rounded-lg text-destructive hover:text-destructive" onClick={() => handleDeleteExpense(exp.id)}>Delete</Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))
+                                )}
+                            </div>
+                        ) : (
+                            <ExpenseList 
+                                expenses={applyExpenseFilters(expenses, expenseFilters)}
+                                isLoading={isLoading}
+                                onEdit={handleEditExpense}
+                                onDelete={handleDeleteExpense}
+                                currency={userCurrency}
+                                onActionSuccess={loadData}
+                            />
+                        )}
                     </motion.div>
                 )}
 

@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react"
+import PropTypes from "prop-types"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva } from "class-variance-authority";
 import { X } from "lucide-react"
@@ -94,6 +95,32 @@ const SheetDescription = React.forwardRef(({ className, ...props }, ref) => (
     {...props} />
 ))
 SheetDescription.displayName = SheetPrimitive.Description.displayName
+
+SheetOverlay.propTypes = {
+  className: PropTypes.string
+}
+
+SheetContent.propTypes = {
+  side: PropTypes.string,
+  className: PropTypes.string,
+  children: PropTypes.node
+}
+
+SheetHeader.propTypes = {
+  className: PropTypes.string
+}
+
+SheetFooter.propTypes = {
+  className: PropTypes.string
+}
+
+SheetTitle.propTypes = {
+  className: PropTypes.string
+}
+
+SheetDescription.propTypes = {
+  className: PropTypes.string
+}
 
 export {
   Sheet,

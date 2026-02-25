@@ -8,6 +8,7 @@ import {
     ArrowLeft, Mail, Phone, MapPin, User as UserIcon, 
     FileText, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Globe, Smartphone, Building2, Lock, StickyNote, CreditCard
 } from "lucide-react";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -41,6 +42,10 @@ const getPaymentTermsText = (terms, days) => {
     return 'Net 30 Days';
 };
 
+/** Supabase client ids are UUIDs; legacy numeric ids (e.g. from old links) are invalid. */
+const isClientIdUuid = (id) =>
+    id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id).trim());
+
 export default function ClientDetail() {
     const urlParams = new URLSearchParams(window.location.search);
     const clientId = urlParams.get('id');
@@ -64,28 +69,51 @@ export default function ClientDetail() {
 
     const loadData = async () => {
         setIsLoading(true);
+        if (clientId && !isClientIdUuid(clientId)) {
+            setClient(null);
+            setInvoices([]);
+            try { setUser(await User.me()); } catch { /* ignore */ }
+            setIsLoading(false);
+            return;
+        }
         try {
             const [clientData, invoicesData, userData] = await Promise.all([
                 Client.filter({ id: clientId }),
                 Invoice.filter({ client_id: clientId }, '-created_date'),
                 User.me()
             ]);
-            setClient(clientData[0] || null);
+            setClient(clientData?.[0] || null);
             setInvoices(invoicesData || []);
             setUser(userData);
         } catch (error) {
             console.error("Error loading client data:", error);
+            setClient(null);
+            setInvoices([]);
         }
         setIsLoading(false);
     };
 
     const handleSaveClient = async (clientData) => {
+        if (clientId && !isClientIdUuid(clientId)) {
+            toast({
+                title: "Cannot save",
+                description: "This client link is invalid. Please open the client from the Clients list.",
+                variant: "destructive"
+            });
+            return;
+        }
         try {
             await Client.update(clientId, clientData);
             setShowEditForm(false);
             loadData();
         } catch (error) {
             console.error("Error saving client:", error);
+            const msg = error?.message || "";
+            toast({
+                title: "Could not save client",
+                description: msg.includes("older version") ? "Please open this client from the Clients list and try again." : msg,
+                variant: "destructive"
+            });
         }
     };
 
@@ -145,7 +173,17 @@ export default function ClientDetail() {
 
     const totalInvoiced = invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const totalPaid = invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const totalOutstanding = invoices.filter(inv => ['sent', 'viewed', 'partial_paid', 'overdue'].includes(inv.status)).reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    // Use partial paid amount as current balance for partial_paid invoices
+    const totalOutstanding = invoices.filter(inv => ['sent', 'viewed', 'partial_paid', 'overdue'].includes(inv.status)).reduce((sum, inv) => {
+        if (inv.status === 'partial_paid' && inv.payments && inv.payments.length > 0) {
+            const totalPaid = inv.payments.reduce((s, p) => s + (p.amount || 0), 0);
+            return sum + (inv.total_amount - totalPaid);
+        }
+        if (inv.status === 'paid') {
+            return sum;
+        }
+        return sum + (inv.total_amount || 0);
+    }, 0);
 
     if (isLoading) {
         return (
@@ -162,8 +200,11 @@ export default function ClientDetail() {
     if (!client) {
         return (
             <div className="min-h-screen bg-slate-100 p-4 sm:p-6 flex items-center justify-center">
-                <Card className="p-8 text-center">
-                    <h2 className="text-xl font-semibold mb-4">Client not found</h2>
+                <Card className="p-8 text-center max-w-md">
+                    <h2 className="text-xl font-semibold mb-2">Client not found</h2>
+                    <p className="text-slate-600 mb-6">
+                        This client may have been from an older version, or the link is invalid. Open a client from the Clients list.
+                    </p>
                     <Link to={createPageUrl("Clients")}>
                         <Button>Back to Clients</Button>
                     </Link>
@@ -175,16 +216,26 @@ export default function ClientDetail() {
     const userCurrency = user?.currency || client?.currency || 'ZAR';
 
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-            <div className="max-w-4xl mx-auto">
-                {/* Back Button */}
+        <div className="min-h-screen bg-background">
+            <div className="max-w-7xl mx-auto">
+                <Breadcrumb className="mb-4">
+                    <BreadcrumbList>
+                        <BreadcrumbItem>
+                            <BreadcrumbLink asChild><Link to={createPageUrl('Clients')}>Clients</Link></BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                            <BreadcrumbPage>{client.name}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                    </BreadcrumbList>
+                </Breadcrumb>
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="mb-6"
                 >
                     <Link to={createPageUrl("Clients")}>
-                        <Button variant="ghost" className="gap-2">
+                        <Button variant="ghost" className="gap-2 rounded-xl">
                             <ArrowLeft className="w-4 h-4" />
                             Back to Clients
                         </Button>

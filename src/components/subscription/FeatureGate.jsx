@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Lock, Crown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Button from '@/components/ui/button';
 import { getPlan, getPlanOrder } from '@/data/planLimits';
 
 // Feature to Package mapping

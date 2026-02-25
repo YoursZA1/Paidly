@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Quote, Client, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { quotesToCsv, parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
+import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 
 export default function QuotesPage() {
     const [quotes, setQuotes] = useState([]);
@@ -21,12 +25,11 @@ export default function QuotesPage() {
     const [viewMode, setViewMode] = useState('list');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
+    const [isImporting, setIsImporting] = useState(false);
+    const quoteFileInputRef = useRef(null);
+    const { toast } = useToast();
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
             const [quotesData, clientsData, userData] = await Promise.all([
@@ -39,9 +42,24 @@ export default function QuotesPage() {
             setUser(userData);
         } catch (error) {
             console.error("Error loading data:", error);
+            toast({
+                title: "Could not load quotes",
+                description: error?.message || "Please check your connection and try again.",
+                variant: "destructive",
+            });
         }
         setIsLoading(false);
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useSupabaseRealtime(
+        ["quotes"],
+        () => loadData(),
+        { channelName: "quotes-page" }
+    );
 
     const getClientName = (clientId) => {
         const client = clients.find(c => c.id === clientId);
@@ -84,8 +102,90 @@ export default function QuotesPage() {
         setCurrentPage(1);
     }, [searchTerm, sortBy]);
 
+    const handleExportQuotes = async () => {
+        const listToExport = sortedQuotes;
+        if (listToExport.length === 0) {
+            toast({ title: "No quotes to export", variant: "destructive" });
+            return;
+        }
+        try {
+            const ids = listToExport.map((q) => q.id);
+            const { data: itemsData } = await supabase.from("quote_items").select("*").in("quote_id", ids);
+            const itemsByQuoteId = new Map();
+            if (Array.isArray(itemsData)) {
+                itemsData.forEach((row) => {
+                    if (!itemsByQuoteId.has(row.quote_id)) itemsByQuoteId.set(row.quote_id, []);
+                    itemsByQuoteId.get(row.quote_id).push({
+                        service_name: row.service_name,
+                        description: row.description || "",
+                        quantity: Number(row.quantity ?? 1),
+                        unit_price: Number(row.unit_price ?? 0),
+                        total_price: Number(row.total_price ?? 0),
+                    });
+                });
+            }
+            const quotesWithItems = listToExport.map((q) => ({
+                ...q,
+                items: itemsByQuoteId.get(q.id) || [],
+            }));
+            const csvContent = quotesToCsv(quotesWithItems);
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `Quote_export_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast({ title: "Export complete", description: `${listToExport.length} quote(s) exported.`, variant: "default" });
+        } catch (error) {
+            console.error("Export quotes error:", error);
+            toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        }
+    };
+
+    const handleImportQuotes = () => quoteFileInputRef.current?.click();
+
+    const handleImportQuotesFile = async (e) => {
+        const file = e.target?.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const { headers, rows } = parseQuoteCsv(text);
+            let created = 0;
+            let skipped = 0;
+            for (const row of rows) {
+                const payload = csvRowToQuotePayload(headers, row);
+                if (!payload || (payload.subtotal === undefined && !payload.total_amount && !payload.items?.length)) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    await Quote.create(payload);
+                    created++;
+                } catch (err) {
+                    console.warn("Import quote row failed:", payload?.quote_number, err);
+                    skipped++;
+                }
+            }
+            await loadData();
+            toast({
+                title: "Import complete",
+                description: `${created} quote(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
+                variant: "default",
+            });
+        } catch (error) {
+            console.error("Import quotes error:", error);
+            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        }
+        setIsImporting(false);
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background">
             <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -94,20 +194,45 @@ export default function QuotesPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                            All Quotes
-                        </h1>
-                        <p className="text-gray-600">
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1">Quotes</h1>
+                        <p className="text-sm text-muted-foreground">
                             Create, manage, and track your project quotations.
                         </p>
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                        <div className="flex bg-white p-1 rounded-lg border shadow-sm h-10">
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                        <input
+                            type="file"
+                            ref={quoteFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportQuotesFile}
+                        />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleImportQuotes}
+                            disabled={isImporting}
+                            className="rounded-xl"
+                        >
+                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                            {isImporting ? "Importing…" : "Import CSV"}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportQuotes}
+                            disabled={sortedQuotes.length === 0}
+                            className="rounded-xl"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Export CSV
+                        </Button>
+                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -115,27 +240,27 @@ export default function QuotesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-lg ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <List className="w-4 h-4" />
                             </Button>
                         </div>
                         <Link to={createPageUrl("QuoteTemplates")} className="flex-1 sm:flex-none">
-                            <Button variant="outline" className="w-full sm:w-auto">
+                            <Button variant="outline" className="w-full sm:w-auto rounded-xl">
                                 <FileText className="w-4 h-4 mr-2" />
                                 Templates
                             </Button>
                         </Link>
                         <Link to={createPageUrl("CreateQuote")} className="flex-1 sm:flex-none">
-                            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Create New Quote
+                            <Button className="w-full sm:w-auto rounded-xl gap-2">
+                                <Plus className="w-4 h-4" />
+                                Create Quote
                             </Button>
                         </Link>
                     </div>
                 </motion.div>
 
-                <Card className="bg-white border border-gray-200">
+                <Card className="rounded-xl border border-border shadow-sm">
                     <CardHeader>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <CardTitle>Quote List</CardTitle>
@@ -172,9 +297,9 @@ export default function QuotesPage() {
                             )
                         ) : sortedQuotes.length === 0 ? (
                             <div className="text-center py-12">
-                                <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                                <h3 className="mt-2 text-sm font-medium text-gray-900">No quotes found</h3>
-                                <p className="mt-1 text-sm text-gray-500">Create your first quote to see it here.</p>
+                                <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                                <h3 className="mt-2 text-sm font-medium text-foreground">No quotes found</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">Create your first quote to see it here.</p>
                                 <div className="mt-6">
                                     <Link to={createPageUrl("CreateQuote")}>
                                         <Button>

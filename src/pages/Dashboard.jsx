@@ -1,10 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { OutstandingBalanceService } from "@/services/OutstandingBalanceService";
+import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
+import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
 import { Client } from "@/api/entities";
 import { User } from "@/api/entities";
 import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
+import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link, useNavigate } from "react-router-dom";
@@ -12,6 +16,7 @@ import { createPageUrl } from "@/utils";
 import { getUserCurrency } from "@/api/currencyProfiles";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { useAuth } from "@/components/auth/AuthContext";
+import { useToast } from "@/components/ui/use-toast";
 import { userService } from "@/services/ExcelUserService";
 import CreateAccountDialog from "@/components/CreateAccountDialog";
 import {
@@ -27,90 +32,30 @@ import {
   Dumbbell,
   Car,
   Receipt,
-  TrendingDown,
-  UserCheck,
-  UserX,
-  Activity,
-  BarChart2,
-  UserPlus,
-  Ban,
-  Clock,
-  RefreshCw,
-  ScrollText,
-  Download
+  Percent
 } from "lucide-react";
 import { motion } from "framer-motion";
-import InvoiceActions from "../components/invoice/InvoiceActions";
+import InvoiceActions from "@/components/invoice/InvoiceActions";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import WelcomeGuide from '../components/shared/WelcomeGuide';
-import CreditCardDisplay from '../components/dashboard/CreditCardDisplay';
-import RevenueChart from '../components/dashboard/RevenueChart';
-import GoalProgress from '../components/dashboard/GoalProgress';
-import UpcomingPayments from '../components/dashboard/UpcomingPayments';
-import RecentExpenses from '../components/dashboard/RecentExpenses';
+import WelcomeGuide from '@/components/shared/WelcomeGuide';
+import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
+import RevenueChart from '@/components/dashboard/RevenueChart';
+import GoalProgress from '@/components/dashboard/GoalProgress';
+import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
+import RecentExpenses from '@/components/dashboard/RecentExpenses';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// KPI Card Component for Admin Dashboard
-const KPICard = ({ title, value, icon: Icon, color, iconBg, isLoading, percentChange, trend }) => {
-  const isPositive = trend === 'up';
-  const changeColor = isPositive ? 'text-green-600' : 'text-red-600';
-  const TrendIcon = isPositive ? TrendingUp : TrendingDown;
-
-  return (
-    <Card className="group bg-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden relative rounded-2xl">
-      <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
-      <CardContent className="p-6 relative">
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex-1">
-            <p className="text-sm font-medium text-slate-600 mb-3">{title}</p>
-            {isLoading ? (
-              <Skeleton className="h-10 w-3/4" />
-            ) : (
-              <>
-                <p className="text-4xl font-bold text-slate-900">{value}</p>
-                {percentChange !== undefined && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendIcon className={`w-4 h-4 ${changeColor}`} />
-                    <span className={`text-sm font-semibold ${changeColor}`}>
-                      {Math.abs(percentChange)}% {trend === 'up' ? 'increase' : 'decrease'}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          <div className={`w-16 h-16 ${iconBg} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-md`}>
-            <Icon className="w-8 h-8 text-white" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-KPICard.propTypes = {
-  title: PropTypes.string.isRequired,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
-  icon: PropTypes.elementType.isRequired,
-  color: PropTypes.string.isRequired,
-  iconBg: PropTypes.string.isRequired,
-  isLoading: PropTypes.bool,
-  percentChange: PropTypes.number,
-  trend: PropTypes.oneOf(['up', 'down', 'neutral'])
-};
-
-const QuickActionCard = ({ title, icon: Icon, href, color, iconBg }) => (
+const QuickActionCard = ({ title, icon: Icon, href, color: _color, iconBg: _iconBg }) => (
   <Link to={href}>
-    <Card className="group bg-white hover:shadow-2xl transition-all duration-300 border-0 cursor-pointer h-full overflow-hidden relative rounded-3xl">
-      <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
+    <Card className="group bg-card hover:shadow-md transition-all duration-300 cursor-pointer h-full overflow-hidden relative rounded-xl border border-border">
       <CardContent className="p-6 relative flex items-center gap-4">
-        <div className={`w-14 h-14 ${iconBg} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-          <Icon className="w-7 h-7 text-white" />
+        <div className="w-14 h-14 bg-primary/10 group-hover:bg-primary flex items-center justify-center rounded-xl transition-colors duration-300">
+          <Icon className="w-7 h-7 text-primary group-hover:text-primary-foreground" />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         </div>
       </CardContent>
     </Card>
@@ -125,21 +70,20 @@ QuickActionCard.propTypes = {
   iconBg: PropTypes.string.isRequired
 };
 
-const StatCard = ({ title, value, icon: Icon, color, iconBg, isLoading }) => (
-  <Card className="group bg-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden relative">
-    <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading }) => (
+  <Card className="group bg-card transition-all duration-300 overflow-hidden relative rounded-xl border border-border shadow-sm">
     <CardContent className="p-6 relative">
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start gap-4">
         <div className="flex-1">
-          <p className="text-sm font-medium text-slate-600 mb-2">{title}</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">{title}</p>
           {isLoading ? (
-            <Skeleton className="h-10 w-3/4" />
+            <Skeleton className="h-10 w-3/4 rounded" />
           ) : (
-            <p className="text-3xl font-bold text-slate-900">{value}</p>
+            <p className="text-2xl font-semibold text-foreground tabular-nums">{value}</p>
           )}
         </div>
-        <div className={`w-14 h-14 ${iconBg} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-md`}>
-          <Icon className="w-7 h-7 text-slate-700" />
+        <div className="w-14 h-14 bg-muted rounded-xl flex items-center justify-center shrink-0">
+          <Icon className="w-7 h-7 text-muted-foreground" />
         </div>
       </div>
     </CardContent>
@@ -157,9 +101,31 @@ StatCard.propTypes = {
 
 export default function Dashboard() {
   const { user: authUser } = useAuth();
+  const { toast } = useToast();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
+
+  // Admin Roles Management State
+  // Removed unused activeAdminTab
+  const [selectedRole, setSelectedRole] = useState(ADMIN_ROLE_TIERS[0].key);
+  const [supabaseUsers, setSupabaseUsers] = useState([]);
+  const [loadingAdmin, setLoadingAdmin] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', fullName: '', role: ADMIN_ROLE_TIERS[0].key });
+  const roleInfo = ADMIN_ROLE_TIERS.find(r => r.key === selectedRole);
+  // Removed unused allowedTabs
+
+  useEffect(() => {
+    if (isAdmin) {
+      async function fetchUsers() {
+        setLoadingAdmin(true);
+        const users = await fetchSupabaseUsers();
+        setSupabaseUsers(users);
+        setLoadingAdmin(false);
+      }
+      fetchUsers();
+    }
+  }, [isAdmin]);
 
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
@@ -193,33 +159,31 @@ export default function Dashboard() {
     cancellations: 0,
     trialsConverted: 0
   });
-  const [invoiceActivity, setInvoiceActivity] = useState({
-    totalInvoicesAllTime: 0,
-    invoicesThisWeek: 0,
-    invoicesThisMonth: 0,
-    averageInvoicesPerUser: 0,
-    topActiveUsers: []
-  });
   const [timeBreakdown, setTimeBreakdown] = useState({
     usersPerWeek: [],
-    invoicesPerWeek: [],
     revenuePerMonth: []
   });
-  const [financialMetrics, setFinancialMetrics] = useState({
-    mrr: 0,
-    arpu: 0,
-    churnRate: 0,
-    ltv: 0
-  });
+  // Removed unused financialMetrics state
   const [activityLogs, setActivityLogs] = useState({
     recentActions: [],
     suspensions: [],
     planChanges: [],
     failedPayments: []
   });
-  const [timeRange, setTimeRange] = useState('3months'); // '4weeks', '3months', '6months', '1year'
-  const [timeUnit, setTimeUnit] = useState('week'); // 'week' or 'month'
+  const [revenueRange, setRevenueRange] = useState(30);
+  const [alerts, setAlerts] = useState({
+    planLimits: [],
+    failedSubscriptions: [],
+    highVolumeLowPlan: []
+  });
   const navigate = useNavigate();
+
+  const openAccount = (user) => {
+    const params = new URLSearchParams();
+    if (user?.id) params.set('userId', user.id);
+    if (user?.email) params.set('email', user.email);
+    navigate(`/admin/accounts-management?${params.toString()}`);
+  };
 
   useEffect(() => {
     if (isAdmin) {
@@ -230,20 +194,20 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
-  // Helper function to calculate activity logs
-  const calculateActivityLogs = (allUsers, allInvoices, now) => {
+  // Removed calculateFinancialMetrics (no longer used)
+
+  const calculateActivityLogs = (allUsers, now) => {
     try {
-      // Recent admin actions (simulated from user updates)
       const recentActions = allUsers
         .filter(u => u.updated_at)
         .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-        .slice(0, 10)
+        .slice(0, 6)
         .map(u => {
           let action = 'Profile updated';
           if (u.status === 'suspended') action = 'Account suspended';
           else if (u.status === 'active' && u.plan) action = `Plan set to ${u.plan}`;
           else if (u.status === 'trial') action = 'Trial account created';
-          
+
           return {
             id: u.id,
             user: u.display_name || u.full_name || 'Unknown User',
@@ -253,11 +217,11 @@ export default function Dashboard() {
           };
         });
 
-      // User suspensions (last 30 days)
       const thirtyDaysAgo = subMonths(now, 1);
       const suspensions = allUsers
         .filter(u => u.status === 'suspended' && new Date(u.updated_at || u.created_at) >= thirtyDaysAgo)
         .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+        .slice(0, 5)
         .map(u => ({
           id: u.id,
           user: u.display_name || u.full_name || 'Unknown User',
@@ -266,24 +230,28 @@ export default function Dashboard() {
           email: u.email
         }));
 
-      // Plan changes (last 30 days) - detect changes from trial to paid
       const planChanges = allUsers
         .filter(u => {
           const updatedDate = new Date(u.updated_at || u.created_at);
           return updatedDate >= thirtyDaysAgo && u.plan && u.status !== 'trial';
         })
         .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
-        .slice(0, 10)
+        .slice(0, 5)
         .map(u => ({
           id: u.id,
           user: u.display_name || u.full_name || 'Unknown User',
           from: 'trial',
           to: u.plan || 'basic',
           timestamp: u.updated_at || u.created_at,
-          type: u.status === 'active' ? 'upgrade' : 'change'
+          type: u.plan_history?.includes('downgrade')
+            ? 'downgrade'
+            : u.plan_history?.includes('upgrade')
+              ? 'upgrade'
+              : u.status === 'active'
+                ? 'upgrade'
+                : 'change'
         }));
 
-      // Failed payments (placeholder - would come from payment system)
       const failedPayments = [];
 
       setActivityLogs({ recentActions, suspensions, planChanges, failedPayments });
@@ -293,73 +261,12 @@ export default function Dashboard() {
     }
   };
 
-  const calculateFinancialMetrics = (allUsers, allInvoices, now) => {
-    // Calculate Monthly Recurring Revenue (MRR)
-    // Based on active subscribers with paid plans (excluding system admins)
-    const activeSubscribersWithPaidPlans = allUsers.filter(u => 
-      u.status === 'active' && u.plan && u.plan !== 'free' && u.plan !== 'trial' && !u.isSystemAdmin
-    );
-    
-    // Assuming subscription_amount field exists on user, or calculate from plan
-    const mrr = activeSubscribersWithPaidPlans.reduce((sum, u) => {
-      // If user has subscription_amount, use it; otherwise assume a default based on plan
-      const monthlyAmount = u.subscription_amount || (u.plan === 'premium' ? 50 : u.plan === 'basic' ? 20 : 0);
-      return sum + monthlyAmount;
-    }, 0);
-
-    // Average Revenue Per User (ARPU)
-    // Exclude system admins from total active users
-    const totalActiveUsers = allUsers.filter(u => u.status === 'active' && !u.isSystemAdmin).length;
-    const arpu = totalActiveUsers > 0 ? Math.round(mrr / totalActiveUsers) : 0;
-
-    // Calculate Churn Rate (monthly)
-    // Users who cancelled in the last month / active users at start of month (excluding system admins)
-    const monthStart = startOfMonth(now);
-    const lastMonthStart = subMonths(monthStart, 1);
-    const lastMonthEnd = endOfMonth(lastMonthStart);
-
-    const churnedUsers = allUsers.filter(u => {
-      if (!u.cancelled_at && !u.updated_at) return false;
-      if (u.isSystemAdmin) return false; // Don't count system admins in churn
-      const cancelDate = new Date(u.cancelled_at || u.updated_at);
-      return (u.status === 'cancelled' || u.status === 'suspended') && 
-             cancelDate >= lastMonthStart && 
-             cancelDate <= lastMonthEnd;
-    }).length;
-
-    const activeUsersLastMonth = allUsers.filter(u => {
-      if (u.isSystemAdmin) return false; // Don't count system admins
-      const createdDate = new Date(u.created_at);
-      return createdDate < monthStart;
-    }).length;
-
-    const churnRate = activeUsersLastMonth > 0 
-      ? Math.round((churnedUsers / activeUsersLastMonth) * 100) 
-      : 0;
-
-    // Lifetime Value (LTV)
-    // Formula: ARPU / Churn Rate (as decimal)
-    // If churn is 0, assume a default retention period (e.g., 12 months)
-    const churnDecimal = churnRate / 100;
-    const ltv = churnDecimal > 0 
-      ? Math.round(arpu / churnDecimal) 
-      : arpu * 12; // Assume 12 months if no churn
-
-    setFinancialMetrics({
-      mrr,
-      arpu,
-      churnRate,
-      ltv
-    });
-  };
-
   const calculateTimeBreakdown = (allUsers, allInvoices, now) => {
-    // Get last 12 weeks of data
     const weeksData = [];
     for (let i = 11; i >= 0; i--) {
       const weekEnd = new Date(now.getTime() - (i * 7 * 24 * 60 * 60 * 1000));
       const weekStart = new Date(weekEnd.getTime() - (7 * 24 * 60 * 60 * 1000));
-      
+
       const usersInWeek = allUsers.filter(u => {
         if (!u.created_at) return false;
         const createdDate = new Date(u.created_at);
@@ -373,37 +280,17 @@ export default function Dashboard() {
       }).length;
 
       weeksData.push({
-        week: formatDate(weekEnd, 'MMM dd'),
+        label: formatDate(weekEnd, 'MMM dd'),
         users: usersInWeek,
-        invoices: invoicesInWeek,
-        revenue: allInvoices
-          .filter(inv => {
-            if (!inv.created_date) return false;
-            const createdDate = new Date(inv.created_date);
-            return createdDate >= weekStart && createdDate <= weekEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
-          })
-          .reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+        invoices: invoicesInWeek
       });
     }
 
-    // Get last 12 months of data
     const monthsData = [];
     for (let i = 11; i >= 0; i--) {
       const monthDate = subMonths(now, i);
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
-
-      const usersInMonth = allUsers.filter(u => {
-        if (!u.created_at) return false;
-        const createdDate = new Date(u.created_at);
-        return createdDate >= monthStart && createdDate <= monthEnd;
-      }).length;
-
-      const invoicesInMonth = allInvoices.filter(inv => {
-        if (!inv.created_date) return false;
-        const createdDate = new Date(inv.created_date);
-        return createdDate >= monthStart && createdDate <= monthEnd;
-      }).length;
 
       const revenueInMonth = allInvoices
         .filter(inv => {
@@ -414,16 +301,13 @@ export default function Dashboard() {
         .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
       monthsData.push({
-        month: formatDate(monthDate, 'MMM yyyy'),
-        users: usersInMonth,
-        invoices: invoicesInMonth,
+        label: formatDate(monthDate, 'MMM yyyy'),
         revenue: revenueInMonth
       });
     }
 
     setTimeBreakdown({
       usersPerWeek: weeksData,
-      invoicesPerWeek: weeksData,
       revenuePerMonth: monthsData
     });
   };
@@ -439,8 +323,14 @@ export default function Dashboard() {
       // Use Excel user service instead of broken User entity
       const allUsers = userService.getAllUsers();
       const allInvoices = await Invoice.list();
-
       setInvoices(allInvoices);
+      // Removed allQuotes (unused)
+
+      // Calculate invoice status breakdown
+      // Removed setInvoiceStats (state no longer used)
+
+      // Calculate quote status breakdown
+      // Removed setQuoteStats (state no longer used)
 
       // Calculate current period stats
       const now = new Date();
@@ -485,10 +375,8 @@ export default function Dashboard() {
         })
         .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
-      // Calculate growth metrics
       const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthStart = startOfMonth(now);
-
       const newUsersThisWeek = allUsers.filter(u => {
         if (!u.created_at) return false;
         const createdDate = new Date(u.created_at);
@@ -503,6 +391,11 @@ export default function Dashboard() {
 
       const growthRate = lastMonthUsers > 0 ? Math.round(((newUsersThisMonth - lastMonthUsers) / lastMonthUsers) * 100) : 0;
 
+      const upgrades = allUsers.filter(u => u.plan_history?.includes('upgrade')).length;
+      const downgrades = allUsers.filter(u => u.plan_history?.includes('downgrade')).length;
+      const cancellations = allUsers.filter(u => u.status === 'cancelled' || u.status === 'suspended').length;
+      const trialsConverted = allUsers.filter(u => u.plan === 'paid' && u.previously_trial === true).length;
+
       // Plan breakdown (Individual / SME / Corporate)
       const individualUsers = allUsers.filter(u => u.plan === 'individual' || u.plan === 'basic' || u.plan === 'free').length;
       const smeUsers = allUsers.filter(u => u.plan === 'sme' || u.plan === 'professional' || u.plan === 'business').length;
@@ -511,12 +404,6 @@ export default function Dashboard() {
       // Active vs cancelled subscriptions
       const activePlans = allUsers.filter(u => u.status === 'active' && u.plan && u.plan !== 'free').length;
       const cancelledPlans = allUsers.filter(u => u.status === 'cancelled' || u.status === 'inactive').length;
-
-      // Subscription movement metrics (based on user status and plan changes in metadata)
-      const upgrades = allUsers.filter(u => u.plan_history?.includes('upgrade')).length;
-      const downgrades = allUsers.filter(u => u.plan_history?.includes('downgrade')).length;
-      const cancellations = allUsers.filter(u => u.status === 'cancelled' || u.status === 'suspended').length;
-      const trialsConverted = allUsers.filter(u => u.plan === 'paid' && u.previously_trial === true).length;
 
       setAdminStats({
         totalUsers: allUsers.length,
@@ -547,67 +434,74 @@ export default function Dashboard() {
         trialsConverted
       });
 
-      // Calculate invoice activity metrics
-      const invoicesThisWeek = allInvoices.filter(inv => {
-        if (!inv.created_date) return false;
-        const createdDate = new Date(inv.created_date);
-        return createdDate >= weekStart && createdDate <= now;
-      }).length;
-
-      const invoicesThisMonth = allInvoices.filter(inv => {
-        if (!inv.created_date) return false;
-        const createdDate = new Date(inv.created_date);
-        return createdDate >= monthStart && createdDate <= now;
-      }).length;
-
-      const averageInvoicesPerUser = allUsers.length > 0 ? Math.round(allInvoices.length / allUsers.length) : 0;
-
-      // Get top 5 most active users (by invoice count)
-      const userInvoiceMap = {};
-      allInvoices.forEach(inv => {
-        const userId = inv.user_id || inv.created_by;
-        if (userId) {
-          userInvoiceMap[userId] = (userInvoiceMap[userId] || 0) + 1;
+      const lowPlans = ['free', 'trial', 'individual', 'basic', 'starter'];
+      const highVolumeThresholds = {
+        free: 10,
+        trial: 10,
+        individual: 12,
+        basic: 12,
+        starter: 15
+      };
+      const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const invoicesByUser = allInvoices.reduce((acc, inv) => {
+        const createdAt = new Date(inv.created_date || inv.created_at || 0);
+        if (createdAt >= last30Start && createdAt <= now) {
+          const ownerId = inv.user_id || inv.created_by;
+          if (ownerId) {
+            acc[ownerId] = (acc[ownerId] || 0) + 1;
+          }
         }
-      });
+        return acc;
+      }, {});
 
-      const topActiveUsers = Object.entries(userInvoiceMap)
-        .map(([userId, count]) => {
-          const userData = allUsers.find(u => u.id === userId);
-          return {
-            id: userId,
-            name: userData?.display_name || userData?.full_name || 'Unknown User',
-            invoiceCount: count
-          };
+      const planLimits = allUsers.filter(u => (
+        u?.limit_reached ||
+        u?.is_limit_reached ||
+        u?.plan_limit_reached ||
+        u?.usage_status === 'limit_reached'
+      ));
+
+      const failedSubscriptions = allUsers.filter(u => (
+        ['inactive', 'cancelled', 'suspended', 'overdue', 'past_due', 'failed'].includes(u?.status)
+      ));
+
+      const highVolumeLowPlan = allUsers
+        .filter(u => lowPlans.includes((u.plan || 'free').toLowerCase()))
+        .filter(u => {
+          const planKey = (u.plan || 'free').toLowerCase();
+          const threshold = highVolumeThresholds[planKey] ?? 20;
+          return (invoicesByUser[u.id] || 0) >= threshold;
         })
-        .sort((a, b) => b.invoiceCount - a.invoiceCount)
-        .slice(0, 5);
+        .map(u => ({
+          ...u,
+          invoiceCount: invoicesByUser[u.id] || 0
+        }))
+        .sort((a, b) => b.invoiceCount - a.invoiceCount);
 
-      setInvoiceActivity({
-        totalInvoicesAllTime: allInvoices.length,
-        invoicesThisWeek,
-        invoicesThisMonth,
-        averageInvoicesPerUser,
-        topActiveUsers
+      setAlerts({
+        planLimits,
+        failedSubscriptions,
+        highVolumeLowPlan
       });
 
-      // Calculate time-based breakdown (weekly/monthly)
+      // Removed call to calculateFinancialMetrics (function deleted)
+
+      // Calculate time breakdown
       calculateTimeBreakdown(allUsers, allInvoices, now);
 
-      // Calculate financial metrics
-      calculateFinancialMetrics(allUsers, allInvoices, now);
-
       // Calculate activity logs
-      calculateActivityLogs(allUsers, allInvoices, now);
-
-      // Calculate activity logs
-      calculateActivityLogs(allUsers, allInvoices, now);
+      calculateActivityLogs(allUsers, now);
     } catch (error) {
       console.error("Error loading admin dashboard data:", error);
+      toast({
+        title: "Could not load dashboard",
+        description: error?.message || "Please check your connection and try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []); // useCallback
+  }, [toast]); // useCallback
 
   const loadUserData = useCallback(async () => {
     setIsLoading(true);
@@ -632,668 +526,474 @@ export default function Dashboard() {
       setHasBankingDetails(bankingDetailsData.length > 0);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
+      toast({
+        title: "Could not load dashboard",
+        description: error?.message || "Please check your connection and try again.",
+        variant: "destructive",
+      });
     }
     setIsLoading(false);
-  }, []); // useCallback
+  }, [toast]); // useCallback
 
-  // Calculate percentage changes
-  const calculatePercentChange = (current, previous) => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 100);
-  };
+  // Real-time KPI updates: refetch when invoices, payments, or expenses change
+  useSupabaseRealtime(
+    ["invoices", "payments", "expenses"],
+    () => {
+      if (isAdmin) {
+        loadAdminData();
+      } else {
+        loadUserData();
+      }
+    },
+    { channelName: "dashboard-kpis" }
+  );
 
-  const userChangePercent = calculatePercentChange(adminStats.totalUsers, adminStats.totalUsersLastMonth + adminStats.totalUsers);
+  const revenueTrendData = useMemo(() => {
+    const now = new Date();
+    const days = Number(revenueRange) || 30;
+    const start = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+    const buckets = new Map();
+
+    for (let i = 0; i < days; i += 1) {
+      const date = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      buckets.set(formatDate(date, 'MMM d'), 0);
+    }
+
+    invoices.forEach(inv => {
+      const createdAt = new Date(inv.created_date || inv.created_at || 0);
+      if (createdAt < start || createdAt > now) return;
+      const label = formatDate(createdAt, 'MMM d');
+      const value = Number(inv.total_amount || inv.total || 0);
+      buckets.set(label, (buckets.get(label) || 0) + value);
+    });
+
+    return Array.from(buckets.entries()).map(([label, value]) => ({
+      label,
+      value
+    }));
+  }, [invoices, revenueRange]);
 
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 p-8">
-        <div className="max-w-[1600px] mx-auto space-y-8">
-          {/* Welcome Header with System Health */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex items-center justify-between"
-          >
-            <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">
-                Welcome back, Admin 👋
-              </h1>
-              <div className="flex items-center gap-2 text-lg">
-                <span className="text-slate-600">System Health:</span>
-                <span className="flex items-center gap-2">
-                  <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="font-semibold text-green-700">Stable</span>
-                </span>
-              </div>
-            </div>
-          </motion.div>
+      <div className="min-h-screen bg-slate-50 p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div>
+            <h1 className="text-3xl font-semibold text-slate-900">Admin Dashboard</h1>
+            <p className="text-sm text-slate-600">Is the business healthy today?</p>
+          </div>
 
-          {/* Main KPI Cards - 4 Cards */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-          >
-            <KPICard
-              title="Total Users"
-              value={adminStats.totalUsers}
-              icon={UsersIcon}
-              color="from-blue-500 to-blue-600"
-              iconBg="bg-gradient-to-br from-blue-500 to-blue-600"
-              isLoading={isLoading}
-              percentChange={Math.abs(userChangePercent)}
-              trend={userChangePercent >= 0 ? 'up' : 'down'}
-            />
-            <KPICard
-              title="Active Users"
-              value={adminStats.activeUsers}
-              icon={UserCheck}
-              color="from-green-500 to-green-600"
-              iconBg="bg-gradient-to-br from-green-500 to-green-600"
-              isLoading={isLoading}
-              percentChange={Math.abs(Math.round((adminStats.activeUsers / Math.max(adminStats.totalUsers, 1)) * 100))}
-              trend="up"
-            />
-            <KPICard
-              title="Suspended Users"
-              value={adminStats.suspendedAccounts}
-              icon={UserX}
-              color="from-red-500 to-red-600"
-              iconBg="bg-gradient-to-br from-red-500 to-red-600"
-              isLoading={isLoading}
-              percentChange={Math.abs(Math.round((adminStats.suspendedAccounts / Math.max(adminStats.totalUsers, 1)) * 100))}
-              trend={adminStats.suspendedAccounts > 0 ? 'down' : 'neutral'}
-            />
-            <KPICard
-              title="New Sign-ups"
-              value={`${adminStats.newUsersToday} / ${growthStats.newUsersThisMonth}`}
-              icon={UserPlus}
-              color="from-purple-500 to-purple-600"
-              iconBg="bg-gradient-to-br from-purple-500 to-purple-600"
-              isLoading={isLoading}
-              percentChange={Math.abs(growthStats.growthRate)}
-              trend={growthStats.growthRate > 0 ? 'up' : growthStats.growthRate < 0 ? 'down' : 'neutral'}
-            />
-          </motion.div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* Total Revenue (Today / MTD / YTD) */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Total Revenue</p>
+                <p className="text-2xl font-semibold text-slate-900">{formatCurrency(adminStats.revenue, 'ZAR')}</p>
+                <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                  <span className="text-slate-500">Today: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                    const created = new Date(inv.created_date || inv.created_at || 0);
+                    const now = new Date();
+                    return created.toDateString() === now.toDateString() && (inv.status === 'paid' || inv.status === 'partial_paid');
+                  }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0), 'ZAR')}</span></span>
+                  <span className="text-slate-500">MTD: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                    const created = new Date(inv.created_date || inv.created_at || 0);
+                    const now = new Date();
+                    return created >= startOfMonth(now) && created <= now && (inv.status === 'paid' || inv.status === 'partial_paid');
+                  }).reduce((sum, inv) => sum + (inv.total_amount || 0), 'ZAR'))}</span></span>
+                  <span className="text-slate-500">YTD: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                    const created = new Date(inv.created_date || inv.created_at || 0);
+                    const now = new Date();
+                    return created.getFullYear() === now.getFullYear() && (inv.status === 'paid' || inv.status === 'partial_paid');
+                  }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0), 'ZAR')}</span></span>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Active Businesses */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Active Businesses</p>
+                <p className="text-2xl font-semibold text-slate-900">{adminStats.activeUsers}</p>
+              </CardContent>
+            </Card>
+            {/* Active Subscriptions */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Active Subscriptions</p>
+                <p className="text-2xl font-semibold text-slate-900">{adminStats.activeSubscribers}</p>
+              </CardContent>
+            </Card>
+            {/* Total Transactions (24h) */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Total Transactions (24h)</p>
+                <p className="text-2xl font-semibold text-slate-900">{
+                  invoices.filter(inv => {
+                    const created = new Date(inv.created_date || inv.created_at || 0);
+                    const now = new Date();
+                    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    return created >= yesterday && created <= now && (inv.status === 'paid' || inv.status === 'partial_paid');
+                  }).length
+                }</p>
+              </CardContent>
+            </Card>
+            {/* Failed Payments */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Failed Payments</p>
+                <p className="text-2xl font-semibold text-slate-900">{
+                  invoices.filter(inv => inv.status === 'failed' || inv.status === 'overdue').length
+                }</p>
+              </CardContent>
+            </Card>
+            {/* Pending Payouts */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Pending Payouts</p>
+                <p className="text-2xl font-semibold text-slate-900">{
+                  invoices.filter(inv => inv.status === 'pending_payout' || inv.status === 'awaiting_payout').length
+                }</p>
+              </CardContent>
+            </Card>
+            {/* Platform Balance */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">Platform Balance</p>
+                <p className="text-2xl font-semibold text-slate-900">{
+                  formatCurrency(OutstandingBalanceService.calculateTotalOutstanding(invoices).totalOutstanding, 'ZAR')
+                }</p>
+              </CardContent>
+            </Card>
+            {/* System Alerts */}
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-500">System Alerts</p>
+                <p className="text-2xl font-semibold text-slate-900">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Charts Section - User Growth & Invoice Activity */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-          >
-            {/* User Growth Chart */}
-            <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-t-2xl">
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  User Growth
-                </CardTitle>
-                <p className="text-blue-100 text-sm">New signups over time</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b">
+                <CardTitle className="text-base font-semibold">Plan Distribution</CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-6 space-y-4">
                 {isLoading ? (
-                  <Skeleton className="h-64 w-full" />
-                ) : timeBreakdown.usersPerWeek.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={timeBreakdown.usersPerWeek}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="week" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px'
-                        }}
-                      />
-                      <Bar dataKey="users" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <Skeleton className="h-36 w-full" />
                 ) : (
-                  <div className="h-64 flex items-center justify-center text-slate-500">
-                    <p>No user data available</p>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Starter</span>
+                      <span className="text-sm font-semibold text-slate-900">{adminStats.individualUsers}</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      <span className="text-sm font-semibold text-amber-800">Entrepreneur</span>
+                      <span className="text-sm font-semibold text-amber-900">{adminStats.smeUsers}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Corporate</span>
+                      <span className="text-sm font-semibold text-slate-900">{adminStats.corporateUsers}</span>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
 
-            {/* Invoice Activity Chart */}
-            <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-t-2xl">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Invoice Activity
-                </CardTitle>
-                <p className="text-orange-100 text-sm">Invoices created weekly</p>
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b flex flex-row items-center justify-between">
+                <CardTitle className="text-base font-semibold">Revenue Trend</CardTitle>
+                <div className="flex items-center gap-2">
+                  {[30, 60, 90].map(range => (
+                    <button
+                      key={range}
+                      onClick={() => setRevenueRange(range)}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition ${
+                        revenueRange === range
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      {range}d
+                    </button>
+                  ))}
+                </div>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 {isLoading ? (
-                  <Skeleton className="h-64 w-full" />
-                ) : timeBreakdown.invoicesPerWeek.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={timeBreakdown.invoicesPerWeek}>
+                  <Skeleton className="h-48 w-full" />
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={revenueTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="week" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                      <YAxis stroke="#64748b" fontSize={10} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e2e8f0',
                           borderRadius: '8px'
                         }}
+                        formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                       />
-                      <Line
-                        type="monotone"
-                        dataKey="invoices"
-                        stroke="#f97316"
-                        strokeWidth={3}
-                        dot={{ fill: '#f97316', r: 4 }}
-                      />
+                      <Line type="monotone" dataKey="value" stroke="#0f172a" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-slate-500">
-                    <p>No invoice data available</p>
-                  </div>
                 )}
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
 
-          {/* Subscriptions & Packages Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="space-y-6"
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <Briefcase className="h-6 w-6 text-blue-600" />
-                Subscriptions & Packages
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Users per Plan */}
-              <Card className="shadow-xl rounded-2xl border-0">
-                <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl">
-                  <CardTitle className="flex items-center gap-2">
-                    <UsersIcon className="h-5 w-5" />
-                    Users per Plan
-                  </CardTitle>
-                  <p className="text-indigo-100 text-sm">Plan distribution</p>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-slate-900">Admin Analytics</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Growth Metrics</CardTitle>
                 </CardHeader>
-                <CardContent className="p-6">
-                  {isLoading ? (
-                    <Skeleton className="h-48 w-full" />
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                          <span className="text-sm font-medium text-slate-700">Individual</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-slate-900">{adminStats.individualUsers}</p>
-                          <p className="text-xs text-slate-500">
-                            {Math.round((adminStats.individualUsers / Math.max(adminStats.totalUsers, 1)) * 100)}%
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                          <span className="text-sm font-medium text-slate-700">SME</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-slate-900">{adminStats.smeUsers}</p>
-                          <p className="text-xs text-slate-500">
-                            {Math.round((adminStats.smeUsers / Math.max(adminStats.totalUsers, 1)) * 100)}%
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                          <span className="text-sm font-medium text-slate-700">Corporate</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-slate-900">{adminStats.corporateUsers}</p>
-                          <p className="text-xs text-slate-500">
-                            {Math.round((adminStats.corporateUsers / Math.max(adminStats.totalUsers, 1)) * 100)}%
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">New users (7d)</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.newUsersThisWeek}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">New users (30d)</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.newUsersThisMonth}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Growth rate</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.growthRate}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Trial conversions</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.trialsConverted}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Upgrades</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.upgrades}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Downgrades</p>
+                    <p className="text-lg font-semibold text-slate-900">{growthStats.downgrades}</p>
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* Active vs Cancelled Subscriptions */}
-              <Card className="shadow-xl rounded-2xl border-0">
-                <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-t-2xl">
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5" />
-                    Subscription Status
-                  </CardTitle>
-                  <p className="text-green-100 text-sm">Active vs cancelled</p>
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Activity Logs</CardTitle>
                 </CardHeader>
-                <CardContent className="p-6">
-                  {isLoading ? (
-                    <Skeleton className="h-48 w-full" />
+                <CardContent className="p-4 space-y-3">
+                  {activityLogs.recentActions.length === 0 ? (
+                    <p className="text-sm text-slate-500">No recent admin actions.</p>
                   ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-                            <UserCheck className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-600">Active Plans</p>
-                            <p className="text-3xl font-bold text-slate-900">{adminStats.activePlans}</p>
-                          </div>
+                    activityLogs.recentActions.map(action => (
+                      <div key={action.id} className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{action.user}</p>
+                          <p className="text-xs text-slate-500">{action.action}</p>
                         </div>
-                        <div className="text-right">
-                          <Badge className="bg-green-500 text-white hover:bg-green-600">
-                            {Math.round((adminStats.activePlans / Math.max(adminStats.activePlans + adminStats.cancelledPlans, 1)) * 100)}%
-                          </Badge>
-                        </div>
+                        <span className="text-xs text-slate-400">
+                          {action.timestamp ? formatDate(new Date(action.timestamp), 'MMM d') : '—'}
+                        </span>
                       </div>
-                      <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border-2 border-red-200">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
-                            <Ban className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-600">Cancelled Plans</p>
-                            <p className="text-3xl font-bold text-slate-900">{adminStats.cancelledPlans}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <Badge className="bg-red-500 text-white hover:bg-red-600">
-                            {Math.round((adminStats.cancelledPlans / Math.max(adminStats.activePlans + adminStats.cancelledPlans, 1)) * 100)}%
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-slate-50 rounded-lg">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-slate-600">Total Subscriptions</span>
-                          <span className="text-lg font-bold text-slate-900">{adminStats.activePlans + adminStats.cancelledPlans}</span>
-                        </div>
-                      </div>
-                    </div>
+                    ))
                   )}
-                </CardContent>
-              </Card>
-
-              {/* Upgrade / Downgrade Activity */}
-              <Card className="shadow-xl rounded-2xl border-0">
-                <CardHeader className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-t-2xl">
-                  <CardTitle className="flex items-center gap-2">
-                    <RefreshCw className="h-5 w-5" />
-                    Plan Changes
-                  </CardTitle>
-                  <p className="text-orange-100 text-sm">Upgrades & downgrades</p>
-                </CardHeader>
-                <CardContent className="p-6">
-                  {isLoading ? (
-                    <Skeleton className="h-48 w-full" />
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <TrendingUp className="h-6 w-6 text-green-600" />
-                            <div>
-                              <p className="text-sm font-medium text-slate-600">Upgrades</p>
-                              <p className="text-xs text-slate-500">Plan improvements</p>
-                            </div>
+                  {activityLogs.suspensions.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs font-semibold text-slate-500 mb-2">Suspensions</p>
+                      {activityLogs.suspensions.slice(0, 2).map(suspension => (
+                        <div key={suspension.id} className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{suspension.user}</p>
+                            <p className="text-xs text-slate-500">{suspension.reason}</p>
                           </div>
-                          <p className="text-3xl font-bold text-green-600">{growthStats.upgrades}</p>
-                        </div>
-                      </div>
-                      <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <TrendingDown className="h-6 w-6 text-orange-600" />
-                            <div>
-                              <p className="text-sm font-medium text-slate-600">Downgrades</p>
-                              <p className="text-xs text-slate-500">Plan reductions</p>
-                            </div>
-                          </div>
-                          <p className="text-3xl font-bold text-orange-600">{growthStats.downgrades}</p>
-                        </div>
-                      </div>
-                      <div className="p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Ban className="h-6 w-6 text-red-600" />
-                            <div>
-                              <p className="text-sm font-medium text-slate-600">Cancellations</p>
-                              <p className="text-xs text-slate-500">Plan terminations</p>
-                            </div>
-                          </div>
-                          <p className="text-3xl font-bold text-red-600">{growthStats.cancellations}</p>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-slate-600 flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            Trial Conversions
+                          <span className="text-xs text-slate-400">
+                            {suspension.timestamp ? formatDate(new Date(suspension.timestamp), 'MMM d') : '—'}
                           </span>
-                          <span className="text-lg font-bold text-blue-600">{growthStats.trialsConverted}</span>
                         </div>
-                      </div>
+                      ))}
+                    </div>
+                  )}
+                  {activityLogs.planChanges.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs font-semibold text-slate-500 mb-2">Plan changes</p>
+                      {activityLogs.planChanges.map(change => {
+                        const label = change.type === 'downgrade'
+                          ? 'Downgrade'
+                          : change.type === 'upgrade'
+                            ? 'Upgrade'
+                            : 'Change';
+                        const badgeClass = change.type === 'downgrade'
+                          ? 'bg-rose-100 text-rose-700'
+                          : change.type === 'upgrade'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-700';
+                        return (
+                          <div key={change.id} className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium text-slate-900">{change.user}</p>
+                                <Badge className={badgeClass}>{label}</Badge>
+                              </div>
+                              <p className="text-xs text-slate-500">{change.from} → {change.to}</p>
+                            </div>
+                            <span className="text-xs text-slate-400">
+                              {change.timestamp ? formatDate(new Date(change.timestamp), 'MMM d') : '—'}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
-          </motion.div>
 
-          {/* Weekly / Monthly Toggle Controls */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <span className="text-slate-700 font-semibold">View:</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setTimeUnit('week')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    timeUnit === 'week'
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                  }`}
-                >
-                  Weekly
-                </button>
-                <button
-                  onClick={() => setTimeUnit('month')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    timeUnit === 'month'
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                  }`}
-                >
-                  Monthly
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 text-sm">Time Range:</span>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                className="px-4 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-700 font-medium focus:outline-none focus:border-blue-500"
-              >
-                <option value="4weeks">Last 4 Weeks</option>
-                <option value="3months">Last 3 Months</option>
-                <option value="6months">Last 6 Months</option>
-                <option value="1year">Last Year</option>
-              </select>
-            </div>
-          </motion.div>
-
-          {/* Bottom Section - Account Alerts, Quick Actions, System Logs */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-          >
-            {/* Account Alerts */}
-            <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-t-2xl">
-                <CardTitle className="flex items-center gap-2">
-                  <UserX className="h-5 w-5" />
-                  Account Alerts
-                </CardTitle>
-                <p className="text-red-100 text-sm">Requires attention</p>
-              </CardHeader>
-              <CardContent className="p-6">
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Suspended Accounts Alert */}
-                    {adminStats.suspendedAccounts > 0 && (
-                      <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-900">Suspended Accounts</p>
-                            <p className="text-sm text-slate-600">{adminStats.suspendedAccounts} users suspended</p>
-                          </div>
-                          <Badge className="bg-red-600">{adminStats.suspendedAccounts}</Badge>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Trial Expiring Soon */}
-                    {adminStats.trialUsers > 0 && (
-                      <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-900">Trial Users</p>
-                            <p className="text-sm text-slate-600">{adminStats.trialUsers} on trial period</p>
-                          </div>
-                          <Badge className="bg-orange-600">{adminStats.trialUsers}</Badge>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Low Activity Users */}
-                    {invoiceActivity.averageInvoicesPerUser < 1 && (
-                      <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-900">Low Activity</p>
-                            <p className="text-sm text-slate-600">Avg {invoiceActivity.averageInvoicesPerUser.toFixed(1)} invoices/user</p>
-                          </div>
-                          <Badge className="bg-yellow-600">!</Badge>
-                        </div>
-                      </div>
-                    )}
-
-                    {adminStats.suspendedAccounts === 0 && adminStats.trialUsers === 0 && invoiceActivity.averageInvoicesPerUser >= 1 && (
-                      <div className="text-center py-8 text-slate-500">
-                        <UserCheck className="h-12 w-12 mx-auto mb-3 text-green-300" />
-                        <p>All clear! No alerts</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions - Sticky */}
-            <div className="sticky top-8 z-40 h-fit">
-              <Card className="shadow-xl rounded-2xl border-0">
-                <CardHeader className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-t-2xl">
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5" />
-                    Quick Actions
-                  </CardTitle>
-                  <p className="text-emerald-100 text-sm">Admin tools</p>
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Weekly Users & Invoices</CardTitle>
                 </CardHeader>
-                <CardContent className="p-6 space-y-3">
-                  <button
-                    onClick={() => setCreateAccountDialogOpen(true)}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <UserPlus className="h-5 w-5" />
-                    <span className="font-semibold">Create Account</span>
-                  </button>
-
-                  <button
-                    onClick={() => window.alert('Suspend User form coming soon')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <Ban className="h-5 w-5" />
-                    <span className="font-semibold">Suspend User</span>
-                  </button>
-
-                  <button
-                    onClick={() => window.alert('Extend Trial form coming soon')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <Clock className="h-5 w-5" />
-                    <span className="font-semibold">Extend Trial</span>
-                  </button>
-
-                  <button
-                    onClick={() => window.alert('Change Plan form coming soon')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <RefreshCw className="h-5 w-5" />
-                    <span className="font-semibold">Change Plan</span>
-                  </button>
-
-                  <button
-                    onClick={() => window.alert('Logs & Audit Trail page coming soon')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-700 to-slate-800 text-white rounded-xl hover:from-slate-800 hover:to-slate-900 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <ScrollText className="h-5 w-5" />
-                    <span className="font-semibold">View Logs</span>
-                  </button>
-
-                  <button
-                    onClick={() => userService.downloadExcel()}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow-md hover:shadow-lg group"
-                  >
-                    <Download className="h-5 w-5" />
-                    <span className="font-semibold">Export Users</span>
-                  </button>
+                <CardContent className="p-4">
+                  {isLoading ? (
+                    <Skeleton className="h-40 w-full" />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={timeBreakdown.usersPerWeek}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                        <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <Line type="monotone" dataKey="users" stroke="#0f172a" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="invoices" stroke="#2563eb" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </CardContent>
               </Card>
             </div>
 
-            {/* System Logs Preview */}
-            <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-t-2xl">
-                <CardTitle className="flex items-center gap-2">
-                  <ScrollText className="h-5 w-5" />
-                  System Logs
-                </CardTitle>
-                <p className="text-purple-100 text-sm">Recent activity</p>
-              </CardHeader>
-              <CardContent className="p-6">
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(4)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
-                  </div>
-                ) : activityLogs.recentActions.length > 0 ? (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {activityLogs.recentActions.slice(0, 5).map((log, index) => (
-                      <div
-                        key={log.id || index}
-                        className="p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
-                      >
-                        <p className="font-medium text-slate-900 text-sm">{log.user}</p>
-                        <p className="text-xs text-slate-600 mt-1">{log.action}</p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {formatDate(new Date(log.timestamp), 'MMM dd, hh:mm a')}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-slate-500">
-                    <Activity className="h-12 w-12 mx-auto mb-3 text-slate-300" />
-                    <p>No recent activity</p>
-                  </div>
-                )}
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={() => window.alert('Full logs page coming soon')}
-                    className="text-sm text-purple-600 hover:text-purple-700 font-semibold"
-                  >
-                    View All Logs →
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Monthly Revenue</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {isLoading ? (
+                    <Skeleton className="h-40 w-full" />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={timeBreakdown.revenuePerMonth}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                        <YAxis stroke="#64748b" fontSize={10} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px'
+                          }}
+                          formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
+                        />
+                        <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
 
-          {/* Optional: Additional Metrics - Collapsible */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
-            <details className="group">
-              <summary className="cursor-pointer list-none">
-                <div className="flex items-center justify-between p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                  <div className="flex items-center gap-2">
-                    <BarChart2 className="h-5 w-5 text-slate-600" />
-                    <span className="font-semibold text-slate-900">View Advanced Metrics</span>
-                  </div>
-                  <TrendingDown className="h-5 w-5 text-slate-400 group-open:rotate-180 transition-transform" />
-                </div>
-              </summary>
-              
-              <div className="mt-6 space-y-6">
-                {/* Financial Overview */}
-                <Card className="shadow-xl rounded-2xl border-0">
-                  <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-t-2xl">
-                    <CardTitle>Financial Metrics</CardTitle>
-                    <p className="text-green-100 text-sm">Revenue insights</p>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-slate-900">
-                          {formatCurrency(financialMetrics.mrr, 'ZAR')}
-                        </p>
-                        <p className="text-sm text-slate-600 mt-1">MRR (ZAR)</p>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-slate-900">Alerts & Actions</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Users Hitting Plan Limits</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {alerts.planLimits.length === 0 ? (
+                    <p className="text-sm text-slate-500">No plan limits reached.</p>
+                  ) : (
+                    alerts.planLimits.slice(0, 4).map(user => (
+                      <div key={user.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">
+                            {user.full_name || user.display_name || user.email}
+                          </p>
+                          <p className="text-xs text-slate-500">{user.email}</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => openAccount(user)}>
+                          Review
+                        </Button>
                       </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-slate-900">
-                          {formatCurrency(financialMetrics.arpu, 'ZAR')}
-                        </p>
-                        <p className="text-sm text-slate-600 mt-1">ARPU (ZAR)</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-slate-900">
-                          {financialMetrics.churnRate.toFixed(1)}%
-                        </p>
-                        <p className="text-sm text-slate-600 mt-1">Churn Rate</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-slate-900">
-                          {formatCurrency(financialMetrics.ltv, 'ZAR')}
-                        </p>
-                        <p className="text-sm text-slate-600 mt-1">LTV (ZAR)</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </details>
-          </motion.div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
 
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">Failed or Overdue Subscriptions</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {alerts.failedSubscriptions.length === 0 ? (
+                    <p className="text-sm text-slate-500">No failed subscriptions.</p>
+                  ) : (
+                    alerts.failedSubscriptions.slice(0, 4).map(user => (
+                      <div key={user.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">
+                            {user.full_name || user.display_name || user.email}
+                          </p>
+                          <p className="text-xs text-slate-500">{user.status || 'inactive'}</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => openAccount(user)}>
+                          Resolve
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-sm font-semibold">High-Volume Users on Low Plans</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {alerts.highVolumeLowPlan.length === 0 ? (
+                    <p className="text-sm text-slate-500">No upgrade candidates.</p>
+                  ) : (
+                    alerts.highVolumeLowPlan.slice(0, 4).map(user => (
+                      <div key={user.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">
+                            {user.full_name || user.display_name || user.email}
+                          </p>
+                          <p className="text-xs text-slate-500">{user.invoiceCount} invoices (30 days)</p>
+                        </div>
+                        <Button size="sm" onClick={() => openAccount(user)}>
+                          Upgrade
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   // USER DASHBOARD
+  // Unified revenue: from paid/partial invoices (or from payments for collected amount)
   const totalRevenue = invoices.reduce((sum, inv) => {
     if (inv.status === 'paid' || inv.status === 'partial_paid') {
       return sum + (inv.total_amount || 0);
@@ -1315,6 +1015,7 @@ export default function Dashboard() {
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
   const netProfit = totalRevenue - totalExpenses;
+  const profitMarginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalExpenses) / totalRevenue) * 100) : 0;
   const goalProgress = Math.min(100, (totalRevenue / 50000) * 100);
 
   const recentTransactions = invoices
@@ -1333,7 +1034,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20">
+    <div className="min-h-full bg-background">
       <div className="max-w-7xl mx-auto p-4 sm:p-6">
         {/* Welcome Header */}
         <motion.div
@@ -1341,11 +1042,136 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent mb-2">
-            Welcome back, {userName}! 👋
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2">
+            Welcome back, {userName}
           </h1>
-          <p className="text-slate-600 text-base sm:text-lg">Here&apos;s what&apos;s happening with your business today</p>
+          <p className="text-muted-foreground text-base">Here&apos;s what&apos;s happening with your business today</p>
         </motion.div>
+
+        {/* Admin Roles Management Section (Visible to Admins Only) */}
+        {isAdmin && (
+          <div className="bg-white rounded shadow p-4 mb-8">
+            <h2 className="text-lg font-semibold mb-2">Admin Roles Management</h2>
+            <div className="mb-4">
+              <label className="font-semibold text-slate-700 mr-2">Select Admin Role:</label>
+              <select
+                value={selectedRole}
+                onChange={e => setSelectedRole(e.target.value)}
+                className="border rounded px-2 py-1"
+              >
+                {ADMIN_ROLE_TIERS.map(role => (
+                  <option key={role.key} value={role.key}>{role.label}</option>
+                ))}
+              </select>
+              <span className="ml-4 text-xs text-slate-500">{roleInfo?.description}</span>
+            </div>
+            <div className="mb-4">
+              <button
+                className="bg-indigo-500 text-white px-3 py-1 rounded mr-2"
+                onClick={async () => {
+                  setLoadingAdmin(true);
+                  const users = await syncAndCleanUsers();
+                  setSupabaseUsers(users);
+                  setLoadingAdmin(false);
+                }}
+                disabled={loadingAdmin}
+              >
+                Sync & Clean Users
+              </button>
+              <span className="text-xs text-slate-500">Best practice: sync and clean orphaned users</span>
+            </div>
+            <form
+              className="mb-4 flex gap-2"
+              onSubmit={async e => {
+                e.preventDefault();
+                setLoadingAdmin(true);
+                await addUser(newUser.email, newUser.fullName, newUser.role);
+                const users = await fetchSupabaseUsers();
+                setSupabaseUsers(users);
+                setNewUser({ email: '', fullName: '', role: ADMIN_ROLE_TIERS[0].key });
+                setLoadingAdmin(false);
+              }}
+            >
+              <input
+                type="email"
+                placeholder="Email"
+                value={newUser.email}
+                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                className="border px-2 py-1 rounded"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={newUser.fullName}
+                onChange={e => setNewUser({ ...newUser, fullName: e.target.value })}
+                className="border px-2 py-1 rounded"
+                required
+              />
+              <select
+                value={newUser.role}
+                onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                className="border px-2 py-1 rounded"
+              >
+                {ADMIN_ROLE_TIERS.map(role => (
+                  <option key={role.key} value={role.key}>{role.label}</option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="bg-green-500 text-white px-3 py-1 rounded"
+                disabled={loadingAdmin}
+              >Add User</button>
+            </form>
+            {loadingAdmin ? (
+              <p className="text-slate-500">Loading...</p>
+            ) : supabaseUsers.length === 0 ? (
+              <p className="text-slate-500">No users found.</p>
+            ) : (
+              <ul className="divide-y">
+                {supabaseUsers.map(user => (
+                  <li key={user.id} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <span className="font-medium text-slate-800">{user.email}</span>
+                      <span className="text-xs text-slate-500 ml-2">ID: {user.id}</span>
+                      {user.profile && (
+                        <span className="text-xs text-slate-600 ml-2">Name: {user.profile.full_name}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-2 md:mt-0">
+                      <select
+                        value={user.memberships?.[0]?.role || ''}
+                        onChange={async e => {
+                          setLoadingAdmin(true);
+                          await updateUserRole(user.id, e.target.value);
+                          const users = await fetchSupabaseUsers();
+                          setSupabaseUsers(users);
+                          setLoadingAdmin(false);
+                        }}
+                        className="border px-2 py-1 rounded"
+                      >
+                        {ADMIN_ROLE_TIERS.map(role => (
+                          <option key={role.key} value={role.key}>{role.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        className="bg-red-500 text-white px-3 py-1 rounded"
+                        onClick={async () => {
+                          setLoadingAdmin(true);
+                          await deleteUser(user.id);
+                          const users = await fetchSupabaseUsers();
+                          setSupabaseUsers(users);
+                          setLoadingAdmin(false);
+                        }}
+                        disabled={loadingAdmin}
+                      >Delete</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         
         {user && !isLoading && <WelcomeGuide user={user} hasBankingDetails={hasBankingDetails} />}
 
@@ -1469,7 +1295,7 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
         >
           <StatCard 
             title="Total Revenue" 
@@ -1493,6 +1319,14 @@ export default function Dashboard() {
             icon={DollarSign}
             color={netProfit >= 0 ? "from-blue-500 to-blue-600" : "from-orange-500 to-orange-600"}
             iconBg={netProfit >= 0 ? "bg-blue-100" : "bg-orange-100"}
+            isLoading={isLoading}
+          />
+          <StatCard 
+            title="Profit margin" 
+            value={totalRevenue > 0 ? `${profitMarginPercent}%` : "—"} 
+            icon={Percent}
+            color="from-violet-500 to-violet-600"
+            iconBg="bg-violet-100"
             isLoading={isLoading}
           />
           <StatCard 

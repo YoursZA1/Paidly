@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { getUnitLabel } from '../itemTypeHelpers';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function ModernTemplate({ invoice, client, user, bankingDetail, userCurrency, safeFormatDate, documentTitle }) {
     const deliveryDate = safeFormatDate(invoice.delivery_date);
@@ -16,7 +17,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                     <div className="max-w-md">
                         {user?.logo_url ? (
                             <div className="mb-3">
-                                <img 
+                                <LogoImage 
                                     src={user.logo_url} 
                                     alt="Company Logo" 
                                     className="h-14 w-auto max-w-xs object-contain bg-white p-2 rounded shadow-sm" 
@@ -84,7 +85,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             <th className="py-3 text-left text-xs font-bold text-purple-600 uppercase tracking-wide">Description</th>
                             <th className="py-3 text-center text-xs font-bold text-purple-600 uppercase tracking-wide">Qty</th>
                             <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Rate</th>
-                            {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                            {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                                 <>
                                     <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Tax %</th>
                                     <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Tax</th>
@@ -94,30 +95,36 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                         </tr>
                     </thead>
                     <tbody>
-                        {invoice.items.map((item, index) => (
-                            <tr key={index} className="border-b border-gray-100">
-                                <td className="py-4">
-                                    <div>
-                                        <p className="font-medium text-gray-900">{item.service_name}</p>
-                                        {item.part_number && <p className="text-xs text-gray-500">Part #: {item.part_number}</p>}
-                                        {item.sku && <p className="text-xs text-gray-500">SKU: {item.sku}</p>}
-                                        {item.description && <p className="text-sm text-gray-500 mt-1">{item.description}</p>}
-                                        {item.details && <p className="text-xs text-gray-400 italic">{item.details}</p>}
-                                    </div>
-                                </td>
-                                <td className="py-4 text-center text-gray-700">
-                                    {item.quantity} {getUnitLabel(item.item_type || 'service', item.unit_type || 'unit')}
-                                </td>
-                                <td className="py-4 text-right text-gray-700">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                {invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
-                                    <>
-                                        <td className="py-4 text-right text-gray-600">{item.item_tax_rate || 0}%</td>
-                                        <td className="py-4 text-right font-medium text-orange-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</td>
-                                    </>
-                                )}
-                                <td className="py-4 text-right font-medium text-gray-900">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</td>
+                        {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                            invoice.items.map((item, index) => (
+                                <tr key={index} className="border-b border-gray-100">
+                                    <td className="py-4">
+                                        <div>
+                                            <p className="font-medium text-gray-900">{item.service_name}</p>
+                                            {item.part_number && <p className="text-xs text-gray-500">Part #: {item.part_number}</p>}
+                                            {item.sku && <p className="text-xs text-gray-500">SKU: {item.sku}</p>}
+                                            {item.description && <p className="text-sm text-gray-500 mt-1">{item.description}</p>}
+                                            {item.details && <p className="text-xs text-gray-400 italic">{item.details}</p>}
+                                        </div>
+                                    </td>
+                                    <td className="py-4 text-center text-gray-700">
+                                        {item.quantity} {getUnitLabel(item.item_type || 'service', item.unit_type || 'unit')}
+                                    </td>
+                                    <td className="py-4 text-right text-gray-700">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    {Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
+                                        <>
+                                            <td className="py-4 text-right text-gray-600">{item.item_tax_rate || 0}%</td>
+                                            <td className="py-4 text-right font-medium text-orange-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</td>
+                                        </>
+                                    )}
+                                    <td className="py-4 text-right font-medium text-gray-900">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan={Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) ? 6 : 4} className="py-4 text-center text-gray-500">No items found</td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </section>
@@ -137,7 +144,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             <span className="font-medium">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
-                    {invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                    {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                         <div className="flex justify-between py-2 text-gray-600">
                             <span>Item Taxes</span>
                             <span className="text-orange-600 font-medium">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Expense, Invoice, User } from '@/api/entities';
-import { formatCurrency } from '../components/CurrencySelector';
+import { formatCurrency } from '@/components/CurrencySelector';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 
 export default function CashFlowPDF() {
