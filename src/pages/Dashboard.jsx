@@ -26,66 +26,99 @@ import {
   Headset,
   DollarSign,
   TrendingUp,
-  Briefcase,
-  ShoppingBag,
-  Coffee,
-  Dumbbell,
-  Car,
   Receipt,
-  Percent
+  Landmark
 } from "lucide-react";
+import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import WelcomeGuide from '@/components/shared/WelcomeGuide';
 import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
-import RevenueChart from '@/components/dashboard/RevenueChart';
 import GoalProgress from '@/components/dashboard/GoalProgress';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
-import RecentExpenses from '@/components/dashboard/RecentExpenses';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-const QuickActionCard = ({ title, icon: Icon, href, color: _color, iconBg: _iconBg }) => (
-  <Link to={href}>
-    <Card className="group bg-card hover:shadow-md transition-all duration-300 cursor-pointer h-full overflow-hidden relative rounded-xl border border-border">
-      <CardContent className="p-6 relative flex items-center gap-4">
-        <div className="w-14 h-14 bg-primary/10 group-hover:bg-primary flex items-center justify-center rounded-xl transition-colors duration-300">
-          <Icon className="w-7 h-7 text-primary group-hover:text-primary-foreground" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        </div>
-      </CardContent>
-    </Card>
-  </Link>
-);
+const QUICK_ACTION_ACCENT = {
+  green: { bg: 'bg-emerald-500/25', icon: 'text-emerald-400', hoverBg: 'group-hover:bg-emerald-500/35', border: 'hover:border-emerald-400/30' },
+  red: { bg: 'bg-red-500/25', icon: 'text-red-400', hoverBg: 'group-hover:bg-red-500/35', border: 'hover:border-red-400/30' },
+  blue: { bg: 'bg-blue-500/25', icon: 'text-blue-400', hoverBg: 'group-hover:bg-blue-500/35', border: 'hover:border-blue-400/30' },
+  violet: { bg: 'bg-violet-500/25', icon: 'text-violet-400', hoverBg: 'group-hover:bg-violet-500/35', border: 'hover:border-violet-400/30' }
+};
+
+const QuickActionCard = ({ title, icon: Icon, href, fintech, accent = 'blue' }) => {
+  const style = QUICK_ACTION_ACCENT[accent] || QUICK_ACTION_ACCENT.blue;
+  return (
+    <Link to={href}>
+      <Card className={`group cursor-pointer h-full overflow-hidden relative transition-all duration-300 ${
+        fintech
+          ? `glass-card glass-card-hover rounded-fintech border border-border hover:border-primary/40 ${style.border}`
+          : "bg-card hover:shadow-md rounded-xl border border-border"
+      }`}>
+        <CardContent className="p-6 relative flex items-center gap-4">
+          <div className={`w-14 h-14 flex items-center justify-center rounded-xl transition-colors duration-300 ${
+            fintech ? `${style.bg} ${style.hoverBg}` : "bg-primary/10 group-hover:bg-primary"
+          }`}>
+            <Icon className={`w-7 h-7 ${fintech ? `${style.icon} group-hover:text-primary-foreground` : "text-primary group-hover:text-primary-foreground"}`} />
+          </div>
+          <div>
+            <h3 className={`text-sm font-semibold ${fintech ? "text-foreground" : "text-foreground"}`}>{title}</h3>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+};
 
 QuickActionCard.propTypes = {
   title: PropTypes.string.isRequired,
   icon: PropTypes.elementType.isRequired,
   href: PropTypes.string.isRequired,
-  color: PropTypes.string.isRequired,
-  iconBg: PropTypes.string.isRequired
+  fintech: PropTypes.bool,
+  accent: PropTypes.oneOf(['green', 'red', 'blue', 'violet'])
 };
 
-const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading }) => (
-  <Card className="group bg-card transition-all duration-300 overflow-hidden relative rounded-xl border border-border shadow-sm">
-    <CardContent className="p-6 relative">
+const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle }) => (
+  <Card className={`transition-all duration-300 overflow-hidden relative ${
+    fintech
+      ? "glass-card rounded-fintech border border-border"
+      : "bg-card rounded-xl border border-border shadow-sm"
+  }`}>
+    <CardContent className={`p-6 relative ${fintech ? "pb-5" : ""}`}>
       <div className="flex justify-between items-start gap-4">
-        <div className="flex-1">
-          <p className="text-xs font-medium text-muted-foreground mb-2">{title}</p>
+        <div className="flex-1 min-w-0">
+          <p className={`text-xs font-medium mb-1.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{title}</p>
           {isLoading ? (
-            <Skeleton className="h-10 w-3/4 rounded" />
+            <Skeleton className={`h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
           ) : (
-            <p className="text-2xl font-semibold text-foreground tabular-nums">{value}</p>
+            <>
+              <p className={`tabular-nums font-bold truncate ${fintech ? "text-3xl text-foreground drop-shadow-subtle" : "text-2xl font-semibold text-foreground"}`}>{value}</p>
+              {subtitle && (
+                <div className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{subtitle}</div>
+              )}
+              {fintech && typeof growth === "number" && (
+                <p className={`text-xs font-medium mt-1 ${growth >= 0 ? "text-status-paid" : "text-status-overdue"}`}>
+                  {growth >= 0 ? "+" : ""}{growth}% vs last month
+                </p>
+              )}
+            </>
           )}
         </div>
-        <div className="w-14 h-14 bg-muted rounded-xl flex items-center justify-center shrink-0">
-          <Icon className="w-7 h-7 text-muted-foreground" />
+        <div className={`rounded-xl flex items-center justify-center shrink-0 ${
+          fintech
+            ? `w-12 h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-primary/20"}`
+            : "w-14 h-14 bg-muted"
+        }`}>
+          <Icon className={`${fintech ? "w-6 h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-primary") : "w-7 h-7 text-muted-foreground"}`} />
         </div>
       </div>
+      {fintech && (
+        <div
+          className="absolute bottom-0 left-4 right-4 h-px rounded-full bg-border"
+        />
+      )}
     </CardContent>
   </Card>
 );
@@ -94,9 +127,13 @@ StatCard.propTypes = {
   title: PropTypes.string.isRequired,
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
   icon: PropTypes.elementType.isRequired,
-  color: PropTypes.string.isRequired,
-  iconBg: PropTypes.string.isRequired,
-  isLoading: PropTypes.bool
+  color: PropTypes.string,
+  iconBg: PropTypes.string,
+  isLoading: PropTypes.bool,
+  fintech: PropTypes.bool,
+  accent: PropTypes.oneOf(['blue', 'purple', 'amber']),
+  growth: PropTypes.number,
+  subtitle: PropTypes.node
 };
 
 export default function Dashboard() {
@@ -119,13 +156,24 @@ export default function Dashboard() {
     if (isAdmin) {
       async function fetchUsers() {
         setLoadingAdmin(true);
-        const users = await fetchSupabaseUsers();
-        setSupabaseUsers(users);
-        setLoadingAdmin(false);
+        try {
+          const users = await fetchSupabaseUsers();
+          setSupabaseUsers(users);
+        } catch (err) {
+          console.warn("Admin users fetch failed (backend may be stopped):", err?.message || err);
+          setSupabaseUsers([]);
+          toast({
+            title: "Backend unavailable",
+            description: "Start the backend with: npm run server",
+            variant: "destructive",
+          });
+        } finally {
+          setLoadingAdmin(false);
+        }
       }
       fetchUsers();
     }
-  }, [isAdmin]);
+  }, [isAdmin, toast]);
 
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
@@ -573,6 +621,79 @@ export default function Dashboard() {
     }));
   }, [invoices, revenueRange]);
 
+  // Fintech KPIs: Revenue, Awaiting payment (consolidated), VAT/Tax liability (SARS), Cash Flow + growth %
+  const fintechKpis = useMemo(() => {
+    const now = new Date();
+    const thisMonthStart = startOfMonth(now);
+    const lastMonthStart = startOfMonth(subMonths(now, 1));
+    const lastMonthEnd = endOfMonth(subMonths(now, 1));
+
+    const outstanding = OutstandingBalanceService.calculateTotalOutstanding(invoices);
+    const paidInvoices = invoices.filter(inv => inv.status === 'paid' || inv.status === 'partial_paid');
+    const taxSummary = TaxService.getTaxSummaryFromInvoices(paidInvoices);
+    const rev = paidInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    const exp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    const cashFlow = rev - exp;
+
+    const revThisMonth = invoices
+      .filter(inv => {
+        const d = new Date(inv.created_date || inv.created_at || 0);
+        return d >= thisMonthStart && (inv.status === 'paid' || inv.status === 'partial_paid');
+      })
+      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    const revLastMonth = invoices
+      .filter(inv => {
+        const d = new Date(inv.created_date || inv.created_at || 0);
+        return d >= lastMonthStart && d <= lastMonthEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
+      })
+      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    const expLastMonth = expenses
+      .filter(e => {
+        const d = new Date(e.date || 0);
+        return d >= lastMonthStart && d <= lastMonthEnd;
+      })
+      .reduce((s, e) => s + (e.amount || 0), 0);
+
+    const revenueGrowth = revLastMonth > 0 ? Math.round(((revThisMonth - revLastMonth) / revLastMonth) * 100) : (revThisMonth > 0 ? 100 : 0);
+    const cashFlowLastMonth = revLastMonth - expLastMonth;
+    const cashFlowGrowth = cashFlowLastMonth !== 0 ? Math.round(((cashFlow - cashFlowLastMonth) / Math.abs(cashFlowLastMonth)) * 100) : (cashFlow !== 0 ? 100 : 0);
+
+    return {
+      revenue: rev,
+      outstandingTotal: outstanding.totalOutstanding,
+      outstandingCount: outstanding.unpaidInvoiceCount,
+      vatLiability: taxSummary.totalTax || 0,
+      cashFlow,
+      revenueGrowth,
+      cashFlowGrowth
+    };
+  }, [invoices, expenses]);
+
+  const recentTransactions = invoices
+    .filter(inv => inv.status === 'paid' || inv.status === 'partial_paid')
+    .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
+    .slice(0, 5);
+
+  const mergedTransactions = useMemo(() => {
+    const income = recentTransactions.map((inv) => ({
+      id: `inv-${inv.id}`,
+      type: 'income',
+      date: inv.created_date,
+      label: clients.find((c) => c.id === inv.client_id)?.name || 'Invoice',
+      amount: Number(inv.total_amount) || 0,
+    }));
+    const expense = expenses.slice(0, 5).map((exp) => ({
+      id: `exp-${exp.id}`,
+      type: 'expense',
+      date: exp.date || exp.created_date,
+      label: exp.description || 'Expense',
+      amount: -(Number(exp.amount) || 0),
+    }));
+    return [...income, ...expense]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 10);
+  }, [recentTransactions, expenses, clients]);
+
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
@@ -792,7 +913,7 @@ export default function Dashboard() {
                           <p className="text-sm font-medium text-slate-900">{action.user}</p>
                           <p className="text-xs text-slate-500">{action.action}</p>
                         </div>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-muted-foreground">
                           {action.timestamp ? formatDate(new Date(action.timestamp), 'MMM d') : '—'}
                         </span>
                       </div>
@@ -807,7 +928,7 @@ export default function Dashboard() {
                             <p className="text-sm font-medium text-slate-900">{suspension.user}</p>
                             <p className="text-xs text-slate-500">{suspension.reason}</p>
                           </div>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-muted-foreground">
                             {suspension.timestamp ? formatDate(new Date(suspension.timestamp), 'MMM d') : '—'}
                           </span>
                         </div>
@@ -837,7 +958,7 @@ export default function Dashboard() {
                               </div>
                               <p className="text-xs text-slate-500">{change.from} → {change.to}</p>
                             </div>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-muted-foreground">
                               {change.timestamp ? formatDate(new Date(change.timestamp), 'MMM d') : '—'}
                             </span>
                           </div>
@@ -869,7 +990,7 @@ export default function Dashboard() {
                           }}
                         />
                         <Line type="monotone" dataKey="users" stroke="#0f172a" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="invoices" stroke="#2563eb" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="invoices" stroke="#f24e00" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -899,7 +1020,7 @@ export default function Dashboard() {
                           }}
                           formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                         />
-                        <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="revenue" stroke="#f24e00" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -1004,24 +1125,7 @@ export default function Dashboard() {
   const userName = user?.display_name || user?.full_name || 'there';
   const userCurrency = userCurrencyPreference || 'ZAR';
 
-  const monthStart = startOfMonth(new Date());
-  const monthEnd = endOfMonth(new Date());
-  const monthExpenses = expenses
-    .filter(exp => {
-      const expDate = new Date(exp.date);
-      return expDate >= monthStart && expDate <= monthEnd;
-    })
-    .reduce((sum, exp) => sum + (exp.amount || 0), 0);
-
-  const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-  const netProfit = totalRevenue - totalExpenses;
-  const profitMarginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalExpenses) / totalRevenue) * 100) : 0;
   const goalProgress = Math.min(100, (totalRevenue / 50000) * 100);
-
-  const recentTransactions = invoices
-    .filter(inv => inv.status === 'paid' || inv.status === 'partial_paid')
-    .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
-    .slice(0, 5);
 
   const statusColors = {
     'paid': 'bg-emerald-200 text-emerald-800',
@@ -1033,25 +1137,130 @@ export default function Dashboard() {
     'cancelled': 'bg-slate-300 text-slate-700'
   };
 
+  const isProfileComplete = Boolean(user?.company_name && user?.company_address && user?.logo_url);
+  const showWelcomeBanner = !isProfileComplete || !hasBankingDetails;
+  const today = startOfDay(new Date());
+  const endOfThisWeek = new Date(today);
+  endOfThisWeek.setDate(endOfThisWeek.getDate() + 7);
+  const overdueCount = invoices.filter(inv => {
+    if (inv.status === 'paid' || inv.status === 'partial_paid' || inv.status === 'draft' || inv.status === 'cancelled') return false;
+    if (inv.status === 'overdue') return true;
+    const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
+    return due && due < today;
+  }).length;
+  const dueThisWeekCount = invoices.filter(inv => {
+    if (inv.status === 'paid' || inv.status === 'partial_paid' || inv.status === 'draft' || inv.status === 'cancelled') return false;
+    const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
+    return due && due >= today && due <= endOfThisWeek;
+  }).length;
+
   return (
-    <div className="min-h-full bg-background">
-      <div className="max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="min-h-full">
+      <div className="max-w-7xl mx-auto p-4 sm:p-8">
         {/* Welcome Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6"
         >
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2">
+          <h1 className="text-[28px] font-bold text-foreground mb-2 font-display leading-tight">
             Welcome back, {userName}
           </h1>
-          <p className="text-muted-foreground text-base">Here&apos;s what&apos;s happening with your business today</p>
+          <p className="finbank-body text-sm text-foreground">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
+
+        {/* KPI Summary — Revenue, Awaiting payment (consolidated), VAT/Tax (SARS), Cash Flow */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6"
+        >
+          <div className="glass-card rounded-fintech border border-border p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Revenue"
+            value={formatCurrency(fintechKpis.revenue, userCurrency)}
+            icon={TrendingUp}
+            isLoading={isLoading}
+            fintech
+            accent="blue"
+            growth={fintechKpis.revenueGrowth}
+          />
+          <StatCard
+            title="Awaiting payment"
+            value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)}
+            subtitle={
+              fintechKpis.outstandingCount === 0
+                ? 'No unpaid invoices'
+                : dueThisWeekCount > 0 || overdueCount > 0
+                  ? (
+                      <span className="flex flex-wrap items-center gap-2">
+                        {dueThisWeekCount > 0 && (
+                          <span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">
+                            Due this week: {dueThisWeekCount}
+                          </span>
+                        )}
+                        {overdueCount > 0 && (
+                          <span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">
+                            Overdue: {overdueCount}
+                          </span>
+                        )}
+                      </span>
+                    )
+                  : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`
+            }
+            icon={DollarSign}
+            isLoading={isLoading}
+            fintech
+            accent="purple"
+          />
+          <StatCard
+            title="VAT / Tax liability"
+            value={formatCurrency(fintechKpis.vatLiability, userCurrency)}
+            subtitle="Set aside for SARS"
+            icon={Landmark}
+            isLoading={isLoading}
+            fintech
+            accent="amber"
+          />
+          <StatCard
+            title="Cash flow"
+            value={formatCurrency(fintechKpis.cashFlow, userCurrency)}
+            icon={Receipt}
+            isLoading={isLoading}
+            fintech
+            accent="blue"
+            growth={fintechKpis.cashFlowGrowth}
+          />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Empty-state tip when Revenue (and Cash Flow) are zero */}
+        {!isLoading && fintechKpis.revenue === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="glass-card rounded-fintech border border-border p-6 flex flex-wrap items-center gap-3">
+              <span className="text-sm text-foreground">Looks like you&apos;re just starting!</span>
+              <span className="text-sm text-muted-foreground">Did you know you can import your existing client list from Excel?</span>
+              <Link
+                to={createPageUrl("Clients")}
+                className="text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
+              >
+                Import clients →
+              </Link>
+            </div>
+          </motion.div>
+        )}
 
         {/* Admin Roles Management Section (Visible to Admins Only) */}
         {isAdmin && (
-          <div className="bg-white rounded shadow p-4 mb-8">
-            <h2 className="text-lg font-semibold mb-2">Admin Roles Management</h2>
+          <div className="glass-card rounded-fintech p-6 mb-6 border border-border">
+            <h2 className="text-lg font-semibold mb-2 text-foreground">Admin Roles Management</h2>
             <div className="mb-4">
               <label className="font-semibold text-slate-700 mr-2">Select Admin Role:</label>
               <select
@@ -1173,240 +1382,289 @@ export default function Dashboard() {
           </div>
         )}
         
-        {user && !isLoading && <WelcomeGuide user={user} hasBankingDetails={hasBankingDetails} />}
+        {user && !isLoading && showWelcomeBanner && (
+          <div className="glass-card rounded-fintech border border-border mb-6 overflow-hidden">
+            <WelcomeGuide user={user} hasBankingDetails={hasBankingDetails} />
+          </div>
+        )}
 
-        {/* Quick Actions - Moved to Top */}
+        {user && !isLoading && !showWelcomeBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="glass-card rounded-fintech border border-border p-6 flex flex-wrap items-center justify-between gap-4">
+              <h3 className="text-lg font-semibold text-foreground font-display">Quick insights</h3>
+              <div className="flex flex-wrap items-center gap-6 text-sm">
+                {overdueCount > 0 ? (
+                  <Link to={createPageUrl("Invoices")} className="flex items-center gap-2 text-amber-300 hover:text-amber-200">
+                    <FileText className="w-4 h-4 shrink-0" />
+                    <span>{overdueCount} invoice{overdueCount !== 1 ? 's' : ''} overdue — send reminders</span>
+                  </Link>
+                ) : fintechKpis.vatLiability > 0 ? (
+                  <span className="flex items-center gap-2 text-slate-300">
+                    <Landmark className="w-4 h-4 shrink-0" />
+                    Set aside {formatCurrency(fintechKpis.vatLiability, userCurrency)} for VAT / SARS
+                  </span>
+                ) : null}
+                {overdueCount === 0 && fintechKpis.vatLiability <= 0 && (
+                  <span className="text-muted-foreground">You&apos;re all set. Create an invoice or track expenses below.</span>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8"
+          className="mb-6"
         >
-          <QuickActionCard 
-            title="Create Invoice" 
-            icon={FileText} 
-            href={createPageUrl("CreateInvoice")}
-            color="from-purple-600 to-blue-600"
-            iconBg="bg-gradient-to-br from-purple-600 to-blue-600"
-          />
-          <QuickActionCard 
-            title="Add Expense" 
-            icon={Receipt} 
-            href={createPageUrl("CashFlow")}
-            color="from-blue-600 to-cyan-500"
-            iconBg="bg-gradient-to-br from-blue-600 to-cyan-500"
-          />
-          <QuickActionCard 
-            title="Add Customer" 
-            icon={UsersIcon}
-            href={createPageUrl("Clients")}
-            color="from-purple-500 to-blue-500"
-            iconBg="bg-gradient-to-br from-purple-500 to-blue-500"
-          />
-          <QuickActionCard 
-            title="Add Service" 
-            icon={Headset} 
-            href={createPageUrl("Services")}
-            color="from-cyan-500 to-blue-500"
-            iconBg="bg-gradient-to-br from-cyan-500 to-blue-500"
-          />
+          <div className="glass-card rounded-fintech border border-border p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <QuickActionCard title="Create Invoice" icon={FileText} href={createPageUrl("CreateInvoice")} fintech accent="green" />
+          <QuickActionCard title="Add Expense" icon={Receipt} href={createPageUrl("CashFlow")} fintech accent="red" />
+          <QuickActionCard title="Add Customer" icon={UsersIcon} href={createPageUrl("Clients")} fintech accent="blue" />
+          <QuickActionCard title="Add Service" icon={Headset} href={createPageUrl("Services")} fintech accent="violet" />
+            </div>
+          </div>
         </motion.div>
 
         {/* Main Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Left Column - Card & Transactions */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Left Column - Card & Recent Transactions */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            {/* Credit Card Display */}
-            <CreditCardDisplay 
-              balance={totalRevenue} 
-              currency={userCurrency}
-              user={user}
-            />
+            <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} />
 
-            {/* Recent Transactions */}
-            <Card className="bg-white border-0 shadow-xl rounded-3xl">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-base font-bold text-slate-900">Recent Income</CardTitle>
+            {/* Transaction List — clean list, 16px padding per row, circular avatar with 10% status color */}
+            <div className="glass-card rounded-fintech border border-border overflow-hidden">
+              <div className="p-6 border-b border-border flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-foreground font-display">Transactions</h3>
+                <div className="flex gap-2">
                   <Link to={createPageUrl("Invoices")}>
-                    <Button variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-slate-900">
-                      View All
+                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                      Invoices
+                    </Button>
+                  </Link>
+                  <Link to={createPageUrl("CashFlow")}>
+                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                      Cash flow
                     </Button>
                   </Link>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {recentTransactions.slice(0, 5).map((transaction, index) => {
-                  const icons = [ShoppingBag, Coffee, Dumbbell, FileText, Car];
-                  const Icon = icons[index % icons.length];
-                  const iconBgs = ['bg-slate-100', 'bg-slate-100', 'bg-slate-100', 'bg-slate-100', 'bg-slate-100'];
-                  const iconBg = iconBgs[index % iconBgs.length];
-
-                  return (
-                    <div key={transaction.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 ${iconBg} rounded-xl flex items-center justify-center`}>
-                          <Icon className="w-5 h-5 text-slate-700" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-sm text-slate-900">{transaction.clientName}</p>
-                          <p className="text-xs text-slate-400">{formatDate(new Date(transaction.created_date), 'dd MMM yyyy HH:mm')}</p>
-                        </div>
-                      </div>
-                      <p className="font-bold text-sm text-emerald-600">+{formatCurrency(transaction.total_amount, userCurrency)}</p>
+              </div>
+              <div className="divide-y divide-border">
+                {mergedTransactions.length === 0 ? (
+                  <div className="text-center py-10 px-4">
+                    <p className="text-muted-foreground text-sm">No transactions yet.</p>
+                    <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
+                    <div className="flex flex-wrap justify-center gap-2 mt-4">
+                      <Link to={createPageUrl("CreateInvoice")}>
+                        <Button size="sm" className="bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg">
+                          Create invoice
+                        </Button>
+                      </Link>
+                      <Link to={createPageUrl("CashFlow")}>
+                        <Button size="sm" variant="outline" className="rounded-lg">
+                          Add expense
+                        </Button>
+                      </Link>
                     </div>
-                  );
-                })}
-                {recentTransactions.length === 0 && (
-                  <p className="text-center text-slate-500 text-sm py-4">No transactions yet</p>
+                  </div>
+                ) : (
+                  mergedTransactions.map((tx) => {
+                    const isIncome = tx.type === 'income';
+                    const Icon = isIncome ? FileText : Receipt;
+                    return (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between py-4 px-4 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                              isIncome ? 'bg-status-paid/10' : 'bg-status-overdue/10'
+                            }`}
+                          >
+                            <Icon
+                              className={`w-5 h-5 shrink-0 ${
+                                isIncome ? 'text-status-paid' : 'text-status-overdue'
+                              }`}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">{tx.label}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tx.date ? formatDate(new Date(tx.date), 'dd MMM yyyy') : '—'}
+                            </p>
+                          </div>
+                        </div>
+                        <p
+                          className={`font-bold text-sm tabular-nums shrink-0 ml-2 ${
+                            isIncome ? 'text-status-paid' : 'text-status-overdue'
+                          }`}
+                        >
+                          {isIncome ? '+' : ''}{formatCurrency(tx.amount, userCurrency)}
+                        </p>
+                      </div>
+                    );
+                  })
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Recent Expenses */}
-            <RecentExpenses expenses={expenses} currency={userCurrency} />
+              </div>
+            </div>
           </motion.div>
 
-          {/* Right Column - Chart & Payments */}
+          {/* Right Column - Revenue chart + Upcoming + Goal */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
             className="lg:col-span-2 space-y-6"
           >
-            {/* Upcoming Payments */}
+            {/* Revenue line chart with electric blue / purple gradient */}
+            <div className="glass-card rounded-fintech border border-border p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <h3 className="text-lg font-semibold text-foreground font-display">Revenue trend</h3>
+                <div className="flex gap-2">
+                  {[30, 60, 90].map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => setRevenueRange(range)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                        revenueRange === range
+                          ? "bg-primary text-primary-foreground border border-primary"
+                          : "bg-muted text-muted-foreground border border-border hover:border-primary/40"
+                      }`}
+                    >
+                      {range}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isLoading ? (
+                <Skeleton className="h-64 w-full rounded-xl bg-white/10" />
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  className="w-full h-[260px]"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={revenueTrendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" style={{ stopColor: 'var(--brand-primary)' }} stopOpacity={0.35} />
+                          <stop offset="50%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0.2} />
+                          <stop offset="100%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
+                      <XAxis dataKey="label" stroke="#7E9294" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#7E9294" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
+                        labelStyle={{ color: "var(--text-main)" }}
+                        formatter={(value) => [formatCurrency(Number(value || 0), userCurrency), "Revenue"]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke="var(--brand-primary)"
+                        strokeWidth={3}
+                        fill="url(#fintechRevenueGrad)"
+                        fillOpacity={1}
+                        dot={false}
+                        activeDot={{ r: 4, fill: "var(--brand-primary)", stroke: "#fff", strokeWidth: 1 }}
+                        isAnimationActive
+                        animationDuration={1200}
+                        animationEasing="ease-out"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </motion.div>
+              )}
+            </div>
+
             <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
 
-            {/* Revenue Chart */}
-            <RevenueChart invoices={invoices} currency={userCurrency} />
-
-            {/* Goal Progress */}
             <GoalProgress year={new Date().getFullYear()} progress={goalProgress} />
           </motion.div>
         </div>
 
-        {/* Stats Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
-        >
-          <StatCard 
-            title="Total Revenue" 
-            value={formatCurrency(totalRevenue, userCurrency)} 
-            icon={TrendingUp}
-            color="from-emerald-500 to-emerald-600"
-            iconBg="bg-emerald-100"
-            isLoading={isLoading}
-          />
-          <StatCard 
-            title="Total Expenses" 
-            value={formatCurrency(totalExpenses, userCurrency)} 
-            icon={Receipt}
-            color="from-red-500 to-red-600"
-            iconBg="bg-red-100"
-            isLoading={isLoading}
-          />
-          <StatCard 
-            title="Net Profit" 
-            value={formatCurrency(netProfit, userCurrency)} 
-            icon={DollarSign}
-            color={netProfit >= 0 ? "from-blue-500 to-blue-600" : "from-orange-500 to-orange-600"}
-            iconBg={netProfit >= 0 ? "bg-blue-100" : "bg-orange-100"}
-            isLoading={isLoading}
-          />
-          <StatCard 
-            title="Profit margin" 
-            value={totalRevenue > 0 ? `${profitMarginPercent}%` : "—"} 
-            icon={Percent}
-            color="from-violet-500 to-violet-600"
-            iconBg="bg-violet-100"
-            isLoading={isLoading}
-          />
-          <StatCard 
-            title="This Month" 
-            value={formatCurrency((invoices.filter(inv => {
-              const invDate = new Date(inv.created_date);
-              const now = new Date();
-              return invDate.getMonth() === now.getMonth() && invDate.getFullYear() === now.getFullYear() && (inv.status === 'paid' || inv.status === 'partial_paid');
-            }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0)) - monthExpenses, userCurrency)} 
-            icon={Briefcase}
-            color="from-purple-500 to-purple-600"
-            iconBg="bg-purple-100"
-            isLoading={isLoading}
-          />
-        </motion.div>
-
-        {/* Recent Invoices */}
+        {/* Recent Invoices — glass table */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-slate-900">Recent Invoices</h2>
+            <h2 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h2>
             <Link to={createPageUrl("Invoices")}>
-              <Button variant="outline" size="sm" className="rounded-full">View All</Button>
+              <Button variant="outline" size="sm" className="rounded-lg border-border text-muted-foreground hover:bg-muted hover:text-foreground text-sm font-medium">View all</Button>
             </Link>
           </div>
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-            <CardContent className="p-0">
+          <div className="glass-card rounded-fintech border border-border overflow-hidden">
+            <div className="p-0">
               {isLoading ? (
                 <div className="p-6 space-y-4">
                   {Array(3).fill(0).map((_, i) => (
                     <div key={i} className="flex items-center justify-between py-4 px-4">
                       <div className="flex items-center gap-4 flex-1">
-                        <Skeleton className="h-14 w-14 rounded-2xl" />
+                        <Skeleton className="h-14 w-14 rounded-2xl bg-white/10" />
                         <div className="flex-1">
-                          <Skeleton className="h-4 w-32 mb-2" />
-                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-4 w-32 mb-2 bg-white/10" />
+                          <Skeleton className="h-3 w-24 bg-white/10" />
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <Skeleton className="h-6 w-24" />
-                        <Skeleton className="h-6 w-16 rounded-full" />
+                        <Skeleton className="h-6 w-24 bg-white/10" />
+                        <Skeleton className="h-6 w-16 rounded-full bg-white/10" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : invoices.length === 0 ? (
                 <div className="text-center p-12">
-                   <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                     <FileText className="w-10 h-10 text-slate-400" />
-                   </div>
-                   <h3 className="text-lg font-semibold text-slate-900 mb-2">No invoices yet</h3>
-                   <p className="text-slate-500 mb-6">Get started by creating your first invoice</p>
-                   <Button onClick={() => navigate(createPageUrl('CreateInvoice'))} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
-                       <Plus className="w-4 h-4 mr-2" />
-                       Create Invoice
-                   </Button>
+                  <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-5">
+                    <FileText className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2 font-display">No invoices yet</h3>
+                  <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">Create professional invoices in seconds. Supports ZAR and all major currencies.</p>
+                  <Button onClick={() => navigate(createPageUrl('CreateInvoice'))} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl px-6 py-2.5 shadow-lg shadow-primary/20">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create your first invoice
+                  </Button>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {invoices.slice(0, 5).map((invoice) => {
                     const client = clients.find((c) => c.id === invoice.client_id);
                     return (
-                      <div key={invoice.id} className="group flex items-center justify-between py-5 px-6 hover:bg-slate-50/50 transition-all">
+                      <div key={invoice.id} className="group flex items-center justify-between py-5 px-6 hover:bg-white/5 transition-all">
                         <div className="flex items-center gap-4 flex-1">
-                          <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                            <FileText className="w-7 h-7 text-white" />
+                          <div className="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                            <FileText className="w-7 h-7 text-blue-400" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-bold text-slate-900">{invoice.invoice_number}</p>
-                            <p className="text-sm text-slate-500">{client?.name || 'Unknown Client'}</p>
+                            <p className="font-bold text-foreground">{invoice.invoice_number}</p>
+                            <p className="text-sm text-muted-foreground">{client?.name || 'Unknown Client'}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-6">
                           <div className="text-right hidden sm:block">
-                            <p className="font-bold text-lg text-slate-900">{formatCurrency(invoice.total_amount, userCurrency)}</p>
+                            <p className="font-bold text-lg text-foreground">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                           </div>
-                          <Badge className={`${statusColors[invoice.status] || 'bg-slate-200 text-slate-800'} border-0 font-semibold px-3 py-1.5`}>
+                          <Badge className={`${statusColors[invoice.status] || 'bg-muted text-foreground'} border-0 font-semibold px-3 py-1.5`}>
                             {(invoice.status || 'draft').replace('_', ' ')}
                           </Badge>
                           <InvoiceActions
@@ -1420,8 +1678,8 @@ export default function Dashboard() {
                   })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </motion.div>
       </div>
 

@@ -58,7 +58,7 @@ export default function DocumentActivity() {
   const documentTypeData = useMemo(() => {
     if (!summaryStats) return [];
     return [
-      { name: 'Invoices', value: summaryStats.totalInvoices, color: '#3b82f6' },
+      { name: 'Invoices', value: summaryStats.totalInvoices, color: '#f24e00' },
       { name: 'Quotes', value: summaryStats.totalQuotes, color: '#10b981' },
       { name: 'Receipts', value: summaryStats.totalReceipts, color: '#f59e0b' }
     ];
@@ -230,7 +230,7 @@ export default function DocumentActivity() {
           {/* Document Types */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-t-2xl">
+              <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-2">
                   <PieChart className="h-5 w-5" />
                   Document Types
@@ -294,7 +294,7 @@ export default function DocumentActivity() {
 
           {/* 30-Day Trend */}
           <Card className="shadow-xl rounded-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-t-2xl">
+            <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
               <CardTitle className="flex items-center gap-2">
                 <LineChartIcon className="h-5 w-5" />
                 30-Day Document Creation Trend
@@ -306,8 +306,8 @@ export default function DocumentActivity() {
                   <AreaChart data={dailyTrend} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
                     <defs>
                       <linearGradient id="colorInvoices" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                        <stop offset="5%" stopColor="#f24e00" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#f24e00" stopOpacity={0.1}/>
                       </linearGradient>
                       <linearGradient id="colorQuotes" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
@@ -319,7 +319,7 @@ export default function DocumentActivity() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Area type="monotone" dataKey="invoices" stroke="#3b82f6" fillOpacity={1} fill="url(#colorInvoices)" />
+                    <Area type="monotone" dataKey="invoices" stroke="#f24e00" fillOpacity={1} fill="url(#colorInvoices)" />
                     <Area type="monotone" dataKey="quotes" stroke="#10b981" fillOpacity={1} fill="url(#colorQuotes)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -355,7 +355,7 @@ export default function DocumentActivity() {
         {/* Per Plan Tab */}
         <TabsContent value="plans" className="space-y-6">
           <Card className="shadow-xl rounded-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl">
+            <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
                 Documents Created Per Plan
@@ -370,7 +370,7 @@ export default function DocumentActivity() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="invoices" stackId="a" fill="#3b82f6" name="Invoices" />
+                    <Bar dataKey="invoices" stackId="a" fill="#f24e00" name="Invoices" />
                     <Bar dataKey="quotes" stackId="a" fill="#10b981" name="Quotes" />
                     <Bar dataKey="receipts" stackId="a" fill="#f59e0b" name="Receipts" />
                   </BarChart>
@@ -414,7 +414,7 @@ export default function DocumentActivity() {
         {/* Top Clients Tab */}
         <TabsContent value="clients" className="space-y-6">
           <Card className="shadow-xl rounded-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-t-2xl">
+            <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
                 Top 10 Clients
@@ -487,7 +487,7 @@ export default function DocumentActivity() {
           </div>
 
           <Card className="shadow-xl rounded-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-t-2xl">
+            <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ffa600] text-white rounded-t-2xl">
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
                 Documents by Type (All Time)

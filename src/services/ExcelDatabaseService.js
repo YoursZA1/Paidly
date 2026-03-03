@@ -2,7 +2,7 @@ import { importFromExcelUrl } from "@/utils/excelUtils";
 import { Client, Invoice, Service } from "@/api/entities";
 import { userService } from "@/services/ExcelUserService";
 
-const CONNECTED_FLAG = "invoicebreek_excel_db_connected";
+const CONNECTED_FLAG = "paidly_excel_db_connected";
 
 const clearEntity = async (entity) => {
   try {
@@ -92,7 +92,7 @@ const importInvoices = async (rows) => {
 };
 
 export const connectExcelDatabase = async ({
-  url = "/invoicebreek_data.xlsx",
+  url = "/paidly_data.xlsx",
   overwrite = false
 } = {}) => {
   if (!overwrite && localStorage.getItem(CONNECTED_FLAG) === "true") {

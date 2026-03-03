@@ -28,7 +28,6 @@ class EntityManager {
     this.userId = userId;
     this.updateStorageKey();
     this.data = this.loadFromStorage();
-    console.log(`📂 ${this.entityName} loaded from: ${this.storageKey}`);
     this.notifySubscribers();
   }
 
@@ -1359,6 +1358,7 @@ class AuthManager {
   /**
    * Restore user state from Supabase session when localStorage was cleared.
    * Loads profile from Supabase profiles table (one row per user, id = auth.users.id).
+   * If profiles fetch fails (e.g. RLS), still returns a minimal user from session so the app can load.
    * @returns {Promise<object|null>} Restored user or null
    */
   async restoreFromSupabaseSession() {
@@ -1366,9 +1366,17 @@ class AuthManager {
       const { data, error } = await supabase.auth.getSession();
       if (error || !data?.session?.user) return null;
       const su = data.session.user;
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", su.id).maybeSingle();
-      const profileData = profile || {};
+
+      let profileData = {};
+      try {
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", su.id).maybeSingle();
+        profileData = profile || {};
+      } catch (profileErr) {
+        console.warn("Could not load profile in restoreFromSupabaseSession:", getSupabaseErrorMessage(profileErr, "Profile load failed"));
+      }
+
       const fullName = profileData.full_name || su.user_metadata?.full_name || (su.email || "").split("@")[0] || "User";
+      const plan = profileData.subscription_plan || su.app_metadata?.plan || "free";
       this.user = {
         id: su.id,
         supabase_id: su.id,
@@ -1384,12 +1392,14 @@ class AuthManager {
         timezone: profileData.timezone || "UTC",
         invoice_template: profileData.invoice_template || "classic",
         invoice_header: profileData.invoice_header || "",
-        plan: su.app_metadata?.plan || "free",
+        plan,
+        subscription_plan: profileData.subscription_plan || plan,
       };
       this.isAuthenticated = true;
       this.saveUserToStorage();
       return this.user;
-    } catch {
+    } catch (err) {
+      console.warn("restoreFromSupabaseSession failed:", getSupabaseErrorMessage(err, "Restore failed"));
       return null;
     }
   }
@@ -1448,14 +1458,28 @@ class AuthManager {
         if (profileData[key] === undefined) delete profileData[key];
       });
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from('profiles')
         .upsert(
           { id: authUserId, ...profileData },
           { onConflict: 'id' }
         );
 
-      if (error) {
+      // If schema cache is missing a column (e.g. company_address not migrated), retry without it
+      const errMsg = error?.message || '';
+      if (error && /company_address|schema cache|column.*of 'profiles'/i.test(errMsg)) {
+        const { company_address: _addr, ...rest } = profileData;
+        const fallback = { id: authUserId, ...rest };
+        Object.keys(fallback).forEach(key => {
+          if (fallback[key] === undefined) delete fallback[key];
+        });
+        const retry = await supabase.from('profiles').upsert(fallback, { onConflict: 'id' });
+        if (retry.error) {
+          console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(retry.error, "Save profile failed"));
+        } else {
+          console.warn("Profile saved without company_address. Add column: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company_address text;");
+        }
+      } else if (error) {
         console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
       }
     } catch (error) {
@@ -1743,7 +1767,9 @@ class CustomAPIClient {
 
   updateEntitiesForUser(userId) {
     // Update all entity managers with new user ID
-    console.log(`🔄 Switching to ${userId ? `user database: ${userId}` : 'guest mode'}`);
+    if (import.meta.env.DEV && typeof console !== "undefined" && console.debug) {
+      console.debug(`🔄 Switching to ${userId ? `user: ${userId.slice(0, 8)}…` : "guest"}`);
+    }
     Object.values(this.entities).forEach(entity => {
       if (entity && typeof entity.setUserId === 'function') {
         entity.setUserId(userId);

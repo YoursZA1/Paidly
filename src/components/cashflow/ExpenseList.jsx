@@ -19,14 +19,14 @@ const categoryColors = {
     salary: "bg-red-100 text-red-700",
     marketing: "bg-pink-100 text-pink-700",
     software: "bg-indigo-100 text-indigo-700",
-    other: "bg-gray-100 text-gray-700"
+    other: "bg-muted text-muted-foreground"
 };
 
 const statusConfig = {
     pending: { color: "bg-yellow-100 text-yellow-800", icon: Clock },
     approved: { color: "bg-green-100 text-green-800", icon: CheckCircle },
     rejected: { color: "bg-red-100 text-red-800", icon: XCircle },
-    not_required: { color: "bg-gray-100 text-gray-800", icon: null }
+    not_required: { color: "bg-muted text-muted-foreground", icon: null }
 };
 
 export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = 'ZAR', onActionSuccess }) {
@@ -96,9 +96,9 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                 ) : expenses.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={7} className="text-center py-12">
-                                            <Receipt className="mx-auto h-12 w-12 text-gray-400" />
-                                            <h3 className="mt-2 text-sm font-medium text-gray-900">No expenses recorded</h3>
-                                            <p className="mt-1 text-sm text-gray-500">Start tracking your business expenses.</p>
+                                            <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
+                                            <h3 className="mt-2 text-sm font-medium text-foreground">No expenses recorded</h3>
+                                            <p className="mt-1 text-sm text-muted-foreground">Start tracking your business expenses.</p>
                                         </TableCell>
                                     </TableRow>
                                 ) : (
@@ -116,7 +116,7 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                                 </TableCell>
                                                 <TableCell className="font-medium max-w-[200px] truncate" title={expense.description}>
                                                     {expense.description}
-                                                    {expense.is_mileage && <span className="ml-2 text-xs text-gray-500">(Mileage)</span>}
+                                                    {expense.is_mileage && <span className="ml-2 text-xs text-muted-foreground">(Mileage)</span>}
                                                 </TableCell>
                                                 <TableCell>{expense.vendor || '-'}</TableCell>
                                                 <TableCell className="font-semibold">{formatCurrency(expense.amount, currency)}</TableCell>
@@ -127,7 +127,7 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                                             {status.replace('_', ' ')}
                                                         </Badge>
                                                     ) : (
-                                                        <span className="text-xs text-gray-400">-</span>
+                                                        <span className="text-xs text-muted-foreground">-</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
@@ -140,7 +140,7 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                                                 <Button size="icon" variant="ghost" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleApproval(expense, 'rejected')} title="Reject">
                                                                     <XCircle className="w-4 h-4" />
                                                                 </Button>
-                                                                <div className="w-px h-4 bg-gray-200 mx-1" />
+                                                                <div className="w-px h-4 bg-border mx-1" />
                                                             </>
                                                         )}
                                                         <Button variant="ghost" size="icon" onClick={() => onEdit(expense)}>
@@ -167,8 +167,8 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                             ))
                         ) : expenses.length === 0 ? (
                             <div className="text-center py-12">
-                                <Receipt className="mx-auto h-12 w-12 text-gray-400" />
-                                <h3 className="mt-2 text-sm font-medium text-gray-900">No expenses recorded</h3>
+                                <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
+                                <h3 className="mt-2 text-sm font-medium text-foreground">No expenses recorded</h3>
                             </div>
                         ) : (
                             expenses.map(expense => {
@@ -178,8 +178,8 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                         <CardContent className="p-4">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex-1 mr-2">
-                                                    <p className="font-semibold text-slate-800 line-clamp-1">{expense.description}</p>
-                                                    <p className="text-sm text-slate-600">{expense.vendor || 'No vendor'}</p>
+                                                    <p className="font-semibold text-foreground line-clamp-1">{expense.description}</p>
+                                                    <p className="text-sm text-muted-foreground">{expense.vendor || 'No vendor'}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">
                                                     <Badge className={categoryColors[expense.category] || categoryColors.other}>
@@ -194,10 +194,10 @@ export default function ExpenseList({ expenses, isLoading, onEdit, onDelete, cur
                                             </div>
                                             <div className="flex justify-between items-center pt-2 border-t mt-2">
                                                 <div>
-                                                    <p className="text-lg font-bold text-slate-800">
+                                                    <p className="text-lg font-bold text-foreground">
                                                         {formatCurrency(expense.amount, currency)}
                                                     </p>
-                                                    <p className="text-xs text-slate-500">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {expense.date ? format(parseISO(expense.date), 'MMM d, yyyy') : 'N/A'}
                                                     </p>
                                                 </div>

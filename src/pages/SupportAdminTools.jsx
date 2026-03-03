@@ -969,7 +969,7 @@ function ErrorTrackingTab({ currentUser, toast }) {
       case 'auth':
         return 'bg-purple-100 text-purple-800';
       case 'api':
-        return 'bg-cyan-100 text-cyan-800';
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-slate-100 text-slate-800';
     }

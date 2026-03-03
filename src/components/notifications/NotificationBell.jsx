@@ -15,7 +15,10 @@ export default function NotificationBell() {
       try {
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) {
-          console.warn("NotificationBell: get user failed", getSupabaseErrorMessage(userError, "Get user failed"));
+          const msg = getSupabaseErrorMessage(userError, "Get user failed");
+          if (!/session missing|not authenticated|invalid jwt/i.test(msg)) {
+            console.warn("NotificationBell: get user failed", msg);
+          }
           return;
         }
         const user = userData?.user;
@@ -52,11 +55,11 @@ export default function NotificationBell() {
   return (
     <div className="relative">
       <button
-        className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition"
+        className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
         onClick={() => setOpen((o) => !o)}
         aria-label="Notifications"
       >
-        <Bell className="w-5 h-5 text-gray-600" />
+        <Bell className="size-5 text-muted-foreground" />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
             {unreadCount}

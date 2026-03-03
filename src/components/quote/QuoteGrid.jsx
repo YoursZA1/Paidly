@@ -8,7 +8,7 @@ import QuoteActions from "./QuoteActions";
 import QuoteStatusTracker from "./QuoteStatusTracker";
 
 const statusStyles = {
-    draft: "bg-slate-100 text-slate-700 border-slate-200",
+    draft: "bg-muted text-muted-foreground border-border",
     sent: "bg-blue-100 text-blue-700 border-blue-200",
     viewed: "bg-purple-100 text-purple-700 border-purple-200",
     accepted: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -39,15 +39,15 @@ export default function QuoteGrid({ quotes, clients, isLoading, userCurrency, on
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {quotes.map(quote => (
-                <Card key={quote.id} className="bg-white border border-slate-200 hover:shadow-md transition-shadow">
+                <Card key={quote.id} className="bg-card border border-border hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex-1 space-y-1">
-                                <p className="font-semibold text-slate-800 truncate" title={getClientName(quote.client_id)}>
+                                <p className="font-semibold text-foreground truncate" title={getClientName(quote.client_id)}>
                                     {getClientName(quote.client_id)}
                                 </p>
                                 <div className="flex items-center gap-2">
-                                    <p className="text-sm text-slate-600">{quote.quote_number}</p>
+                                    <p className="text-sm text-muted-foreground">{quote.quote_number}</p>
                                     <Badge variant="secondary" className={`${statusStyles[quote.status || 'draft']} border text-[10px] px-1.5 py-0 h-5`}>
                                         {(quote.status || 'draft').replace('_', ' ')}
                                     </Badge>
@@ -60,18 +60,18 @@ export default function QuoteGrid({ quotes, clients, isLoading, userCurrency, on
                             />
                         </div>
                         
-                        <p className="text-sm text-slate-500 mb-4 line-clamp-2 min-h-[40px]">
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
                             {quote.project_title || "No project title"}
                         </p>
 
-                        <div className="flex flex-col gap-4 pt-4 border-t border-slate-100">
+                        <div className="flex flex-col gap-4 pt-4 border-t border-border">
                             <QuoteStatusTracker status={quote.status} />
                             <div className="flex justify-between items-end">
                                 <div>
-                                    <p className="text-sm font-bold text-slate-800 text-lg">
+                                    <p className="text-sm font-bold text-foreground text-lg">
                                         {formatCurrency(quote.total_amount, userCurrency)}
                                     </p>
-                                    <p className="text-xs text-slate-400 mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1">
                                         Valid until: {quote.valid_until ? format(new Date(quote.valid_until), "MMM d, yyyy") : 'N/A'}
                                     </p>
                                 </div>

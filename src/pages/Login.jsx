@@ -69,17 +69,17 @@ export default function Login() {
         <Card className="w-full max-w-md rounded-2xl border border-border shadow-lg">
           <CardHeader className="space-y-1 pb-6 text-center">
             <div className="w-16 h-16 bg-primary/10 flex items-center justify-center mx-auto mb-4 rounded-2xl">
-              <Lock className="w-8 h-8 text-primary" />
+              <Lock className="size-6 text-primary" />
             </div>
-            <CardTitle className="text-2xl font-semibold text-foreground">Welcome Back</CardTitle>
-            <p className="text-sm text-muted-foreground">Sign in to manage your business</p>
+            <CardTitle className="text-2xl font-semibold text-foreground font-display">Welcome back</CardTitle>
+            <p className="text-sm text-muted-foreground">Sign in to manage your business.</p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-foreground">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -95,7 +95,7 @@ export default function Login() {
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-foreground">Password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type="password"
@@ -117,7 +117,7 @@ export default function Login() {
               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" disabled={isLoading}>
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                     Signing in...
                   </span>
                 ) : (

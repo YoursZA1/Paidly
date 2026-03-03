@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -322,7 +322,7 @@ const getNavigationItems = (userPlan, userRole) => {
 };
 // Placeholder for LockedNavItem to prevent errors
 const LockedNavItem = ({ title, requiredPlan }) => (
-  <div className="px-4 py-2 text-[13px] text-gray-400">{title} (Upgrade to {requiredPlan})</div>
+  <div className="px-4 py-2 text-[13px] text-white/65">{title} (Upgrade to {requiredPlan})</div>
 );
 LockedNavItem.propTypes = {
   title: PropTypes.string.isRequired,
@@ -341,10 +341,10 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
 
   if (item.type === "section") {
     if (collapsed) {
-      return <div className="my-2 h-px bg-white/10" />;
+      return <div className="my-2 h-px bg-border" />;
     }
     return (
-      <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
+      <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
         {item.title}
       </div>
     );
@@ -363,14 +363,14 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
             aria-expanded={open}
             aria-controls={`nav-children-${item.id}`}
           >
-            <span className="inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-white/60 group-hover:text-white">
-              <item.icon className="h-5 w-5" />
+            <span className="sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-muted-foreground group-hover:text-foreground [&_svg]:size-5">
+              <item.icon className="size-5" strokeWidth={2.5} />
             </span>
             {!collapsed && (
-              <span className="text-[13px] font-normal transition-colors text-white/70 group-hover:text-white">{item.title}</span>
+              <span className="text-[13px] font-normal transition-colors text-muted-foreground group-hover:text-foreground">{item.title}</span>
             )}
             {!collapsed && (
-              <span className={`ml-auto transition-transform text-white/50 ${open ? "rotate-90" : "rotate-0"}`}>
+              <span className={`ml-auto transition-transform text-muted-foreground ${open ? "rotate-90" : "rotate-0"}`}>
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </span>
             )}
@@ -402,7 +402,7 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
     <motion.div
       whileHover={{ x: 2 }}
       whileTap={{ scale: 0.98 }}
-      className={isActive ? "bg-white/10 rounded-xl" : ""}
+      className={`rounded-full ${isActive ? "sidebar-nav-item-active" : ""}`}
     >
       <Link
         id={item.id}
@@ -410,20 +410,17 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
         onClick={onClick}
         title={collapsed ? item.title : undefined}
         aria-label={collapsed ? item.title : undefined}
-        className={`group flex items-center py-2.5 transition-all ${collapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-xl`}
+        className={`group flex items-center py-2.5 transition-all ${collapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-full`}
       >
         <span
-          className={`inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all shrink-0
-            ${isActive ? "text-[#00CCFF]" : "text-white/60 group-hover:text-white"}
+          className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
+            ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground group-hover:bg-muted/80"}
           `}
         >
-          <item.icon className="h-5 w-5" />
+          <item.icon className="size-5" strokeWidth={2.5} />
         </span>
         {!collapsed && (
-          <span className={`text-[13px] transition-colors ${isActive ? "text-white font-medium" : "text-white/70 group-hover:text-white font-normal"}`}>{item.title}</span>
-        )}
-        {isActive && !collapsed && (
-          <span className="ml-auto w-1 h-6 bg-[#00CCFF] rounded-full" aria-hidden />
+          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : "text-muted-foreground group-hover:text-foreground font-normal"}`}>{item.title}</span>
         )}
       </Link>
     </motion.div>
@@ -448,12 +445,12 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
       <div className="flex h-20 items-center justify-between px-2">
         <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3">
           <div className="w-10 h-10 bg-[#00CCFF] rounded-xl flex items-center justify-center">
-            <img src="/Logo icon.png" alt="InvoiceBreak" className="w-8 h-8" />
+            <img src="/logo.svg" alt="Paidly" className="w-8 h-8" />
           </div>
-          <span className="text-[15px] font-semibold text-white">InvoiceBreek</span>
+          <span className="text-[15px] font-semibold text-white">Paidly</span>
         </Link>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white/60 hover:bg-white/10 hover:text-white rounded-lg">
-          <X className="h-6 w-6" />
+          <X className="size-5" />
         </Button>
       </div>
       <nav className="space-y-1 mt-4 flex-1 overflow-y-auto">
@@ -477,20 +474,20 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
           </div>
         </div>
         <Button className="w-full mb-2 bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
-          <Settings className="w-4 h-4 mr-2" /> Settings
+          <Settings className="size-5 mr-2" /> Settings
         </Button>
         <Button variant="outline" className="w-full mb-2 border-white/20 text-white hover:bg-white/10 py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
-          <Bell className="w-4 h-4 mr-2" /> Subscription
+          <Bell className="size-5 mr-2" /> Subscription
         </Button>
         <Button variant="destructive" className="w-full rounded-xl" onClick={() => { onClose(); handleLogout(); }}>
-          <LogOut className="w-4 h-4 mr-2" /> Logout
+          <LogOut className="size-5 mr-2" /> Logout
         </Button>
       </div>
 
       <div className="p-4">
         <Link to={createPageUrl("CreateInvoice")} onClick={onClose}>
           <Button className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl">
-            <Plus className="w-4 h-4 mr-2" /> Create Invoice
+            <Plus className="size-5 mr-2" /> Create Invoice
           </Button>
         </Link>
       </div>
@@ -515,8 +512,17 @@ export default function Layout({ children, currentPageName }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const mainContentRef = useRef(null);
   const { user, logout } = useAuth();
   const { toast } = useToast();
+
+  // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
+  useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -609,7 +615,16 @@ export default function Layout({ children, currentPageName }) {
   ];
 
   if (standalonePages.includes(currentPageName)) {
-    return children;
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+        className="min-h-screen"
+      >
+        {children}
+      </motion.div>
+    );
   }
 
   return (
@@ -620,33 +635,33 @@ export default function Layout({ children, currentPageName }) {
       }[isSidebarCollapsed]}`}
     >
       {/* Sidebar */}
-      <motion.div 
+      <motion.div
         initial={{ x: -280 }}
         animate={{ x: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className={`sidebar hidden md:block bg-[#121212] text-white sticky top-0 h-screen border-r border-white/10 py-8 scrollbar-dark ${
-          isSidebarCollapsed ? "px-2" : "px-5"
+        className={`sidebar sidebar-panel hidden md:block text-foreground sticky top-0 h-screen py-6 ${
+          isSidebarCollapsed ? "px-2" : "px-4"
         }`}
       >
         <div className="flex h-full flex-col">
 
-          {/* Logo — wallet style */}
+          {/* Logo */}
           <div className={`flex flex-col ${isSidebarCollapsed ? "px-0" : ""}`}>
-            <div className={`flex items-center ${isSidebarCollapsed ? "justify-center h-20" : "h-20 gap-3"}`}>
+            <div className={`flex items-center ${isSidebarCollapsed ? "justify-center h-16" : "h-16 gap-3"}`}>
               <Link
                 to={createPageUrl("Dashboard")}
                 className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}
               >
-                <div className="w-10 h-10 bg-[#00CCFF] rounded-xl flex items-center justify-center shrink-0">
-                  <img 
-                    src="/Logo icon.png" 
-                    alt="InvoiceBreak" 
+                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                  <img
+                    src="/logo.svg"
+                    alt="Paidly"
                     className="w-8 h-8"
                   />
                 </div>
                 {!isSidebarCollapsed && (
-                  <span className="text-[15px] font-semibold text-white">
-                    InvoiceBreek
+                  <span className="text-[15px] font-semibold text-foreground tracking-tight">
+                    Paidly
                   </span>
                 )}
               </Link>
@@ -654,19 +669,18 @@ export default function Layout({ children, currentPageName }) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                className="ml-auto text-white/60 hover:text-white hover:bg-white/10 rounded-lg shrink-0 w-9 h-9"
+                className="ml-auto text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl shrink-0 w-9 h-9 transition-colors"
                 title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 {isSidebarCollapsed ? (
-                  <ChevronsRight className="h-5 w-5" />
+                  <ChevronsRight className="size-5" />
                 ) : (
-                  <ChevronsLeft className="h-5 w-5" />
+                  <ChevronsLeft className="size-5" />
                 )}
               </Button>
             </div>
-            {/* Always show Dashboard as first nav item */}
-            <div className="mt-2" data-tour="dashboard-summary">
+            <div className="mt-3" data-tour="dashboard-summary">
               <NavLink
                 item={getNavigationItems(user?.subscription_plan || 'Individual', user?.role).find(item => item.title === "Dashboard")}
                 collapsed={isSidebarCollapsed}
@@ -674,8 +688,8 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </div>
 
-          {/* Navigation - removed all-caps section labels for a cleaner, modern look */}
-          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area fade-in ${isSidebarCollapsed ? "px-1" : "px-4"}`}> 
+          {/* Navigation */}
+          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-1" : "px-3"}`}> 
             <nav className={isSidebarCollapsed ? "space-y-2" : "space-y-1"}>
               {getNavigationItems(user?.subscription_plan || 'Individual', user?.role)
                 .filter(item => item.title && item.id && item.title !== "Dashboard")
@@ -697,7 +711,7 @@ export default function Layout({ children, currentPageName }) {
             </nav>
           </div>
 
-          {/* Create Invoice — neon green primary */}
+          {/* Create Invoice CTA */}
           <div className={`mt-auto ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
             <Link
               to={createPageUrl("CreateInvoice")}
@@ -707,30 +721,30 @@ export default function Layout({ children, currentPageName }) {
               {isSidebarCollapsed ? (
                 <Button
                   id="create-invoice-btn"
-                  className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold rounded-xl"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30"
                   size="icon"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="size-5" />
                 </Button>
               ) : (
-              <Button id="create-invoice-btn" className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2">
-                <Plus className="h-4 w-4" /> Create Invoice
+              <Button id="create-invoice-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2 shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30">
+                <Plus className="size-5" /> Create Invoice
               </Button>
               )}
             </Link>
           </div>
 
           {/* Logout */}
-          <div className={`border-t border-white/10 ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
+          <div className={`border-t border-[var(--sidebar-border-color)] ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
             <button
               onClick={handleLogout}
               title={isSidebarCollapsed ? "Log out" : undefined}
               aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-white/60 hover:text-white transition-colors w-full py-2 text-[13px] rounded-lg hover:bg-white/5 ${
+              className={`flex items-center text-muted-foreground hover:text-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-muted ${
                 isSidebarCollapsed ? "justify-center" : "gap-3"
               }`}
             >
-              <LogOut className="h-5 w-5" />
+              <LogOut className="size-5" />
               {!isSidebarCollapsed && "Log out"}
             </button>
           </div>
@@ -749,24 +763,24 @@ export default function Layout({ children, currentPageName }) {
         )}
       </AnimatePresence>
 
-      {/* Main Content — light panel (wallet style) */}
-      <div className="flex flex-col bg-background min-h-screen">
-        {/* Header — light */}
-        <motion.header 
+      {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
+      <div className={`flex flex-col min-h-screen ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+        {/* Header */}
+        <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="h-20 bg-card border-b border-border flex items-center justify-between px-4 sm:px-8 shadow-sm"
+          className="h-16 bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm"
         >
           <div className="flex items-center gap-4 flex-1">
-            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-lg" onClick={() => setIsMobileMenuOpen(true)}>
-              <Menu className="h-6 w-6" />
+            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="size-5" />
             </Button>
             <div className="relative hidden sm:block max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
-                placeholder="Search something"
-                className="pl-10 bg-muted/50 border-border rounded-xl text-foreground placeholder:text-muted-foreground"
+                placeholder="Search invoices, clients…"
+                className="pl-10 bg-muted/50 border-border rounded-xl text-foreground placeholder:text-muted-foreground h-10 text-sm focus-visible:ring-2 focus-visible:ring-primary/20"
               />
             </div>
           </div>
@@ -788,23 +802,23 @@ export default function Layout({ children, currentPageName }) {
                     <span className="font-medium hidden sm:block text-foreground">{user.company_name || user.full_name || 'User'}</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border">
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border bg-card shadow-elevation-lg">
                   <div className="px-2 py-2">
                     <p className="text-sm font-semibold text-foreground">{user.company_name || 'My Company'}</p>
                     <p className="text-xs text-muted-foreground">{user.full_name || user.email}</p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings"))} data-tour="settings-btn">
-                    <Settings className="w-4 h-4 mr-2" />
+                    <Settings className="size-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings") + "?tab=subscription")}>
-                    <Bell className="w-4 h-4 mr-2" />
+                    <Bell className="size-4 mr-2" />
                     Subscription
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="w-4 h-4 mr-2" />
+                    <LogOut className="size-4 mr-2" />
                     Logout
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -813,22 +827,31 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </motion.header>
 
-        {/* Main Content Area — light, generous padding */}
-        <motion.main 
-          key={location.pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className="dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth fade-in py-8 px-4 sm:px-8"
+        {/* Main Content Area — fintech navy gradient when on Dashboard */}
+        <main
+          ref={mainContentRef}
+          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-8 px-4 sm:px-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
-          {children}
-        </motion.main>
+          <div className="max-w-7xl mx-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+              className="min-h-full"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+          </div>
+        </main>
 
-        {/* Footer — Mission / About */}
-        <footer className="border-t border-border bg-card/50 py-4 px-4 sm:px-8">
+        {/* Footer */}
+        <footer className="border-t border-border bg-card/30 py-4 px-4 sm:px-8">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-            <span>© {new Date().getFullYear()} InvoiceBreek. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} Paidly. All rights reserved.</span>
             <div className="flex items-center gap-6">
               <Link to={createPageUrl("About")} className="hover:text-foreground transition-colors">
                 Mission &amp; About

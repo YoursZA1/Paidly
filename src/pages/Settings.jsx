@@ -831,7 +831,7 @@ export default function Settings() {
                     animate={{ opacity: 1, y: 0 }}
                     className="mb-8"
                 >
-                    <h1 className="text-3xl font-bold text-slate-800">Settings</h1>
+                    <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Settings</h1>
                     <p className="text-slate-600 mt-1">Manage your company branding, payment details, and subscription.</p>
                 </motion.div>
 

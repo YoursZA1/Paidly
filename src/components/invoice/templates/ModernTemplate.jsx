@@ -12,7 +12,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
     return (
         <div className="bg-white">
             {/* Header with gradient */}
-            <header className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-8 -mx-8 -mt-8 mb-8 rounded-t-lg">
+            <header className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white p-8 -mx-8 -mt-8 mb-8 rounded-t-lg">
                 <div className="flex justify-between items-start">
                     <div className="max-w-md">
                         {user?.logo_url ? (
@@ -24,7 +24,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                                     style={{ maxHeight: '56px' }}
                                 />
                                 {user?.company_name && (
-                                    <p className="text-purple-100 text-sm font-semibold mt-2">{user.company_name}</p>
+                                    <p className="text-white/90 text-sm font-semibold mt-2">{user.company_name}</p>
                                 )}
                             </div>
                         ) : (
@@ -33,29 +33,29 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             </h1>
                         )}
                         {user?.company_address && (
-                            <p className="text-purple-100 text-sm whitespace-pre-line leading-relaxed">{user.company_address}</p>
+                            <p className="text-white/90 text-sm whitespace-pre-line leading-relaxed">{user.company_address}</p>
                         )}
                     </div>
                     <div className="text-right">
                         <h2 className="text-4xl font-light tracking-wide mb-2">{resolvedTitle}</h2>
-                        <p className="text-purple-200">#{invoice.invoice_number}</p>
-                        <p className="text-purple-200">Issued: {issueDate}</p>
-                        <p className="text-purple-200">{dueLabel}: {deliveryDate}</p>
+                        <p className="text-white/80">#{invoice.invoice_number}</p>
+                        <p className="text-white/80">Issued: {issueDate}</p>
+                        <p className="text-white/80">{dueLabel}: {deliveryDate}</p>
                     </div>
                 </div>
             </header>
 
             {/* Custom Header Message */}
             {user?.invoice_header && (
-                <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                    <p className="text-purple-800 whitespace-pre-line">{user.invoice_header}</p>
+                <div className="mb-6 p-4 bg-[#fff7ed] rounded-xl border border-[#fed7aa]">
+                    <p className="text-[#9a3412] whitespace-pre-line">{user.invoice_header}</p>
                 </div>
             )}
 
             {/* Client Info */}
             <section className="grid grid-cols-2 gap-8 mb-8">
                 <div className="bg-gray-50 p-5 rounded-xl">
-                    <h3 className="text-xs font-bold text-purple-600 uppercase tracking-wide mb-3">Bill To</h3>
+                    <h3 className="text-xs font-bold text-[#ea580c] uppercase tracking-wide mb-3">Bill To</h3>
                     <p className="font-semibold text-gray-900 text-lg">{client.name}</p>
                     {client.contact_person && <p className="text-gray-600 text-sm">Attn: {client.contact_person}</p>}
                     {client.address && <p className="text-gray-600 mt-1">{client.address}</p>}
@@ -71,9 +71,9 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                     )}
                 </div>
                 <div className="bg-gray-50 p-5 rounded-xl text-right">
-                    <h3 className="text-xs font-bold text-purple-600 uppercase tracking-wide mb-3">Payment Due</h3>
+                    <h3 className="text-xs font-bold text-[#ea580c] uppercase tracking-wide mb-3">Payment Due</h3>
                     <p className="font-semibold text-gray-900 text-lg">{deliveryDate}</p>
-                    <p className="text-2xl font-bold text-purple-600 mt-2">{formatCurrency(invoice.total_amount, userCurrency)}</p>
+                    <p className="text-2xl font-bold text-[#f24e00] mt-2">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                 </div>
             </section>
             
@@ -81,17 +81,17 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
             <section className="mb-8">
                 <table className="w-full">
                     <thead>
-                        <tr className="border-b-2 border-purple-200">
-                            <th className="py-3 text-left text-xs font-bold text-purple-600 uppercase tracking-wide">Description</th>
-                            <th className="py-3 text-center text-xs font-bold text-purple-600 uppercase tracking-wide">Qty</th>
-                            <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Rate</th>
+                        <tr className="border-b-2 border-[#fed7aa]">
+                            <th className="py-3 text-left text-xs font-bold text-[#ea580c] uppercase tracking-wide">Description</th>
+                            <th className="py-3 text-center text-xs font-bold text-[#ea580c] uppercase tracking-wide">Qty</th>
+                            <th className="py-3 text-right text-xs font-bold text-[#ea580c] uppercase tracking-wide">Rate</th>
                             {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                                 <>
-                                    <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Tax %</th>
-                                    <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Tax</th>
+                                    <th className="py-3 text-right text-xs font-bold text-[#ea580c] uppercase tracking-wide">Tax %</th>
+                                    <th className="py-3 text-right text-xs font-bold text-[#ea580c] uppercase tracking-wide">Tax</th>
                                 </>
                             )}
-                            <th className="py-3 text-right text-xs font-bold text-purple-600 uppercase tracking-wide">Amount</th>
+                            <th className="py-3 text-right text-xs font-bold text-[#ea580c] uppercase tracking-wide">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -156,7 +156,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             <span>{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between py-3 mt-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 rounded-lg">
+                    <div className="flex justify-between py-3 mt-2 bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white px-4 rounded-lg">
                         <span className="font-bold">Total Due</span>
                         <span className="font-bold text-lg">{formatCurrency(invoice.total_amount, userCurrency)}</span>
                     </div>
@@ -165,38 +165,38 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
             
             {/* Payment Details */}
             {bankingDetail && (
-                <section className="mb-8 p-5 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl">
-                    <h3 className="font-bold text-purple-700 mb-4 text-sm uppercase tracking-wide">Payment Information</h3>
+                <section className="mb-8 p-5 bg-[#fff7ed] rounded-xl border border-[#fed7aa]">
+                    <h3 className="font-bold text-[#9a3412] mb-4 text-sm uppercase tracking-wide">Payment Information</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                            <p className="text-purple-500 text-xs uppercase">Bank</p>
+                            <p className="text-[#ea580c] text-xs uppercase">Bank</p>
                             <p className="font-medium text-gray-900">{bankingDetail.bank_name}</p>
                         </div>
                         <div>
-                            <p className="text-purple-500 text-xs uppercase">Account Name</p>
+                            <p className="text-[#ea580c] text-xs uppercase">Account Name</p>
                             <p className="font-medium text-gray-900">{bankingDetail.account_name}</p>
                         </div>
                         {bankingDetail.account_number && (
                             <div>
-                                <p className="text-purple-500 text-xs uppercase">Account Number</p>
+                                <p className="text-[#ea580c] text-xs uppercase">Account Number</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.account_number}</p>
                             </div>
                         )}
                         {bankingDetail.routing_number && (
                             <div>
-                                <p className="text-purple-500 text-xs uppercase">Branch Code</p>
+                                <p className="text-[#ea580c] text-xs uppercase">Branch Code</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.routing_number}</p>
                             </div>
                         )}
                         {bankingDetail.swift_code && (
                             <div>
-                                <p className="text-purple-500 text-xs uppercase">SWIFT Code</p>
+                                <p className="text-[#ea580c] text-xs uppercase">SWIFT Code</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.swift_code}</p>
                             </div>
                         )}
                         {bankingDetail.additional_info && (
                             <div className="col-span-2">
-                                <p className="text-purple-500 text-xs uppercase">Additional Info</p>
+                                <p className="text-[#ea580c] text-xs uppercase">Additional Info</p>
                                 <p className="font-medium text-gray-900 whitespace-pre-line">{bankingDetail.additional_info}</p>
                             </div>
                         )}

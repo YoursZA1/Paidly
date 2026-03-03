@@ -78,56 +78,49 @@ export default function CurrencySelector({ value, onChange, className = "" }) {
     const [suggestedCurrency, setSuggestedCurrency] = useState('ZAR'); // Default to ZAR
 
     useEffect(() => {
-        // Always suggest ZAR as default, but still try to detect location
+        let cancelled = false;
         const detectLocation = async () => {
             try {
-                // Try to get location from IP
                 const response = await fetch('https://ipapi.co/json/');
+                if (cancelled) return;
                 const data = await response.json();
-                
+                if (cancelled) return;
                 if (data.country_code) {
                     setDetectedCountry(data.country_code);
-                    
-                    // Find suggested currency based on country, but prefer ZAR for South Africa
                     const suggested = Object.entries(currencyData).find(([code, info]) =>
                         info.countries.includes(data.country_code)
                     );
-                    
                     if (suggested) {
                         setSuggestedCurrency(suggested[0]);
-                        
-                        // Auto-select if no currency is set
                         if (!value && onChange) {
                             onChange(suggested[0]);
-                            
-                            // Save to user profile
                             User.updateMyUserData({
                                 country: data.country_code,
                                 currency: suggested[0]
-                            }).catch(console.error);
+                            }).catch(() => {});
                         }
                     }
                 } else {
-                    // Fallback to ZAR if location detection fails
+                    setSuggestedCurrency('ZAR');
                     if (!value && onChange) {
                         onChange('ZAR');
-                        User.updateMyUserData({
-                            currency: 'ZAR'
-                        }).catch(console.error);
+                        User.updateMyUserData({ currency: 'ZAR' }).catch(() => {});
                     }
                 }
-            } catch (error) {
-                console.error('Error detecting location:', error);
-                // Always fallback to ZAR
+            } catch {
+                // Network/CORS or ipapi down: fail silently, use ZAR
+                if (cancelled) return;
                 setSuggestedCurrency('ZAR');
                 if (!value && onChange) {
                     onChange('ZAR');
                 }
             }
         };
-
         detectLocation();
-    }, [value, onChange]);
+        return () => { cancelled = true; };
+    // Run once on mount; value/onChange changes don't need to re-detect location
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const formatCurrencyOption = (code) => {
         const currency = currencyData[code];

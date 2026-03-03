@@ -112,11 +112,11 @@ export default function ResetPassword() {
 
   if (tokenValid === null) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
           <CardContent className="pt-12 pb-6 text-center">
-            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-slate-600">Validating reset link...</p>
+            <div className="w-12 h-12 border-4 border-border border-t-primary rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Validating reset link...</p>
           </CardContent>
         </Card>
       </div>
@@ -125,17 +125,17 @@ export default function ResetPassword() {
 
   if (tokenValid === false) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
           <CardContent className="pt-12 pb-6 text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-8 h-8 text-red-600" />
+            <div className="w-16 h-16 bg-destructive/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-destructive" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Invalid reset link</h2>
-            <p className="text-sm text-slate-600 mb-6">{error}</p>
+            <h2 className="text-xl font-bold text-foreground mb-2 font-display">Invalid reset link</h2>
+            <p className="text-sm text-muted-foreground mb-6">{error}</p>
             <Button
               onClick={() => navigate(createPageUrl("ForgotPassword"))}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
             >
               Request new reset link
             </Button>
@@ -147,14 +147,14 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
           <CardContent className="pt-12 pb-6 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 bg-status-paid/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-status-paid" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Password reset successful</h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="text-xl font-bold text-foreground mb-2 font-display">Password reset successful</h2>
+            <p className="text-sm text-muted-foreground">
               You can now log in with your new password
             </p>
           </CardContent>
@@ -164,50 +164,50 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
         <CardHeader className="space-y-1 pb-6 text-center">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold">Create new password</CardTitle>
-          <p className="text-sm text-slate-500">Enter your new password below</p>
+          <CardTitle className="text-2xl font-bold text-foreground font-display">Create new password</CardTitle>
+          <p className="text-sm text-muted-foreground">Enter your new password below</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-sm text-destructive">
                 {error}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
+              <Label htmlFor="password" className="text-foreground">New password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 rounded-xl border-border"
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Label htmlFor="confirmPassword" className="text-foreground">Confirm password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="confirmPassword"
                   type="password"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 rounded-xl border-border"
                   required
                 />
               </div>
@@ -216,7 +216,7 @@ export default function ResetPassword() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
             >
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {isLoading ? "Resetting..." : "Reset password"}

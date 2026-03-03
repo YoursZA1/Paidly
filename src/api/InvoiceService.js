@@ -156,7 +156,7 @@ class InvoiceService {
               box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }
             .email-header {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%);
               color: white;
               padding: 30px;
               text-align: center;
@@ -203,11 +203,11 @@ class InvoiceService {
               display: inline-block;
             }
             .button-primary {
-              background-color: #4f46e5;
+              background-color: #f24e00;
               color: white;
             }
             .button-primary:hover {
-              background-color: #4338ca;
+              background-color: #e04500;
             }
             .button-secondary {
               background-color: #10b981;
@@ -281,7 +281,7 @@ class InvoiceService {
             </div>
 
             <div class="email-footer">
-              <p>This is an automated email from InvoiceBreek. Please do not reply to this email.</p>
+              <p>This is an automated email from Paidly. Please do not reply to this email.</p>
               <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
             </div>
           </div>

@@ -7,13 +7,22 @@
  */
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+// Normalize URL: Supabase project APIs use .supabase.co only. .supabase.com does not resolve → ERR_NAME_NOT_RESOLVED.
+let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+if (supabaseUrl && /\.supabase\.com(\/|$)/i.test(supabaseUrl)) {
+  supabaseUrl = supabaseUrl.replace(/\.supabase\.com/gi, ".supabase.co");
+  if (import.meta.env.DEV) {
+    console.warn("[Supabase] VITE_SUPABASE_URL was .supabase.com; using .supabase.co. Update .env to https://YOUR_REF.supabase.co");
+  }
+}
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-const effectiveUrl = supabaseUrl || "https://placeholder.supabase.co";
-const effectiveKey = supabaseAnonKey || "placeholder-anon-key";
+// When not configured, use a resolvable hostname to avoid "server with specified hostname could not be found".
+// Auth/DB calls will fail with 4xx until real VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.
+const effectiveUrl = supabaseUrl || "https://supabase.com";
+const effectiveKey = supabaseAnonKey || "not-configured";
 
 export const supabase = createClient(effectiveUrl, effectiveKey, {
   auth: {

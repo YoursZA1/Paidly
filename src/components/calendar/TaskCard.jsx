@@ -23,7 +23,7 @@ const statusIcons = {
 
 const categoryColors = {
     follow_up: 'bg-purple-100 text-purple-700',
-    meeting: 'bg-cyan-100 text-cyan-700',
+    meeting: 'bg-orange-100 text-orange-700',
     deadline: 'bg-red-100 text-red-700',
     payment: 'bg-green-100 text-green-700',
     delivery: 'bg-yellow-100 text-yellow-700',

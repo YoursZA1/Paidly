@@ -37,7 +37,7 @@ export default function AdminBilling() {
         <Card>
           <CardHeader>
             <CardTitle>Total MRR</CardTitle>
-            <BarChart2 className="w-6 h-6 text-cyan-600" />
+            <BarChart2 className="w-6 h-6 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold">${stats.mrr}</div>

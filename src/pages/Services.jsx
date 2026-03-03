@@ -404,11 +404,11 @@ export default function Services() {
                     className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                            Unified Catalog
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 font-display">
+                            Services & products
                         </h1>
-                        <p className="text-gray-600">
-                            Manage your catalog items. Each item has a required type (Service, Product, Labor, Material, or Expense) that determines how it appears in invoices. {services.length} total items.
+                        <p className="text-sm text-muted-foreground">
+                            Manage your catalog. Each item has a type (Service, Product, Labor, Material, or Expense) that determines how it appears in invoices. {services.length} total items.
                         </p>
                     </div>
                     
@@ -425,7 +425,7 @@ export default function Services() {
                             size="sm"
                             onClick={handleImportServices}
                             disabled={isImporting}
-                            className="rounded-lg"
+                            className="rounded-xl"
                         >
                             <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
                             {isImporting ? "Importing…" : "Import CSV"}
@@ -435,17 +435,17 @@ export default function Services() {
                             size="sm"
                             onClick={handleExportServices}
                             disabled={filteredServices.length === 0}
-                            className="rounded-lg"
+                            className="rounded-xl"
                         >
                             <Download className="w-4 h-4 mr-2" />
                             Export CSV
                         </Button>
                         <Button
                             onClick={() => setShowForm(true)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg shadow-sm"
+                            className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2"
                         >
                             <Plus className="w-4 h-4 mr-2" />
-                            Add New Catalog Item
+                            Add catalog item
                         </Button>
                     </div>
                 </motion.div>

@@ -8,11 +8,11 @@ import { startOfDay, startOfWeek, startOfMonth, startOfYear, subDays, subWeeks, 
 const CustomTooltip = ({ active, payload, currency }) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3">
-                <p className="text-sm font-semibold text-slate-900">
+            <div className="bg-card border border-border rounded-lg shadow-md p-3">
+                <p className="text-sm font-semibold text-foreground">
                     {formatCurrency(payload[0].value, currency)}
                 </p>
-                <p className="text-xs text-slate-500">{payload[0].payload.name}</p>
+                <p className="text-xs text-muted-foreground">{payload[0].payload.name}</p>
             </div>
         );
     }
@@ -160,22 +160,23 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                 </div>
 
                 <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={chartData}>
+                    <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                                <stop offset="0%" style={{ stopColor: 'var(--brand-primary)' }} stopOpacity={0.35}/>
+                                <stop offset="50%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0.2}/>
+                                <stop offset="100%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0}/>
                             </linearGradient>
                         </defs>
                         <XAxis 
                             dataKey="name" 
-                            stroke="#94a3b8"
+                            stroke="#7E9294"
                             fontSize={12}
                             tickLine={false}
                             axisLine={false}
                         />
                         <YAxis 
-                            stroke="#94a3b8"
+                            stroke="#7E9294"
                             fontSize={12}
                             tickLine={false}
                             axisLine={false}
@@ -185,9 +186,14 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                         <Area 
                             type="monotone" 
                             dataKey="value" 
-                            stroke="#8b5cf6" 
+                            stroke="var(--brand-primary)" 
                             strokeWidth={3}
                             fill="url(#colorRevenue)"
+                            dot={false}
+                            activeDot={{ r: 4, fill: "var(--brand-primary)", stroke: "#fff", strokeWidth: 1 }}
+                            isAnimationActive
+                            animationDuration={1000}
+                            animationEasing="ease-out"
                         />
                     </AreaChart>
                 </ResponsiveContainer>

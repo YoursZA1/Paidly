@@ -27,7 +27,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'];
 
 export default function CashFlowPage() {
     const navigate = useNavigate();
@@ -297,7 +297,7 @@ export default function CashFlowPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
                 >
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Cash Flow</h1>
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash flow</h1>
                         <p className="text-gray-600 mt-1">Monitor your income and expenses</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -330,7 +330,7 @@ export default function CashFlowPage() {
                                 setEditingExpense(null);
                                 setShowExpenseForm(true);
                             }}
-                            className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 gap-2"
+                            className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] gap-2"
                         >
                             <Plus className="w-4 h-4" />
                             <span className="hidden sm:inline">Add Expense</span>
@@ -430,7 +430,7 @@ export default function CashFlowPage() {
                                         <YAxis />
                                         <Tooltip formatter={(value) => formatCurrency(value, userCurrency)} />
                                         <Legend />
-                                        <Bar dataKey="income" fill="#3b82f6" name="Income" />
+                                        <Bar dataKey="income" fill="#f24e00" name="Income" />
                                         <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
                                     </BarChart>
                                 </ResponsiveContainer>

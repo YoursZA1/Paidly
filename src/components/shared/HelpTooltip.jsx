@@ -13,7 +13,7 @@ export default function HelpTooltip({ content, side = "top" }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex ml-1 cursor-help opacity-70 hover:opacity-100 transition-opacity">
-            <HelpCircle className="w-4 h-4 text-slate-400" />
+            <HelpCircle className="w-4 h-4 text-muted-foreground" />
           </span>
         </TooltipTrigger>
         <TooltipContent side={side} className="max-w-xs text-sm">

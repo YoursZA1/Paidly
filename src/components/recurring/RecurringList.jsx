@@ -7,7 +7,7 @@ import { format } from "date-fns";
 const statusStyles = {
     active: "bg-emerald-100 text-emerald-700",
     paused: "bg-amber-100 text-amber-700",
-    ended: "bg-slate-100 text-slate-700",
+    ended: "bg-muted text-muted-foreground",
 };
 
 export default function RecurringList({ profiles, clients, isLoading }) {
@@ -63,7 +63,7 @@ export default function RecurringList({ profiles, clients, isLoading }) {
                     </TableHeader>
                     <TableBody>
                         {profiles.map(profile => (
-                            <TableRow key={profile.id} className="hover:bg-slate-50">
+                            <TableRow key={profile.id} className="hover:bg-muted/50">
                                 <TableCell className="font-medium">{profile.profile_name}</TableCell>
                                 <TableCell>{getClientName(profile.client_id)}</TableCell>
                                 <TableCell className="capitalize">{profile.frequency}</TableCell>

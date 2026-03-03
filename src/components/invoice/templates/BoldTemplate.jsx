@@ -11,7 +11,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
     return (
         <div className="bg-white">
             {/* Bold Header */}
-            <header className="bg-teal-700 text-white p-8 -mx-8 -mt-8 mb-0">
+            <header className="bg-[#f24e00] text-white p-8 -mx-8 -mt-8 mb-0">
                 <div className="flex justify-between items-center">
                     <div className="max-w-md">
                         {user?.logo_url ? (
@@ -39,7 +39,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             </header>
 
             {/* Invoice Info Bar */}
-            <div className="bg-teal-600 text-white px-8 py-4 -mx-8 mb-8 flex justify-between text-sm flex-wrap gap-3">
+            <div className="bg-[#ff7c00] text-white px-8 py-4 -mx-8 mb-8 flex justify-between text-sm flex-wrap gap-3">
                 <div>
                     <span className="opacity-70">Invoice #:</span>
                     <span className="font-bold ml-2">{invoice.invoice_number}</span>
@@ -61,15 +61,15 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
 
             {/* Custom Header */}
             {user?.invoice_header && (
-                <div className="mb-6 p-4 bg-teal-50 rounded-lg border-l-4 border-teal-500">
-                    <p className="text-teal-800 font-medium whitespace-pre-line">{user.invoice_header}</p>
+                <div className="mb-6 p-4 bg-[#fff7ed] rounded-lg border-l-4 border-[#f24e00]">
+                    <p className="text-[#9a3412] font-medium whitespace-pre-line">{user.invoice_header}</p>
                 </div>
             )}
 
             {/* Client Info */}
             <section className="grid grid-cols-2 gap-8 mb-8">
                 <div>
-                    <h3 className="text-teal-600 font-black text-sm uppercase mb-3">Bill To</h3>
+                    <h3 className="text-[#f24e00] font-black text-sm uppercase mb-3">Bill To</h3>
                     <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="font-bold text-gray-900 text-lg">{client.name}</p>
                         {client.contact_person && <p className="text-gray-600 text-sm">Attn: {client.contact_person}</p>}
@@ -87,7 +87,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     </div>
                 </div>
                 <div>
-                    <h3 className="text-teal-600 font-black text-sm uppercase mb-3">From</h3>
+                    <h3 className="text-[#f24e00] font-black text-sm uppercase mb-3">From</h3>
                     <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="font-bold text-gray-900 text-lg">{user?.company_name}</p>
                         <p className="text-gray-600 mt-1 whitespace-pre-line">{user?.company_address}</p>
@@ -99,7 +99,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             <section className="mb-8">
                 <table className="w-full">
                     <thead>
-                        <tr className="bg-teal-700 text-white">
+                        <tr className="bg-[#f24e00] text-white">
                             <th className="p-4 text-left font-bold uppercase text-sm">Service</th>
                             <th className="p-4 text-center font-bold uppercase text-sm">Qty</th>
                             <th className="p-4 text-right font-bold uppercase text-sm">Price</th>
@@ -167,7 +167,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             <span className="font-medium">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between py-4 px-4 bg-teal-700 text-white rounded-lg mt-2">
+                    <div className="flex justify-between py-4 px-4 bg-[#f24e00] text-white rounded-lg mt-2">
                         <span className="font-black uppercase">Total Due</span>
                         <span className="font-black text-xl">{formatCurrency(invoice.total_amount, userCurrency)}</span>
                     </div>
@@ -176,38 +176,38 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             
             {/* Payment Details */}
             {bankingDetail && (
-                <section className="mb-8 p-5 bg-teal-50 rounded-lg border border-teal-200">
-                    <h3 className="font-black text-teal-700 mb-4 uppercase text-sm">Payment Information</h3>
+                <section className="mb-8 p-5 bg-[#fff7ed] rounded-lg border border-[#fed7aa]">
+                    <h3 className="font-black text-[#9a3412] mb-4 uppercase text-sm">Payment Information</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                            <p className="text-teal-600 text-xs uppercase font-bold">Bank</p>
+                            <p className="text-[#ea580c] text-xs uppercase font-bold">Bank</p>
                             <p className="font-medium text-gray-900">{bankingDetail.bank_name}</p>
                         </div>
                         <div>
-                            <p className="text-teal-600 text-xs uppercase font-bold">Account Name</p>
+                            <p className="text-[#ea580c] text-xs uppercase font-bold">Account Name</p>
                             <p className="font-medium text-gray-900">{bankingDetail.account_name}</p>
                         </div>
                         {bankingDetail.account_number && (
                             <div>
-                                <p className="text-teal-600 text-xs uppercase font-bold">Account Number</p>
+                                <p className="text-[#ea580c] text-xs uppercase font-bold">Account Number</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.account_number}</p>
                             </div>
                         )}
                         {bankingDetail.routing_number && (
                             <div>
-                                <p className="text-teal-600 text-xs uppercase font-bold">Branch Code</p>
+                                <p className="text-[#ea580c] text-xs uppercase font-bold">Branch Code</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.routing_number}</p>
                             </div>
                         )}
                         {bankingDetail.swift_code && (
                             <div>
-                                <p className="text-teal-600 text-xs uppercase font-bold">SWIFT Code</p>
+                                <p className="text-[#ea580c] text-xs uppercase font-bold">SWIFT Code</p>
                                 <p className="font-medium text-gray-900">{bankingDetail.swift_code}</p>
                             </div>
                         )}
                         {bankingDetail.additional_info && (
                             <div className="col-span-2">
-                                <p className="text-teal-600 text-xs uppercase font-bold">Additional Info</p>
+                                <p className="text-[#ea580c] text-xs uppercase font-bold">Additional Info</p>
                                 <p className="font-medium text-gray-900 whitespace-pre-line">{bankingDetail.additional_info}</p>
                             </div>
                         )}

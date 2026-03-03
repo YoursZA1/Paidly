@@ -55,10 +55,10 @@ export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 })
                                 <IconComponent className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors duration-200">
+                                <h3 className="font-bold text-foreground text-lg group-hover:text-primary transition-colors duration-200">
                                     {detail.bank_name}
                                 </h3>
-                                <p className="text-sm text-slate-600 capitalize">
+                                <p className="text-sm text-muted-foreground capitalize">
                                     {detail.payment_method.replace('_', ' ')}
                                 </p>
                             </div>
@@ -76,18 +76,18 @@ export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 })
 
                     <div className="space-y-3">
                         <div>
-                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                                 Account Holder
                             </p>
-                            <p className="font-semibold text-slate-900">{detail.account_name}</p>
+                            <p className="font-semibold text-foreground">{detail.account_name}</p>
                         </div>
                         
                         {detail.account_number && (
                             <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                                     Account Number
                                 </p>
-                                <p className="font-mono text-slate-900">
+                                <p className="font-mono text-foreground">
                                     ****{detail.account_number.slice(-4)}
                                 </p>
                             </div>
@@ -95,30 +95,30 @@ export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 })
                         
                         {detail.routing_number && (
                             <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                                     Routing Number
                                 </p>
-                                <p className="font-mono text-slate-900">{detail.routing_number}</p>
+                                <p className="font-mono text-foreground">{detail.routing_number}</p>
                             </div>
                         )}
                         
                         {detail.swift_code && (
                             <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                                     SWIFT Code
                                 </p>
-                                <p className="font-mono text-slate-900">{detail.swift_code}</p>
+                                <p className="font-mono text-foreground">{detail.swift_code}</p>
                             </div>
                         )}
                         
                         {detail.additional_info && (
-                            <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-                                <p className="text-sm text-slate-600">{detail.additional_info}</p>
+                            <div className="mt-4 p-3 bg-muted rounded-lg">
+                                <p className="text-sm text-muted-foreground">{detail.additional_info}</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
                         <Badge variant="secondary" className="text-xs">
                             Added {new Date(detail.created_date).toLocaleDateString()}
                         </Badge>

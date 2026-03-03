@@ -6,7 +6,7 @@ alwaysApply: true
 # InvoiceBreak App Information
 
 ## Repository Summary
-InvoiceBreak App is a comprehensive invoice management system featuring a **React frontend** built with **Vite**, a **Node.js Express backend**, and **Supabase** for database, authentication, and storage services. The platform handles clients, services, invoices, quotes, and payments with support for PDF generation and billing integrations.
+Paidly is a comprehensive invoice management system featuring a **React frontend** built with **Vite**, a **Node.js Express backend**, and **Supabase** for database, authentication, and storage services. The platform handles clients, services, invoices, quotes, and payments with support for PDF generation and billing integrations.
 
 ## Repository Structure
 - **src/**: React frontend application including components, hooks, pages, and services.

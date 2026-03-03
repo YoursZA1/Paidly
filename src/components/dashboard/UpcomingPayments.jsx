@@ -37,7 +37,7 @@ export default function UpcomingPayments({ invoices = [], clients = [], currency
 
     const iconBgs = [
         'bg-gradient-to-br from-purple-600 to-blue-600',
-        'bg-gradient-to-br from-blue-600 to-cyan-500'
+        'bg-gradient-to-br from-[#f24e00] to-[#ff7c00]'
     ];
 
     return (

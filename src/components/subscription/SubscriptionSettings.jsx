@@ -89,7 +89,7 @@ export default function SubscriptionSettings() {
     };
 
     const handleManageSubscription = () => {
-        window.location.href = 'https://invoicebreeksite.app';
+        window.location.href = 'https://paidly.com';
     };
 
     const handleExportPackages = () => {
@@ -179,7 +179,7 @@ export default function SubscriptionSettings() {
 
           {/* Current Plan Banner */}
           {currentPlanName && (
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-6 mb-8 max-w-2xl mx-auto">
+              <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-6 mb-8 max-w-2xl mx-auto">
                   <div className="flex items-center justify-center gap-3">
                       <CheckCircle className="w-6 h-6 text-emerald-600" />
                       <div className="text-center">
@@ -257,7 +257,7 @@ export default function SubscriptionSettings() {
               </p>
               <Button 
                   variant="outline" 
-                  onClick={() => window.location.href = 'https://invoicebreek.com/contact'}
+                  onClick={() => window.location.href = 'https://paidly.com/contact'}
                   className="border-indigo-200 text-indigo-600 hover:bg-indigo-50"
               >
                   Contact Our Sales Team

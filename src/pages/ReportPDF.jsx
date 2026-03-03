@@ -385,7 +385,7 @@ export default function ReportPDF() {
                 </div>
                 <div className="text-right">
                     <p>{user?.company_name}</p>
-                    <p>Generated via InvoiceBreek</p>
+                    <p>Generated via Paidly</p>
                 </div>
             </div>
         </div>

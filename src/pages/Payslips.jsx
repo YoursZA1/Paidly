@@ -161,7 +161,7 @@ export default function PayslipsPage() {
                         </p>
                     </div>
                     <Link to={createPageUrl("CreatePayslip")}>
-                        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto">
+                        <Button className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto">
                             <Plus className="w-4 h-4 mr-2" />
                             Create New Payslip
                         </Button>

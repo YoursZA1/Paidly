@@ -1,5 +1,4 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -13,44 +12,39 @@ export default function WelcomeGuide({ user, hasBankingDetails }) {
     }
 
     return (
-        <Card className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Lightbulb className="w-6 h-6 text-blue-600" />
-                    Welcome to InvoiceBreek!
-                </CardTitle>
-                <CardDescription>Let's get your account ready for professional invoicing.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
+        <div
+            className="p-6 rounded-fintech"
+            style={{
+                background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%)',
+            }}
+        >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                        <Lightbulb className="w-5 h-5 text-amber-200" />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-white text-sm font-display">Complete your setup</h3>
+                        <p className="text-xs text-white/80 mt-0.5">Add your company profile and banking details for professional invoices.</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {!isProfileComplete && (
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white rounded-lg gap-4">
-                            <div>
-                                <h4 className="font-semibold">Complete Your Company Profile</h4>
-                                <p className="text-sm text-gray-600">Add your company name, address, and logo for branded documents.</p>
-                            </div>
-                            <Link to={createPageUrl("Settings")}>
-                                <Button className="w-full sm:w-auto">
-                                    <Settings className="w-4 h-4 mr-2" /> Go to Settings
-                                </Button>
-                            </Link>
-                        </div>
+                        <Link to={createPageUrl("Settings")}>
+                            <Button size="sm" className="bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-lg h-9">
+                                <Settings className="w-4 h-4 mr-1.5" /> Company profile
+                            </Button>
+                        </Link>
                     )}
-                     {!hasBankingDetails && (
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white rounded-lg gap-4">
-                            <div>
-                                <h4 className="font-semibold">Add Your Banking Details</h4>
-                                <p className="text-sm text-gray-600">Add a bank account so your clients know how to pay you.</p>
-                            </div>
-                            <Link to={createPageUrl("Settings") + "?tab=payments"}>
-                                <Button className="w-full sm:w-auto">
-                                    <Banknote className="w-4 h-4 mr-2" /> Add Details
-                                </Button>
-                            </Link>
-                        </div>
+                    {!hasBankingDetails && (
+                        <Link to={createPageUrl("Settings") + "?tab=payments"}>
+                            <Button size="sm" className="bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-lg h-9">
+                                <Banknote className="w-4 h-4 mr-1.5" /> Banking details
+                            </Button>
+                        </Link>
                     )}
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }

@@ -25,7 +25,7 @@ export default function ClientLogin({ onLogin }) {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
             <Card className="w-full max-w-md shadow-2xl border-0">
                 <CardHeader className="space-y-1 pb-6">
                     <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4">

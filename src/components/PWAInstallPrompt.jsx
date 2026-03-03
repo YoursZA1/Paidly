@@ -70,19 +70,19 @@ export default function PWAInstallPrompt() {
         if (isIOS) {
             return {
                 icon: Smartphone,
-                title: "Install InvoiceBreek",
+                title: "Install Paidly",
                 instructions: "Tap the Share button, then 'Add to Home Screen'"
             };
         } else if (isAndroid) {
             return {
                 icon: Smartphone,
-                title: "Install InvoiceBreek",
+                title: "Install Paidly",
                 instructions: "Tap 'Add to Home Screen' in your browser menu"
             };
         } else {
             return {
                 icon: Monitor,
-                title: "Install InvoiceBreek",
+                title: "Install Paidly",
                 instructions: "Click the install button in your browser's address bar"
             };
         }

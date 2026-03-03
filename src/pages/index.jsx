@@ -69,6 +69,8 @@ import SystemStatus from "./SystemStatus";
 import BackgroundJobs from "./BackgroundJobs";
 import BuildLogs from "./BuildLogs";
 import About from "./About";
+import BentoDemoPage from "./BentoDemo";
+import AnimatedIconsDemoPage from "./AnimatedIconsDemo";
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthContext";
@@ -112,6 +114,10 @@ const MAIN_ROUTES = [
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
+    { path: "/BentoDemo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
+    { path: "/bento-demo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
+    { path: "/AnimatedIconsDemo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
+    { path: "/animated-icons-demo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
 ];
 
 // --- Invoice Pages ---
@@ -272,6 +278,8 @@ function PagesContent() {
 }
 
 function SupabaseSetupRequired() {
+    const isVercel = typeof window !== "undefined" && /\.vercel\.app$/i.test(window.location?.hostname || "");
+
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
             <div className="max-w-lg text-center">
@@ -279,11 +287,24 @@ function SupabaseSetupRequired() {
                 <p className="text-sm text-slate-600 mb-4">
                     The app needs Supabase to run. Add your project URL and anon key to environment variables.
                 </p>
-                <ol className="text-left text-sm text-slate-600 list-decimal list-inside space-y-2 mb-4">
-                    <li>Copy <code className="bg-slate-200 px-1 rounded">.env.development.example</code> to <code className="bg-slate-200 px-1 rounded">.env.development</code> (or set <code className="bg-slate-200 px-1 rounded">.env</code>).</li>
-                    <li>Set <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> and <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> with your Supabase project values.</li>
-                    <li>Restart the dev server (<code className="bg-slate-200 px-1 rounded">npm run dev</code>).</li>
-                </ol>
+                {isVercel ? (
+                    <>
+                        <p className="text-left text-sm text-slate-600 mb-2 font-medium">Deployed on Vercel:</p>
+                        <ol className="text-left text-sm text-slate-600 list-decimal list-inside space-y-2 mb-4">
+                            <li>Open your project on <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Vercel Dashboard</a>.</li>
+                            <li>Go to <strong>Settings → Environment Variables</strong>.</li>
+                            <li>Add <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> (your Supabase project URL, e.g. <code className="bg-slate-200 px-1 rounded text-xs">https://xxxx.supabase.co</code>).</li>
+                            <li>Add <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> (your Supabase anon/public key from Project → Settings → API).</li>
+                            <li>Redeploy the project (Deployments → ⋮ → Redeploy) so the new variables are used at build time.</li>
+                        </ol>
+                    </>
+                ) : (
+                    <ol className="text-left text-sm text-slate-600 list-decimal list-inside space-y-2 mb-4">
+                        <li>Copy <code className="bg-slate-200 px-1 rounded">.env.development.example</code> to <code className="bg-slate-200 px-1 rounded">.env.development</code> (or <code className="bg-slate-200 px-1 rounded">.env</code>).</li>
+                        <li>Set <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> and <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> with your Supabase project values.</li>
+                        <li>Restart the dev server (<code className="bg-slate-200 px-1 rounded">npm run dev</code>).</li>
+                    </ol>
+                )}
                 <p className="text-xs text-slate-500">See <code className="bg-slate-200 px-1 rounded">docs/SUPABASE_SETUP_AND_MAINTENANCE.md</code> for details.</p>
             </div>
         </div>

@@ -10,17 +10,22 @@ export default function GoalProgress({ year = currentYear(), progress = 75, titl
     const strokeDashoffset = circumference - (progress / 100) * circumference;
 
     return (
-        <Card className="relative bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 text-white border-0 shadow-2xl overflow-hidden rounded-3xl">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-400/20 to-cyan-400/20 rounded-full blur-2xl" />
-            
+        <Card
+            className="relative border border-border overflow-hidden rounded-fintech card-shadow"
+            style={{
+                background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%)',
+            }}
+        >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+
             <CardContent className="p-6 relative">
                 <div className="flex items-center justify-between">
                     <div className="flex-1">
-                        <p className="text-sm text-white/70 mb-1">{displayTitle}</p>
-                        <p className="text-xl font-bold mb-2">Completed</p>
+                        <p className="text-sm text-white/80 mb-1">{displayTitle}</p>
+                        <p className="text-xl font-bold text-white mb-2 font-display">Completed</p>
                         <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center">
-                                <Target className="w-5 h-5 text-cyan-600" />
+                            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                <Target className="w-5 h-5 text-white" />
                             </div>
                         </div>
                     </div>
@@ -31,7 +36,7 @@ export default function GoalProgress({ year = currentYear(), progress = 75, titl
                                 cx="56"
                                 cy="56"
                                 r="45"
-                                stroke="rgba(255,255,255,0.1)"
+                                stroke="rgba(255,255,255,0.2)"
                                 strokeWidth="8"
                                 fill="none"
                             />
@@ -39,7 +44,7 @@ export default function GoalProgress({ year = currentYear(), progress = 75, titl
                                 cx="56"
                                 cy="56"
                                 r="45"
-                                stroke="#06b6d4"
+                                stroke="rgba(255,255,255,0.9)"
                                 strokeWidth="8"
                                 fill="none"
                                 strokeDasharray={circumference}
@@ -49,7 +54,7 @@ export default function GoalProgress({ year = currentYear(), progress = 75, titl
                             />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-2xl font-bold">{progress}%</span>
+                            <span className="text-2xl font-bold text-white">{progress}%</span>
                         </div>
                     </div>
                 </div>

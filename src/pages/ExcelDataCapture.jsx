@@ -11,7 +11,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { 
   importFromExcel, 
-  generateInvoiceBreekTemplate,
+  generatePaidlyTemplate,
   validateUsersData,
   validateInvoiceData,
   validateClientData,
@@ -260,7 +260,7 @@ function ExcelDataCapture() {
             <FileSpreadsheet className="w-8 h-8 text-indigo-600" />
             <h1 className="text-3xl font-bold text-slate-900">Excel Data Capture</h1>
           </div>
-          <p className="text-slate-600">Single file (invoicebreek_data.xlsx) with multiple sheets - one sheet per table. No mixed data!</p>
+          <p className="text-slate-600">Single file (paidly_data.xlsx) with multiple sheets - one sheet per table. No mixed data!</p>
         </div>
 
         <Tabs defaultValue="import" className="w-full">
@@ -281,7 +281,7 @@ function ExcelDataCapture() {
               <CardHeader className="border-b">
                 <div className="flex items-center gap-2">
                   <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
-                  <CardTitle>Upload invoicebreek_data.xlsx</CardTitle>
+                  <CardTitle>Upload paidly_data.xlsx</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
@@ -293,10 +293,10 @@ function ExcelDataCapture() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => generateInvoiceBreekTemplate()}
+                    onClick={() => generatePaidlyTemplate()}
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    Download Template (invoicebreek_data.xlsx)
+                    Download Template (paidly_data.xlsx)
                   </Button>
                   <div className="relative">
                     <input
@@ -406,7 +406,7 @@ function ExcelDataCapture() {
               <CardContent className="text-sm text-blue-800">
                 <div className="space-y-3">
                   <div>
-                    <p className="font-semibold mb-1">📁 File: invoicebreek_data.xlsx</p>
+                    <p className="font-semibold mb-1">📁 File: paidly_data.xlsx</p>
                     <p>One file contains all your data across multiple sheets</p>
                   </div>
                   <div>
@@ -472,7 +472,7 @@ function ExcelDataCapture() {
                   onClick={() => handleExport()}
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Export to invoicebreek_data.xlsx
+                  Export to paidly_data.xlsx
                 </Button>
               </CardContent>
             </Card>

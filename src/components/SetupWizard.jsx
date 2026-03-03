@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { uploadAndSaveLogo } from "./SetupWizard.uploadLogo";
 import PropTypes from "prop-types";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { User, BankingDetail } from "@/api/entities";
 
 /**
- * Simple SetupWizard modal placeholder.
- * Replace with your actual setup steps and UI as needed.
+ * Setup wizard (Step 1 of 5 = Business Profile). Data is loaded from and saved to
+ * the current user's Supabase profile so it is backed up and restored correctly.
  */
 
 const initialState = {
@@ -49,6 +50,33 @@ export default function SetupWizard({ isOpen, onComplete }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialState);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Load current user profile when wizard opens so Step 1 is pre-filled and data is for correct user
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setLoadingProfile(true);
+    (async () => {
+      try {
+        const user = await User.me();
+        if (cancelled || !user) return;
+        setForm(f => ({
+          ...f,
+          businessName: user.company_name || "",
+          currency: user.currency || "",
+          country: user.company_address || "",
+          logo_url: user.logo_url || "",
+          businessEmail: user.email || ""
+        }));
+      } catch {
+        if (!cancelled) setForm(initialState);
+      } finally {
+        if (!cancelled) setLoadingProfile(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,9 +88,37 @@ export default function SetupWizard({ isOpen, onComplete }) {
     }));
   }
 
-  function next() {
+  /** Persist Step 1 (Business Profile) to current user's Supabase profile. */
+  async function saveBusinessProfileStep() {
+    const user = await User.me();
+    if (!user?.id) return;
+    let logoUrl = form.logo_url;
+    if (form.logo instanceof File) {
+      logoUrl = await uploadAndSaveLogo(form.logo, form);
+    }
+    await User.updateMyUserData({
+      company_name: (form.businessName || "").trim() || user.company_name,
+      company_address: (form.country || "").trim() || user.company_address,
+      currency: (form.currency || "").trim() || user.currency,
+      logo_url: logoUrl || user.logo_url
+    });
+  }
+
+  async function next() {
+    if (step === 0) {
+      setSubmitting(true);
+      try {
+        await saveBusinessProfileStep();
+      } catch (err) {
+        alert("Failed to save business profile: " + (err?.message || err));
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
     setStep(s => Math.min(s + 1, steps.length - 1));
   }
+
   function prev() {
     setStep(s => Math.max(s - 1, 0));
   }
@@ -71,39 +127,55 @@ export default function SetupWizard({ isOpen, onComplete }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      let logoUrl = form.logo_url;
-      if (form.logo instanceof File) {
-        logoUrl = await uploadAndSaveLogo(form.logo, form);
+      const user = await User.me();
+      if (!user?.id) {
+        alert("Please sign in to save.");
+        setSubmitting(false);
+        return;
       }
-      // Optionally update other profile fields here as needed
+      // Save Step 1 (Business Profile) to Supabase for this user
+      await saveBusinessProfileStep();
+      // Step 2: banking — persist if filled
+      if (form.bankName && form.accountNumber) {
+        await BankingDetail.create({
+          bank_name: form.bankName,
+          account_name: form.accountHolder || form.businessName,
+          account_number: form.accountNumber,
+          branch_code: form.branchCode || undefined,
+          payment_method: "bank_transfer",
+          is_default: true
+        }).catch(() => {});
+      }
       setSubmitting(false);
       onComplete();
     } catch (err) {
-      // Optionally show error to user
       setSubmitting(false);
-      alert("Failed to save profile: " + (err.message || err));
+      alert("Failed to save profile: " + (err?.message || err));
     }
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onComplete(); }}>
       <DialogContent className="sm:max-w-lg p-0 overflow-hidden border-0 bg-transparent shadow-none">
-      <form className="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full" onSubmit={handleSubmit}>
+      <form className="bg-card border border-border rounded-xl shadow-lg p-8 max-w-lg w-full" onSubmit={handleSubmit}>
         <div className="mb-6">
-          <div className="text-xs text-gray-400 mb-1">Step {step + 1} of {steps.length}</div>
-          <h2 className="text-2xl font-bold mb-2">{steps[step]}</h2>
+          <div className="text-xs text-muted-foreground mb-1">Step {step + 1} of {steps.length}</div>
+          <h2 className="text-2xl font-bold text-foreground mb-2 font-display">{steps[step]}</h2>
         </div>
 
         {step === 0 && (
           <div className="space-y-3">
-            <input className="w-full border rounded p-2" name="businessName" placeholder="Business Name" value={form.businessName} onChange={handleChange} required />
+            {loadingProfile && (
+              <p className="text-sm text-muted-foreground">Loading your profile…</p>
+            )}
+            <input className="w-full border rounded p-2" name="businessName" placeholder="Business Name" value={form.businessName} onChange={handleChange} required disabled={loadingProfile} />
             <input className="w-full border rounded p-2" name="registrationNumber" placeholder="Registration Number (optional)" value={form.registrationNumber} onChange={handleChange} />
             <input className="w-full border rounded p-2" name="vatNumber" placeholder="VAT / Tax Number" value={form.vatNumber} onChange={handleChange} />
             <input className="w-full border rounded p-2" name="industry" placeholder="Industry" value={form.industry} onChange={handleChange} required />
             <input className="w-full border rounded p-2" name="currency" placeholder="Currency (e.g. USD, ZAR)" value={form.currency} onChange={handleChange} required />
             <input className="w-full border rounded p-2" name="country" placeholder="Country" value={form.country} onChange={handleChange} required />
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Upload Logo (optional)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Upload Logo (optional)</label>
               <input type="file" name="logo" accept="image/*" onChange={handleChange} />
             </div>
           </div>
@@ -150,15 +222,15 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
         {step === 4 && (
           <div className="space-y-3">
-            <div className="bg-gray-50 border rounded p-4 mb-2 text-sm">
-              <div className="mb-2 font-semibold">Ready to send your first invoice?</div>
-              <ul className="list-disc ml-5 text-gray-600">
+            <div className="bg-muted border border-border rounded-lg p-4 mb-2 text-sm">
+              <div className="mb-2 font-semibold text-foreground">Ready to send your first invoice?</div>
+              <ul className="list-disc ml-5 text-muted-foreground">
                 <li>Business: <span className="font-medium">{form.businessName || "-"}</span></li>
                 <li>Client: <span className="font-medium">{form.clientName || "-"}</span></li>
                 <li>Dummy item: <span className="font-medium">Consulting Service</span></li>
               </ul>
             </div>
-            <button type="submit" className="w-full bg-cyan-600 text-white py-2 rounded-lg font-semibold hover:bg-cyan-700 transition" disabled={submitting}>
+            <button type="submit" className="w-full bg-primary text-primary-foreground py-2 rounded-lg font-semibold hover:bg-primary/90 transition" disabled={submitting}>
               {submitting ? "Sending..." : "Send Your First Invoice"}
             </button>
           </div>
@@ -166,10 +238,10 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
         <div className="flex gap-2 mt-8">
           {step > 0 && (
-            <button type="button" className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg font-semibold hover:bg-gray-200 transition" onClick={prev} disabled={submitting}>Back</button>
+            <button type="button" className="flex-1 bg-muted text-muted-foreground py-2 rounded-lg font-semibold hover:bg-muted/80 transition" onClick={prev} disabled={submitting}>Back</button>
           )}
           {step < steps.length - 1 && (
-            <button type="button" className="flex-1 bg-cyan-600 text-white py-2 rounded-lg font-semibold hover:bg-cyan-700 transition" onClick={next} disabled={submitting}>Next</button>
+            <button type="button" className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg font-semibold hover:bg-primary/90 transition disabled:opacity-70" onClick={next} disabled={submitting || loadingProfile}>{submitting ? "Saving…" : "Next"}</button>
           )}
         </div>
       </form>

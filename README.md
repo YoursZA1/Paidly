@@ -1,7 +1,9 @@
-# InvoiceBreak App
+# Paidly App
 
-This app was created automatically by InvoiceBreak.
-It's a Vite+React app that communicates with the InvoiceBreak API.
+This app was created automatically by Paidly.
+It's a Vite+React app that communicates with the Paidly API.
+
+**Production app:** [https://invoicebreekapp2.vercel.app](https://invoicebreekapp2.vercel.app)
 
 ## Development & Build
 
@@ -19,6 +21,10 @@ It's a Vite+React app that communicates with the InvoiceBreak API.
 npm install
 npm run dev
 ```
+Open the URL shown (e.g. `http://localhost:5173`). The app uses Supabase for auth and data. For admin sync and some features you can start the backend in another terminal: `npm run server` (see below).
+
+**If you see "Connection refused" or "Backend unavailable":**  
+The frontend proxies `/api` to the backend in dev. If you use admin features or see backend errors, start the backend: `npm run server` (runs on `http://localhost:5179` by default). The app will still load without it; only backend-dependent features will show a message.
 
 **Production build and preview:**
 ```bash
@@ -27,15 +33,26 @@ npm start
 # or: npm run preview
 ```
 
+### Deployment (Vercel)
+
+The app is deployed at **https://invoicebreekapp2.vercel.app**. For Vercel (or similar):
+
+1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_SERVER_URL` (your backend API URL) and `VITE_SUPABASE_STORAGE_BUCKET`. Use **Production** (and Preview if needed).
+2. **Supabase Auth:** In Supabase Dashboard → **Authentication → URL Configuration**, add `https://invoicebreekapp2.vercel.app` to **Site URL** and **Redirect URLs** so sign-in, password reset, and OAuth work.
+3. **Backend CORS:** If you run the API server separately, set `CLIENT_ORIGIN=https://invoicebreekapp2.vercel.app` so the server allows requests from the frontend.
+
+The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
+
 ## Environment variables
 
 Required for Supabase (auth and storage) and for the backend API. Vite loads `.env` from the project root; only variables prefixed with `VITE_` are exposed to the client.
 
 1. Copy the example file and fill in your values:
    ```bash
-   cp .env.example .env
+   # For development, copy the development example file.
+   cp .env.development.example .env.development
    ```
-2. Set these in `.env`:
+2. Set these in `.env.development`:
 
    | Variable | Required | Description |
    |----------|----------|-------------|
@@ -44,7 +61,7 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    | `VITE_SERVER_URL` | No | Backend API base URL (default: `http://localhost:5179`). |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `invoicebreek`). |
 
-If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will throw on load. **Store credentials securely:** never commit `.env` (it is gitignored); use `.env.example` as the template locally, and use your host’s environment or a secrets manager in production.
+If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Store credentials securely:** never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production.
 
 ## Supabase & database
 

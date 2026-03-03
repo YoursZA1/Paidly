@@ -195,7 +195,7 @@ export default function AdminSubscriptions() {
       plan_change: 'bg-indigo-100 text-indigo-700 border-indigo-200',
       discount_applied: 'bg-purple-100 text-purple-700 border-purple-200',
       discount_removed: 'bg-slate-100 text-slate-700 border-slate-200',
-      custom_plan_created: 'bg-cyan-100 text-cyan-700 border-cyan-200'
+      custom_plan_created: 'bg-orange-100 text-orange-700 border-orange-200'
     };
 
     return badges[eventType] || 'bg-slate-100 text-slate-700 border-slate-200';

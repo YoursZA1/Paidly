@@ -296,7 +296,7 @@ export default function CreateInvoice() {
         {/* Header: title, subtitle, actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight font-display">
               New Invoice
             </h1>
             <p className="text-muted-foreground mt-1">

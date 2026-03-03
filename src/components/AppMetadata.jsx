@@ -5,19 +5,19 @@ export default function AppMetadata() {
   React.useEffect(() => {
     // Create and inject PWA manifest
     const manifest = {
-      name: "InvoiceBreek - Professional Invoicing",
-      short_name: "InvoiceBreek",
+      name: "Paidly - Professional Invoicing",
+      short_name: "Paidly",
       description: "Professional invoicing solution for businesses",
       start_url: "/",
       display: "standalone",
-      background_color: "#1e40af",
-      theme_color: "#1e40af",
+      background_color: "#f24e00",
+      theme_color: "#f24e00",
       orientation: "portrait-primary",
       icons: [
         {
-          src: "/Logo icon.png",
+          src: "/icon.svg",
           sizes: "any",
-          type: "image/png",
+          type: "image/svg+xml",
           purpose: "any maskable"
         }
       ],
@@ -30,7 +30,7 @@ export default function AppMetadata() {
           url: "/CreateInvoice",
           icons: [
             {
-              src: "/Logo icon.png",
+              src: "/icon.svg",
               sizes: "any"
             }
           ]
@@ -42,7 +42,7 @@ export default function AppMetadata() {
           url: "/Dashboard",
           icons: [
             {
-              src: "/Logo icon.png",
+              src: "/icon.svg",
               sizes: "any"
             }
           ]
@@ -65,16 +65,16 @@ export default function AppMetadata() {
 
     // Add meta tags for PWA
     const metaTags = [
-      { name: 'application-name', content: 'InvoiceBreek' },
+      { name: 'application-name', content: 'Paidly' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-      { name: 'apple-mobile-web-app-title', content: 'InvoiceBreek' },
+      { name: 'apple-mobile-web-app-title', content: 'Paidly' },
       { name: 'mobile-web-app-capable', content: 'yes' },
-      { name: 'msapplication-TileColor', content: '#1e40af' },
+      { name: 'msapplication-TileColor', content: '#f24e00' },
       { name: 'msapplication-tap-highlight', content: 'no' },
-      { property: 'og:title', content: 'InvoiceBreek - Professional Invoicing' },
+      { property: 'og:title', content: 'Paidly - Professional Invoicing' },
       { property: 'og:description', content: 'Professional invoicing solution for businesses' },
-      { property: 'og:image', content: '/Logo icon.png' }
+      { property: 'og:image', content: '/logo.svg' }
     ];
 
     metaTags.forEach(({ name, property, content }) => {
@@ -92,14 +92,14 @@ export default function AppMetadata() {
     // Add apple touch icons
     const appleTouchIcon = document.createElement('link');
     appleTouchIcon.rel = 'apple-touch-icon';
-    appleTouchIcon.href = '/Logo icon.png';
+    appleTouchIcon.href = '/icon.svg';
     document.head.appendChild(appleTouchIcon);
 
     // Service Worker Registration
     if ('serviceWorker' in navigator) {
       // Create a simple service worker
       const swCode = `
-        const CACHE_NAME = 'invoicebreek-v1';
+        const CACHE_NAME = 'paidly-v1';
         const urlsToCache = [
           '/',
           '/Dashboard',

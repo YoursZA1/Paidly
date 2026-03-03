@@ -46,14 +46,14 @@ export default function DocumentLayout({ user, title, documentNumber, date, chil
                                 href={downloadUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-indigo-600 text-white hover:bg-indigo-700 h-10 px-4 sm:px-6 py-2"
+                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-[#f24e00] text-white hover:bg-[#e04500] h-10 px-4 sm:px-6 py-2"
                             >
                                 Download PDF
                             </a>
                         ) : (
                             <Button
                                 onClick={printPDF}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 py-2 rounded-lg text-sm"
+                                className="bg-[#f24e00] hover:bg-[#e04500] text-white px-4 sm:px-6 py-2 rounded-lg text-sm"
                             >
                                 Download PDF
                             </Button>
@@ -77,7 +77,7 @@ export default function DocumentLayout({ user, title, documentNumber, date, chil
                                     )}
                                 </div>
                                 <div className="text-left sm:text-right">
-                                    <h2 className="text-2xl sm:text-3xl font-bold text-indigo-600 mb-2">{title}</h2>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-[#f24e00] mb-2">{title}</h2>
                                     {documentNumber && <p className="text-gray-600 text-sm"><strong>#:</strong> {documentNumber}</p>}
                                     {date && <p className="text-gray-600 text-sm"><strong>Date:</strong> {date}</p>}
                                 </div>

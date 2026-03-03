@@ -151,7 +151,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
         <Dialog open={isOpen} onOpenChange={() => {}}>
             <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden bg-white">
                 <div className="bg-indigo-600 p-6 text-white text-center">
-                    <DialogTitle className="text-2xl font-bold">Welcome to InvoiceBreek!</DialogTitle>
+                    <DialogTitle className="text-2xl font-bold">Welcome to Paidly!</DialogTitle>
                     <DialogDescription className="text-indigo-100 mt-2">
                         Get your professional profile set up in just a few steps.
                     </DialogDescription>

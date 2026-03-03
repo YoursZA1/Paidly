@@ -194,7 +194,7 @@ export default function QuotesPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1">Quotes</h1>
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">Quotes</h1>
                         <p className="text-sm text-muted-foreground">
                             Create, manage, and track your project quotations.
                         </p>
@@ -297,14 +297,16 @@ export default function QuotesPage() {
                             )
                         ) : sortedQuotes.length === 0 ? (
                             <div className="text-center py-12">
-                                <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-                                <h3 className="mt-2 text-sm font-medium text-foreground">No quotes found</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">Create your first quote to see it here.</p>
+                                <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">
+                                    <FileText className="h-7 w-7 text-muted-foreground" />
+                                </div>
+                                <h3 className="mt-2 text-base font-semibold text-foreground font-display">No quotes yet</h3>
+                                <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">Send professional quotes in ZAR or any currency. Convert to invoices when approved.</p>
                                 <div className="mt-6">
                                     <Link to={createPageUrl("CreateQuote")}>
-                                        <Button>
+                                        <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />
-                                            New Quote
+                                            Create your first quote
                                         </Button>
                                     </Link>
                                 </div>

@@ -48,18 +48,30 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         setSession(initialSession);
         let currentUser = null;
-        try {
-          currentUser = await User.me();
-        } catch {
-          // No local user (e.g. localStorage cleared); try restoring from Supabase session
-          if (initialSession?.user) {
+
+        // If we have a Supabase session, try restoring user from it first (works when localStorage is empty or stale)
+        if (initialSession?.user) {
+          try {
             currentUser = await User.restoreFromSupabaseSession();
+          } catch (restoreErr) {
+            console.warn("Restore from session failed:", restoreErr);
           }
         }
+
+        // If no user yet, try User.me() (uses localStorage + refreshes from Supabase profiles)
+        if (!currentUser) {
+          try {
+            currentUser = await User.me();
+          } catch {
+            // No local user; restore already attempted above
+          }
+        }
+
         if (cancelled) return;
         setUser(currentUser);
         setError(initialSession?.user && !currentUser ? "Failed to restore session" : "");
-      } catch {
+      } catch (err) {
+        console.warn("Auth init error:", err);
         if (!cancelled) setSession(null);
       } finally {
         if (!cancelled) setLoading(false);

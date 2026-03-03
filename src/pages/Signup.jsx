@@ -237,8 +237,8 @@ export default function Signup() {
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <User className="w-8 h-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">Create your account</CardTitle>
-          <p className="text-sm text-slate-500">Step {step} of 2</p>
+          <CardTitle className="text-2xl font-semibold text-foreground font-display">Create your account</CardTitle>
+          <p className="text-sm text-muted-foreground">Step {step} of 2</p>
         </CardHeader>
         <CardContent>
           {success ? (

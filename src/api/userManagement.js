@@ -1,32 +1,30 @@
-// User management API utilities for best practice
-import axios from "axios";
+// User management API utilities (calls backend at VITE_SERVER_URL)
+import { backendApi } from "./backendClient";
 
 // Fetch all Supabase users
 export async function fetchSupabaseUsers() {
-  const response = await axios.get("/api/admin/sync-users");
+  const response = await backendApi.get("/api/admin/sync-users");
   return response.data.users || [];
 }
 
 // Update user role
 export async function updateUserRole(userId, role) {
-  return axios.post("/api/admin/roles", { userId, role });
+  return backendApi.post("/api/admin/roles", { userId, role });
 }
 
 // Delete user
 export async function deleteUser(userId) {
-  return axios.delete(`/api/admin/users/${userId}`);
+  return backendApi.delete(`/api/admin/users/${userId}`);
 }
 
 // Add new user
 export async function addUser(email, fullName, role) {
-  return axios.post("/api/admin/users", { email, fullName, role });
+  return backendApi.post("/api/admin/users", { email, fullName, role });
 }
 
 // Sync users and clean up orphaned users
 export async function syncAndCleanUsers() {
-  // Fetch users from Supabase
   const supabaseUsers = await fetchSupabaseUsers();
-  // Optionally, call backend endpoint to clean orphaned users
-  await axios.post("/api/admin/clean-orphaned-users");
+  await backendApi.post("/api/admin/clean-orphaned-users");
   return supabaseUsers;
 }

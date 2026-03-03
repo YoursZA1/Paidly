@@ -131,7 +131,7 @@ export default function Reports() {
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1">Reports</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">Reports</h1>
           <p className="text-sm text-muted-foreground">
             View and download income, expense, and custom reports.
           </p>

@@ -124,7 +124,7 @@ export default function PaymentReminderSettings() {
     };
 
     return (
-        <Card className="bg-white border border-gray-200">
+        <Card className="bg-card border border-border">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Bell className="w-5 h-5" />
@@ -140,7 +140,7 @@ export default function PaymentReminderSettings() {
                     <div className="flex items-center justify-between">
                         <div>
                             <Label className="text-base font-medium">Enable Reminders</Label>
-                            <p className="text-sm text-gray-500">Turn on/off all automated reminders</p>
+                            <p className="text-sm text-muted-foreground">Turn on/off all automated reminders</p>
                         </div>
                         <Switch
                             checked={settings.reminders_enabled}
@@ -152,7 +152,7 @@ export default function PaymentReminderSettings() {
                     <div className="flex items-center justify-between">
                         <div>
                             <Label className="text-base font-medium">Auto-Send Emails</Label>
-                            <p className="text-sm text-gray-500">Send emails automatically without manual review</p>
+                            <p className="text-sm text-muted-foreground">Send emails automatically without manual review</p>
                         </div>
                         <Switch
                             checked={settings.auto_send}
@@ -167,7 +167,7 @@ export default function PaymentReminderSettings() {
                 {settings.reminders_enabled && (
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-medium text-gray-900">Reminder Schedule</h3>
+                            <h3 className="text-lg font-medium text-foreground">Reminder Schedule</h3>
                             <Button onClick={handleAddRule} variant="outline" size="sm">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Add Rule
@@ -181,19 +181,19 @@ export default function PaymentReminderSettings() {
                                 const bVal = b.type === 'before' ? -b.days : b.days;
                                 return aVal - bVal;
                             }).map((rule) => (
-                                <div key={rule.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                                <div key={rule.id} className="flex items-center justify-between p-4 bg-muted rounded-lg border">
                                     <div>
-                                        <div className="font-medium text-gray-900">
+                                        <div className="font-medium text-foreground">
                                             {rule.days === 0 ? 'On Due Date' : 
                                              `${rule.days} day${rule.days > 1 ? 's' : ''} ${rule.type} due date`}
                                         </div>
-                                        <div className="text-sm text-gray-500 truncate max-w-md">
+                                        <div className="text-sm text-muted-foreground truncate max-w-md">
                                             Subject: {rule.subject}
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
                                         <Button variant="ghost" size="icon" onClick={() => handleEditRule(rule)}>
-                                            <Edit2 className="w-4 h-4 text-gray-500" />
+                                            <Edit2 className="w-4 h-4 text-muted-foreground" />
                                         </Button>
                                         <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(rule.id)}>
                                             <Trash2 className="w-4 h-4 text-red-500" />
@@ -202,7 +202,7 @@ export default function PaymentReminderSettings() {
                                 </div>
                             ))}
                             {settings.reminder_rules.length === 0 && (
-                                <div className="text-center py-8 text-gray-500 italic">
+                                <div className="text-center py-8 text-muted-foreground italic">
                                     No reminders configured. Add a rule to get started.
                                 </div>
                             )}
@@ -211,7 +211,7 @@ export default function PaymentReminderSettings() {
                 )}
 
                 <div className="pt-4 border-t flex justify-end">
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/90 text-white">
                         <Save className="w-4 h-4 mr-2" />
                         {isSaving ? 'Saving...' : 'Save Settings'}
                     </Button>
@@ -237,7 +237,7 @@ export default function PaymentReminderSettings() {
                                                 onChange={(e) => setEditingRule({...editingRule, days: parseInt(e.target.value) || 0})}
                                                 className="w-24"
                                             />
-                                            <span className="text-sm text-gray-500">days</span>
+                                            <span className="text-sm text-muted-foreground">days</span>
                                             <Select 
                                                 value={editingRule.type} 
                                                 onValueChange={(val) => setEditingRule({...editingRule, type: val})}
@@ -250,7 +250,7 @@ export default function PaymentReminderSettings() {
                                                     <SelectItem value="after">After</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                            <span className="text-sm text-gray-500">due date</span>
+                                            <span className="text-sm text-muted-foreground">due date</span>
                                         </div>
                                     </div>
                                 </div>
@@ -262,7 +262,7 @@ export default function PaymentReminderSettings() {
                                         onChange={(e) => setEditingRule({...editingRule, subject: e.target.value})}
                                         placeholder="e.g., Reminder: Invoice {{invoice_number}}"
                                     />
-                                    <p className="text-xs text-gray-500">Available variables: {'{{invoice_number}}'}, {'{{client_name}}'}, {'{{amount}}'}, {'{{due_date}}'}</p>
+                                    <p className="text-xs text-muted-foreground">Available variables: {'{{invoice_number}}'}, {'{{client_name}}'}, {'{{amount}}'}, {'{{due_date}}'}</p>
                                 </div>
 
                                 <div className="space-y-2">
@@ -273,7 +273,7 @@ export default function PaymentReminderSettings() {
                                         rows={8}
                                         placeholder="Write your email content here..."
                                     />
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-muted-foreground">
                                         Available variables: {'{{invoice_number}}'}, {'{{client_name}}'}, {'{{amount}}'}, {'{{due_date}}'}, {'{{currency}}'}, {'{{company_name}}'}, {'{{view_link}}'}
                                     </p>
                                 </div>
@@ -282,7 +282,7 @@ export default function PaymentReminderSettings() {
 
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                            <Button onClick={saveRule} className="bg-indigo-600 text-white">Save Rule</Button>
+                            <Button onClick={saveRule} className="bg-primary text-primary-foreground">Save Rule</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

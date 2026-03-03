@@ -7,7 +7,7 @@ import { connectExcelDatabase } from "@/services/ExcelDatabaseService"
 
 function App() {
   useEffect(() => {
-    connectExcelDatabase({ url: "/invoicebreek_data.xlsx" }).catch(() => {
+    connectExcelDatabase({ url: "/paidly_data.xlsx" }).catch(() => {
       // ignore bootstrap errors
     });
   }, []);

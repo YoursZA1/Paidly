@@ -11,8 +11,8 @@ const DEFAULT_SETTINGS = {
   system: {
     siteName: 'Invoice Breek',
     siteDescription: 'Professional Invoice Management Platform',
-    adminEmail: 'admin@invoicebreek.com',
-    supportEmail: 'support@invoicebreek.com',
+    adminEmail: 'admin@paidly.com',
+    supportEmail: 'support@paidly.com',
     maintenanceMode: false,
     maintenanceMessage: 'We are currently performing scheduled maintenance. We\'ll be back shortly.',
     allowUserRegistration: true,

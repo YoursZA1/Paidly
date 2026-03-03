@@ -11,7 +11,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuContent
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Copy, FileJson, Share2, FileText, Send, XCircle } from 'lucide-react';
+import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Copy, FileJson, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Invoice, Payment } from '@/api/entities';
@@ -114,6 +114,29 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
             });
         } finally {
             setIsGeneratingShareLink(false);
+        }
+    };
+
+    const handleSendViaWhatsApp = async () => {
+        try {
+            const token = await ensureToken();
+            const publicInvoiceUrl = `${window.location.origin}${createPageUrl(`PublicInvoice?token=${token}`)}`;
+            const message = `Hi, here's your invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'us'}: ${publicInvoiceUrl}`;
+            const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+            toast({
+                title: "WhatsApp opened",
+                description: "Share the invoice link with your client.",
+                variant: "success",
+                duration: 3000
+            });
+        } catch (error) {
+            console.error("Failed to prepare WhatsApp share:", error);
+            toast({
+                title: "Failed to open WhatsApp",
+                description: error.message || "Please try again.",
+                variant: "destructive"
+            });
         }
     };
 
@@ -471,6 +494,10 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                     <DropdownMenuItem onClick={handleEmailClient}>
                         <Mail className="w-4 h-4 mr-2" />
                         Email to Client
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleSendViaWhatsApp}>
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        Send via WhatsApp
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleShare}>
                         <Copy className="w-4 h-4 mr-2" />

@@ -1,18 +1,19 @@
 /**
  * Currency Management API Integration
- * Handles API calls for currency preferences and settings
+ * User currency is stored in Supabase profiles (breakApi.auth); optional backend for business/exchange rates.
  */
 
 import { breakApi } from './apiClient';
+import { backendApi } from './backendClient';
 
 /**
- * Get user's preferred currency
- * @returns {Promise} Currency preference data
+ * Get user's preferred currency from auth profile (Supabase profiles table).
+ * @returns {Promise<{ currency: string }>} Currency preference data
  */
 export const getUserCurrency = async () => {
   try {
-    const response = await breakApi.get('/api/user/currency');
-    return response.data || { currency: 'ZAR' };
+    const user = await breakApi.auth.me();
+    return { currency: user?.currency || 'ZAR' };
   } catch (error) {
     console.error('Error fetching user currency:', error);
     return { currency: 'ZAR' };
@@ -20,16 +21,14 @@ export const getUserCurrency = async () => {
 };
 
 /**
- * Set user's preferred currency
+ * Set user's preferred currency via auth profile (Supabase profiles table).
  * @param {string} currencyCode - Currency code (e.g., 'ZAR', 'USD')
  * @returns {Promise} Updated currency preference
  */
 export const setUserCurrency = async (currencyCode) => {
   try {
-    const response = await breakApi.put('/api/user/currency', {
-      currency: currencyCode,
-    });
-    return response.data;
+    await breakApi.auth.updateMyUserData({ currency: currencyCode });
+    return { currency: currencyCode };
   } catch (error) {
     console.error('Error setting user currency:', error);
     throw error;
@@ -37,58 +36,65 @@ export const setUserCurrency = async (currencyCode) => {
 };
 
 /**
- * Get business currency settings
+ * Get business currency settings (optional backend). Falls back to user default.
  * @param {string} businessId - Business ID
  * @returns {Promise} Business currency settings
  */
 export const getBusinessCurrency = async (businessId) => {
   try {
-    const response = await breakApi.get(`/api/business/${businessId}/currency`);
-    return response.data || { currency: 'ZAR', allowMultipleCurrencies: false };
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get(`/api/business/${businessId}/currency`);
+      return response.data || { currency: 'ZAR', allowMultipleCurrencies: false };
+    }
   } catch (error) {
     console.error('Error fetching business currency:', error);
-    return { currency: 'ZAR', allowMultipleCurrencies: false };
   }
+  return { currency: 'ZAR', allowMultipleCurrencies: false };
 };
 
 /**
- * Set business currency settings
+ * Set business currency settings (optional backend).
  * @param {string} businessId - Business ID
  * @param {object} settings - Currency settings
  * @returns {Promise} Updated settings
  */
 export const setBusinessCurrency = async (businessId, settings) => {
   try {
-    const response = await breakApi.put(
-      `/api/business/${businessId}/currency`,
-      settings
-    );
-    return response.data;
+    if (typeof backendApi.put === 'function') {
+      const response = await backendApi.put(
+        `/api/business/${businessId}/currency`,
+        settings
+      );
+      return response.data;
+    }
   } catch (error) {
     console.error('Error setting business currency:', error);
     throw error;
   }
+  return settings;
 };
 
 /**
- * Get exchange rates
+ * Get exchange rates (optional backend).
  * @param {string} baseCurrency - Base currency code
  * @returns {Promise} Exchange rates object
  */
 export const getExchangeRates = async (baseCurrency = 'ZAR') => {
   try {
-    const response = await breakApi.get('/api/exchange-rates', {
-      params: { base: baseCurrency },
-    });
-    return response.data || {};
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get('/api/exchange-rates', {
+        params: { base: baseCurrency },
+      });
+      return response.data || {};
+    }
   } catch (error) {
     console.error('Error fetching exchange rates:', error);
-    return {};
   }
+  return {};
 };
 
 /**
- * Get historical exchange rates
+ * Get historical exchange rates (optional backend).
  * @param {string} baseCurrency - Base currency code
  * @param {string} date - Date in YYYY-MM-DD format
  * @returns {Promise} Historical exchange rates
@@ -98,25 +104,25 @@ export const getHistoricalExchangeRates = async (
   date
 ) => {
   try {
-    const response = await breakApi.get(
-      '/api/exchange-rates/historical',
-      {
-        params: { base: baseCurrency, date },
-      }
-    );
-    return response.data || {};
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get(
+        '/api/exchange-rates/historical',
+        { params: { base: baseCurrency, date } }
+      );
+      return response.data || {};
+    }
   } catch (error) {
     console.error('Error fetching historical exchange rates:', error);
-    return {};
   }
+  return {};
 };
 
 /**
- * Convert currency using API
+ * Convert currency using API (optional backend).
  * @param {number} amount - Amount to convert
  * @param {string} fromCurrency - Source currency code
  * @param {string} toCurrency - Target currency code
- * @returns {Promise} Converted amount
+ * @returns {Promise<number>} Converted amount
  */
 export const convertCurrencyAPI = async (
   amount,
@@ -124,42 +130,44 @@ export const convertCurrencyAPI = async (
   toCurrency = 'ZAR'
 ) => {
   try {
-    const response = await breakApi.get('/api/currency/convert', {
-      params: { amount, from: fromCurrency, to: toCurrency },
-    });
-    return response.data?.convertedAmount || amount;
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get('/api/currency/convert', {
+        params: { amount, from: fromCurrency, to: toCurrency },
+      });
+      return response.data?.convertedAmount ?? amount;
+    }
   } catch (error) {
     console.error('Error converting currency:', error);
-    return amount;
   }
+  return amount;
 };
 
 /**
- * Get all supported currencies from API
+ * Get all supported currencies (optional backend). Returns in-memory list if no backend.
  * @returns {Promise} Array of supported currencies
  */
 export const getSupportedCurrencies = async () => {
   try {
-    const response = await breakApi.get('/api/currencies');
-    return response.data || [];
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get('/api/currencies');
+      return response.data || [];
+    }
   } catch (error) {
     console.error('Error fetching supported currencies:', error);
-    return [];
   }
+  return [];
 };
 
 /**
- * Save invoice currency
+ * Save invoice currency (updates invoice via entities, not REST).
  * @param {string} invoiceId - Invoice ID
  * @param {string} currencyCode - Currency code
  * @returns {Promise} Updated invoice
  */
 export const saveInvoiceCurrency = async (invoiceId, currencyCode) => {
   try {
-    const response = await breakApi.put(`/api/invoices/${invoiceId}`, {
-      currency: currencyCode,
-    });
-    return response.data;
+    await breakApi.entities.Invoice.update(invoiceId, { currency: currencyCode });
+    return { currency: currencyCode };
   } catch (error) {
     console.error('Error saving invoice currency:', error);
     throw error;
@@ -167,35 +175,39 @@ export const saveInvoiceCurrency = async (invoiceId, currencyCode) => {
 };
 
 /**
- * Get invoice currency history
+ * Get invoice currency history (optional backend).
  * @param {string} invoiceId - Invoice ID
  * @returns {Promise} Currency history for invoice
  */
 export const getInvoiceCurrencyHistory = async (invoiceId) => {
   try {
-    const response = await breakApi.get(
-      `/api/invoices/${invoiceId}/currency-history`
-    );
-    return response.data || [];
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get(
+        `/api/invoices/${invoiceId}/currency-history`
+      );
+      return response.data || [];
+    }
   } catch (error) {
     console.error('Error fetching invoice currency history:', error);
-    return [];
   }
+  return [];
 };
 
 /**
- * Get currency conversion rates for a specific date
+ * Get currency conversion rates for a specific date (optional backend).
  * @param {string} date - Date in YYYY-MM-DD format
  * @returns {Promise} Exchange rates for the date
  */
 export const getCurrencyRatesForDate = async (date) => {
   try {
-    const response = await breakApi.get(`/api/exchange-rates/${date}`);
-    return response.data || {};
+    if (typeof backendApi.get === 'function') {
+      const response = await backendApi.get(`/api/exchange-rates/${date}`);
+      return response.data || {};
+    }
   } catch (error) {
     console.error('Error fetching currency rates for date:', error);
-    return {};
   }
+  return {};
 };
 
 export default {

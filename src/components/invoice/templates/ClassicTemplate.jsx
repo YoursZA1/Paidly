@@ -37,7 +37,7 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                         )}
                     </div>
                     <div className="text-right">
-                        <h2 className="text-3xl font-bold text-indigo-600 mb-2">{resolvedTitle}</h2>
+                        <h2 className="text-3xl font-bold text-[#f24e00] mb-2">{resolvedTitle}</h2>
                         <p className="text-gray-600"><strong>#:</strong> {invoice.invoice_number}</p>
                     </div>
                 </div>
@@ -45,7 +45,7 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
 
             {/* Custom Header Message */}
             {user?.invoice_header && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg border-l-4 border-indigo-500">
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border-l-4 border-[#f24e00]">
                     <p className="text-gray-700 whitespace-pre-line">{user.invoice_header}</p>
                 </div>
             )}
@@ -157,14 +157,14 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                     )}
                     <div className="flex justify-between py-3 text-lg bg-gray-100 px-3 rounded-md mt-2">
                         <span className="font-bold text-gray-800">Total</span>
-                        <span className="font-bold text-indigo-600">{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                        <span className="font-bold text-[#f24e00]">{formatCurrency(invoice.total_amount, userCurrency)}</span>
                     </div>
                 </div>
             </section>
             
             {/* Payment Details Section */}
             {bankingDetail && (
-                <section className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <section className="mb-8 p-4 bg-[#fff7ed] rounded-lg border border-[#fed7aa]">
                     <h3 className="font-semibold text-gray-800 mb-3">Payment Details</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>

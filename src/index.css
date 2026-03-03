@@ -102,51 +102,89 @@ button:focus-visible {
 
 
 
-/* Wallet / split theme: dark sidebar + light content, neon green accent */
+/* Paidly light theme: soft off-white page, white cards, orange/coral brand (matches logo).
+ * Use semantic tokens app-wide:
+ * - Text: text-foreground (main), text-muted-foreground (labels/captions)
+ * - Backgrounds: bg-background (page), bg-card (cards), bg-muted (subtle areas)
+ * - Borders: border-border
+ * - Primary actions: bg-primary, text-primary-foreground
+ * - Status: status-paid, status-overdue, status-pending
+ */
 @layer base {
   :root {
+    /* Brand palette from logo (dist/logo.svg): coral/orange */
+    --bg-main: #F4F7F9;
+    --bg-card: #FFFFFF;
+    --brand-primary: #f24e00;
+    --brand-secondary: #ff7c00;
+    --accent-blue: #ffa600;
+    --status-paid: #27AE60;
+    --status-overdue: #EB5757;
+    --status-pending: #F2994A;
+    --text-main: #1A3336;
+    --text-muted: #7E9294;
+
     --font-sans: 'Inter', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
-    --font-display: 'Inter', system-ui, sans-serif;
-    /* Content area: light */
-    --background: 0 0% 97%;
-    --foreground: 0 0% 9%;
+    --font-display: 'Plus Jakarta Sans', Inter, system-ui, sans-serif;
+
+    /* Semantic theme (HSL) — primary = logo coral #f24e00 (17 100% 47%) */
+    --background: 210 20% 96%;
+    --foreground: 20 15% 18%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 20 15% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    /* Primary = logo cyan #00CCFF */
-    --primary: 192 100% 50%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 94%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 94%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84% 60%;
+    --popover-foreground: 20 15% 18%;
+    --primary: 17 100% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 20% 94%;
+    --secondary-foreground: 20 15% 18%;
+    --muted: 30 15% 93%;
+    --muted-foreground: 20 8% 50%;
+    --accent: 29 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 79% 63%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 192 100% 50%;
-    --chart-1: 192 100% 50%;
-    --chart-2: 217 91% 60%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 0 84% 60%;
-    --chart-5: 0 0% 45%;
+    --border: 30 15% 90%;
+    --input: 30 15% 90%;
+    --ring: 17 100% 47%;
+    --chart-1: 17 100% 47%;
+    --chart-2: 29 100% 50%;
+    --chart-3: 38 100% 50%;
+    --chart-4: 0 79% 63%;
+    --chart-5: 145 63% 42%;
     --radius: 0.5rem;
-    /* Sidebar: dark */
-    --sidebar-background: 0 0% 7%;
+    --radius-xl: 0.75rem;
+    --icon-sm: 1rem;
+    --icon-md: 1.25rem;
+    --icon-lg: 1.5rem;
+    /* Sidebar: warm dark with orange accent */
+    --sidebar-background: 20 25% 12%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 192 100% 50%;
-    --sidebar-primary-foreground: 0 0% 0%;
-    --sidebar-accent: 0 0% 14%;
+    --sidebar-primary: 17 100% 47%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 18%;
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 14%;
-    --sidebar-ring: 192 100% 50%;
-    --logo-cyan: #00CCFF;
-    --content-bg: #f7f7f7;
-    --panel-bg: #ffffff;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 17 100% 47%;
+    --logo-cyan: #f24e00;
+    --content-bg: #F4F7F9;
+    --panel-bg: #FFFFFF;
+    --sidebar-border-color: #EDEFF2;
+    /* FinBank spacing & typography */
+    --spacing-page-mobile: 16px;
+    --spacing-page-desktop: 32px;
+    --card-padding: 24px;
+    --gap-cards: 24px;
+    --text-h1-size: 28px;
+    --text-h2-size: 18px;
+    --text-body-size: 14px;
+    --text-caption-size: 12px;
+  }
+  /* Optional: soft dark gradient — add class "content-dark" to main to use */
+  .content-soft-dark {
+    --background: 222 47% 11%;
+    background: linear-gradient(160deg, hsl(222 47% 11%) 0%, hsl(220 40% 16%) 50%, hsl(222 47% 11%) 100%);
   }
   .dark {
     --background: 0 0% 7%;
@@ -155,27 +193,27 @@ button:focus-visible {
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 98%;
-    --primary: 192 100% 50%;
-    --primary-foreground: 0 0% 0%;
+    --primary: 17 100% 52%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 14%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14%;
     --muted-foreground: 0 0% 65%;
-    --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 29 100% 50%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14%;
     --input: 0 0% 14%;
-    --ring: 192 100% 50%;
+    --ring: 17 100% 52%;
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 192 100% 50%;
-    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-primary: 17 100% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 14%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 14%;
-    --sidebar-ring: 192 100% 50%;
+    --sidebar-ring: 17 100% 52%;
   }
 }
 
@@ -186,20 +224,111 @@ button:focus-visible {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground antialiased;
     font-family: var(--font-sans);
     min-height: 100vh;
+    letter-spacing: 0.01em;
+    background: hsl(var(--background));
   }
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
+  /* Inputs: consistent focus for product feel */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none ring-2 ring-ring/30 ring-offset-2 ring-offset-background;
+  }
+  /* Main content area: FinBank soft off-white so cards feel floating */
+  .content-area-light {
+    background: var(--bg-main);
+  }
+  h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+    color: var(--text-main);
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+  h1 {
+    font-size: var(--text-h1-size);
+    font-weight: 700;
+  }
+  h2 {
+    font-size: var(--text-h2-size);
     font-weight: 600;
+  }
+  /* FinBank body & captions */
+  .finbank-body {
+    font-size: var(--text-body-size);
+    color: var(--text-main);
+  }
+  .finbank-caption {
+    font-size: var(--text-caption-size);
+    color: var(--text-muted);
   }
   #root {
     min-height: 100vh;
   }
+
+  /* Dashboard: FinBank light (soft off-white) */
+  .dashboard-fintech-wrap {
+    background: var(--bg-main);
+    min-height: 100%;
+  }
+  .glass-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+    border-radius: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  .glass-card-hover:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Floating cards on light: white, subtle shadow */
+  .card-float {
+    background: var(--bg-card);
+    border: 1px solid hsl(var(--border));
+    border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Shadow & depth (FinBank "look") */
+  .card-shadow {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  }
+  .card-hover {
+    transition: all 0.3s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Sidebar: white background, 1px right border, pill active state, 20px icons */
+  .sidebar-panel {
+    background: #FFFFFF;
+    border-right: 1px solid var(--sidebar-border-color);
+  }
+  .sidebar-nav-icon {
+    stroke-width: 2.5;
+    width: 20px;
+    height: 20px;
+  }
+  .sidebar-nav-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+  .sidebar-nav-item-active {
+    background: var(--brand-primary) !important;
+    color: #FFFFFF !important;
+    border-radius: 9999px;
+    box-shadow: none;
+  }
+  .sidebar-nav-item-active .sidebar-nav-icon {
+    color: #FFFFFF !important;
+  }
+  .sidebar-nav-item-active a {
+    border-radius: 9999px;
+  }
+
 }

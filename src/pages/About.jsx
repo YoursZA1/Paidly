@@ -8,7 +8,7 @@ export default function About() {
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto py-8">
         <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1">About InvoiceBreek</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">About Paidly</h1>
           <p className="text-muted-foreground">
             Our mission and what we stand for.
           </p>
@@ -23,7 +23,7 @@ export default function About() {
           </CardHeader>
           <CardContent className="space-y-3 text-muted-foreground">
             <p>
-              InvoiceBreek helps small businesses and freelancers get paid faster by making
+              Paidly helps small businesses and freelancers get paid faster by making
               invoicing, quotes, and cash flow simple and professional. We aim to reduce the
               friction between sending an invoice and receiving payment so you can focus on
               your work.

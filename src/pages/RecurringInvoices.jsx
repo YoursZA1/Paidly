@@ -177,7 +177,7 @@ export default function RecurringInvoices() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 flex items-center gap-2 font-display">
                             <Zap className="w-6 h-6 text-blue-600" />
                             Recurring Invoices
                         </h1>
@@ -253,18 +253,20 @@ export default function RecurringInvoices() {
                 )}
 
                 {recurringInvoices.length === 0 && !isLoading ? (
-                    <Card className="border-dashed">
+                    <Card className="border-dashed border-border">
                         <CardContent className="pt-12 pb-12">
                             <div className="text-center">
-                                <Repeat className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                                <h3 className="text-lg font-semibold text-gray-600 mb-2">No Recurring Invoices</h3>
-                                <p className="text-gray-500 mb-6">Create your first recurring invoice template to automate your billing.</p>
+                                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <Repeat className="w-7 h-7 text-muted-foreground" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-foreground mb-2 font-display">No recurring invoices yet</h3>
+                                <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">Set up a template once and we’ll generate invoices automatically. Supports ZAR and all major currencies.</p>
                                 <Button
                                     onClick={() => setIsCreateDialogOpen(true)}
-                                    className="bg-blue-600 hover:bg-blue-700"
+                                    className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
                                 >
                                     <Plus className="w-4 h-4 mr-2" />
-                                    Create Template
+                                    Create your first template
                                 </Button>
                             </div>
                         </CardContent>

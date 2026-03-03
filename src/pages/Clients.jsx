@@ -373,20 +373,20 @@ export default function Clients() {
                     className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                            Client Management
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 font-display">
+                            Clients
                         </h1>
-                        <p className="text-gray-600">
-                            Organize and manage your client relationships
+                        <p className="text-sm text-muted-foreground">
+                            Organize and manage your client relationships.
                         </p>
                     </div>
                     
                     <Button
                         onClick={() => setShowForm(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+                        className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2"
                     >
                         <Plus className="w-4 h-4 mr-2" />
-                        Add New Client
+                        Add client
                     </Button>
                 </motion.div>
 
@@ -637,29 +637,29 @@ export default function Clients() {
                             ))}
                         </div>
                     ) : filteredClients.length === 0 ? (
-                        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+                        <Card className="border-dashed border-border">
                             <CardContent className="p-12 text-center">
-                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Users className="w-8 h-8 text-slate-400" />
+                                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <Users className="w-7 h-7 text-muted-foreground" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                                <h3 className="text-base font-semibold text-foreground mb-2 font-display">
                                     {searchTerm || Object.keys(filters).length > 0 ? "No clients found" : "No clients yet"}
                                 </h3>
-                                <p className="text-slate-600 mb-6">
-                                    {searchTerm 
+                                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                                    {searchTerm
                                         ? `No clients match "${searchTerm}"`
                                         : Object.keys(filters).length > 0
-                                        ? "Try adjusting your filters"
-                                        : "Add your first client to get started with invoicing"
+                                        ? "Try adjusting your filters."
+                                        : "Add clients to send invoices and quotes. Supports ZAR and all major currencies."
                                     }
                                 </p>
                                 {!searchTerm && Object.keys(filters).length === 0 && (
                                     <Button
                                         onClick={() => setShowForm(true)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                        className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
-                                        Add Your First Client
+                                        Add your first client
                                     </Button>
                                 )}
                             </CardContent>

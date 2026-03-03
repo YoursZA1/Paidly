@@ -30,7 +30,7 @@ export const exportToExcel = (data, filename = 'export.xlsx', sheetName = 'Sheet
 };
 
 // Export multiple sheets to one Excel file with data validation
-export const exportMultipleSheets = (sheets, filename = 'invoicebreek_data.xlsx') => {
+export const exportMultipleSheets = (sheets, filename = 'paidly_data.xlsx') => {
   try {
     const workbook = XLSX.utils.book_new();
 
@@ -147,8 +147,8 @@ export const importFromExcelUrl = async (url) => {
   }
 };
 
-// Generate complete InvoiceBreek data template (all sheets in one file)
-export const generateInvoiceBreekTemplate = () => {
+// Generate complete Paidly data template (all sheets in one file)
+export const generatePaidlyTemplate = () => {
   const userTemplate = [
     {
       'id': generateUUID(),
@@ -364,7 +364,7 @@ export const generateInvoiceBreekTemplate = () => {
     { data: serviceTemplate, sheetName: 'Services' }
   ];
 
-  return exportMultipleSheets(sheets, 'invoicebreek_data.xlsx');
+  return exportMultipleSheets(sheets, 'paidly_data.xlsx');
 };
 
 // Validate Users data
@@ -904,7 +904,7 @@ export const validateLogsData = (data, usersData = []) => {
   };
 };
 
-// Export all InvoiceBreek data to one file with multiple sheets
+// Export all Paidly data to one file with multiple sheets
 export const exportAllData = async (users, invoices, clients, services) => {
   const usersData = users.map(user => ({
     'id': user.id || generateUUID(),
@@ -965,7 +965,7 @@ export const exportAllData = async (users, invoices, clients, services) => {
     { data: servicesData.length > 0 ? servicesData : [{ 'Service Name': '', 'Default Price': 0 }], sheetName: 'Services' }
   ];
 
-  return exportMultipleSheets(sheets, 'invoicebreek_data.xlsx');
+  return exportMultipleSheets(sheets, 'paidly_data.xlsx');
 };
 
 // Helper functions

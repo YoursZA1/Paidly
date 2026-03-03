@@ -14,28 +14,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..');
 
-// Load .env file
+// Load .env file (try .env.development first for dev, then .env)
 function loadEnv() {
-  try {
-    const envPath = join(projectRoot, '.env');
-    const envContent = readFileSync(envPath, 'utf-8');
-    const env = {};
-    
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const [key, ...valueParts] = trimmed.split('=');
-        if (key && valueParts.length > 0) {
-          env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+  const envFiles = ['.env.development', '.env'];
+  for (const envFile of envFiles) {
+    try {
+      const envPath = join(projectRoot, envFile);
+      const envContent = readFileSync(envPath, 'utf-8');
+      const env = {};
+      envContent.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const [key, ...valueParts] = trimmed.split('=');
+          if (key && valueParts.length > 0) {
+            env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+          }
         }
+      });
+      if (env.VITE_SUPABASE_URL || env.VITE_SUPABASE_ANON_KEY) {
+        console.log(`   Loaded from ${envFile}\n`);
+        return env;
       }
-    });
-    
-    return env;
-  } catch (error) {
-    console.error('❌ Error reading .env file:', error.message);
-    return null;
+    } catch {
+      // file not found or unreadable, try next
+    }
   }
+  console.error('❌ No .env.development or .env found with Supabase variables');
+  return null;
 }
 
 async function verifySupabaseConfig() {
@@ -43,7 +48,7 @@ async function verifySupabaseConfig() {
   
   const env = loadEnv();
   if (!env) {
-    console.error('❌ Could not load .env file');
+    console.error('❌ Could not load .env.development or .env with Supabase variables');
     process.exit(1);
   }
   

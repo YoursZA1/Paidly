@@ -95,7 +95,7 @@ export default function VendorsPage() {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                     <div className="flex items-center gap-4">
@@ -107,7 +107,7 @@ export default function VendorsPage() {
                             <ArrowLeft className="w-4 h-4" />
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-semibold text-gray-900">Vendors</h1>
+                            <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Vendors</h1>
                             <p className="text-gray-600">Manage your suppliers and service providers</p>
                         </div>
                     </div>
@@ -133,9 +133,25 @@ export default function VendorsPage() {
                         {isLoading ? (
                             <div className="text-center py-8">Loading...</div>
                         ) : filteredVendors.length === 0 ? (
-                            <div className="text-center py-12 text-gray-500">
-                                No vendors found. Add one to get started.
-                            </div>
+                            <Card className="border-dashed border-border">
+                                <CardContent className="py-12 text-center">
+                                    <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <Building2 className="w-7 h-7 text-muted-foreground" />
+                                    </div>
+                                    <h3 className="text-base font-semibold text-foreground mb-2 font-display">
+                                        {searchTerm ? "No vendors found" : "No vendors yet"}
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                                        {searchTerm ? "Try a different search." : "Track suppliers and expenses. Add a vendor to get started."}
+                                    </p>
+                                    {!searchTerm && (
+                                        <Button onClick={openCreate} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground">
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add vendor
+                                        </Button>
+                                    )}
+                                </CardContent>
+                            </Card>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {filteredVendors.map(vendor => (

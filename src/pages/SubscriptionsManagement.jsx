@@ -57,7 +57,7 @@ export default function SubscriptionsManagement() {
   const planChartData = useMemo(() => {
     if (!planData) return [];
     return [
-      { name: 'Individual', value: planData.Individual.count, color: '#3b82f6' },
+      { name: 'Individual', value: planData.Individual.count, color: '#f24e00' },
       { name: 'SME', value: planData.SME.count, color: '#10b981' },
       { name: 'Corporate', value: planData.Corporate.count, color: '#a855f7' }
     ];
@@ -194,7 +194,7 @@ export default function SubscriptionsManagement() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Plan Category Charts */}
             <Card className="shadow-xl rounded-2xl border-0 lg:col-span-1">
-              <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl">
+              <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
                   Users by Plan
@@ -227,7 +227,7 @@ export default function SubscriptionsManagement() {
 
             {/* Plan Details */}
             <Card className="shadow-xl rounded-2xl border-0 lg:col-span-2">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-t-2xl">
+              <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
                   Plan Distribution
@@ -357,7 +357,7 @@ export default function SubscriptionsManagement() {
 
           {/* MRR Trend */}
           <Card className="shadow-xl rounded-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-t-2xl">
+            <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
               <CardTitle className="flex items-center gap-2">
                 <LineChartIcon className="h-5 w-5" />
                 Monthly Recurring Revenue Trend (12 Months)
@@ -369,8 +369,8 @@ export default function SubscriptionsManagement() {
                   <AreaChart data={mrrTrend} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
                     <defs>
                       <linearGradient id="colorMrr" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                        <stop offset="5%" stopColor="#f24e00" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#f24e00" stopOpacity={0.1}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -380,7 +380,7 @@ export default function SubscriptionsManagement() {
                     <Area 
                       type="monotone" 
                       dataKey="mrr" 
-                      stroke="#3b82f6" 
+                      stroke="#f24e00" 
                       fillOpacity={1} 
                       fill="url(#colorMrr)" 
                     />
@@ -447,7 +447,7 @@ export default function SubscriptionsManagement() {
         <TabsContent value="analysis" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-t-2xl">
+              <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
                   30-Day Movement
@@ -472,7 +472,7 @@ export default function SubscriptionsManagement() {
                       <span className="text-slate-700 font-medium">Reactivations</span>
                       <span className="text-2xl font-bold text-green-600">+{metrics.metrics30Days.reactivations}</span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300">
+                    <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border-2 border-orange-300">
                       <span className="text-slate-700 font-medium font-semibold">Net Movement</span>
                       <span className={`text-2xl font-bold ${metrics.metrics30Days.netMovement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {metrics.metrics30Days.netMovement > 0 ? '+' : ''}{metrics.metrics30Days.netMovement}
@@ -484,7 +484,7 @@ export default function SubscriptionsManagement() {
             </Card>
 
             <Card className="shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-t-2xl">
+              <CardHeader className="bg-gradient-to-r from-[#f24e00] to-[#ffa600] text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-2">
                   <LineChartIcon className="h-5 w-5" />
                   MRR Movement

@@ -673,7 +673,7 @@ export default function UserManagement() {
 
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">User & Role Management</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">User & role management</h1>
             <p className="text-sm text-slate-600">Create and manage user access for your workspace.</p>
           </div>
           <div className="flex items-center gap-4">
@@ -1081,7 +1081,7 @@ export default function UserManagement() {
                     </div>
                   ))}
                   {filteredInvoiceHistory.length === 0 && (
-                    <p className="text-sm text-slate-500">No invoices yet.</p>
+                    <p className="text-sm text-muted-foreground">No invoices for this user yet.</p>
                   )}
                   {filteredInvoiceHistory.length > 0 && (
                     <div className="flex items-center justify-between pt-2">
@@ -1219,7 +1219,7 @@ export default function UserManagement() {
                     </div>
                   ))}
                   {filteredQuoteHistory.length === 0 && (
-                    <p className="text-sm text-slate-500">No quotes yet.</p>
+                    <p className="text-sm text-muted-foreground">No quotes for this user yet.</p>
                   )}
                   {filteredQuoteHistory.length > 0 && (
                     <div className="flex items-center justify-between pt-2">

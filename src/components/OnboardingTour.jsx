@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const TOUR_STEPS = [
   {
     id: "welcome",
-    headline: "Welcome to InvoiceBreek",
+    headline: "Welcome to Paidly",
     subtext: "Let’s get you paid faster.",
     cta: "Start Setup",
     skip: true,
@@ -147,7 +147,7 @@ export default function OnboardingTour({ isOpen, onClose }) {
               <p className="mb-6 text-gray-600 text-center">{current.subtext}</p>
               <div className="flex gap-3 w-full">
                 <button
-                  className="flex-1 bg-cyan-600 text-white py-2 rounded-lg font-semibold hover:bg-cyan-700 transition"
+                  className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg font-semibold hover:bg-primary/90 transition"
                   onClick={handleNext}
                 >
                   {current.cta || "Start"}
@@ -165,7 +165,7 @@ export default function OnboardingTour({ isOpen, onClose }) {
               <h2 className="text-lg font-semibold mb-2 text-center">{current.headline}</h2>
               <div className="flex gap-3 w-full mt-4">
                 <button
-                  className="flex-1 bg-cyan-600 text-white py-2 rounded-lg font-semibold hover:bg-cyan-700 transition"
+                  className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg font-semibold hover:bg-primary/90 transition"
                   onClick={handleNext}
                 >
                   {step === TOUR_STEPS.length - 1 ? "Finish" : "Next"}

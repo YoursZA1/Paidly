@@ -22,7 +22,7 @@ const industryConfig = {
     retail: { label: "Retail", icon: ShoppingBag, color: "bg-purple-50 text-purple-700" },
     manufacturing: { label: "Manufacturing", icon: Factory, color: "bg-gray-50 text-gray-700" },
     education: { label: "Education", icon: GraduationCap, color: "bg-yellow-50 text-yellow-700" },
-    real_estate: { label: "Real Estate", icon: Building2, color: "bg-teal-50 text-teal-700" },
+    real_estate: { label: "Real Estate", icon: Building2, color: "bg-orange-50 text-orange-700" },
     hospitality: { label: "Hospitality", icon: UtensilsCrossed, color: "bg-orange-50 text-orange-700" },
     consulting: { label: "Consulting", icon: Briefcase, color: "bg-indigo-50 text-indigo-700" },
     creative: { label: "Creative", icon: Palette, color: "bg-pink-50 text-pink-700" },

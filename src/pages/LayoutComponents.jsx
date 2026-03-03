@@ -91,7 +91,7 @@ export const NavLink = ({ item, onClick, collapsed = false }) => {
       >
         <span
           className={`inline-flex items-center justify-center h-10 w-10 rounded-xl shadow-sm transition-all
-            ${isActive ? "bg-white/90 text-primary ring-2 ring-cyan-400/60" : "bg-white/10 text-white/80 group-hover:bg-white/20 group-hover:text-white"}
+            ${isActive ? "bg-white/90 text-primary ring-2 ring-primary/60" : "bg-white/10 text-white/80 group-hover:bg-white/20 group-hover:text-white"}
           `}
         >
           <item.icon className="h-5 w-5" />
@@ -118,7 +118,7 @@ export const MobileNav = ({ items, onClose }) => (
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="fixed inset-0 z-50 flex md:hidden"
   >
-    <div className="w-full max-w-xs bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 text-white p-4 flex flex-col">
+    <div className="w-full max-w-xs bg-gradient-to-br from-[#f24e00] via-[#ff7c00] to-[#ffa600] text-white p-4 flex flex-col">
       <div className="flex h-20 items-center justify-between px-2">
         <Link
           to={createPageUrl("Dashboard")}
@@ -127,12 +127,12 @@ export const MobileNav = ({ items, onClose }) => (
         >
           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
             <img 
-              src="/Logo icon.png" 
-              alt="InvoiceBreak" 
+              src="/logo.svg" 
+              alt="Paidly" 
               className="w-8 h-8"
             />
           </div>
-          <span className="text-xl font-bold">InvoiceBreek</span>
+          <span className="text-xl font-bold">Paidly</span>
         </Link>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/10">
           <X className="h-6 w-6" />

@@ -45,7 +45,7 @@ export const EmailNotificationService = {
 
       const outbox = loadOutbox();
       const settings = SystemSettingsService.getSection('system');
-      const sender = from || settings?.supportEmail || settings?.adminEmail || 'no-reply@invoicebreek.com';
+      const sender = from || settings?.supportEmail || settings?.adminEmail || 'no-reply@paidly.com';
 
       const entry = {
         id: `email_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
