@@ -99,7 +99,7 @@ export default function Signup() {
         return;
       }
 
-      // Create Supabase user
+      // Create Supabase user (trigger creates profile + org + membership)
       try {
         const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
         await SupabaseAuthService.signUpWithEmail(normalizedEmail, password, {
@@ -111,7 +111,13 @@ export default function Signup() {
           role: "user"
         });
       } catch (supabaseErr) {
-        setError(supabaseErr?.message || "Failed to create Supabase user");
+        const msg = supabaseErr?.message || "Failed to create Supabase user";
+        const isSchemaError = /company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist/i.test(msg);
+        setError(
+          isSchemaError
+            ? "Signup failed due to database setup. Ask your administrator to run in Supabase SQL Editor: scripts/fix-signup-trigger.sql (or supabase/schema.postgres.sql). Then try again."
+            : msg
+        );
         setIsLoading(false);
         return;
       }
@@ -231,22 +237,22 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0">
-        <CardHeader className="space-y-1 pb-6 text-center">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <User className="w-8 h-8 text-white" />
+    <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x overflow-auto">
+      <Card className="w-full max-w-md shadow-xl rounded-2xl border border-border overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col my-auto">
+        <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6 shrink-0">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+            <User className="w-8 h-8 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-semibold text-foreground font-display">Create your account</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl font-semibold text-foreground font-display">Create your account</CardTitle>
           <p className="text-sm text-muted-foreground">Step {step} of 2</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6 pb-6 overflow-y-auto min-h-0 flex-1">
           {success ? (
             <div className="text-center space-y-6 py-8">
-              <div className="text-3xl text-green-600">🎉</div>
-              <div className="text-lg font-semibold">Account created!</div>
-              <div className="text-slate-700">Please check your email and click the confirmation link to activate your account before logging in.</div>
-              <div className="text-slate-500 text-sm">If you don&apos;t see the email, check your spam or junk folder.</div>
+              <div className="text-3xl">🎉</div>
+              <div className="text-lg font-semibold text-foreground">Account created!</div>
+              <div className="text-muted-foreground">Please check your email and click the confirmation link to activate your account before logging in.</div>
+              <div className="text-muted-foreground text-sm">If you don&apos;t see the email, check your spam or junk folder.</div>
               <Button
                 className="mt-4"
                 onClick={async () => {
@@ -265,78 +271,78 @@ export default function Signup() {
           ) : step === 1 ? (
             <form onSubmit={handleStepOne} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full name</Label>
+                <Label htmlFor="fullName" className="text-foreground">Full name</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="fullName"
                     type="text"
                     placeholder="Jane Doe"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-border"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-foreground">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
+className="pl-10 rounded-xl border-border"
+                  required
+                />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-foreground">Password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type="password"
                     placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-border"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword" className="text-foreground">Confirm password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="confirmPassword"
                     type="password"
                     placeholder="********"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-border"
                     required
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2">
                   {error}
                 </div>
               )}
 
               <Button
                 type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 ring-2 ring-indigo-500/40 hover:ring-indigo-500/70 transition"
+                className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg rounded-xl ring-2 ring-primary/30 hover:ring-primary/50 transition touch-manipulation"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -353,7 +359,7 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={() => navigate(createPageUrl("Login"))}
-                  className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                  className="text-sm text-primary hover:text-primary/80 font-medium"
                 >
                   Already have an account? Sign in
                 </button>
@@ -362,7 +368,7 @@ export default function Signup() {
           ) : (
             <form onSubmit={handleStepTwo} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="plan">Plan</Label>
+                <Label htmlFor="plan" className="text-foreground">Plan</Label>
                 <select
                   id="plan"
                   value={plan}
@@ -376,58 +382,59 @@ export default function Signup() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500">Your 7-day trial starts after this step.</p>
+                <p className="text-xs text-muted-foreground">Your 7-day trial starts after this step.</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="companyName">Company (optional)</Label>
+                <Label htmlFor="companyName" className="text-foreground">Company (optional)</Label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="companyName"
                     type="text"
                     placeholder="Acme Inc"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-border"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="companyAddress">Company address</Label>
+                <Label htmlFor="companyAddress" className="text-foreground">Company address</Label>
                 <Input
                   id="companyAddress"
                   type="text"
                   placeholder="123 Main St, City, Country"
                   value={companyAddress}
                   onChange={(e) => setCompanyAddress(e.target.value)}
+                  className="rounded-xl border-border"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="phone" className="text-foreground">Phone</Label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="phone"
                     type="tel"
                     placeholder="+27 123 456 7890"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-border"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2">
                   {error}
                 </div>
               )}
 
               {success && (
-                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                <div className="text-sm text-status-paid bg-status-paid/10 border border-status-paid/20 rounded-xl px-3 py-2">
                   Trial activated. Redirecting to your dashboard...
                 </div>
               )}
@@ -442,7 +449,7 @@ export default function Signup() {
                 >
                   Back
                 </Button>
-                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={isLoading}>
+                <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" disabled={isLoading}>
                   {isLoading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />

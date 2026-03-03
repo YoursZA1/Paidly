@@ -441,58 +441,58 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="fixed inset-0 z-50 flex md:hidden"
   >
-    <div className="w-full max-w-xs bg-[#121212] border-r border-white/10 text-white p-6 flex flex-col">
-      <div className="flex h-20 items-center justify-between px-2">
-        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#00CCFF] rounded-xl flex items-center justify-center">
+    <div className="w-full max-w-[min(320px,85vw)] bg-card border-r border-border text-foreground p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col safe-left">
+      <div className="flex h-14 items-center justify-between">
+        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
             <img src="/logo.svg" alt="Paidly" className="w-8 h-8" />
           </div>
-          <span className="text-[15px] font-semibold text-white">Paidly</span>
+          <span className="text-[15px] font-semibold text-foreground truncate">Paidly</span>
         </Link>
-        <Button variant="ghost" size="icon" onClick={onClose} className="text-white/60 hover:bg-white/10 hover:text-white rounded-lg">
+        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 h-10 w-10 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close menu">
           <X className="size-5" />
         </Button>
       </div>
-      <nav className="space-y-1 mt-4 flex-1 overflow-y-auto">
+      <nav className="space-y-1 mt-4 flex-1 overflow-y-auto -mx-2 py-2 min-h-0">
         {items.map(item => (
           <NavLink key={item.id || item.title} item={item} onClick={onClose} />
         ))}
       </nav>
 
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-border safe-bottom">
         <div className="flex flex-col items-center gap-2 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center font-medium text-white/70 text-sm overflow-hidden">
+          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden">
             {user?.logo_url ? (
               <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               user?.full_name ? user.full_name[0].toUpperCase() : 'U'
             )}
           </div>
-          <div className="text-center">
-            <div className="font-semibold text-white">{user?.company_name || 'My Company'}</div>
-            <div className="text-xs text-white/60">{user?.full_name || user?.email}</div>
+          <div className="text-center min-w-0">
+            <div className="font-semibold text-foreground truncate">{user?.company_name || 'My Company'}</div>
+            <div className="text-xs text-muted-foreground truncate">{user?.full_name || user?.email}</div>
           </div>
         </div>
-        <Button className="w-full mb-2 bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
+        <Button className="w-full mb-2 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl h-12" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
           <Settings className="size-5 mr-2" /> Settings
         </Button>
-        <Button variant="outline" className="w-full mb-2 border-white/20 text-white hover:bg-white/10 py-3 rounded-xl" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
+        <Button variant="outline" className="w-full mb-2 border-border text-foreground hover:bg-muted py-3 rounded-xl h-12" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
           <Bell className="size-5 mr-2" /> Subscription
         </Button>
-        <Button variant="destructive" className="w-full rounded-xl" onClick={() => { onClose(); handleLogout(); }}>
+        <Button variant="destructive" className="w-full rounded-xl h-12" onClick={() => { onClose(); handleLogout(); }}>
           <LogOut className="size-5 mr-2" /> Logout
         </Button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 pt-0">
         <Link to={createPageUrl("CreateInvoice")} onClick={onClose}>
-          <Button className="w-full bg-[#00CCFF] text-black hover:bg-[#00CCFF]/90 font-semibold py-3 rounded-xl">
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl h-12">
             <Plus className="size-5 mr-2" /> Create Invoice
           </Button>
         </Link>
       </div>
     </div>
-    <div className="flex-1 bg-black/50" onClick={onClose}></div>
+    <div className="flex-1 bg-black/50" onClick={onClose} aria-hidden="true"></div>
   </motion.div>
 );
 
@@ -611,7 +611,11 @@ export default function Layout({ children, currentPageName }) {
     'PublicInvoice',
     'PublicQuote',
     'PublicPayslip',
-    'Login'
+    'Login',
+    'Signup',
+    'ForgotPassword',
+    'ResetPassword',
+    'AcceptInvite'
   ];
 
   if (standalonePages.includes(currentPageName)) {
@@ -770,10 +774,10 @@ export default function Layout({ children, currentPageName }) {
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="h-16 bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm"
+          className="h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm"
         >
           <div className="flex items-center gap-4 flex-1">
-            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl" onClick={() => setIsMobileMenuOpen(true)}>
+            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl min-h-10 min-w-10 touch-manipulation" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
               <Menu className="size-5" />
             </Button>
             <div className="relative hidden sm:block max-w-md flex-1">
@@ -830,7 +834,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — fintech navy gradient when on Dashboard */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-8 px-4 sm:px-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-6 sm:py-8 px-4 sm:px-8 safe-x safe-bottom ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className="max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
@@ -849,7 +853,7 @@ export default function Layout({ children, currentPageName }) {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-border bg-card/30 py-4 px-4 sm:px-8">
+        <footer className="border-t border-border bg-card/30 py-4 px-4 sm:px-8 safe-x safe-bottom">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
             <span>© {new Date().getFullYear()} Paidly. All rights reserved.</span>
             <div className="flex items-center gap-6">

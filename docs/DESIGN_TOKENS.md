@@ -30,6 +30,10 @@ Use these **semantic** classes across the app so colours and typography stay con
 | Overdue / danger | `text-status-overdue`, `bg-status-overdue/10` |
 | Pending | `text-status-pending`, `bg-status-pending/10` |
 
+## Auth pages
+- Use `auth-page-bg` for the full-page background on Login, Signup, ForgotPassword, ResetPassword (warm cream/orange gradient matching logo).
+- Buttons and links: `bg-primary`, `text-primary`, `text-primary-foreground` (logo coral/orange).
+
 ## Avoid
 - Raw palette classes like `text-slate-600`, `bg-gray-100`, `text-blue-600`, `bg-indigo-600` — use the semantic tokens above so the app can be rethemed in one place.
 

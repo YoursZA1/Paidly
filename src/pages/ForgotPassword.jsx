@@ -59,10 +59,10 @@ export default function ForgotPassword() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
         <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
-          <CardContent className="pt-12 pb-6 text-center">
-            <div className="w-16 h-16 bg-status-paid/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <CardContent className="pt-8 sm:pt-12 pb-6 text-center px-4 sm:px-6">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-status-paid/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-status-paid" />
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2 font-display">Check your email</h2>
@@ -75,7 +75,7 @@ export default function ForgotPassword() {
             </p>
             <Button
               onClick={() => navigate(createPageUrl("Login"))}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+              className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl touch-manipulation"
             >
               Back to Login
             </Button>
@@ -86,18 +86,18 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
       <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
-        <CardHeader className="space-y-1 pb-6 text-center">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
             <Mail className="w-8 h-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold text-foreground font-display">Reset your password</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl font-bold text-foreground font-display">Reset your password</CardTitle>
           <p className="text-sm text-muted-foreground">
             Enter your email and we&apos;ll send you a link to reset your password
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-sm text-destructive">
@@ -124,7 +124,7 @@ export default function ForgotPassword() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+              className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl touch-manipulation"
             >
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {isLoading ? "Sending..." : "Send reset link"}
@@ -133,7 +133,7 @@ export default function ForgotPassword() {
 
           <button
             onClick={() => navigate(createPageUrl("Login"))}
-            className="w-full mt-4 flex items-center justify-center text-sm text-primary hover:text-primary/90 font-medium"
+            className="w-full mt-4 flex items-center justify-center text-sm text-primary hover:text-primary/90 font-medium min-h-10 touch-manipulation"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to login

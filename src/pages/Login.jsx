@@ -65,16 +65,16 @@ export default function Login() {
 
   return (
     <>
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md rounded-2xl border border-border shadow-lg">
-          <CardHeader className="space-y-1 pb-6 text-center">
-            <div className="w-16 h-16 bg-primary/10 flex items-center justify-center mx-auto mb-4 rounded-2xl">
+      <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
+        <Card className="w-full max-w-md rounded-2xl border border-border shadow-lg overflow-hidden">
+          <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary/10 flex items-center justify-center mx-auto mb-3 sm:mb-4 rounded-2xl">
               <Lock className="size-6 text-primary" />
             </div>
-            <CardTitle className="text-2xl font-semibold text-foreground font-display">Welcome back</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl font-semibold text-foreground font-display">Welcome back</CardTitle>
             <p className="text-sm text-muted-foreground">Sign in to manage your business.</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-foreground">Email</Label>
@@ -114,7 +114,7 @@ export default function Login() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" disabled={isLoading}>
+              <Button type="submit" className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl touch-manipulation" disabled={isLoading}>
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="size-4 animate-spin" />

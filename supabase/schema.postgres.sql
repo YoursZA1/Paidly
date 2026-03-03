@@ -40,6 +40,8 @@ create table if not exists public.memberships (
   unique (org_id, user_id)
 );
 
+-- Trigger uses only columns that exist in all deployments (omit company_address so
+-- signup works even if the column has not been added yet; app sets it via profile update).
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -49,7 +51,7 @@ as $$
 declare
   new_org_id uuid;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, currency, timezone)
+  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, currency, timezone)
   values (
     new.id,
     new.email,
@@ -57,7 +59,6 @@ begin
     new.raw_user_meta_data->>'avatar_url',
     new.raw_user_meta_data->>'logo_url',
     new.raw_user_meta_data->>'company_name',
-    new.raw_user_meta_data->>'company_address',
     coalesce(new.raw_user_meta_data->>'currency', 'USD'),
     coalesce(new.raw_user_meta_data->>'timezone', 'UTC')
   )
@@ -67,7 +68,6 @@ begin
     avatar_url = excluded.avatar_url,
     logo_url = coalesce(excluded.logo_url, profiles.logo_url),
     company_name = coalesce(excluded.company_name, profiles.company_name),
-    company_address = coalesce(excluded.company_address, profiles.company_address),
     currency = coalesce(excluded.currency, profiles.currency),
     timezone = coalesce(excluded.timezone, profiles.timezone),
     updated_at = now();
