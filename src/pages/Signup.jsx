@@ -244,9 +244,7 @@ export default function Signup() {
       }
       
       setSuccess(true);
-      setTimeout(() => {
-        navigate(createPageUrl("Dashboard"));
-      }, 800);
+      // Don't auto-redirect - user must confirm email first
     } catch (err) {
       setError(err?.message || "Failed to finish setup");
     } finally {
@@ -266,25 +264,63 @@ export default function Signup() {
         </CardHeader>
         <CardContent className="px-4 sm:px-6 pb-6 overflow-y-auto min-h-0 flex-1">
           {success ? (
-            <div className="text-center space-y-6 py-8">
-              <div className="text-3xl">🎉</div>
-              <div className="text-lg font-semibold text-foreground">Account created!</div>
-              <div className="text-muted-foreground">Please check your email and click the confirmation link to activate your account before logging in.</div>
-              <div className="text-muted-foreground text-sm">If you don&apos;t see the email, check your spam or junk folder.</div>
-              <Button
-                className="mt-4"
-                onClick={async () => {
-                  try {
-                    const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
-                    await SupabaseAuthService.signInWithMagicLink(email);
-                    alert("Confirmation email resent! Please check your inbox.");
-                  } catch (err) {
-                    alert(err?.message || "Failed to resend confirmation email.");
-                  }
-                }}
-              >
-                Resend confirmation email
-              </Button>
+            <div className="text-center space-y-6 py-12 px-2">
+              {/* Success Icon */}
+              <div className="flex justify-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center animate-bounce">
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19a9 9 0 019-9 9.003 9.003 0 01.946-9m2.048 0A9.967 9.967 0 0112 3c4.478 0 8.268 2.943 9.542 7m-9.542 9a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Main Message */}
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-foreground">Check your email!</h2>
+                <p className="text-lg text-primary font-semibold">Confirm your account to get started</p>
+              </div>
+
+              {/* Instructions */}
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
+                <p className="text-sm text-foreground font-medium">We sent a confirmation link to:</p>
+                <p className="text-sm font-semibold text-primary break-all">{email}</p>
+                <p className="text-xs text-muted-foreground">Click the link in the email to activate your Paidly account and start your 7-day free trial.</p>
+              </div>
+
+              {/* Tips */}
+              <div className="space-y-2 text-left text-sm">
+                <p className="font-semibold text-foreground">💡 Pro tips:</p>
+                <ul className="text-muted-foreground space-y-1 pl-4">
+                  <li>• The link expires in 24 hours</li>
+                  <li>• Check your spam or junk folder if you don&apos;t see it</li>
+                  <li>• You can request a new link below</li>
+                </ul>
+              </div>
+
+              {/* Buttons */}
+              <div className="space-y-2 pt-2">
+                <Button
+                  className="w-full min-h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl shadow-lg"
+                  onClick={async () => {
+                    try {
+                      const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
+                      await SupabaseAuthService.signInWithMagicLink(email);
+                      alert("✓ Confirmation email resent! Check your inbox.");
+                    } catch (err) {
+                      alert(err?.message || "Failed to resend confirmation email.");
+                    }
+                  }}
+                >
+                  📧 Resend Confirmation Email
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full min-h-11 rounded-xl"
+                  onClick={() => navigate(createPageUrl("Login"))}
+                >
+                  Back to Login
+                </Button>
+              </div>
             </div>
           ) : step === 1 ? (
             <form onSubmit={handleStepOne} className="space-y-5">
