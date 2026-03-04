@@ -26,5 +26,23 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('@supabase/supabase-js')) return 'supabase';
+              if (id.includes('recharts')) return 'recharts';
+              if (id.includes('framer-motion')) return 'framer-motion';
+              if (id.includes('lucide-react')) return 'lucide';
+              if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf';
+              if (id.includes('xlsx')) return 'xlsx';
+              return 'vendor';
+            }
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1700,
+    },
   };
 });
