@@ -1,31 +1,41 @@
-Confirm Your Email
+═══════════════════════════════════════════════════════════
+🧡 PAIDLY - Confirm Your Email
+═══════════════════════════════════════════════════════════
 
-Hello {{ .Email }},
+Welcome to Paidly, {{ .Email }}! 🎉
 
-Thank you for signing up for Paidly! To complete your account creation and access all the features, please confirm your email address by clicking the link below.
+We're thrilled to have you join us! Your simplified invoicing journey starts now.
 
-This link will expire in 24 hours for security reasons.
+To activate your account and unlock all premium features, confirm your email address by visiting this link. This link expires in 24 hours for your security.
 
+CONFIRM YOUR EMAIL:
 {{ .ConfirmationURL }}
 
----
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Once confirmed, your 7-day free trial will begin, and you'll have instant access to:
-- Professional invoice creation
-- Client management
-- Payment tracking
-- Recurring invoices
-- And much more!
+WHAT'S WAITING FOR YOU:
 
----
+✓ Professional invoice creation in seconds
+✓ Smart client & payment management
+✓ Recurring invoices automation
+✓ Real-time payment tracking
+✓ Multi-currency support (ZAR, USD, EUR, GBP)
+✓ 7-day free trial to explore everything
 
-Didn't create this account?
-If you didn't sign up for Paidly, please ignore this email. Your account will not be created until you confirm your email address.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
----
+🔒 SECURITY NOTE:
 
-Questions? Contact our support team at support@paidly.com
+If you didn't create this account, simply ignore this email. Your account won't be activated until you confirm your email address.
 
-Paidly – Invoice & Payment Management
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Need help?
+Support: support@paidly.com
+Docs: https://paidly.com/help
+
+⭐ Join thousands of freelancers and small businesses managing invoices smarter
+
 © 2026 Paidly. All rights reserved.
-123 Anderson Street, Johannesburg, South Africa
+Johannesburg, South Africa
+═══════════════════════════════════════════════════════════
