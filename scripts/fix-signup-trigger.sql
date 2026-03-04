@@ -1,8 +1,10 @@
 -- Fix signup: update handle_new_user trigger so it does not require company_address column.
 -- Run this in Supabase SQL Editor if new user signup fails with "Database error saving new user"
--- or other schema/trigger errors. Also ensures company_address column exists so the app can save it later from Settings.
+-- or other schema/trigger errors. Ensures required profile columns exist so signup data is captured.
 
 alter table public.profiles add column if not exists company_address text;
+alter table public.profiles add column if not exists phone text;
+alter table public.profiles add column if not exists subscription_plan text default 'starter';
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -13,7 +15,7 @@ as $$
 declare
   new_org_id uuid;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, currency, timezone)
+  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone)
   values (
     new.id,
     new.email,
@@ -22,6 +24,8 @@ begin
     new.raw_user_meta_data->>'logo_url',
     new.raw_user_meta_data->>'company_name',
     new.raw_user_meta_data->>'company_address',
+    new.raw_user_meta_data->>'phone',
+    coalesce(new.raw_user_meta_data->>'plan', new.raw_user_meta_data->>'subscription_plan', 'starter'),
     coalesce(new.raw_user_meta_data->>'currency', 'USD'),
     coalesce(new.raw_user_meta_data->>'timezone', 'UTC')
   )
@@ -32,6 +36,8 @@ begin
     logo_url = coalesce(excluded.logo_url, profiles.logo_url),
     company_name = coalesce(excluded.company_name, profiles.company_name),
     company_address = coalesce(excluded.company_address, profiles.company_address),
+    phone = coalesce(excluded.phone, profiles.phone),
+    subscription_plan = coalesce(excluded.subscription_plan, profiles.subscription_plan),
     currency = coalesce(excluded.currency, profiles.currency),
     timezone = coalesce(excluded.timezone, profiles.timezone),
     updated_at = now();

@@ -23,6 +23,8 @@ create table if not exists public.profiles (
   logo_url text,
   company_name text,
   company_address text,
+  phone text,
+  subscription_plan text default 'starter',
   currency text default 'USD',
   timezone text default 'UTC',
   invoice_template text default 'classic',
@@ -50,7 +52,7 @@ as $$
 declare
   new_org_id uuid;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, currency, timezone)
+  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone)
   values (
     new.id,
     new.email,
@@ -59,6 +61,8 @@ begin
     new.raw_user_meta_data->>'logo_url',
     new.raw_user_meta_data->>'company_name',
     new.raw_user_meta_data->>'company_address',
+    new.raw_user_meta_data->>'phone',
+    coalesce(new.raw_user_meta_data->>'plan', new.raw_user_meta_data->>'subscription_plan', 'starter'),
     coalesce(new.raw_user_meta_data->>'currency', 'USD'),
     coalesce(new.raw_user_meta_data->>'timezone', 'UTC')
   )
@@ -69,6 +73,8 @@ begin
     logo_url = coalesce(excluded.logo_url, profiles.logo_url),
     company_name = coalesce(excluded.company_name, profiles.company_name),
     company_address = coalesce(excluded.company_address, profiles.company_address),
+    phone = coalesce(excluded.phone, profiles.phone),
+    subscription_plan = coalesce(excluded.subscription_plan, profiles.subscription_plan),
     currency = coalesce(excluded.currency, profiles.currency),
     timezone = coalesce(excluded.timezone, profiles.timezone),
     updated_at = now();
