@@ -381,7 +381,7 @@ export default function QuoteDetails({
         >
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
                 <CardHeader className="border-b border-slate-100 pb-6">
-                    <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                         <FileText className="w-5 h-5" />
                         Quote Details
                     </CardTitle>
@@ -400,7 +400,7 @@ export default function QuoteDetails({
                                     value={quoteData.client_id} 
                                     onValueChange={(value) => handleInputChange('client_id', value)}
                                 >
-                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20">
+                                    <SelectTrigger className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20">
                                         <SelectValue placeholder="Choose a client" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -422,7 +422,7 @@ export default function QuoteDetails({
                                     value={quoteData.project_title}
                                     onChange={(e) => handleInputChange('project_title', e.target.value)}
                                     placeholder="Enter project title"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
                         </div>
@@ -430,18 +430,18 @@ export default function QuoteDetails({
                         {/* Services/Items Section */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <Label className="text-lg font-semibold text-slate-900">Services & Items</Label>
+                                <Label className="text-lg font-semibold text-foreground">Services & Items</Label>
                                 <Button
                                     type="button"
                                     onClick={addItem}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg"
                                 >
                                     <Plus className="w-4 h-4 mr-2" />
                                     Add Item
                                 </Button>
                             </div>
 
-                            <div className="bg-white border border-slate-200 rounded-xl p-4">
+                            <div className="bg-white border border-border rounded-xl p-4">
                                 <p className="text-sm font-semibold text-slate-800 mb-3">Quick Add</p>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                     <Input
@@ -480,7 +480,7 @@ export default function QuoteDetails({
                                         <Button
                                             type="button"
                                             onClick={addQuickItem}
-                                            className="bg-slate-900 hover:bg-slate-800 text-white px-4"
+                                            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4"
                                         >
                                             Add
                                         </Button>
@@ -497,7 +497,7 @@ export default function QuoteDetails({
                             {items.map((item, index) => (
                                 <div key={index} className="bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h4 className="font-semibold text-slate-900">Item #{index + 1}</h4>
+                                        <h4 className="font-semibold text-foreground">Item #{index + 1}</h4>
                                         {items.length > 0 && (
                                             <Button
                                                 type="button"
@@ -532,7 +532,7 @@ export default function QuoteDetails({
                                                     type="button"
                                                     variant="ghost"
                                                     onClick={() => setExpandedItems([...expandedItems, index])}
-                                                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                                    className="text-primary hover:text-primary/90 text-sm font-medium"
                                                 >
                                                     + Add Description
                                                 </Button>
@@ -583,7 +583,7 @@ export default function QuoteDetails({
                                     <div className="flex justify-end">
                                         <div className="text-right">
                                             <p className="text-sm text-slate-600">Total Price</p>
-                                            <p className="text-xl font-bold text-slate-900">
+                                            <p className="text-xl font-bold text-foreground">
                                                 {formatCurrency(item.total_price || 0, userCurrency)}
                                             </p>
                                         </div>
@@ -594,7 +594,7 @@ export default function QuoteDetails({
 
                         {/* Tax and Totals */}
                         {(quoteData.items || []).length > 0 && (
-                            <div className="bg-indigo-50 p-4 sm:p-6 rounded-xl space-y-4">
+                            <div className="bg-primary/10 p-4 sm:p-6 rounded-xl space-y-4">
                                 <div className="grid md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label className="text-sm font-semibold text-slate-700">Tax Rate (%)</Label>
@@ -622,7 +622,7 @@ export default function QuoteDetails({
                                     </div>
                                 </div>
 
-                                <div className="border-t border-slate-200 pt-4">
+                                <div className="border-t border-border pt-4">
                                     <div className="space-y-2">
                                         <div className="flex justify-between">
                                             <span className="text-slate-600">Subtotal:</span>
@@ -634,7 +634,7 @@ export default function QuoteDetails({
                                                 <span className="font-semibold">{formatCurrency(quoteData.tax_amount || 0, userCurrency)}</span>
                                             </div>
                                         )}
-                                        <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
+                                        <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
                                             <span>Total:</span>
                                             <span>{formatCurrency(quoteData.total_amount || 0, userCurrency)}</span>
                                         </div>
@@ -654,7 +654,7 @@ export default function QuoteDetails({
                                     value={quoteData.project_description}
                                     onChange={(e) => handleInputChange('project_description', e.target.value)}
                                     placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 resize-none"
+                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
 
@@ -667,7 +667,7 @@ export default function QuoteDetails({
                                     value={quoteData.notes}
                                     onChange={(e) => handleInputChange('notes', e.target.value)}
                                     placeholder="Any additional notes..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 resize-none"
+                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
 
@@ -680,7 +680,7 @@ export default function QuoteDetails({
                                     value={quoteData.terms_conditions}
                                     onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
                                     placeholder="Enter terms and conditions..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 resize-none"
+                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
                         </div>
@@ -690,7 +690,7 @@ export default function QuoteDetails({
                                 <Button
                                     onClick={onNext}
                                     disabled={!isValid}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isEditing ? (
                                         <>

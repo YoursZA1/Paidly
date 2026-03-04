@@ -415,7 +415,7 @@ export default function CreatePayslip() {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 Deductions
-                                <div className="ml-auto text-sm text-blue-600 flex items-center gap-1">
+                                <div className="ml-auto text-sm text-primary flex items-center gap-1">
                                     <Info className="w-4 h-4" />
                                     PAYE & UIF auto-calculated
                                 </div>
@@ -521,9 +521,9 @@ export default function CreatePayslip() {
                                     <p className="text-sm text-red-600 font-medium">Total Deductions</p>
                                     <p className="text-2xl font-bold text-red-700">{formatCurrency(totalDeductions, 'ZAR')}</p>
                                 </div>
-                                <div className="bg-blue-50 rounded-lg p-4">
-                                    <p className="text-sm text-blue-600 font-medium">Net Pay</p>
-                                    <p className="text-2xl font-bold text-blue-700">{formatCurrency(netPay, 'ZAR')}</p>
+                                <div className="bg-primary/10 rounded-lg p-4">
+                                    <p className="text-sm text-primary font-medium">Net Pay</p>
+                                    <p className="text-2xl font-bold text-primary">{formatCurrency(netPay, 'ZAR')}</p>
                                 </div>
                             </div>
                             
@@ -546,7 +546,7 @@ export default function CreatePayslip() {
                         <Button
                             onClick={handleCreatePayslip}
                             size="lg"
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                            className="bg-primary hover:bg-primary/90 disabled:bg-primary/50 disabled:cursor-not-allowed"
                             disabled={!isFormValid}
                         >
                             <Save className="w-4 h-4 mr-2" />

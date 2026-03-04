@@ -298,7 +298,7 @@ export default function InvoiceDetails({
                               type="button"
                               variant="ghost"
                               onClick={() => setExpandedItems([...expandedItems, idx])}
-                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                              className="text-primary hover:text-primary/80 text-sm font-medium"
                             >
                               + Add Description
                             </Button>
@@ -384,7 +384,7 @@ export default function InvoiceDetails({
           </div>
 
           {/* Tax and Totals */}
-          <div className="bg-indigo-50 p-4 sm:p-6 rounded-xl space-y-4">
+          <div className="bg-primary/10 p-4 sm:p-6 rounded-xl space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-slate-700">Tax Rate (%)</Label>
@@ -469,7 +469,7 @@ export default function InvoiceDetails({
                   !(invoiceData.items && invoiceData.items.length > 0) ||
                   !invoiceData.items.every(item => item.name && item.quantity > 0 && item.rate >= 0)
                 }
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue to Preview
               </Button>

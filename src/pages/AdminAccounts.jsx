@@ -494,7 +494,7 @@ export default function AdminAccounts() {
                   <p className="text-sm font-medium text-slate-600">Total Accounts</p>
                   <p className="text-3xl font-bold text-slate-900">{summary.totalAccounts}</p>
                 </div>
-                <Building2 size={32} className="text-blue-500" />
+                <Building2 size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -620,7 +620,7 @@ export default function AdminAccounts() {
                 <CardTitle className="text-lg">Total Users</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-4xl font-bold text-blue-600">{summary?.totalUsers || 0}</p>
+                <p className="text-4xl font-bold text-primary">{summary?.totalUsers || 0}</p>
                 <p className="text-sm text-slate-600 mt-2">Across all accounts</p>
               </CardContent>
             </Card>
@@ -759,7 +759,7 @@ export default function AdminAccounts() {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleChangePlan(account)}
-                            className="text-blue-600 hover:bg-blue-50"
+                            className="text-primary hover:bg-primary/10"
                             title="Change plan"
                           >
                             <Edit2 size={16} />

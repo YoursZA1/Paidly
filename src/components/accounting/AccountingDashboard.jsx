@@ -135,7 +135,7 @@ export default function AccountingDashboard({ user }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary/10 to-primary/5">
         <div className="max-w-7xl mx-auto p-6 sm:p-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
@@ -155,12 +155,12 @@ export default function AccountingDashboard({ user }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary/10 to-primary/5">
       <div className="max-w-7xl mx-auto p-6 sm:p-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary to-[#ff7c00] rounded-xl flex items-center justify-center">
               <Calculator className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -521,13 +521,13 @@ export default function AccountingDashboard({ user }) {
               <Card className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-blue-600" />
+                    <Receipt className="w-5 h-5 text-primary" />
                     Tax Summary
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-600 mb-4">View tax-related information</p>
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700">View Summary</Button>
+                  <Button className="w-full bg-primary hover:bg-primary/90">View Summary</Button>
                 </CardContent>
               </Card>
 

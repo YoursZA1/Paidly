@@ -32,7 +32,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                             key={conv.client_id + (conv.invoice_id || '')}
                             className={`cursor-pointer hover:shadow-md transition-all group relative ${
                                 selectedId === conv.client_id + (conv.invoice_id || '')
-                                    ? 'ring-2 ring-blue-500 bg-blue-50'
+                                    ? 'ring-2 ring-primary bg-primary/10'
                                     : 'bg-white'
                             }`}
                             onClick={() => onSelect(conv)}
@@ -41,9 +41,9 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                            hasUnread ? 'bg-blue-100' : 'bg-slate-100'
+                                            hasUnread ? 'bg-primary/15' : 'bg-slate-100'
                                         }`}>
-                                            <Building2 className={`w-5 h-5 ${hasUnread ? 'text-blue-600' : 'text-slate-600'}`} />
+                                            <Building2 className={`w-5 h-5 ${hasUnread ? 'text-primary' : 'text-slate-600'}`} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                                     {client?.name || 'Unknown Client'}
                                                 </h4>
                                                 {hasUnread && (
-                                                    <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                                                    <span className="w-2 h-2 bg-primary rounded-full"></span>
                                                 )}
                                             </div>
                                             {invoice && (

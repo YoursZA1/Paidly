@@ -344,7 +344,7 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
       return <div className="my-2 h-px bg-border" />;
     }
     return (
-      <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
+      <div className="px-4 py-2 text-[12px] font-semibold uppercase tracking-wide text-foreground">
         {item.title}
       </div>
     );
@@ -363,14 +363,14 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
             aria-expanded={open}
             aria-controls={`nav-children-${item.id}`}
           >
-            <span className="sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-muted-foreground group-hover:text-foreground [&_svg]:size-5">
+            <span className="sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-foreground [&_svg]:size-5">
               <item.icon className="size-5" strokeWidth={2.5} />
             </span>
             {!collapsed && (
-              <span className="text-[13px] font-normal transition-colors text-muted-foreground group-hover:text-foreground">{item.title}</span>
+              <span className="text-[13px] font-normal transition-colors text-foreground">{item.title}</span>
             )}
             {!collapsed && (
-              <span className={`ml-auto transition-transform text-muted-foreground ${open ? "rotate-90" : "rotate-0"}`}>
+              <span className={`ml-auto transition-transform text-foreground ${open ? "rotate-90" : "rotate-0"}`}>
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </span>
             )}
@@ -414,13 +414,13 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
       >
         <span
           className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
-            ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground group-hover:bg-muted/80"}
+            ${isActive ? "text-primary-foreground" : "text-foreground group-hover:bg-muted/80"}
           `}
         >
           <item.icon className="size-5" strokeWidth={2.5} />
         </span>
         {!collapsed && (
-          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : "text-muted-foreground group-hover:text-foreground font-normal"}`}>{item.title}</span>
+          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : "text-foreground font-normal"}`}>{item.title}</span>
         )}
       </Link>
     </motion.div>
@@ -440,28 +440,36 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
     exit={{ x: "-100%" }}
     transition={{ duration: 0.3, ease: "easeInOut" }}
     className="fixed inset-0 z-50 flex md:hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Main menu"
   >
-    <div className="w-full max-w-[min(320px,85vw)] bg-card border-r border-border text-foreground p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col safe-left">
-      <div className="flex h-14 items-center justify-between">
-        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-            <img src="/logo.svg" alt="Paidly" className="w-8 h-8" />
+    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly */}
+    <div className="w-full max-w-[min(320px,85vw)] flex flex-col bg-card border-r border-border text-foreground shadow-elevation-lg p-4 mobile-nav-panel">
+      {/* Header with safe-top applied via mobile-nav-panel */}
+      <div className="flex h-14 min-h-[3.5rem] items-center justify-between shrink-0">
+        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0 min-h-[44px] items-center touch-manipulation" aria-label="Paidly home">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+            <img src="/logo.svg" alt="" className="w-8 h-8" aria-hidden="true" />
           </div>
-          <span className="text-[15px] font-semibold text-foreground truncate">Paidly</span>
+          <span className="text-[15px] font-semibold text-foreground truncate font-display">Paidly</span>
         </Link>
-        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 h-10 w-10 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close menu">
+        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 min-h-12 min-w-12 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation" aria-label="Close menu">
           <X className="size-5" />
         </Button>
       </div>
-      <nav className="space-y-1 mt-4 flex-1 overflow-y-auto -mx-2 py-2 min-h-0">
+
+      {/* Nav list: scrollable, theme spacing */}
+      <nav className="space-y-0.5 mt-2 flex-1 overflow-y-auto overflow-x-hidden -mx-2 py-2 min-h-0" aria-label="App navigation">
         {items.map(item => (
           <NavLink key={item.id || item.title} item={item} onClick={onClose} />
         ))}
       </nav>
 
-      <div className="p-4 border-t border-border safe-bottom">
-        <div className="flex flex-col items-center gap-2 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden">
+      {/* Footer: user, actions, safe-bottom for home indicator */}
+      <div className="shrink-0 border-t border-border pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] px-4 space-y-3">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden shrink-0">
             {user?.logo_url ? (
               <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
             ) : (
@@ -469,30 +477,27 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
             )}
           </div>
           <div className="text-center min-w-0">
-            <div className="font-semibold text-foreground truncate">{user?.company_name || 'My Company'}</div>
+            <div className="font-semibold text-foreground truncate text-sm">{user?.company_name || 'My Company'}</div>
             <div className="text-xs text-muted-foreground truncate">{user?.full_name || user?.email}</div>
           </div>
         </div>
-        <Button className="w-full mb-2 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl h-12" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
+        <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
           <Settings className="size-5 mr-2" /> Settings
         </Button>
-        <Button variant="outline" className="w-full mb-2 border-border text-foreground hover:bg-muted py-3 rounded-xl h-12" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
+        <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
           <Bell className="size-5 mr-2" /> Subscription
         </Button>
-        <Button variant="destructive" className="w-full rounded-xl h-12" onClick={() => { onClose(); handleLogout(); }}>
+        <Button variant="destructive" className="w-full min-h-12 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
           <LogOut className="size-5 mr-2" /> Logout
         </Button>
-      </div>
-
-      <div className="p-4 pt-0">
-        <Link to={createPageUrl("CreateInvoice")} onClick={onClose}>
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl h-12">
+        <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
+          <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation">
             <Plus className="size-5 mr-2" /> Create Invoice
           </Button>
         </Link>
       </div>
     </div>
-    <div className="flex-1 bg-black/50" onClick={onClose} aria-hidden="true"></div>
+    <div className="flex-1 bg-black/50 min-h-screen" onClick={onClose} aria-hidden="true" />
   </motion.div>
 );
 
@@ -655,12 +660,14 @@ export default function Layout({ children, currentPageName }) {
               <Link
                 to={createPageUrl("Dashboard")}
                 className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}
+                aria-label={isSidebarCollapsed ? "Paidly home" : undefined}
               >
                 <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
                   <img
                     src="/logo.svg"
-                    alt="Paidly"
+                    alt=""
                     className="w-8 h-8"
+                    aria-hidden="true"
                   />
                 </div>
                 {!isSidebarCollapsed && (
@@ -673,14 +680,14 @@ export default function Layout({ children, currentPageName }) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                className="ml-auto text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl shrink-0 w-9 h-9 transition-colors"
+                className="ml-auto shrink-0 h-10 w-10 rounded-xl border border-transparent bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 active:scale-95 transition-all duration-200 ease-out"
                 title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 {isSidebarCollapsed ? (
-                  <ChevronsRight className="size-5" />
+                  <ChevronsRight className="size-5" aria-hidden />
                 ) : (
-                  <ChevronsLeft className="size-5" />
+                  <ChevronsLeft className="size-5" aria-hidden />
                 )}
               </Button>
             </div>
@@ -725,13 +732,13 @@ export default function Layout({ children, currentPageName }) {
               {isSidebarCollapsed ? (
                 <Button
                   id="create-invoice-btn"
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   size="icon"
                 >
                   <Plus className="size-5" />
                 </Button>
               ) : (
-              <Button id="create-invoice-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2 shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30">
+              <Button id="create-invoice-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2 shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 <Plus className="size-5" /> Create Invoice
               </Button>
               )}
@@ -744,7 +751,7 @@ export default function Layout({ children, currentPageName }) {
               onClick={handleLogout}
               title={isSidebarCollapsed ? "Log out" : undefined}
               aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-muted-foreground hover:text-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-muted ${
+              className={`flex items-center text-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-muted ${
                 isSidebarCollapsed ? "justify-center" : "gap-3"
               }`}
             >
@@ -854,13 +861,13 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Footer */}
         <footer className="border-t border-border bg-card/30 py-4 px-4 sm:px-8 safe-x safe-bottom">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-foreground">
             <span>© {new Date().getFullYear()} Paidly. All rights reserved.</span>
             <div className="flex items-center gap-6">
-              <Link to={createPageUrl("About")} className="hover:text-foreground transition-colors">
+              <Link to={createPageUrl("About")} className="text-foreground underline-offset-4 hover:underline transition-colors">
                 Mission &amp; About
               </Link>
-              <Link to={createPageUrl("Settings")} className="hover:text-foreground transition-colors">
+              <Link to={createPageUrl("Settings")} className="text-foreground underline-offset-4 hover:underline transition-colors">
                 Settings
               </Link>
             </div>

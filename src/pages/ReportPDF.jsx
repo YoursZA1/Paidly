@@ -350,7 +350,7 @@ export default function ReportPDF() {
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase ${
                                         txn.type === 'INVOICE' ? 'bg-green-50 border-green-200 text-green-700' :
                                         txn.type === 'EXPENSE' ? 'bg-red-50 border-red-200 text-red-700' :
-                                        'bg-blue-50 border-blue-200 text-blue-700'
+                                        'bg-primary/10 border-primary/20 text-primary'
                                     }`}>
                                         {txn.type}
                                     </span>

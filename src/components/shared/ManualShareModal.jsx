@@ -154,7 +154,7 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                     <Button 
                         onClick={handleSendEmail}
                         disabled={isSending || !emailTo || !emailSubject}
-                        className="bg-indigo-600 hover:bg-indigo-700"
+                        className="bg-primary hover:bg-primary/90"
                     >
                         {isSending ? (
                             <>

@@ -125,7 +125,7 @@ function LogsAuditTrail() {
       case EVENT_TYPES.INVOICE_CREATED:
         return "bg-green-100 text-green-800 border-green-200";
       case EVENT_TYPES.INVOICE_UPDATED:
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "bg-primary/15 text-primary border-primary/20";
       case EVENT_TYPES.PAYMENT_RECORDED:
         return "bg-emerald-100 text-emerald-800 border-emerald-200";
       case EVENT_TYPES.STATUS_CHANGED:
@@ -137,7 +137,7 @@ function LogsAuditTrail() {
         return "bg-red-100 text-red-800 border-red-200";
       case EVENT_TYPES.USER_LOGIN:
       case EVENT_TYPES.USER_LOGOUT:
-        return "bg-indigo-100 text-indigo-800 border-indigo-200";
+        return "bg-primary/15 text-primary border-primary/20";
       default:
         return "bg-slate-100 text-slate-800 border-slate-200";
     }
@@ -229,7 +229,7 @@ function LogsAuditTrail() {
                 {[
                   { label: "Total", value: logStats.total, className: "text-slate-900" },
                   { label: "Created", value: logStats.created, className: "text-green-600" },
-                  { label: "Updated", value: logStats.updated, className: "text-blue-600" },
+                  { label: "Updated", value: logStats.updated, className: "text-primary" },
                   { label: "Payments", value: logStats.payments, className: "text-emerald-600" },
                   { label: "Status", value: logStats.statusChanges, className: "text-orange-600" },
                   { label: "Admin", value: logStats.adminActions, className: "text-purple-600" },
@@ -506,18 +506,18 @@ function LogsAuditTrail() {
               <p className="text-slate-500 mb-2">Related:</p>
               <ul className="flex flex-wrap gap-3">
                 <li>
-                  <a href="/admin/system-status" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                  <a href="/admin/system-status" className="text-primary hover:underline inline-flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" />
                     System status
                   </a>
                 </li>
                 <li>
-                  <a href="/admin/background-jobs" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                  <a href="/admin/background-jobs" className="text-primary hover:underline inline-flex items-center gap-1">
                     Background jobs
                   </a>
                 </li>
                 <li>
-                  <a href="/admin/support-tools" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                  <a href="/admin/support-tools" className="text-primary hover:underline inline-flex items-center gap-1">
                     Support & admin tools
                     <ExternalLink className="h-3 w-3" />
                   </a>

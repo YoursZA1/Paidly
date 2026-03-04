@@ -209,7 +209,7 @@ export const getStatusBadgeColor = (status) => {
     inactive: 'bg-slate-100 text-slate-800',
     suspended: 'bg-red-100 text-red-800',
     paused: 'bg-yellow-100 text-yellow-800',
-    pending: 'bg-blue-100 text-blue-800',
+    pending: 'bg-primary/15 text-primary',
     cancelled: 'bg-slate-200 text-slate-800',
   };
   return statusMap[status?.toLowerCase()] || 'bg-slate-100 text-slate-800';

@@ -281,7 +281,7 @@ export const getUsageBadge = (item) => {
             shortLabel: 'New',
             icon: Sparkles,
             color: 'blue',
-            className: 'bg-blue-50 border-blue-200 text-blue-700'
+            className: 'bg-primary/10 border-primary/20 text-primary'
         };
     }
     

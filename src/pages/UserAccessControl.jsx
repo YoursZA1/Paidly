@@ -535,7 +535,7 @@ function UsageLimitsTab() {
   const getUsageColor = (percentage) => {
     if (percentage >= 90) return "bg-red-500";
     if (percentage >= 75) return "bg-yellow-500";
-    if (percentage >= 50) return "bg-blue-500";
+    if (percentage >= 50) return "bg-primary/100";
     return "bg-green-500";
   };
 
@@ -554,7 +554,7 @@ function UsageLimitsTab() {
                 onClick={() => setSelectedUser(user)}
                 className={`p-4 text-left rounded-lg border-2 transition-all ${
                   selectedUser?.id === user.id
-                    ? "border-indigo-500 bg-indigo-50"
+                    ? "border-primary bg-primary/10"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 }`}
               >
@@ -762,14 +762,14 @@ function UsageLimitsTab() {
                 </div>
 
                 {getUserUsageStats.nextUpgrade && (
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-indigo-900 mb-3">Next Upgrade: {getUserUsageStats.nextUpgrade}</h4>
-                    <p className="text-sm text-indigo-800 mb-3">
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                    <h4 className="font-semibold text-foreground mb-3">Next Upgrade: {getUserUsageStats.nextUpgrade}</h4>
+                    <p className="text-sm text-primary mb-3">
                       Upgrade this user to get more features and higher limits.
                     </p>
                     <Button
                       size="sm"
-                      className="w-full bg-indigo-600 hover:bg-indigo-700"
+                      className="w-full bg-primary hover:bg-primary/90"
                       onClick={() => {
                         // This would link to Admin Control > Change User Plan
                         window.location.href = "/admin-control";
@@ -856,7 +856,7 @@ function ManualOverridesLogTab() {
       case "ACCOUNT_SUSPENSION":
         return "bg-red-100 text-red-800";
       case "PLAN_CHANGE":
-        return "bg-blue-100 text-blue-800";
+        return "bg-primary/15 text-primary";
       case "FEATURE_OVERRIDE":
         return "bg-purple-100 text-purple-800";
       default:
@@ -920,7 +920,7 @@ function ManualOverridesLogTab() {
             <CardTitle className="text-sm font-medium text-slate-600">Plan Changes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{overrideStats.planChanges}</div>
+            <div className="text-3xl font-bold text-primary">{overrideStats.planChanges}</div>
             <p className="text-xs text-slate-500 mt-2">plan upgrades/downgrades</p>
           </CardContent>
         </Card>
@@ -948,7 +948,7 @@ function ManualOverridesLogTab() {
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="all">All Types</option>
                 <option value="ACCOUNT_SUSPENSION">Account Suspension</option>
@@ -964,7 +964,7 @@ function ManualOverridesLogTab() {
                 placeholder="Search by user, email, or admin..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -1052,14 +1052,14 @@ function ManualOverridesLogTab() {
       </Card>
 
       {/* Compliance Note */}
-      <Card className="border-slate-200 bg-blue-50 shadow-sm">
+      <Card className="border-slate-200 bg-primary/10 shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-600" />
-            <CardTitle className="text-blue-900">Audit & Compliance</CardTitle>
+            <Shield className="w-5 h-5 text-primary" />
+            <CardTitle className="text-foreground">Audit & Compliance</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="text-sm text-blue-800">
+        <CardContent className="text-sm text-primary">
           All manual overrides are automatically logged and timestamped. This audit trail helps:
           <ul className="mt-2 ml-4 list-disc space-y-1">
             <li>Track admin actions for compliance requirements</li>
@@ -1080,7 +1080,7 @@ export default function UserAccessControl() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <Shield className="w-8 h-8 text-indigo-600" />
+            <Shield className="w-8 h-8 text-primary" />
             <h1 className="text-3xl font-bold text-slate-900">User & Access Control</h1>
           </div>
           <p className="text-slate-600">Manage user access levels, feature availability, and account suspension.</p>

@@ -79,7 +79,7 @@ export const getSubscriptionStatusLabel = (status) => {
  */
 export const getSubscriptionStatusColor = (status) => {
   const colors = {
-    active: 'bg-blue-100 text-blue-800',
+    active: 'bg-primary/15 text-primary',
     paused: 'bg-yellow-100 text-yellow-800',
     cancelled: 'bg-red-100 text-red-800',
     pending: 'bg-purple-100 text-purple-800'
@@ -221,7 +221,7 @@ export const getPlanTypeLabel = (planType) => {
 export const getPlanColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
-    starter: 'bg-blue-100 text-blue-800',
+    starter: 'bg-primary/15 text-primary',
     professional: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800',
     custom: 'bg-pink-100 text-pink-800'
@@ -303,7 +303,7 @@ export const getPaymentStatusColor = (status) => {
     successful: 'bg-green-100 text-green-800',
     failed: 'bg-red-100 text-red-800',
     pending: 'bg-yellow-100 text-yellow-800',
-    refunded: 'bg-blue-100 text-blue-800'
+    refunded: 'bg-primary/15 text-primary'
   };
   return colors[status] || 'bg-gray-100 text-gray-800';
 };

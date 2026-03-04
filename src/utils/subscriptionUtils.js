@@ -189,7 +189,7 @@ export function getActivityColor(type) {
     'upgrade': 'text-green-500',
     'downgrade': 'text-orange-500',
     'cancel': 'text-red-500',
-    'reactivate': 'text-blue-500',
+    'reactivate': 'text-primary',
     'extend': 'text-purple-500'
   };
   return colors[type] || 'text-gray-500';

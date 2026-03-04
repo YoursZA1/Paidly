@@ -87,7 +87,7 @@ export default function PaymentSchedule({
                         <div 
                             className={`h-full transition-all duration-500 ${
                                 paymentProgress === 100 ? 'bg-green-500' : 
-                                paymentProgress >= 50 ? 'bg-blue-500' : 
+                                paymentProgress >= 50 ? 'bg-primary/100' : 
                                 'bg-yellow-500'
                             }`}
                             style={{ width: `${Math.min(paymentProgress, 100)}%` }}

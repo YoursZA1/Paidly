@@ -126,7 +126,7 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                         <CardTitle className="text-sm font-medium text-gray-600">On-Time Rate</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-bold text-blue-600">{onTimePercentage}%</p>
+                        <p className="text-2xl font-bold text-primary">{onTimePercentage}%</p>
                         <p className="text-xs text-gray-500">{metrics.onTimeCount} of {metrics.totalPayments}</p>
                     </CardContent>
                 </Card>
@@ -196,8 +196,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                         <CardTitle className="text-sm font-medium text-gray-600">31-60 Days</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-lg font-bold text-blue-600">{formatCurrency(metrics.paymentAging.days30, currency)}</p>
-                        <Badge className="mt-2 bg-blue-100 text-blue-700 border-blue-300">Aging</Badge>
+                        <p className="text-lg font-bold text-primary">{formatCurrency(metrics.paymentAging.days30, currency)}</p>
+                        <Badge className="mt-2 bg-primary/15 text-primary border-primary/30">Aging</Badge>
                     </CardContent>
                 </Card>
 

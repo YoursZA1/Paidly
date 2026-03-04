@@ -178,7 +178,7 @@ export default function RecurringInvoices() {
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 flex items-center gap-2 font-display">
-                            <Zap className="w-6 h-6 text-blue-600" />
+                            <Zap className="w-6 h-6 text-primary" />
                             Recurring Invoices
                         </h1>
                         <p className="text-gray-600">Manage automated invoice templates and schedules.</p>
@@ -228,7 +228,7 @@ export default function RecurringInvoices() {
                         </Button>
                         <Button
                             onClick={() => setIsCreateDialogOpen(true)}
-                            className="bg-blue-600 hover:bg-blue-700"
+                            className="bg-primary hover:bg-primary/90"
                         >
                             <Plus className="w-4 h-4 mr-2" />
                             Create Template
@@ -410,7 +410,7 @@ export default function RecurringInvoices() {
                 <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-blue-600" />
+                            <Zap className="w-5 h-5 text-primary" />
                             Cycle History: {selectedInvoiceForHistory?.template_name}
                         </DialogTitle>
                         <DialogDescription>

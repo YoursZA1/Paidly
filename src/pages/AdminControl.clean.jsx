@@ -13,11 +13,11 @@ export default function AdminControl() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-indigo-600" />
+            <Shield className="w-8 h-8 text-primary" />
             <h1 className="text-3xl font-bold text-slate-900">Admin Control</h1>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => navigate('/admin/roles-management')} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={() => navigate('/admin/roles-management')} className="gap-2 bg-primary hover:bg-primary/90">
               <Key className="w-4 h-4" />
               Admin Roles
             </Button>

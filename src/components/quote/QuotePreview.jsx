@@ -8,7 +8,6 @@ import { formatCurrency } from "../CurrencySelector";
 import { clientPropType, quoteDataPropType } from "../invoice/propTypes";
 import LogoImage from "@/components/shared/LogoImage";
 import { createPageUrl } from "@/utils";
-import { getUnitLabel, getItemTypeLabel } from "../invoice/itemTypeHelpers";
 
 export default function QuotePreview({ 
     quoteData, 
@@ -57,20 +56,20 @@ export default function QuotePreview({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
         >
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="border-b border-slate-100 pb-6">
+            <Card className="bg-card/80 backdrop-blur-sm border-0 shadow-xl">
+                <CardHeader className="border-b border-border pb-6">
                     {/* Logo Display */}
                     {user?.logo_url && (
                         <div className="mb-4 flex justify-center">
                             <LogoImage src={user.logo_url} alt="Company Logo" className="h-16 w-auto max-w-xs object-contain rounded shadow" style={{ maxHeight: '64px' }} />
                         </div>
                     )}
-                    <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                         <FileText className="w-5 h-5" />
                         {previewOnly ? "Quote" : "Quote Preview"}
                     </CardTitle>
                     {!previewOnly && (
-                        <p className="text-slate-600 mt-2">
+                        <p className="text-muted-foreground mt-2">
                             Review all details before creating your professional quote
                         </p>
                     )}
@@ -88,164 +87,107 @@ export default function QuotePreview({
                 </CardHeader>
 
                 <CardContent className="p-8">
-                    <div className="space-y-8">
-                        {/* Billed by / Billed to - full details */}
-                        <div className="grid md:grid-cols-2 gap-6 border-b border-slate-200 pb-6">
-                            <div>
-                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed by</h3>
-                                <div className="space-y-1">
-                                    {user?.logo_url && (
-                                        <LogoImage src={user.logo_url} alt="" className="h-10 w-auto mb-2" style={{ maxHeight: "40px" }} />
-                                    )}
-                                    <p className="font-semibold text-slate-900">{user?.company_name || "Your Company"}</p>
-                                    {user?.company_address && (
-                                        <p className="text-sm text-slate-600 whitespace-pre-line">{user.company_address}</p>
-                                    )}
-                                    {user?.email && (
-                                        <p className="text-sm text-slate-600">{user.email}</p>
-                                    )}
-                                </div>
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed to</h3>
-                                <div className="space-y-1">
-                                    <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
-                                    {client?.contact_person && <p className="text-sm text-slate-600">Attn: {client.contact_person}</p>}
-                                    {client?.address && <p className="text-sm text-slate-600 whitespace-pre-line">{client.address}</p>}
-                                    {client?.email && <p className="text-sm text-slate-600">{client.email}</p>}
-                                    {client?.phone && <p className="text-sm text-slate-600">{client.phone}</p>}
-                                    {client?.tax_id && <p className="text-sm text-slate-600">Tax ID: {client.tax_id}</p>}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quote Information */}
-                        <div className="bg-slate-50 rounded-2xl p-6">
-                            <h3 className="font-bold text-slate-900 mb-4">Quote Information</h3>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-slate-600">Client Name</p>
-                                    <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Project Title</p>
-                                    <p className="font-semibold text-slate-900">{quoteData?.project_title || "—"}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Valid Until</p>
-                                    <p className="font-semibold text-slate-900">
-                                        {validUntil ? format(validUntil, "MMMM d, yyyy") : "Not set"}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-600">Total Amount</p>
-                                    <p className="font-bold text-slate-900 text-xl">
-                                        {formatCurrency(totalAmount, currency)}
-                                    </p>
-                                </div>
-                            </div>
-                            {quoteData?.project_description && (
-                                <div className="mt-4">
-                                    <p className="text-sm text-slate-600">Description</p>
-                                    <p className="text-slate-800">{quoteData.project_description}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Items - full table with product/service details */}
-                        <div className="bg-primary/5 rounded-2xl p-6 border border-primary/10">
-                            <h3 className="font-bold text-slate-900 mb-4">Quote Items</h3>
-                            {items.length === 0 ? (
-                                <p className="text-slate-500 text-center py-4">No items added</p>
-                            ) : (
-                                <>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="border-b border-slate-200">
-                                                    <th className="py-2 pr-4 text-xs font-semibold text-slate-600 uppercase">Product / Service</th>
-                                                    <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-center w-14">Qty</th>
-                                                    <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase w-20">Unit</th>
-                                                    <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right">Rate</th>
-                                                    <th className="py-2 pl-2 text-xs font-semibold text-slate-600 uppercase text-right">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {items.map((item, index) => {
-                                                    const qty = Number(item.quantity ?? item.qty ?? 1);
-                                                    const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
-                                                    const total = Number(item.total_price ?? item.total ?? qty * unitPrice);
-                                                    const name = item.service_name || item.name || "Item";
-                                                    const itemType = item.item_type || "service";
-                                                    const unitType = item.unit_type || "unit";
-                                                    const unitLabel = getUnitLabel(itemType, unitType);
-                                                    const typeLabel = getItemTypeLabel(itemType);
-                                                    return (
-                                                        <tr key={index} className="border-b border-slate-100 align-top">
-                                                            <td className="py-3 pr-4">
-                                                                <p className="font-medium text-slate-900">{name}</p>
-                                                                {(item.sku || item.part_number) && (
-                                                                    <p className="text-xs text-slate-500 mt-0.5">
-                                                                        {item.sku && <span>SKU: {item.sku}</span>}
-                                                                        {item.sku && item.part_number && " · "}
-                                                                        {item.part_number && <span>Part #: {item.part_number}</span>}
-                                                                    </p>
-                                                                )}
-                                                                {item.description && (
-                                                                    <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{item.description}</p>
-                                                                )}
-                                                                {item.details && (
-                                                                    <p className="text-xs text-slate-500 mt-1 italic">{item.details}</p>
-                                                                )}
-                                                                <p className="text-xs text-slate-500 mt-1">{typeLabel}</p>
-                                                            </td>
-                                                            <td className="py-3 px-2 text-center text-slate-700">{qty}</td>
-                                                            <td className="py-3 px-2 text-slate-700 text-sm">{unitLabel}</td>
-                                                            <td className="py-3 px-2 text-right text-slate-700">{formatCurrency(unitPrice, currency)}</td>
-                                                            <td className="py-3 pl-2 text-right font-medium text-slate-900">{formatCurrency(total, currency)}</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-slate-200">
-                                <div className="flex justify-between text-sm">
-                                        <span>Subtotal:</span>
-                                        <span>{formatCurrency(subtotal, currency)}</span>
-                                    </div>
-                                    {showTax && (
-                                        <div className="flex justify-between text-sm">
-                                            <span>Tax ({taxRate}%):</span>
-                                            <span>{formatCurrency(taxAmount, currency)}</span>
+                    <div className="bg-card rounded-lg text-foreground">
+                        {/* Header: QUOTE left, Company logo-aligned accent box right + Quote No, Valid Until */}
+                        <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-foreground uppercase tracking-tight">Quote</h1>
+                            <div className="text-right">
+                                <div className="inline-block rounded-lg px-4 py-3 bg-primary/10 border border-primary/20">
+                                    {user?.logo_url ? (
+                                        <div className="flex items-center gap-3">
+                                            <LogoImage src={user.logo_url} alt="" className="h-10 w-auto" style={{ maxHeight: "40px" }} />
+                                            <span className="font-semibold text-foreground">{user?.company_name || "Your Company"}</span>
                                         </div>
+                                    ) : (
+                                        <span className="font-semibold text-foreground">{user?.company_name || "Your Company"}</span>
                                     )}
-                                    <div className="flex justify-between text-lg font-bold mt-2 pt-2 border-t border-slate-200">
-                                        <span>Total:</span>
-                                        <span>{formatCurrency(totalAmount, currency)}</span>
-                                    </div>
                                 </div>
-                                </>
-                            )}
+                                <div className="mt-3 text-sm text-muted-foreground">
+                                    <p>Quote No: {quoteData?.quote_number || "Draft"}</p>
+                                    <p>Valid Until: {validUntil ? format(validUntil, "dd/MM/yyyy") : "—"}</p>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Notes & Terms */}
+                        {/* Payable To | Bank Details */}
+                        <div className="grid md:grid-cols-2 gap-8 mb-8">
+                            <div>
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payable To</h3>
+                                <p className="font-medium text-foreground">{client?.name || "—"}</p>
+                                {client?.address && <p className="text-sm text-muted-foreground mt-0.5">{client.address}</p>}
+                                {client?.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
+                            </div>
+                            <div className="text-right md:text-right">
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Bank Details</h3>
+                                <p className="text-sm text-muted-foreground">—</p>
+                            </div>
+                        </div>
+
+                        {/* Itemized table: logo-aligned accent header, 4 columns */}
+                        <div className="overflow-x-auto rounded-t-lg overflow-hidden mb-6">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-primary/10 border border-primary/20">
+                                        <th className="px-4 py-3.5 text-left text-xs font-bold text-foreground uppercase tracking-wider">Item Description</th>
+                                        <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-20">Qty</th>
+                                        <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Price</th>
+                                        <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">No items added</td>
+                                        </tr>
+                                    ) : (
+                                        items.map((item, index) => {
+                                            const qty = Number(item.quantity ?? item.qty ?? 1);
+                                            const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
+                                            const total = Number(item.total_price ?? item.total ?? qty * unitPrice);
+                                            const name = item.service_name || item.name || "Item";
+                                            return (
+                                                <tr key={index} className="border-b border-border">
+                                                    <td className="px-4 py-4 text-foreground">{name}</td>
+                                                    <td className="px-4 py-4 text-right text-foreground tabular-nums">{qty}</td>
+                                                    <td className="px-4 py-4 text-right text-foreground tabular-nums">{formatCurrency(unitPrice, currency)}</td>
+                                                    <td className="px-4 py-4 text-right font-medium text-foreground tabular-nums">{formatCurrency(total, currency)}</td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Notes */}
                         {(quoteData?.notes || quoteData?.terms_conditions) && (
-                            <div className="grid md:grid-cols-2 gap-6">
-                                {quoteData?.notes && (
-                                    <div className="bg-amber-50 rounded-2xl p-6">
-                                        <h3 className="font-bold text-slate-900 mb-4">Additional Notes</h3>
-                                        <p className="text-slate-800 whitespace-pre-wrap">{quoteData.notes}</p>
-                                    </div>
-                                )}
-                                {quoteData?.terms_conditions && (
-                                    <div className="bg-purple-50 rounded-2xl p-6">
-                                        <h3 className="font-bold text-slate-900 mb-4">Terms & Conditions</h3>
-                                        <p className="text-slate-800 whitespace-pre-wrap">{quoteData.terms_conditions}</p>
-                                    </div>
-                                )}
+                            <div className="mb-8">
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Notes</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                                    {[quoteData?.notes, quoteData?.terms_conditions].filter(Boolean).join("\n\n")}
+                                </p>
                             </div>
                         )}
+
+                        {/* Totals: right-aligned logo-aligned accent box */}
+                        <div className="flex justify-end">
+                            <div className="w-full max-w-xs rounded-lg border border-primary/20 bg-primary/10 px-5 py-4">
+                                <div className="flex justify-between py-2 text-sm text-foreground">
+                                    <span>Sub Total</span>
+                                    <span className="tabular-nums">{formatCurrency(subtotal, currency)}</span>
+                                </div>
+                                {showTax && (
+                                    <div className="flex justify-between py-2 text-sm text-foreground">
+                                        <span>Tax ({taxRate}%)</span>
+                                        <span className="tabular-nums">{formatCurrency(taxAmount, currency)}</span>
+                                    </div>
+                                )}
+                                <div className="border-t border-border mt-2 pt-3 flex justify-between text-base font-bold text-foreground">
+                                    <span>Grand Total</span>
+                                    <span className="tabular-nums">{formatCurrency(totalAmount, currency)}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div className={`flex ${showBack && !previewOnly ? "justify-between" : "justify-end"} mt-8 gap-3`}>
@@ -253,7 +195,7 @@ export default function QuotePreview({
                             <Button
                                 onClick={onPrevious}
                                 variant="outline"
-                                className="px-8 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+                                className="px-8 py-3 rounded-xl border-border hover:bg-muted"
                             >
                                 <ArrowLeft className="w-4 h-4 mr-2" />
                                 Back
@@ -263,7 +205,7 @@ export default function QuotePreview({
                             <Button
                                 onClick={onClose}
                                 variant="outline"
-                                className="px-8 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+                                className="px-8 py-3 rounded-xl border-border hover:bg-muted"
                             >
                                 Close Preview
                             </Button>
@@ -272,7 +214,7 @@ export default function QuotePreview({
                             <Button
                                 onClick={onCreate}
                                 disabled={loading}
-                                className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? (
                                     <>

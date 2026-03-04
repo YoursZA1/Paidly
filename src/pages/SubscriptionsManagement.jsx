@@ -127,7 +127,7 @@ export default function SubscriptionsManagement() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
+              <Users className="h-4 w-4 text-primary" />
               Active Subscriptions
             </CardTitle>
           </CardHeader>
@@ -243,7 +243,7 @@ export default function SubscriptionsManagement() {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-slate-200 rounded-full h-2">
                         <div 
-                          className="bg-blue-500 h-2 rounded-full" 
+                          className="bg-primary/100 h-2 rounded-full" 
                           style={{ width: `${data.percentage}%` }}
                         />
                       </div>
@@ -413,7 +413,7 @@ export default function SubscriptionsManagement() {
                         {event.type === 'upgrade' && <TrendingUp className="h-5 w-5 text-green-500" />}
                         {event.type === 'downgrade' && <TrendingDown className="h-5 w-5 text-orange-500" />}
                         {event.type === 'cancel' && <XCircle className="h-5 w-5 text-red-500" />}
-                        {event.type === 'reactivate' && <CheckCircle className="h-5 w-5 text-blue-500" />}
+                        {event.type === 'reactivate' && <CheckCircle className="h-5 w-5 text-primary" />}
                         {event.type === 'extend' && <Clock className="h-5 w-5 text-purple-500" />}
                       </div>
                       <div className="flex-1">
@@ -456,7 +456,7 @@ export default function SubscriptionsManagement() {
               <CardContent className="p-6 space-y-3">
                 {metrics && (
                   <>
-                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
                       <span className="text-slate-700 font-medium">Upgrades</span>
                       <span className="text-2xl font-bold text-green-600">+{metrics.metrics30Days.upgrades}</span>
                     </div>

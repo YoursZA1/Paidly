@@ -31,7 +31,7 @@ export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0
                     <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
-                                <h3 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors duration-200">
+                                <h3 className="font-bold text-slate-900 text-lg group-hover:text-primary transition-colors duration-200">
                                     {service.name}
                                 </h3>
                                 {!service.is_active && <Archive className="w-4 h-4 text-gray-400" />}
@@ -46,7 +46,7 @@ export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0
                                 {(() => {
                                     const itemType = ITEM_TYPES.find(t => t.value === (service.item_type || 'service'));
                                     return itemType ? (
-                                        <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-300">
+                                        <Badge className="text-xs bg-primary/15 text-primary border-primary/30">
                                             {renderIcon(itemType.icon, {style: {width: 16, height: 16}, className: "inline-block align-middle mr-1"})} {itemType.label}
                                         </Badge>
                                     ) : null;
@@ -83,7 +83,7 @@ export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0
                             variant="ghost"
                             size="icon"
                             onClick={() => onEdit(service)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-50"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-primary/10"
                         >
                             <Edit className="w-4 h-4" />
                         </Button>

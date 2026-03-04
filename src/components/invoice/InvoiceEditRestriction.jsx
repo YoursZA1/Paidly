@@ -166,24 +166,24 @@ export default function InvoiceEditRestriction({ invoice, reason = 'paid' }) {
             )}
 
             {/* What you can do */}
-            <Card className="mb-8 border-blue-200 bg-blue-50">
+            <Card className="mb-8 border-primary/20 bg-primary/10">
               <CardContent className="p-6">
                 <h3 className="font-semibold text-gray-900 mb-3">What you can do instead:</h3>
                 <ul className="space-y-2 text-sm text-gray-700">
                   <li className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
+                    <span className="text-primary">•</span>
                     <span>View the invoice in read-only mode</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
+                    <span className="text-primary">•</span>
                     <span>Download or export the invoice</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
+                    <span className="text-primary">•</span>
                     <span>Create a new invoice based on this one</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
+                    <span className="text-primary">•</span>
                     <span>Contact support if you need to make corrections</span>
                   </li>
                 </ul>
@@ -194,7 +194,7 @@ export default function InvoiceEditRestriction({ invoice, reason = 'paid' }) {
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
                 onClick={() => navigate(createPageUrl('ViewInvoice') + `?id=${invoice?.id}`)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+                className="bg-primary hover:bg-primary/90 text-white px-6"
               >
                 <Eye className="w-4 h-4 mr-2" />
                 View Invoice

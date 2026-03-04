@@ -67,7 +67,7 @@ export default function BalanceSheetReport({ data, currency = 'ZAR', dateRange }
                     {/* Liabilities & Equity */}
                     <div>
                         <div className="flex items-center gap-2 mb-4">
-                            <Building2 className="w-6 h-6 text-blue-600" />
+                            <Building2 className="w-6 h-6 text-primary" />
                             <h3 className="font-bold text-slate-900 text-xl">Liabilities & Equity</h3>
                         </div>
                         <div className="space-y-1">

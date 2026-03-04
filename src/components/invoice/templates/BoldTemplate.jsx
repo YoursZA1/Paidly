@@ -97,43 +97,31 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             
             {/* Items Table */}
             <section className="mb-8">
-                <table className="w-full">
+                <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-[#f24e00] text-white">
-                            <th className="p-4 text-left font-bold uppercase text-sm">Service</th>
-                            <th className="p-4 text-center font-bold uppercase text-sm">Qty</th>
-                            <th className="p-4 text-right font-bold uppercase text-sm">Price</th>
-                            {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
-                                <>
-                                    <th className="p-4 text-right font-bold uppercase text-sm">Tax %</th>
-                                    <th className="p-4 text-right font-bold uppercase text-sm">Tax</th>
-                                </>
-                            )}
-                            <th className="p-4 text-right font-bold uppercase text-sm">Total</th>
+                            <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider">Project Title</th>
+                            <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider w-16">Qty</th>
+                            <th className="px-5 py-3.5 text-right text-xs font-bold uppercase tracking-wider w-24">Price</th>
+                            <th className="px-5 py-3.5 text-right text-xs font-bold uppercase tracking-wider w-24">Total</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-200">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                    <td className="p-4">
-                                        <p className="font-bold text-gray-900">{item.service_name}</p>
-                                        {item.description && <p className="text-sm text-gray-500">{item.description}</p>}
+                                    <td className="px-5 py-3.5">
+                                        <p className="font-semibold text-gray-900">{item.service_name || item.name || 'Item'}</p>
+                                        {item.description && <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>}
                                     </td>
-                                    <td className="p-4 text-center font-medium">{item.quantity}</td>
-                                    <td className="p-4 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    {Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) && (
-                                        <>
-                                            <td className="p-4 text-right text-gray-600">{item.item_tax_rate || 0}%</td>
-                                            <td className="p-4 text-right text-orange-600 font-medium">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</td>
-                                        </>
-                                    )}
-                                    <td className="p-4 text-right font-bold">{formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}</td>
+                                    <td className="px-5 py-3.5 text-center text-gray-700 tabular-nums">{item.quantity}</td>
+                                    <td className="px-5 py-3.5 text-right text-gray-700 tabular-nums">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={Array.isArray(invoice.items) && invoice.items.some(i => i.item_tax_rate && i.item_tax_rate > 0) ? 6 : 4} className="p-4 text-center text-gray-500">No items found</td>
+                                <td colSpan={4} className="px-5 py-8 text-center text-gray-500">No items found</td>
                             </tr>
                         )}
                     </tbody>

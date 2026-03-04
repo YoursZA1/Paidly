@@ -100,7 +100,7 @@ export default function QuoteTemplates() {
                     <h1 className="text-2xl font-bold">{currentTemplate.id ? 'Edit Template' : 'New Template'}</h1>
                     <div className="flex gap-2">
                         <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
-                        <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white"><Save className="w-4 h-4 mr-2"/> Save Template</Button>
+                        <Button onClick={handleSave} className="bg-primary hover:bg-primary/90 text-white"><Save className="w-4 h-4 mr-2"/> Save Template</Button>
                     </div>
                 </div>
 
@@ -175,7 +175,7 @@ export default function QuoteTemplates() {
                         <h1 className="text-3xl font-bold text-slate-900">Quote Templates</h1>
                         <p className="text-slate-600">Create reusable templates to speed up your workflow.</p>
                     </div>
-                    <Button onClick={handleCreateNew} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Button onClick={handleCreateNew} className="bg-primary hover:bg-primary/90 text-white">
                         <Plus className="w-4 h-4 mr-2" /> New Template
                     </Button>
                 </div>

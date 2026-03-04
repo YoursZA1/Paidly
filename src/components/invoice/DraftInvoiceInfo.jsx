@@ -15,16 +15,16 @@ export default function DraftInvoiceInfo({ invoice, client }) {
   const isDraft = invoice.status === 'draft';
 
   return (
-    <Card className={`border-2 ${isDraft ? 'border-blue-200 bg-blue-50/50' : 'border-gray-200 bg-gray-50'}`}>
+    <Card className={`border-2 ${isDraft ? 'border-primary/20 bg-primary/10' : 'border-gray-200 bg-gray-50'}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            <FileText className={`w-5 h-5 ${isDraft ? 'text-blue-600' : 'text-gray-600'}`} />
+            <FileText className={`w-5 h-5 ${isDraft ? 'text-primary' : 'text-gray-600'}`} />
             <h3 className="font-semibold text-gray-900">Invoice Information</h3>
           </div>
           <Badge 
             variant={isDraft ? 'default' : 'secondary'}
-            className={isDraft ? 'bg-blue-600' : 'bg-gray-600'}
+            className={isDraft ? 'bg-primary' : 'bg-gray-600'}
           >
             {isDraft ? 'DRAFT' : invoice.status?.toUpperCase()}
           </Badge>
@@ -101,14 +101,14 @@ export default function DraftInvoiceInfo({ invoice, client }) {
 
         {/* Draft-specific info */}
         {isDraft && (
-          <div className="mt-4 pt-4 border-t border-blue-200">
+          <div className="mt-4 pt-4 border-t border-primary/20">
             <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-primary mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-blue-900">
+                <p className="text-sm font-medium text-foreground">
                   Draft Status
                 </p>
-                <p className="text-xs text-blue-700 mt-1">
+                <p className="text-xs text-primary mt-1">
                   This invoice hasn&apos;t been sent to the client. You can make changes and either save as draft or send it.
                 </p>
               </div>

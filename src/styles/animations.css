@@ -328,3 +328,62 @@ button:focus {
 .mobile-menu {
   animation: mobileMenuSlide 0.3s ease-out;
 }
+
+/* Shimmer for skeleton (used by .skeleton-shimmer) */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0.08) 0%,
+    hsl(var(--primary) / 0.2) 50%,
+    hsl(var(--primary) / 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: pulse 2s ease-in-out infinite;
+  }
+}
+
+/* Load screen: stagger children with slight delay */
+.load-screen-stagger > * {
+  animation: fadeIn 0.35s ease-out backwards;
+}
+.load-screen-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.load-screen-stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.load-screen-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.load-screen-stagger > *:nth-child(4) { animation-delay: 0.2s; }
+.load-screen-stagger > *:nth-child(5) { animation-delay: 0.25s; }
+
+/* Respect reduced motion: disable or shorten animations */
+@media (prefers-reduced-motion: reduce) {
+  .main-content-enter,
+  .page-container,
+  .sidebar,
+  .header,
+  .card,
+  .modal,
+  .fade-in,
+  .slide-in-left,
+  .slide-in-right,
+  .stagger-item,
+  .mobile-menu,
+  .table-row {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .nav-link:hover {
+    transform: none;
+  }
+  .btn-primary:hover {
+    transform: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+}

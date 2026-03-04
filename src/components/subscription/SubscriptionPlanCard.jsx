@@ -13,9 +13,9 @@ export default function SubscriptionPlanCard({ plan, isCurrent, onSelect, isSele
             whileHover={{ y: -5 }}
             className={`h-full ${plan.is_recommended ? 'transform scale-105' : ''}`}
         >
-            <Card className={`flex flex-col h-full border-2 ${plan.is_recommended ? 'border-indigo-600 shadow-2xl' : 'border-slate-200'}`}>
+            <Card className={`flex flex-col h-full border-2 ${plan.is_recommended ? 'border-primary shadow-2xl' : 'border-slate-200'}`}>
                 {plan.is_recommended && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white">
                         Recommended
                     </Badge>
                 )}
@@ -30,7 +30,7 @@ export default function SubscriptionPlanCard({ plan, isCurrent, onSelect, isSele
                     <ul className="space-y-3 mb-8 flex-grow">
                         {plan.features.map((feature, index) => (
                             <li key={index} className="flex items-start gap-3">
-                                <CheckCircle className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />
+                                <CheckCircle className="w-5 h-5 text-primary mt-0.5 shrink-0" />
                                 <span className="text-slate-600">{feature}</span>
                             </li>
                         ))}
@@ -43,7 +43,7 @@ export default function SubscriptionPlanCard({ plan, isCurrent, onSelect, isSele
                                 ? 'bg-emerald-100 text-emerald-700 cursor-not-allowed border-2 border-emerald-300' 
                                 : isEnterprise 
                                     ? 'bg-slate-800 hover:bg-slate-900'
-                                    : 'bg-indigo-600 hover:bg-indigo-700'
+                                    : 'bg-primary hover:bg-primary/90'
                         }`}
                     >
                         {isCurrent ? '✓ Current Plan' : isSelecting ? 'Selecting...' : isEnterprise ? 'Contact Us' : 'Choose Plan'}

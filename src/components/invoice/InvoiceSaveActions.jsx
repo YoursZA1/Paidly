@@ -55,7 +55,7 @@ export default function InvoiceSaveActions({
           variant="outline"
           onClick={() => handleAction('draft')}
           disabled={disabled || loading}
-          className="flex items-center gap-2 border-gray-300 hover:bg-gray-50"
+          className="flex items-center gap-2 border-border hover:bg-muted"
         >
           <Save className="w-4 h-4" />
           <span>{draftButtonText}</span>
@@ -65,7 +65,7 @@ export default function InvoiceSaveActions({
         <Button
           onClick={() => handleAction('send')}
           disabled={disabled || loading}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Send className="w-4 h-4" />
           <span>{loading ? 'Sending...' : sendButtonText}</span>
@@ -79,12 +79,12 @@ export default function InvoiceSaveActions({
             <DialogTitle className="flex items-center gap-2">
               {actionType === 'send' ? (
                 <>
-                  <Mail className="w-5 h-5 text-blue-600" />
+                  <Mail className="w-5 h-5 text-primary" />
                   <span>Send Invoice Now?</span>
                 </>
               ) : (
                 <>
-                  <FileText className="w-5 h-5 text-gray-600" />
+                  <FileText className="w-5 h-5 text-muted-foreground" />
                   <span>Save as Draft?</span>
                 </>
               )}
@@ -114,7 +114,7 @@ export default function InvoiceSaveActions({
             <Button
               onClick={() => executeAction(actionType)}
               disabled={loading}
-              className={actionType === 'send' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+              className={actionType === 'send' ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : ''}
             >
               {loading ? 'Processing...' : actionType === 'send' ? 'Send Now' : 'Save Draft'}
             </Button>

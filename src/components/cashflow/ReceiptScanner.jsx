@@ -52,7 +52,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                 <div className="p-6">
                     {isScanning ? (
                         <div className="text-center py-12">
-                            <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+                            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
                             <p className="text-slate-600">Scanning receipt...</p>
                             <p className="text-sm text-slate-500 mt-2">This may take a few seconds</p>
                         </div>
@@ -65,7 +65,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                                     We'll extract the details automatically
                                 </p>
                                 <label htmlFor="receipt-upload">
-                                    <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+                                    <Button asChild className="bg-primary hover:bg-primary/90">
                                         <span>
                                             <Upload className="w-4 h-4 mr-2" />
                                             Choose File

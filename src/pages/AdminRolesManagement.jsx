@@ -118,7 +118,7 @@ function AdminRolesManagement({ embedded = false }) {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary to-[#ff7c00] rounded-xl flex items-center justify-center">
                 <Users className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -176,7 +176,7 @@ function AdminRolesManagement({ embedded = false }) {
                   onClick={() => setSelectedRole(role.id)}
                   className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition ${
                     selectedRole === role.id
-                      ? 'border-indigo-500 bg-indigo-50'
+                      ? 'border-primary bg-primary/10'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -280,15 +280,15 @@ function AdminRolesManagement({ embedded = false }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {Object.entries(editMode ? editRoleData.features : selectedRoleData.features).map(
                         ([feature, enabled]) => (
-                          <div key={feature} className={`flex items-center gap-3 p-3 rounded border ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                          <div key={feature} className={`flex items-center gap-3 p-3 rounded border ${enabled ? 'bg-primary/10 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
                             {canEdit && editMode ? (
                               <input type="checkbox" checked={enabled} onChange={e => setEditRoleData({ ...editRoleData, features: { ...editRoleData.features, [feature]: e.target.checked } })} />
                             ) : enabled ? (
-                              <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                              <Check className="w-5 h-5 text-primary flex-shrink-0" />
                             ) : (
                               <X className="w-5 h-5 text-slate-400 flex-shrink-0" />
                             )}
-                            <span className={`text-sm ${enabled ? 'text-blue-900' : 'text-slate-600'}`}>{feature.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>
+                            <span className={`text-sm ${enabled ? 'text-foreground' : 'text-slate-600'}`}>{feature.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>
                           </div>
                         )
                       )}
@@ -317,7 +317,7 @@ function AdminRolesManagement({ embedded = false }) {
                                 <option value="restricted">Restricted</option>
                               </select>
                             ) : (
-                              <Badge className={accessLevel === 'full' ? 'bg-green-100 text-green-800' : accessLevel === 'read-only' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}>
+                              <Badge className={accessLevel === 'full' ? 'bg-green-100 text-green-800' : accessLevel === 'read-only' ? 'bg-primary/15 text-primary' : 'bg-red-100 text-red-800'}>
                                 {accessLevel === 'full' ? '✓ Full Access' : accessLevel === 'read-only' ? '👁️ Read-Only' : '🔒 Restricted'}
                               </Badge>
                             )}
@@ -453,11 +453,11 @@ function AdminRolesManagement({ embedded = false }) {
         </Card>
 
         {/* Information Panel */}
-        <Card className="mt-8 border-blue-200 bg-blue-50">
+        <Card className="mt-8 border-primary/20 bg-primary/10">
           <CardHeader>
-            <CardTitle className="text-blue-900">ℹ️ Role Assignment Guide</CardTitle>
+            <CardTitle className="text-foreground">ℹ️ Role Assignment Guide</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-blue-800 space-y-3">
+          <CardContent className="text-sm text-primary space-y-3">
             <div>
               <strong>Super Administrator (👑)</strong> - Platform owners. Full access to everything including user management and system settings.
             </div>

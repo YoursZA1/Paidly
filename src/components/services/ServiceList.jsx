@@ -64,7 +64,7 @@ export default function ServiceList({
                                 {(() => {
                                     const itemType = ITEM_TYPES.find(t => t.value === (service.item_type || 'service'));
                                     return itemType ? (
-                                        <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-300">
+                                        <Badge className="text-xs bg-primary/15 text-primary border-primary/30">
                                             {renderIcon(itemType.icon, {style: {width: 16, height: 16}, className: "inline-block align-middle mr-1"})} {itemType.label}
                                         </Badge>
                                     ) : (
@@ -141,7 +141,7 @@ export default function ServiceList({
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => onEdit(service)}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-600"
+                                    className="h-8 w-8 text-slate-400 hover:text-primary"
                                 >
                                     <Edit className="w-4 h-4" />
                                 </Button>

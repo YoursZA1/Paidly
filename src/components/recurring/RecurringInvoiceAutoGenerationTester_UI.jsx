@@ -90,7 +90,7 @@ const RecurringInvoiceAutoGenerationTester_UI = () => {
             <Button
               onClick={handleRunTests}
               disabled={isRunning}
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className="w-full bg-primary hover:bg-primary/90"
               size="lg"
             >
               {isRunning ? (
@@ -223,7 +223,7 @@ const RecurringInvoiceAutoGenerationTester_UI = () => {
                   {result.generatedCount !== undefined && (
                     <div className="pt-2 border-t">
                       <p className="text-sm font-medium text-gray-700">
-                        Invoices Generated: <span className="text-blue-600">{result.generatedCount}</span>
+                        Invoices Generated: <span className="text-primary">{result.generatedCount}</span>
                       </p>
                     </div>
                   )}
@@ -248,10 +248,10 @@ const RecurringInvoiceAutoGenerationTester_UI = () => {
 
       {/* Info Card */}
       {!testResults && !isRunning && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-600" />
+              <AlertCircle className="w-5 h-5 text-primary" />
               About These Tests
             </CardTitle>
           </CardHeader>

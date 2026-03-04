@@ -8,7 +8,7 @@ import InvoiceActions from "./InvoiceActions";
 
 const statusStyles = {
     draft: "bg-slate-100 text-slate-700 border-slate-200",
-    sent: "bg-blue-100 text-blue-700 border-blue-200",
+    sent: "bg-primary/15 text-primary border-primary/20",
     viewed: "bg-purple-100 text-purple-700 border-purple-200",
     partial_paid: "bg-amber-100 text-amber-700 border-amber-200",
     paid: "bg-emerald-100 text-emerald-700 border-emerald-200",

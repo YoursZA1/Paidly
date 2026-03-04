@@ -455,10 +455,10 @@ export default function Services() {
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+                        className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-lg"
                     >
                         <div className="flex items-center justify-between">
-                            <p className="text-blue-700 font-medium">
+                            <p className="text-primary font-medium">
                                 {selectedServices.length} item{selectedServices.length !== 1 ? 's' : ''} selected
                             </p>
                             <div className="flex items-center gap-2">
@@ -516,7 +516,7 @@ export default function Services() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.1 }}
-                    className="mb-8 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg"
+                    className="mb-8 p-4 bg-gradient-to-r from-primary/10 to-primary/5 border border-purple-200 rounded-lg"
                 >
                     <p className="text-sm font-semibold text-slate-900 mb-3">
                         📋 Required: Each catalog item must have a type
@@ -687,7 +687,7 @@ export default function Services() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
                                 title="Grid View"
                             >
                                 <LayoutGrid className="w-4 h-4" />
@@ -696,7 +696,7 @@ export default function Services() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
                                 title="List View"
                             >
                                 <List className="w-4 h-4" />
@@ -745,7 +745,7 @@ export default function Services() {
                                         : "Add a service to quickly add it to invoices."}
                                 </p>
                                 {(!searchTerm && categoryFilter === "all" && itemTypeFilter === "all" && statusFilter === "all") && (
-                                    <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                    <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 text-white">
                                         <Plus className="w-4 h-4 mr-2" />
                                         Add Your First Service
                                     </Button>

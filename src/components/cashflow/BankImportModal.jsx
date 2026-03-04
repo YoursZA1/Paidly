@@ -133,14 +133,14 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
                     <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed rounded-xl bg-slate-50">
                         {isProcessing ? (
                             <div className="text-center space-y-4">
-                                <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mx-auto" />
+                                <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
                                 <p className="text-slate-600">Analyzing statement & categorizing...</p>
                             </div>
                         ) : (
                             <>
                                 <FileSpreadsheet className="w-12 h-12 text-slate-400 mb-4" />
                                 <Label htmlFor="file-upload" className="cursor-pointer">
-                                    <div className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+                                    <div className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors">
                                         Select CSV File
                                     </div>
                                     <Input 
@@ -172,7 +172,7 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
                         <ScrollArea className="flex-1 border rounded-md">
                             <div className="p-4 space-y-2">
                                 {transactions.map((t) => (
-                                    <div key={t.id} className={`flex items-center gap-4 p-3 rounded-lg border ${t.selected ? 'bg-white border-indigo-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                    <div key={t.id} className={`flex items-center gap-4 p-3 rounded-lg border ${t.selected ? 'bg-white border-primary/20 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
                                         <Checkbox 
                                             checked={t.selected} 
                                             onCheckedChange={() => toggleTransaction(t.id)}
@@ -242,7 +242,7 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
                     {step === 2 && (
                         <>
                             <Button variant="outline" onClick={() => setStep(1)} disabled={isProcessing}>Back</Button>
-                            <Button onClick={handleImport} disabled={isProcessing || transactions.filter(t => t.selected).length === 0} className="bg-indigo-600 hover:bg-indigo-700">
+                            <Button onClick={handleImport} disabled={isProcessing || transactions.filter(t => t.selected).length === 0} className="bg-primary hover:bg-primary/90">
                                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                                 Import {transactions.filter(t => t.selected).length} Transactions
                             </Button>

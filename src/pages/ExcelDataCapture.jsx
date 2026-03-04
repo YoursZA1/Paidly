@@ -257,7 +257,7 @@ function ExcelDataCapture() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <FileSpreadsheet className="w-8 h-8 text-indigo-600" />
+            <FileSpreadsheet className="w-8 h-8 text-primary" />
             <h1 className="text-3xl font-bold text-slate-900">Excel Data Capture</h1>
           </div>
           <p className="text-slate-600">Single file (paidly_data.xlsx) with multiple sheets - one sheet per table. No mixed data!</p>
@@ -280,7 +280,7 @@ function ExcelDataCapture() {
             <Card className="border-0 shadow-sm mb-6">
               <CardHeader className="border-b">
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
+                  <FileSpreadsheet className="w-5 h-5 text-primary" />
                   <CardTitle>Upload paidly_data.xlsx</CardTitle>
                 </div>
               </CardHeader>
@@ -396,14 +396,14 @@ function ExcelDataCapture() {
             )}
 
             {/* Instructions */}
-            <Card className="border-slate-200 bg-blue-50 shadow-sm">
+            <Card className="border-slate-200 bg-primary/10 shadow-sm">
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <Info className="w-5 h-5 text-blue-600" />
-                  <CardTitle className="text-blue-900">File Structure Rules</CardTitle>
+                  <Info className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-foreground">File Structure Rules</CardTitle>
                 </div>
               </CardHeader>
-              <CardContent className="text-sm text-blue-800">
+              <CardContent className="text-sm text-primary">
                 <div className="space-y-3">
                   <div>
                     <p className="font-semibold mb-1">📁 File: paidly_data.xlsx</p>
@@ -417,7 +417,7 @@ function ExcelDataCapture() {
                       <li>Invoices - Invoice records (id, invoice_number, user_id, client_id, status, subtotal, tax, discount, total, currency, issue_date, due_date, created_at)</li>
                       <li>InvoiceItems - Line items (id, invoice_id, description, quantity, rate, line_total)</li>
                       <li>Payments - Payment records (id, invoice_id, amount, payment_method, payment_date, notes)</li>
-                      <li className="font-bold text-blue-900">Logs - Audit trail (id, user_id, action, entity, entity_id, description, created_at) ⚠️ VERY IMPORTANT</li>
+                      <li className="font-bold text-foreground">Logs - Audit trail (id, user_id, action, entity, entity_id, description, created_at) ⚠️ VERY IMPORTANT</li>
                       <li>Services - Service catalog</li>
                     </ul>
                   </div>

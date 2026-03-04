@@ -223,9 +223,10 @@ export default function ViewInvoice() {
 
     if (isLoading) {
         return (
-            <div className="bg-slate-100 p-8">
-                <Skeleton className="h-12 w-1/3 mb-4" />
-                <Skeleton className="h-[800px] w-full" />
+            <div className="bg-slate-100 p-8 animate-fade-in min-h-[60vh]" role="status" aria-label="Loading invoice">
+                <Skeleton className="h-12 w-1/3 mb-4 animate-fade-in-up" style={{ animationDelay: "0.05s", animationFillMode: "backwards" }} />
+                <Skeleton className="h-16 w-full mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s", animationFillMode: "backwards" }} />
+                <Skeleton className="h-[600px] w-full animate-fade-in-up" style={{ animationDelay: "0.15s", animationFillMode: "backwards" }} />
             </div>
         )
     }
@@ -309,7 +310,7 @@ export default function ViewInvoice() {
                         <Button
                             onClick={handleSendEmail}
                             disabled={isSending}
-                            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                            className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
                         >
                             <Mail className="w-4 h-4" />
                             {isSending ? 'Sending...' : 'Email Client'}
@@ -333,124 +334,125 @@ export default function ViewInvoice() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Invoice Preview Column */}
                     <div className="lg:col-span-2">
-                         <Card id="invoice-preview" className="shadow-lg print:shadow-none print:border-none">
+                         <Card id="invoice-preview" className="shadow-lg print:shadow-none print:border-none bg-white">
                             <CardContent className="p-8">
-                                {/* Company Header with Logo */}
-                                <div className="flex flex-col sm:flex-row justify-between items-start mb-8 pb-6 border-b-2 border-indigo-600">
-                                    <div className="flex items-start gap-6 mb-4 sm:mb-0">
-                                        {company?.logo_url && (
-                                            <LogoImage 
-                                                src={company.logo_url} 
-                                                alt={company?.company_name || 'Company'} 
-                                                className="w-24 h-24 object-contain rounded-xl shadow-lg"
-                                            />
-                                        )}
-                                        <div>
-                                            <h1 className={`font-semibold text-gray-600 ${company?.logo_url ? 'text-lg' : 'text-2xl sm:text-3xl text-indigo-600'}`}>
-                                                {company?.company_name}
-                                            </h1>
-                                            <p className="text-slate-600 mt-1 whitespace-pre-line text-sm">{company?.company_address}</p>
-                                            <p className="text-slate-500 text-sm">Date: {format(new Date(), 'MMMM d, yyyy')}</p>
+                                {/* Agency-style: INVOICE left, company beige box right */}
+                                <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
+                                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 uppercase tracking-tight">Invoice</h1>
+                                    <div className="text-right">
+                                        <div className="inline-block rounded-lg px-4 py-3 bg-[#f5f0e8] border border-[#e8e0d5]">
+                                            {company?.logo_url ? (
+                                                <div className="flex items-center gap-3">
+                                                    <LogoImage src={company.logo_url} alt="" className="h-10 w-auto" style={{ maxHeight: "40px" }} />
+                                                    <span className="font-semibold text-gray-800">{company?.company_name}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="font-semibold text-gray-800">{company?.company_name}</span>
+                                            )}
+                                        </div>
+                                        <div className="mt-3 text-sm text-gray-600">
+                                            <p>Invoice No: {invoice.invoice_number}</p>
+                                            <p>Date: {format(new Date(invoice.created_date), "dd/MM/yyyy")}</p>
                                         </div>
                                     </div>
-                                    <div className="text-left sm:text-right">
-                                        <h2 className="text-2xl sm:text-3xl font-bold text-indigo-600">INVOICE</h2>
-                                        <p className="text-slate-600 text-lg">#{invoice.invoice_number}</p>
-                                    </div>
                                 </div>
 
-                                {/* Billed To, Dates */}
-                                <div className="grid grid-cols-2 gap-8 mb-10">
+                                {/* Payable To | Bank Details */}
+                                <div className="grid md:grid-cols-2 gap-8 mb-8">
                                     <div>
-                                        <h4 className="font-semibold text-slate-500 mb-2">Billed To</h4>
-                                        <p className="font-bold text-slate-800">{client.name}</p>
-                                        <p className="text-slate-600">{client.address}</p>
-                                        <p className="text-slate-600">{client.email}</p>
+                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Payable To</h3>
+                                        <p className="font-medium text-gray-900">{client.name}</p>
+                                        {client.address && <p className="text-sm text-gray-600 mt-0.5">{client.address}</p>}
+                                        {client.email && <p className="text-sm text-gray-600">{client.email}</p>}
                                     </div>
-                                    <div className="text-right">
-                                        <h4 className="font-semibold text-slate-500 mb-2">Date of Issue</h4>
-                                        <p className="text-slate-800">{format(new Date(invoice.created_date), 'MMMM d, yyyy')}</p>
-                                        <h4 className="font-semibold text-slate-500 mt-4 mb-2">Due Date</h4>
-                                        <p className="text-slate-800">{format(new Date(invoice.delivery_date), 'MMMM d, yyyy')}</p>
+                                    <div className="text-right md:text-right">
+                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
+                                        {bankingDetail ? (
+                                            <>
+                                                <p className="font-medium text-gray-900">{bankingDetail.account_name || bankingDetail.bank_name}</p>
+                                                {bankingDetail.account_number && <p className="text-sm text-gray-600">{bankingDetail.account_number}</p>}
+                                                {bankingDetail.bank_name && bankingDetail.account_name && <p className="text-sm text-gray-600">{bankingDetail.bank_name}</p>}
+                                            </>
+                                        ) : (
+                                            <p className="text-sm text-gray-500">—</p>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Items Table */}
-                                <table className="w-full mb-10">
-                                    <thead className="bg-slate-100">
-                                        <tr>
-                                            <th className="p-3 text-left font-semibold text-slate-600">Service</th>
-                                            <th className="p-3 text-center font-semibold text-slate-600">Qty</th>
-                                            <th className="p-3 text-right font-semibold text-slate-600">Rate</th>
-                                            <th className="p-3 text-right font-semibold text-slate-600">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
-                                            invoice.items.map((item, index) => (
-                                                <tr key={index} className="border-b border-slate-100">
-                                                    <td className="p-3">
-                                                        <p className="font-medium text-slate-800">{item.service_name}</p>
-                                                        <p className="text-sm text-slate-500">{item.description}</p>
-                                                    </td>
-                                                    <td className="p-3 text-center">{item.quantity}</td>
-                                                    <td className="p-3 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                                    <td className="p-3 text-right">{formatCurrency(item.total_price, userCurrency)}</td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan="4" className="p-3 text-center text-slate-500">No items found</td>
+                                {/* Itemized table: beige header, 4 columns */}
+                                <div className="overflow-x-auto rounded-t-lg overflow-hidden mb-6">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-[#f5f0e8] border border-[#e8e0d5]">
+                                                <th className="px-4 py-3.5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Item Description</th>
+                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-20">Qty</th>
+                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-28">Price</th>
+                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-28">Total</th>
                                             </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
+                                                invoice.items.map((item, index) => {
+                                                    const name = item.service_name || item.name || "Item";
+                                                    const qty = Number(item.quantity ?? item.qty ?? 1);
+                                                    const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
+                                                    const lineTotal = Number(item.total_price ?? item.total ?? qty * unitPrice);
+                                                    return (
+                                                        <tr key={index} className="border-b border-gray-100">
+                                                            <td className="px-4 py-4 text-gray-900">{name}</td>
+                                                            <td className="px-4 py-4 text-right text-gray-700 tabular-nums">{qty}</td>
+                                                            <td className="px-4 py-4 text-right text-gray-700 tabular-nums">{formatCurrency(unitPrice, userCurrency)}</td>
+                                                            <td className="px-4 py-4 text-right font-medium text-gray-900 tabular-nums">{formatCurrency(lineTotal, userCurrency)}</td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500">No items added</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
 
-                                {/* Totals */}
-                                <div className="flex justify-end mb-10">
-                                    <div className="w-full max-w-sm">
-                                        <div className="flex justify-between py-2 border-b">
-                                            <span className="text-slate-600">Subtotal</span>
-                                            <span className="font-medium text-slate-800">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                                {/* Notes */}
+                                {invoice.notes && (
+                                    <div className="mb-8">
+                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Notes</h3>
+                                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
+                                    </div>
+                                )}
+
+                                {/* Totals: right-aligned beige box */}
+                                <div className="flex justify-end">
+                                    <div className="w-full max-w-xs rounded-lg border border-[#e8e0d5] bg-[#f5f0e8] px-5 py-4">
+                                        <div className="flex justify-between py-2 text-sm text-gray-700">
+                                            <span>Sub Total</span>
+                                            <span className="tabular-nums">{formatCurrency(invoice.subtotal ?? 0, userCurrency)}</span>
                                         </div>
                                         {invoice.tax_amount > 0 && (
-                                            <div className="flex justify-between py-2 border-b">
-                                                <span className="text-slate-600">Tax ({invoice.tax_rate}%)</span>
-                                                <span className="font-medium text-slate-800">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                                            <div className="flex justify-between py-2 text-sm text-gray-700">
+                                                <span>Tax ({invoice.tax_rate}%)</span>
+                                                <span className="tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                                             </div>
                                         )}
-                                        <div className="flex justify-between py-3 bg-slate-100 px-4 rounded-b-lg">
-                                            <span className="font-bold text-slate-900">Total</span>
-                                            <span className="font-bold text-lg text-slate-900">{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                                        <div className="border-t border-gray-300 mt-2 pt-3 flex justify-between text-base font-bold text-gray-900">
+                                            <span>Grand Total</span>
+                                            <span className="tabular-nums">{formatCurrency(invoice.total_amount, userCurrency)}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Notes & Payment Details */}
-                                <div className="grid md:grid-cols-2 gap-8">
-                                    <div>
-                                        {invoice.notes && (
-                                            <>
-                                                <h4 className="font-semibold text-slate-800 mb-2">Notes</h4>
-                                                <p className="text-sm text-slate-600">{invoice.notes}</p>
-                                            </>
-                                        )}
+                                {/* Payment details (extra) */}
+                                {bankingDetail && (bankingDetail.routing_number || bankingDetail.swift_code) && (
+                                    <div className="mt-8 pt-6 border-t border-gray-200">
+                                        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Payment Reference</h4>
+                                        <div className="text-sm text-gray-600 space-y-0.5">
+                                            {bankingDetail.routing_number && <p>Routing: {bankingDetail.routing_number}</p>}
+                                            {bankingDetail.swift_code && <p>SWIFT/BIC: {bankingDetail.swift_code}</p>}
+                                        </div>
                                     </div>
-                                     <div>
-                                        {bankingDetail && (
-                                            <>
-                                                <h4 className="font-semibold text-slate-800 mb-2">Payment Details</h4>
-                                                <div className="text-sm text-slate-600 space-y-1">
-                                                    <p><strong>Bank:</strong> {bankingDetail.bank_name}</p>
-                                                    <p><strong>Account Name:</strong> {bankingDetail.account_name}</p>
-                                                    <p><strong>Account Number:</strong> {bankingDetail.account_number}</p>
-                                                    {bankingDetail.routing_number && <p><strong>Routing:</strong> {bankingDetail.routing_number}</p>}
-                                                    {bankingDetail.swift_code && <p><strong>SWIFT/BIC:</strong> {bankingDetail.swift_code}</p>}
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

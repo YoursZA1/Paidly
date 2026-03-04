@@ -17,13 +17,13 @@ export default function InvoiceStatusBadge({ status, size = 'default' }) {
     draft: {
       icon: FileText,
       label: 'Draft',
-      className: 'bg-gray-100 text-gray-700 border-gray-200',
+      className: 'bg-muted text-muted-foreground border-border',
       description: 'Not sent to client',
     },
     sent: {
       icon: Send,
       label: 'Sent',
-      className: 'bg-blue-100 text-blue-700 border-blue-200',
+      className: 'bg-primary/15 text-primary border-primary/30',
       description: 'Sent to client',
     },
     viewed: {
@@ -59,7 +59,7 @@ export default function InvoiceStatusBadge({ status, size = 'default' }) {
     cancelled: {
       icon: XCircle,
       label: 'Cancelled',
-      className: 'bg-gray-100 text-gray-500 border-gray-200',
+      className: 'bg-muted text-muted-foreground border-border',
       description: 'Invoice cancelled',
     },
   };

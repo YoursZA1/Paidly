@@ -63,10 +63,10 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
               <p className="text-xs text-green-700 mt-2">All records have required fields</p>
             </div>
 
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm font-medium text-blue-900 mb-1">Total Transactions</p>
-              <p className="text-2xl font-bold text-blue-600">{analysis.validation.totalTransactions}</p>
-              <p className="text-xs text-blue-700 mt-2">
+            <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+              <p className="text-sm font-medium text-foreground mb-1">Total Transactions</p>
+              <p className="text-2xl font-bold text-primary">{analysis.validation.totalTransactions}</p>
+              <p className="text-xs text-primary mt-2">
                 {analysis.validation.paymentCount} payments, {analysis.validation.expenseCount} expenses
               </p>
             </div>
@@ -164,22 +164,22 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg">
-              <p className="text-sm font-medium text-blue-900 mb-3">Current Month Margin</p>
+            <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/15 border border-primary/20 rounded-lg">
+              <p className="text-sm font-medium text-foreground mb-3">Current Month Margin</p>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-blue-700">Margin %</span>
-                  <span className="text-lg font-bold text-blue-900">
+                  <span className="text-xs text-primary">Margin %</span>
+                  <span className="text-lg font-bold text-foreground">
                     {analysis.margins.currentMonth?.marginPercentage?.toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
+                <div className="w-full bg-primary/20 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full"
+                    className="bg-primary h-2 rounded-full"
                     style={{ width: `${Math.min(Math.max(analysis.margins.currentMonth?.marginPercentage || 0, 0), 100)}%` }}
                   />
                 </div>
-                <div className="text-xs text-blue-700 pt-1">
+                <div className="text-xs text-primary pt-1">
                   {formatCurrency(analysis.margins.currentMonth?.margin || 0, currency)} profit on {formatCurrency(analysis.margins.currentMonth?.income || 0, currency)} income
                 </div>
               </div>
@@ -326,11 +326,11 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
       )}
 
       {/* Accuracy Notes */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-primary/10 border-primary/20">
         <CardHeader>
-          <CardTitle className="text-sm text-blue-900">Cash Flow Accuracy</CardTitle>
+          <CardTitle className="text-sm text-foreground">Cash Flow Accuracy</CardTitle>
         </CardHeader>
-        <CardContent className="text-xs text-blue-800 space-y-2">
+        <CardContent className="text-xs text-primary space-y-2">
           <p>✓ Income calculated from actual payment dates, not invoice creation dates</p>
           <p>✓ Expenses matched to transaction dates for accurate period reporting</p>
           <p>✓ All calculations validated for data integrity and consistency</p>

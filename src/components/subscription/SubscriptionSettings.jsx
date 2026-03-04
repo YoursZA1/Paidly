@@ -199,9 +199,9 @@ export default function SubscriptionSettings() {
               </p>
               
               {/* Manage Subscription Button */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 mb-8 max-w-md mx-auto">
+              <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-6 mb-8 max-w-md mx-auto">
                   <div className="flex items-center justify-center mb-3">
-                      <Crown className="w-6 h-6 text-indigo-600 mr-2" />
+                      <Crown className="w-6 h-6 text-primary mr-2" />
                       <h3 className="text-lg font-semibold text-slate-900">Manage Your Subscription</h3>
                   </div>
                   <p className="text-sm text-slate-600 mb-4">
@@ -209,7 +209,7 @@ export default function SubscriptionSettings() {
                   </p>
                   <Button 
                       onClick={handleManageSubscription}
-                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
+                      className="w-full bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white font-medium py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
                   >
                       <ExternalLink className="w-4 h-4 mr-2" />
                       Manage Subscription on Website
@@ -258,7 +258,7 @@ export default function SubscriptionSettings() {
               <Button 
                   variant="outline" 
                   onClick={() => window.location.href = 'https://paidly.com/contact'}
-                  className="border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                  className="border-primary/20 text-primary hover:bg-primary/10"
               >
                   Contact Our Sales Team
               </Button>

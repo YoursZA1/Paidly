@@ -119,9 +119,9 @@ export default function TeamPerformance({ tasks }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-slate-600">On-Time Rate</p>
-                                <p className="text-2xl font-bold text-blue-600">{metrics.onTimeRate}%</p>
+                                <p className="text-2xl font-bold text-primary">{metrics.onTimeRate}%</p>
                             </div>
-                            <Clock className="w-8 h-8 text-blue-500 opacity-50" />
+                            <Clock className="w-8 h-8 text-primary opacity-50" />
                         </div>
                         <Progress value={metrics.onTimeRate} className="mt-2 h-2" />
                     </CardContent>

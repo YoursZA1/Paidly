@@ -55,7 +55,7 @@ export default function ReminderDashboard() {
     const getReminderTypeInfo = (type) => {
         switch (type) {
             case 'upcoming':
-                return { label: 'Due Soon', icon: Clock, color: 'bg-blue-100 text-blue-800' };
+                return { label: 'Due Soon', icon: Clock, color: 'bg-primary/15 text-primary' };
             case 'due_today':
                 return { label: 'Due Today', icon: AlertTriangle, color: 'bg-yellow-100 text-yellow-800' };
             case 'overdue_1':
@@ -87,7 +87,7 @@ export default function ReminderDashboard() {
                 <CardContent>
                     {isLoading && pendingReminders.length === 0 ? (
                         <div className="text-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
                             <p className="mt-2 text-gray-500">Loading reminders...</p>
                         </div>
                     ) : pendingReminders.length === 0 ? (

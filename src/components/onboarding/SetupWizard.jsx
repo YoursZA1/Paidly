@@ -133,13 +133,13 @@ export default function SetupWizard({ isOpen, onComplete }) {
             {[1, 2, 3].map((s) => (
                 <div key={s} className="flex items-center">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                        s <= currentStep ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                        s <= currentStep ? 'bg-primary text-white' : 'bg-slate-100 text-slate-400'
                     }`}>
                         {s < currentStep ? <CheckCircle className="w-5 h-5" /> : s}
                     </div>
                     {s < 3 && (
                         <div className={`w-12 h-1 mx-2 rounded-full ${
-                            s < currentStep ? 'bg-indigo-600' : 'bg-slate-100'
+                            s < currentStep ? 'bg-primary' : 'bg-slate-100'
                         }`} />
                     )}
                 </div>
@@ -150,9 +150,9 @@ export default function SetupWizard({ isOpen, onComplete }) {
     return (
         <Dialog open={isOpen} onOpenChange={() => {}}>
             <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden bg-white">
-                <div className="bg-indigo-600 p-6 text-white text-center">
+                <div className="bg-primary p-6 text-white text-center">
                     <DialogTitle className="text-2xl font-bold">Welcome to Paidly!</DialogTitle>
-                    <DialogDescription className="text-indigo-100 mt-2">
+                    <DialogDescription className="text-primary/90 mt-2">
                         Get your professional profile set up in just a few steps.
                     </DialogDescription>
                 </div>
@@ -171,7 +171,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     className="space-y-4"
                                 >
                                     <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                                        <Building className="w-5 h-5 text-indigo-600" /> Your profile & company
+                                        <Building className="w-5 h-5 text-primary" /> Your profile & company
                                     </h3>
 
                                     <div className="space-y-2">
@@ -221,7 +221,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     className="space-y-4"
                                 >
                                     <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                                        <ImageIcon className="w-5 h-5 text-indigo-600" /> Branding
+                                        <ImageIcon className="w-5 h-5 text-primary" /> Branding
                                     </h3>
 
                                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-8 bg-slate-50">
@@ -245,7 +245,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <div className="w-24 h-24 bg-indigo-100 rounded-full flex items-center justify-center mb-4 text-indigo-500">
+                                            <div className="w-24 h-24 bg-primary/15 rounded-full flex items-center justify-center mb-4 text-primary">
                                                 <ImageIcon className="w-10 h-10" />
                                             </div>
                                         )}
@@ -279,7 +279,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     className="space-y-4"
                                 >
                                     <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                                        <CreditCard className="w-5 h-5 text-indigo-600" /> Banking Details
+                                        <CreditCard className="w-5 h-5 text-primary" /> Banking Details
                                     </h3>
                                     <p className="text-sm text-slate-500 mb-4">Add your primary bank account so clients know where to send payments. You can add more later.</p>
 
@@ -329,7 +329,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                         <Button 
                             onClick={handleNext} 
                             disabled={isLoading}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[120px]"
+                            className="bg-primary hover:bg-primary/90 text-white min-w-[120px]"
                         >
                             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                                 <>

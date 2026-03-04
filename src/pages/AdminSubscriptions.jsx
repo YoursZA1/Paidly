@@ -190,9 +190,9 @@ export default function AdminSubscriptions() {
       subscription_resumed: 'bg-emerald-100 text-emerald-700 border-emerald-200',
       subscription_paused: 'bg-yellow-100 text-yellow-700 border-yellow-200',
       subscription_cancelled: 'bg-red-100 text-red-700 border-red-200',
-      payment_status_recorded: 'bg-blue-100 text-blue-700 border-blue-200',
+      payment_status_recorded: 'bg-primary/15 text-primary border-primary/20',
       payment_retry_succeeded: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      plan_change: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+      plan_change: 'bg-primary/15 text-primary border-primary/20',
       discount_applied: 'bg-purple-100 text-purple-700 border-purple-200',
       discount_removed: 'bg-slate-100 text-slate-700 border-slate-200',
       custom_plan_created: 'bg-orange-100 text-orange-700 border-orange-200'
@@ -417,7 +417,7 @@ export default function AdminSubscriptions() {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
             <p className="text-slate-600">Loading subscription data...</p>
           </div>
         </div>
@@ -485,7 +485,7 @@ export default function AdminSubscriptions() {
                   <p className="text-sm font-medium text-slate-600">Total Subs</p>
                   <p className="text-3xl font-bold text-slate-900">{summary.total}</p>
                 </div>
-                <TrendingUp size={32} className="text-blue-500" />
+                <TrendingUp size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -519,9 +519,9 @@ export default function AdminSubscriptions() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-600">ARR</p>
-                  <p className="text-2xl font-bold text-indigo-600">{formatCurrency(summary.arr)}</p>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(summary.arr)}</p>
                 </div>
-                <TrendingUp size={32} className="text-indigo-500" />
+                <TrendingUp size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -695,7 +695,7 @@ export default function AdminSubscriptions() {
                 <CardTitle className="text-lg">Trial Users</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-4xl font-bold text-blue-600">{summary?.trial}</p>
+                <p className="text-4xl font-bold text-primary">{summary?.trial}</p>
                 <p className="text-sm text-slate-600 mt-2">
                   {((summary?.trial / summary?.total) * 100).toFixed(1)}% of total
                 </p>
@@ -874,7 +874,7 @@ export default function AdminSubscriptions() {
                               variant="ghost"
                               onClick={() => handleUpgradeSubscription(sub)}
                               title="Upgrade"
-                              className="text-indigo-600 hover:bg-indigo-50"
+                              className="text-primary hover:bg-primary/10"
                             >
                               <ArrowUpRight size={16} />
                             </Button>
@@ -1092,7 +1092,7 @@ export default function AdminSubscriptions() {
                           {accountSearchValue && (
                             <Link
                               to={createPageUrl(`AdminAccounts?search=${encodeURIComponent(accountSearchValue)}`)}
-                              className="text-xs font-medium text-blue-600 hover:underline"
+                              className="text-xs font-medium text-primary hover:underline"
                             >
                               View account
                             </Link>
@@ -1100,7 +1100,7 @@ export default function AdminSubscriptions() {
                           {accountSearchValue && (
                             <Link
                               to={createPageUrl(`AdminSubscriptions?tab=subscriptions&search=${encodeURIComponent(accountSearchValue)}`)}
-                              className="text-xs font-medium text-blue-600 hover:underline"
+                              className="text-xs font-medium text-primary hover:underline"
                             >
                               View subscription
                             </Link>
@@ -1207,7 +1207,7 @@ export default function AdminSubscriptions() {
                 >
                   Cancel
                 </Button>
-                <Button type="button" className="bg-indigo-600 hover:bg-indigo-700" onClick={confirmUpgrade}>
+                <Button type="button" className="bg-primary hover:bg-primary/90" onClick={confirmUpgrade}>
                   Upgrade
                 </Button>
               </div>

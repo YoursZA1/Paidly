@@ -83,7 +83,7 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
   const getStatusBadge = (status) => {
     const statusConfig = {
       paid: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Paid' },
-      sent: { color: 'bg-blue-100 text-blue-800', icon: Calendar, label: 'Sent' },
+      sent: { color: 'bg-primary/15 text-primary', icon: Calendar, label: 'Sent' },
       viewed: { color: 'bg-purple-100 text-purple-800', icon: Eye, label: 'Viewed' },
       overdue: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: 'Overdue' },
       draft: { color: 'bg-gray-100 text-gray-800', icon: Clock, label: 'Draft' },
@@ -156,8 +156,8 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-blue-600 mb-1">Pending</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.pending}</p>
+              <p className="text-sm text-primary mb-1">Pending</p>
+              <p className="text-3xl font-bold text-primary">{stats.pending}</p>
             </div>
           </CardContent>
         </Card>
@@ -173,7 +173,7 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
       </div>
 
       {/* Revenue Summary */}
-      <Card className="bg-gradient-to-br from-blue-50 to-purple-50">
+      <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
         <CardContent className="pt-6">
           <div className="grid md:grid-cols-3 gap-6">
             <div>
@@ -189,8 +189,8 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
               </p>
             </div>
             <div>
-              <p className="text-sm text-blue-600 mb-1">Payment Rate</p>
-              <p className="text-2xl font-bold text-blue-700">
+              <p className="text-sm text-primary mb-1">Payment Rate</p>
+              <p className="text-2xl font-bold text-primary">
                 {stats.paymentRate.toFixed(1)}%
               </p>
             </div>

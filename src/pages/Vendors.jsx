@@ -111,7 +111,7 @@ export default function VendorsPage() {
                             <p className="text-gray-600">Manage your suppliers and service providers</p>
                         </div>
                     </div>
-                    <Button onClick={openCreate} className="bg-indigo-600 hover:bg-indigo-700">
+                    <Button onClick={openCreate} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
                         Add Vendor
                     </Button>
@@ -158,7 +158,7 @@ export default function VendorsPage() {
                                     <div key={vendor.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                                                <div className="w-8 h-8 rounded bg-primary/15 flex items-center justify-center text-primary font-bold">
                                                     {vendor.name.charAt(0).toUpperCase()}
                                                 </div>
                                                 <h3 className="font-semibold">{vendor.name}</h3>

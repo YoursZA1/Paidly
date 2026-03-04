@@ -22,8 +22,8 @@ const paymentIcons = {
 };
 
 const paymentGradients = {
-    bank_transfer: "from-blue-500 to-indigo-600",
-    paypal: "from-blue-600 to-blue-700",
+    bank_transfer: "from-primary to-[#ff7c00]",
+    paypal: "from-primary to-[#ff7c00]",
     stripe: "from-purple-500 to-purple-600",
     crypto: "from-orange-500 to-yellow-500",
     check: "from-gray-500 to-gray-600"
@@ -31,7 +31,7 @@ const paymentGradients = {
 
 export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 }) {
     const IconComponent = paymentIcons[detail.payment_method] || CreditCard;
-    const gradient = paymentGradients[detail.payment_method] || "from-blue-500 to-indigo-600";
+    const gradient = paymentGradients[detail.payment_method] || "from-primary to-[#ff7c00]";
 
     return (
         <motion.div
@@ -68,7 +68,7 @@ export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 })
                             variant="ghost"
                             size="icon"
                             onClick={() => onEdit(detail)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-50"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-primary/10"
                         >
                             <Edit className="w-4 h-4" />
                         </Button>

@@ -121,9 +121,9 @@ export default function PayslipPDF() {
             {/* Summary */}
             <section className="mt-6 sm:mt-8 pt-4 border-t-2 border-gray-200">
                  <div className="w-full sm:max-w-xs sm:ml-auto">
-                    <div className="flex justify-between py-3 text-lg sm:text-xl bg-indigo-50 px-4 rounded-md mt-2">
+                    <div className="flex justify-between py-3 text-lg sm:text-xl bg-primary/10 px-4 rounded-md mt-2">
                         <span className="font-bold text-gray-800">Net Pay</span>
-                        <span className="font-bold text-indigo-600">{formatCurrency(payslip.net_pay, userCurrency)}</span>
+                        <span className="font-bold text-primary">{formatCurrency(payslip.net_pay, userCurrency)}</span>
                     </div>
                 </div>
             </section>

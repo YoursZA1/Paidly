@@ -120,7 +120,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
             <Dialog open={true} onOpenChange={onClose}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <div className="flex items-center justify-center h-64">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
                 </DialogContent>
             </Dialog>
@@ -142,7 +142,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                         <Button variant="outline" onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-indigo-600 hover:bg-indigo-700">
+                        <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-primary hover:bg-primary/90">
                             <Send className="w-4 h-4 mr-2" />
                             {isSending ? 'Sending...' : 'Send Anyway'}
                         </Button>
@@ -212,28 +212,28 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                             <CardContent>
                                 <div className="border rounded-lg p-6 bg-white max-h-96 overflow-y-auto" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>
                                     {/* PDF Content Preview */}
-                                    <div className="flex justify-between items-start mb-8 border-b-2 border-indigo-500 pb-4">
+                                    <div className="flex justify-between items-start mb-8 border-b-2 border-primary pb-4">
                                         <div>
-                                            <h1 className="text-2xl font-bold text-indigo-600 mb-2">{companyName}</h1>
+                                            <h1 className="text-2xl font-bold text-primary mb-2">{companyName}</h1>
                                             <p className="text-gray-600">{company?.company_address}</p>
                                             <p className="text-gray-600">Date: {format(new Date(), 'MMMM d, yyyy')}</p>
                                         </div>
                                         <div className="text-right">
-                                            <h2 className="text-2xl font-bold text-indigo-600">INVOICE</h2>
+                                            <h2 className="text-2xl font-bold text-primary">INVOICE</h2>
                                             <p className="text-gray-600">#{invoice.invoice_number}</p>
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-8 mb-8">
                                         <div>
-                                            <h3 className="font-bold text-indigo-600 mb-2">Bill To:</h3>
+                                            <h3 className="font-bold text-primary mb-2">Bill To:</h3>
                                             <p className="font-semibold">{client.name}</p>
                                             <p>{client.email}</p>
                                             {client.phone && <p>{client.phone}</p>}
                                             {client.address && <p>{client.address}</p>}
                                         </div>
                                         <div>
-                                            <h3 className="font-bold text-indigo-600 mb-2">Invoice Details:</h3>
+                                            <h3 className="font-bold text-primary mb-2">Invoice Details:</h3>
                                             <p><strong>Project:</strong> {invoice.project_title}</p>
                                             <p><strong>Due Date:</strong> {format(new Date(invoice.delivery_date), 'MMMM d, yyyy')}</p>
                                             <p><strong>Status:</strong> {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1).replace('_', ' ')}</p>
@@ -242,7 +242,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
 
                                     {invoice.project_description && (
                                         <div className="mb-6 p-4 bg-gray-50 rounded">
-                                            <h3 className="font-bold text-indigo-600 mb-2">Project Description:</h3>
+                                            <h3 className="font-bold text-primary mb-2">Project Description:</h3>
                                             <p>{invoice.project_description}</p>
                                         </div>
                                     )}
@@ -250,7 +250,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                                     <div className="mb-6">
                                         <table className="w-full border-collapse">
                                             <thead>
-                                                <tr className="bg-indigo-600 text-white">
+                                                <tr className="bg-primary text-white">
                                                     <th className="border p-3 text-left">Service</th>
                                                     <th className="border p-3 text-center">Qty</th>
                                                     <th className="border p-3 text-right">Unit Price</th>
@@ -286,7 +286,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                                                     <span>{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                                                 </div>
                                             )}
-                                            <div className="flex justify-between py-2 border-t-2 border-indigo-600 font-bold text-lg">
+                                            <div className="flex justify-between py-2 border-t-2 border-primary font-bold text-lg">
                                                 <span>Total Amount:</span>
                                                 <span>{formatCurrency(invoice.total_amount, userCurrency)}</span>
                                             </div>
@@ -294,8 +294,8 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                                     </div>
 
                                     {bankingDetail && (
-                                        <div className="bg-blue-50 p-4 rounded mb-6">
-                                            <h3 className="font-bold text-indigo-600 mb-2">Payment Information</h3>
+                                        <div className="bg-primary/10 p-4 rounded mb-6">
+                                            <h3 className="font-bold text-primary mb-2">Payment Information</h3>
                                             <p><strong>Bank:</strong> {bankingDetail.bank_name}</p>
                                             <p><strong>Account Name:</strong> {bankingDetail.account_name}</p>
                                             {bankingDetail.account_number && <p><strong>Account Number:</strong> {bankingDetail.account_number}</p>}
@@ -325,7 +325,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                         <X className="w-4 h-4 mr-2" />
                         Cancel
                     </Button>
-                    <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-indigo-600 hover:bg-indigo-700">
+                    <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-primary hover:bg-primary/90">
                         <Send className="w-4 h-4 mr-2" />
                         {isSending ? 'Sending...' : 'Send Email with Download Link'}
                     </Button>

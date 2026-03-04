@@ -23,7 +23,7 @@ export default function Accounting() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary/10 to-primary/5 p-8">
         <div className="max-w-7xl mx-auto">
           <Skeleton className="h-12 w-48 mb-8" />
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

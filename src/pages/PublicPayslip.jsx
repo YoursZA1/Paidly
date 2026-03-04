@@ -131,7 +131,7 @@ export default function PublicPayslip() {
             <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
                     <div className="text-center mb-6">
-                        <Mail className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+                        <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
                         <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
                         <p className="text-slate-600">
                             To view this payslip, please enter the email address it was sent to.
@@ -163,7 +163,7 @@ export default function PublicPayslip() {
                         <Button
                             onClick={handleEmailVerification}
                             disabled={isVerifying || !emailVerification.trim()}
-                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            className="w-full bg-primary hover:bg-primary/90"
                         >
                             {isVerifying ? (
                                 <>

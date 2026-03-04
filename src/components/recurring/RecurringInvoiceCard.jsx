@@ -62,14 +62,14 @@ const RecurringInvoiceCard = ({
   const getStatusColor = () => {
     if (recurringInvoice.status === 'paused') return 'bg-yellow-50 border-yellow-200';
     if (recurringInvoice.status === 'ended') return 'bg-gray-50 border-gray-200';
-    if (isDue) return 'bg-blue-50 border-blue-200';
+    if (isDue) return 'bg-primary/10 border-primary/20';
     return 'bg-white';
   };
 
   const getStatusBadgeColor = () => {
     if (recurringInvoice.status === 'paused') return 'bg-yellow-100 text-yellow-800';
     if (recurringInvoice.status === 'ended') return 'bg-gray-100 text-gray-800';
-    if (isDue) return 'bg-blue-100 text-blue-800';
+    if (isDue) return 'bg-primary/15 text-primary';
     return 'bg-green-100 text-green-800';
   };
 
@@ -186,7 +186,7 @@ const RecurringInvoiceCard = ({
         <div className="flex justify-between items-start">
           <div className="flex-1">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Zap className="w-5 h-5 text-blue-600" />
+              <Zap className="w-5 h-5 text-primary" />
               {recurringInvoice.template_name}
             </CardTitle>
             <CardDescription>{clientName}</CardDescription>
@@ -282,7 +282,7 @@ const RecurringInvoiceCard = ({
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-600 mb-1">Total Amount</p>
-            <p className="font-semibold text-sm text-blue-600">
+            <p className="font-semibold text-sm text-primary">
               {formatCurrency(recurringInvoice.total_amount, 'USD')}
             </p>
           </div>

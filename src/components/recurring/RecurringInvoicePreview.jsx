@@ -148,9 +148,9 @@ export default function RecurringInvoicePreview({
                                     {invoiceData.currency} {subtotal.toFixed(2)}
                                 </p>
                             </div>
-                            <div className="bg-blue-50 rounded-xl p-4">
-                                <p className="text-sm text-blue-600 mb-1">Tax ({invoiceData.tax_rate}%)</p>
-                                <p className="text-2xl font-bold text-blue-900">
+                            <div className="bg-primary/10 rounded-xl p-4">
+                                <p className="text-sm text-primary mb-1">Tax ({invoiceData.tax_rate}%)</p>
+                                <p className="text-2xl font-bold text-foreground">
                                     {invoiceData.currency} {tax.toFixed(2)}
                                 </p>
                             </div>

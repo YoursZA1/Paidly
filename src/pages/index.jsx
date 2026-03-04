@@ -291,7 +291,7 @@ function SupabaseSetupRequired() {
                     <>
                         <p className="text-left text-sm text-slate-600 mb-2 font-medium">Deployed on Vercel:</p>
                         <ol className="text-left text-sm text-slate-600 list-decimal list-inside space-y-2 mb-4">
-                            <li>Open your project on <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Vercel Dashboard</a>.</li>
+                            <li>Open your project on <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Vercel Dashboard</a>.</li>
                             <li>Go to <strong>Settings → Environment Variables</strong>.</li>
                             <li>Add <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> (your Supabase project URL, e.g. <code className="bg-slate-200 px-1 rounded text-xs">https://xxxx.supabase.co</code>).</li>
                             <li>Add <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> (your Supabase anon/public key from Project → Settings → API).</li>

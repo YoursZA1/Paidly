@@ -112,7 +112,7 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                     <Filter className="w-4 h-4" />
                     Filters
                     {activeFilterCount > 0 && (
-                        <Badge className="bg-indigo-600 text-white ml-1">{activeFilterCount}</Badge>
+                        <Badge className="bg-primary text-white ml-1">{activeFilterCount}</Badge>
                     )}
                     <ChevronDown className={cn("w-4 h-4 transition-transform", showFilters && "rotate-180")} />
                 </Button>

@@ -150,7 +150,7 @@ export default function AdminUsers() {
                   <p className="text-sm font-medium text-slate-600">Total Users</p>
                   <p className="text-3xl font-bold text-slate-900">{activitySummary.totalUsers}</p>
                 </div>
-                <Users size={32} className="text-blue-500" />
+                <Users size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -172,9 +172,9 @@ export default function AdminUsers() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-600">Active This Week</p>
-                  <p className="text-3xl font-bold text-blue-600">{activitySummary.activeThisWeek}</p>
+                  <p className="text-3xl font-bold text-primary">{activitySummary.activeThisWeek}</p>
                 </div>
-                <Clock size={32} className="text-blue-500" />
+                <Clock size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -410,7 +410,7 @@ export default function AdminUsers() {
                             variant="ghost"
                             onClick={() => handleResetPassword(user.id)}
                             title="Reset password"
-                            className="text-blue-600 hover:bg-blue-50"
+                            className="text-primary hover:bg-primary/10"
                           >
                             <RotateCcw size={16} />
                           </Button>
@@ -456,8 +456,8 @@ export default function AdminUsers() {
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4 flex-1">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Users size={20} className="text-blue-600" />
+                      <div className="w-10 h-10 bg-primary/15 rounded-full flex items-center justify-center">
+                        <Users size={20} className="text-primary" />
                       </div>
                       <div className="flex-1">
                         <p className="font-medium text-slate-900">{entry.userEmail}</p>

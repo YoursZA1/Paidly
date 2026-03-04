@@ -77,12 +77,12 @@ export default function ConversationThread({ messages, client, invoice, user, on
                                 <div
                                     className={`rounded-2xl px-4 py-3 ${
                                         isFromBusiness
-                                            ? 'bg-blue-600 text-white rounded-br-md'
+                                            ? 'bg-primary text-white rounded-br-md'
                                             : 'bg-white border border-slate-200 rounded-bl-md'
                                     }`}
                                 >
                                     {message.subject && (
-                                        <p className={`font-semibold text-sm mb-1 ${isFromBusiness ? 'text-blue-100' : 'text-slate-600'}`}>
+                                        <p className={`font-semibold text-sm mb-1 ${isFromBusiness ? 'text-primary-foreground' : 'text-slate-600'}`}>
                                             {message.subject}
                                         </p>
                                     )}
@@ -100,7 +100,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className={`flex items-center gap-2 text-sm ${
-                                                        isFromBusiness ? 'text-blue-100 hover:text-white' : 'text-blue-600 hover:text-blue-700'
+                                                        isFromBusiness ? 'text-primary-foreground hover:text-white' : 'text-primary hover:text-primary'
                                                     }`}
                                                 >
                                                     <Paperclip className="w-3 h-3" />
@@ -180,7 +180,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                     <Button 
                         onClick={handleSendReply} 
                         disabled={isSending || !replyContent || replyContent === '<p><br></p>'}
-                        className="bg-blue-600 hover:bg-blue-700 self-end mb-2"
+                        className="bg-primary hover:bg-primary/90 self-end mb-2"
                     >
                         <Send className="w-4 h-4" />
                     </Button>

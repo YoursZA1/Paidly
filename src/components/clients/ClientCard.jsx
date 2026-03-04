@@ -34,11 +34,11 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                 <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center space-x-3">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                            <div className="w-12 h-12 bg-gradient-to-br from-primary to-[#ff7c00] rounded-full flex items-center justify-center">
                                 <User className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors duration-200">
+                                <h3 className="font-bold text-slate-900 text-lg group-hover:text-primary transition-colors duration-200">
                                     {client.name}
                                 </h3>
                                 {client.contact_person && (
@@ -54,7 +54,7 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-50"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-primary/10"
                                 >
                                     <Eye className="w-4 h-4" />
                                 </Button>
@@ -63,7 +63,7 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                                 variant="ghost"
                                 size="icon"
                                 onClick={(e) => { e.stopPropagation(); onEdit(client); }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-50"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-primary/10"
                             >
                                 <Edit className="w-4 h-4" />
                             </Button>
@@ -88,7 +88,7 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                                 Has Notes
                             </Badge>
                         )}
-                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-300">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
                             <CreditCard className="w-3 h-3 mr-1" />
                             {getPaymentTermsText(client.payment_terms, client.payment_terms_days)}
                         </Badge>
@@ -145,7 +145,7 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                                     href={client.website} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-700 truncate"
+                                    className="text-primary hover:text-primary truncate"
                                 >
                                     {client.website.replace(/^https?:\/\//, '')}
                                 </a>
@@ -173,7 +173,7 @@ export default function ClientCard({ client, onEdit, onDelete, delay = 0, curren
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="text-xs text-blue-600 hover:text-blue-700"
+                            className="text-xs text-primary hover:text-primary"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigator.clipboard.writeText(portalUrl);

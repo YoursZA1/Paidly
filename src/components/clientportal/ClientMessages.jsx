@@ -124,7 +124,7 @@ export default function ClientMessages({ client, invoices }) {
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className={`flex items-center gap-2 text-sm ${
-                                                                    isFromClient ? 'text-emerald-100 hover:text-white' : 'text-blue-600 hover:text-blue-700'
+                                                                    isFromClient ? 'text-emerald-100 hover:text-white' : 'text-primary hover:text-primary'
                                                                 }`}
                                                             >
                                                                 <Paperclip className="w-3 h-3" />

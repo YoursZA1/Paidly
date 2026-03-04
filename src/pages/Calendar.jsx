@@ -357,7 +357,7 @@ export default function CalendarPage() {
                         </Link>
                         <Button 
                             onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
-                            className="bg-blue-600 hover:bg-blue-700"
+                            className="bg-primary hover:bg-primary/90"
                         >
                             <Plus className="w-4 h-4 mr-2" />
                             Add Task
@@ -399,7 +399,7 @@ export default function CalendarPage() {
                                 
                                 <div className="mt-6 flex flex-wrap gap-4 justify-center">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-blue-200 rounded"></div>
+                                        <div className="w-4 h-4 bg-primary/20 rounded"></div>
                                         <span className="text-sm text-slate-600">Invoice Due</span>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -457,7 +457,7 @@ export default function CalendarPage() {
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2">
                                                         {event.type === 'invoice' ? (
-                                                            <FileText className="w-5 h-5 text-blue-600" />
+                                                            <FileText className="w-5 h-5 text-primary" />
                                                         ) : (
                                                             <FileText className="w-5 h-5 text-yellow-600" />
                                                         )}

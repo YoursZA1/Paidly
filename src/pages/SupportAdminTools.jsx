@@ -539,7 +539,7 @@ function AdminActivityLogsTab({ toast }) {
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-indigo-600">{stats.recent}</p>
+                <p className="text-3xl font-bold text-primary">{stats.recent}</p>
                 <p className="text-sm text-slate-600 mt-1">Last 30 Days</p>
               </div>
             </CardContent>
@@ -641,8 +641,8 @@ function AdminActivityLogsTab({ toast }) {
                 <div key={activity.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50 hover:bg-slate-100 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1">
-                      <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                        <Activity className="w-4 h-4 text-indigo-600" />
+                      <div className="w-8 h-8 bg-primary/15 rounded-full flex items-center justify-center">
+                        <Activity className="w-4 h-4 text-primary" />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -840,8 +840,8 @@ function UserActionsLogTab({ toast }) {
                   <div key={log.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="w-4 h-4 text-blue-600" />
+                        <div className="w-8 h-8 bg-primary/15 rounded-full flex items-center justify-center">
+                          <User className="w-4 h-4 text-primary" />
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
@@ -965,7 +965,7 @@ function ErrorTrackingTab({ currentUser, toast }) {
       case 'payment':
         return 'bg-emerald-100 text-emerald-800';
       case 'invoice':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-primary/15 text-primary';
       case 'auth':
         return 'bg-purple-100 text-purple-800';
       case 'api':
@@ -1063,7 +1063,7 @@ function ErrorTrackingTab({ currentUser, toast }) {
                     onClick={() => setSelectedError(error)}
                     className={`border rounded-lg p-4 cursor-pointer transition-all ${
                       selectedError?.id === error.id
-                        ? 'border-indigo-500 bg-indigo-50'
+                        ? 'border-primary bg-primary/10'
                         : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                     }`}
                   >
@@ -1336,7 +1336,7 @@ function WebhookFailuresTab({ currentUser, toast }) {
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-indigo-600">{stats.retryable}</p>
+                <p className="text-3xl font-bold text-primary">{stats.retryable}</p>
                 <p className="text-sm text-slate-600 mt-1">Retryable</p>
               </div>
             </CardContent>
@@ -1672,7 +1672,7 @@ function AdminNotesTab({ currentUser, toast }) {
       case 'high':
         return 'bg-orange-500 text-white';
       case 'normal':
-        return 'bg-blue-500 text-white';
+        return 'bg-primary/100 text-white';
       case 'low':
         return 'bg-gray-500 text-white';
       default:
@@ -1705,7 +1705,7 @@ function AdminNotesTab({ currentUser, toast }) {
 
       {/* Add Note Form */}
       {showAddNote && (
-        <Card className="border-indigo-200 bg-indigo-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardHeader>
             <CardTitle>Add Admin Note</CardTitle>
           </CardHeader>
@@ -1785,12 +1785,12 @@ function AdminNotesTab({ currentUser, toast }) {
       <div className="grid grid-cols-1 gap-4">
         {filteredNotes.length > 0 ? (
           filteredNotes.map((note) => (
-            <Card key={note.id} className={note.pinned ? 'border-indigo-300 bg-indigo-50' : ''}>
+            <Card key={note.id} className={note.pinned ? 'border-primary/30 bg-primary/10' : ''}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-4 flex-1">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-indigo-600" />
+                    <div className="w-10 h-10 bg-primary/15 rounded-full flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
@@ -2065,13 +2065,13 @@ function DataExportTab({ toast }) {
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+      <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-900">
+          <CardTitle className="flex items-center gap-2 text-foreground">
             <Database className="w-5 h-5" />
             Data Export Center
           </CardTitle>
-          <CardDescription className="text-blue-700">
+          <CardDescription className="text-primary">
             Export system data as CSV files for reporting, backup, or compliance purposes
           </CardDescription>
         </CardHeader>

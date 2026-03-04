@@ -109,7 +109,7 @@ export default function ViewQuote() {
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button 
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                            className="bg-primary hover:bg-primary/90 text-white"
                             onClick={() => navigate(createPageUrl(`CreateInvoice?quoteId=${quote.id}`))}
                         >
                             <ArrowRightSquare className="w-4 h-4 mr-2" /> Convert to Invoice
@@ -128,7 +128,7 @@ export default function ViewQuote() {
                          <Card className="shadow-lg">
                             <CardContent className="p-8">
                                 {/* Company Header with Logo */}
-                                <div className="flex flex-col sm:flex-row justify-between items-start mb-8 pb-6 border-b-2 border-indigo-600">
+                                <div className="flex flex-col sm:flex-row justify-between items-start mb-8 pb-6 border-b-2 border-primary">
                                     <div className="flex items-start gap-6 mb-4 sm:mb-0">
                                         {company?.logo_url && (
                                             <LogoImage 
@@ -138,7 +138,7 @@ export default function ViewQuote() {
                                             />
                                         )}
                                         <div>
-                                            <h1 className={`font-semibold text-gray-600 ${company?.logo_url ? 'text-lg' : 'text-2xl sm:text-3xl text-indigo-600'}`}>
+                                            <h1 className={`font-semibold text-gray-600 ${company?.logo_url ? 'text-lg' : 'text-2xl sm:text-3xl text-primary'}`}>
                                                 {company?.company_name}
                                             </h1>
                                             <p className="text-slate-600 mt-1 whitespace-pre-line text-sm">{company?.company_address}</p>
@@ -146,7 +146,7 @@ export default function ViewQuote() {
                                         </div>
                                     </div>
                                     <div className="text-left sm:text-right">
-                                        <h2 className="text-2xl sm:text-3xl font-bold text-indigo-600">QUOTE</h2>
+                                        <h2 className="text-2xl sm:text-3xl font-bold text-primary">QUOTE</h2>
                                         <p className="text-slate-600 text-lg">#{quote.quote_number}</p>
                                     </div>
                                 </div>

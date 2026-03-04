@@ -480,7 +480,7 @@ export default function AdminDocumentOversight() {
                   <p className="text-sm font-medium text-slate-600">Total Documents</p>
                   <p className="text-3xl font-bold text-slate-900">{summary.totalDocuments}</p>
                 </div>
-                <FileText size={32} className="text-blue-500" />
+                <FileText size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -502,9 +502,9 @@ export default function AdminDocumentOversight() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-600">Quotes</p>
-                  <p className="text-3xl font-bold text-blue-600">{summary.quotesCreated}</p>
+                  <p className="text-3xl font-bold text-primary">{summary.quotesCreated}</p>
                 </div>
-                <FileText size={32} className="text-blue-500" />
+                <FileText size={32} className="text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -613,7 +613,7 @@ export default function AdminDocumentOversight() {
                 <CardTitle className="text-lg">Total Users</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-4xl font-bold text-blue-600">{summary?.totalUsers || 0}</p>
+                <p className="text-4xl font-bold text-primary">{summary?.totalUsers || 0}</p>
                 <p className="text-sm text-slate-600 mt-2">
                   Avg: {summary?.averageDocumentsPerUser} docs/user
                 </p>
@@ -713,7 +713,7 @@ export default function AdminDocumentOversight() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge className="bg-blue-100 text-blue-800">
+                        <Badge className="bg-primary/15 text-primary">
                           {user.plan}
                         </Badge>
                       </td>
@@ -1053,8 +1053,8 @@ export default function AdminDocumentOversight() {
                     <p className="text-2xl font-bold text-purple-600">{engagement.powerUsersCount}</p>
                     <p className="text-sm text-slate-600">Power Users</p>
                   </div>
-                  <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <p className="text-2xl font-bold text-blue-600">{engagement.regularUsersCount}</p>
+                  <div className="text-center p-4 bg-primary/10 rounded-lg">
+                    <p className="text-2xl font-bold text-primary">{engagement.regularUsersCount}</p>
                     <p className="text-sm text-slate-600">Regular Users</p>
                   </div>
                   <div className="text-center p-4 bg-yellow-50 rounded-lg">

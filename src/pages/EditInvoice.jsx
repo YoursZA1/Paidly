@@ -271,10 +271,10 @@ export default function EditInvoice() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3 }}
                     >
-                        <Alert className="mb-6 border-blue-200 bg-blue-50">
-                            <AlertCircle className="h-4 w-4 text-blue-600" />
-                            <AlertTitle className="text-blue-900">Draft Invoice</AlertTitle>
-                            <AlertDescription className="text-blue-800">
+                        <Alert className="mb-6 border-primary/20 bg-primary/10">
+                            <AlertCircle className="h-4 w-4 text-primary" />
+                            <AlertTitle className="text-foreground">Draft Invoice</AlertTitle>
+                            <AlertDescription className="text-primary">
                                 This invoice is still a draft and hasn't been sent to the client yet. 
                                 You can continue editing and send it when ready.
                             </AlertDescription>
@@ -326,10 +326,9 @@ export default function EditInvoice() {
                         <InvoicePreview
                             invoiceData={invoiceData}
                             clients={clients}
-                            bankingDetails={bankingDetails}
+                            bankingDetail={bankingDetails?.find(b => b.id === invoiceData?.banking_detail_id) ?? null}
                             onPrevious={handlePrevious}
                             onCreate={handleUpdateInvoice}
-                            isEditing={true}
                         />
                     )}
                 </motion.div>

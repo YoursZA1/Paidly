@@ -71,12 +71,12 @@ export default function ClientList({ clients, onEdit, onDelete, currency }) {
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => onEdit(client)}
-                                        className="h-8 w-8 text-slate-400 hover:text-blue-600"
+                                        className="h-8 w-8 text-slate-400 hover:text-primary"
                                     >
                                         <Edit className="w-4 h-4" />
                                     </Button>
                                     <Link to={createPageUrl("ClientDetail") + `?id=${client.id}`}>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary">
                                             <Eye className="w-4 h-4" />
                                         </Button>
                                     </Link>

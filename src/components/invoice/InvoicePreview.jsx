@@ -7,11 +7,16 @@ import { format } from "date-fns";
 import { formatCurrency } from "../CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
 import { createPageUrl } from "@/utils";
-import { getUnitLabel, getItemTypeLabel } from "./itemTypeHelpers";
+
+/* Agency-style layout: INVOICE title left, company in logo-aligned tint box right, Payable To | Bank Details, 4-col table, Notes, Totals. Colours match app/logo (primary). */
+
+const CARD_ACCENT_BG = "bg-primary/10";
+const CARD_ACCENT_BORDER = "border-primary/20";
 
 export default function InvoicePreview({
   invoiceData,
   clients,
+  client: clientProp, // Optional: pass resolved client directly (overrides lookup from clients + client_id)
   onPrevious,
   onCreate,
   onClose,
@@ -19,21 +24,25 @@ export default function InvoicePreview({
   user, // Pass user/company object with logo_url, currency if available
   loading = false,
   previewOnly = false,
+  bankingDetail = null, // Optional: for Payable To | Bank Details layout
 }) {
   // Ensure invoiceData exists and has required structure
   if (!invoiceData) {
     return (
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
         <CardContent className="p-8">
-          <p className="text-red-600">Error: Invoice data is missing</p>
+          <p className="text-destructive">Error: Invoice data is missing</p>
         </CardContent>
       </Card>
     );
   }
 
   const clientList = Array.isArray(clients) ? clients : [];
-  const client = clientList.find(c => c.id === invoiceData?.client_id) ?? null;
+  const clientResolved = clientList.find(c => c.id === invoiceData?.client_id) ?? null;
+  const client = clientProp ?? clientResolved;
   const items = Array.isArray(invoiceData?.items) ? invoiceData.items : [];
+  const projectTitle = invoiceData?.project_title ?? "";
+  const projectDescription = invoiceData?.project_description ?? "";
   const deliveryDate = invoiceData?.delivery_date ? new Date(invoiceData.delivery_date) : null;
   const invoiceDate = invoiceData?.invoice_date ? new Date(invoiceData.invoice_date) : null;
   const currency = invoiceData?.currency || user?.currency || "USD";
@@ -44,9 +53,6 @@ export default function InvoicePreview({
   const showTax = taxAmount > 0;
   const discountAmount = Number(invoiceData?.discount_amount ?? 0);
   const showDiscount = discountAmount > 0;
-  const hasItemTax = items.some(
-    (item) => (Number(item.item_tax_rate) || 0) > 0 || (Number(item.item_tax_amount) || 0) > 0
-  );
 
   const handleDownloadPDF = () => {
     try {
@@ -56,9 +62,13 @@ export default function InvoicePreview({
           invoiceData: {
             ...invoiceData,
             invoice_number: invoiceData.invoice_number || invoiceData.reference_number || "Draft",
+            project_title: invoiceData.project_title,
+            project_description: invoiceData.project_description,
+            items: items,
           },
           client: client || {},
           user: user || {},
+          bankingDetail: bankingDetail || null,
         })
       );
       // Open PDF preview and trigger auto-download
@@ -75,7 +85,7 @@ export default function InvoicePreview({
       transition={{ duration: 0.5 }}
     >
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-        <CardHeader className="border-b border-slate-100 pb-6">
+        <CardHeader className="border-b border-border pb-6">
           {/* Logo Display */}
           {user?.logo_url && (
             <div className="mb-4 flex justify-center">
@@ -87,12 +97,12 @@ export default function InvoicePreview({
               />
             </div>
           )}
-          <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
             <FileText className="w-5 h-5" />
             {previewOnly ? "Invoice" : "Invoice Preview"}
           </CardTitle>
           {!previewOnly && (
-            <p className="text-slate-600 mt-2">
+            <p className="text-muted-foreground mt-2">
               Review all details before creating your professional invoice
             </p>
           )}
@@ -109,222 +119,136 @@ export default function InvoicePreview({
           )}
         </CardHeader>
         <CardContent className="p-8">
-          <div className="space-y-8">
-            {/* Billed by / Billed to - full details */}
-            <div className="grid md:grid-cols-2 gap-6 border-b border-slate-200 pb-6">
-              <div>
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed by</h3>
-                <div className="space-y-1">
-                  {user?.logo_url && (
-                    <LogoImage src={user.logo_url} alt="" className="h-10 w-auto mb-2" style={{ maxHeight: "40px" }} />
-                  )}
-                  <p className="font-semibold text-slate-900">{user?.company_name || "Your Company"}</p>
-                  {user?.company_address && (
-                    <p className="text-sm text-slate-600 whitespace-pre-line">{user.company_address}</p>
-                  )}
-                  {user?.email && (
-                    <p className="text-sm text-slate-600">{user.email}</p>
+          <div className="bg-card rounded-lg text-foreground">
+            {/* Header: INVOICE left, Company in beige box right + Invoice No, Date */}
+            <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground uppercase tracking-tight">Invoice</h1>
+              <div className="text-right">
+                <div className={`inline-block rounded-lg px-4 py-3 ${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
+                  {user?.logo_url ? (
+                    <div className="flex items-center gap-3">
+                      <LogoImage src={user.logo_url} alt="" className="h-10 w-auto" style={{ maxHeight: "40px" }} />
+                      <span className="font-semibold text-foreground">{user?.company_name || "Your Company"}</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-foreground">{user?.company_name || "Your Company"}</span>
                   )}
                 </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Billed to</h3>
-                <div className="space-y-1">
-                  <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
-                  {client?.contact_person && <p className="text-sm text-slate-600">Attn: {client.contact_person}</p>}
-                  {client?.address && <p className="text-sm text-slate-600 whitespace-pre-line">{client.address}</p>}
-                  {client?.email && <p className="text-sm text-slate-600">{client.email}</p>}
-                  {client?.phone && <p className="text-sm text-slate-600">{client.phone}</p>}
-                  {client?.tax_id && <p className="text-sm text-slate-600">Tax ID: {client.tax_id}</p>}
+                <div className="mt-3 text-sm text-muted-foreground">
+                  <p>Invoice No: {invoiceData?.invoice_number || invoiceData?.reference_number || "Draft"}</p>
+                  <p>Date: {invoiceDate ? format(invoiceDate, "dd/MM/yyyy") : deliveryDate ? format(deliveryDate, "dd/MM/yyyy") : "—"}</p>
+                  {projectTitle && <p className="mt-1 font-medium text-foreground">Project: {projectTitle}</p>}
                 </div>
               </div>
             </div>
 
-            {/* Invoice Information - all details */}
-            <div className="bg-slate-50 rounded-2xl p-6">
-              <h3 className="font-bold text-slate-900 mb-4">Invoice Information</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-slate-600">Client</p>
-                  <p className="font-semibold text-slate-900">{client?.name || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600">Project Title</p>
-                  <p className="font-semibold text-slate-900">{invoiceData?.project_title || "—"}</p>
-                </div>
-                {invoiceData?.invoice_number && (
-                  <div>
-                    <p className="text-sm text-slate-600">Invoice Number</p>
-                    <p className="font-semibold text-slate-900">{invoiceData.invoice_number}</p>
-                  </div>
-                )}
-                {(invoiceData?.reference_number ?? "") !== "" && (
-                  <div>
-                    <p className="text-sm text-slate-600">Reference Number</p>
-                    <p className="font-medium text-slate-900">{invoiceData.reference_number}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm text-slate-600">Currency</p>
-                  <p className="font-medium text-slate-900">{currency}</p>
-                </div>
-                {invoiceDate && (
-                  <div>
-                    <p className="text-sm text-slate-600">Invoice Date</p>
-                    <p className="font-semibold text-slate-900">{format(invoiceDate, "MMMM d, yyyy")}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm text-slate-600">Due Date</p>
-                  <p className="font-semibold text-slate-900">
-                    {deliveryDate ? format(deliveryDate, "MMMM d, yyyy") : "Not set"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600">Total Amount</p>
-                  <p className="font-bold text-slate-900 text-xl">
-                    {formatCurrency(totalAmount, currency)}
-                  </p>
-                </div>
-              </div>
-              {invoiceData?.project_description && (
-                <div className="mt-4">
-                  <p className="text-sm text-slate-600">Project Description</p>
-                  <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.project_description}</p>
-                </div>
-              )}
-              {invoiceData?.delivery_address && (
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <p className="text-sm text-slate-600">Delivery / Billing Address</p>
-                  <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.delivery_address}</p>
-                </div>
-              )}
-            </div>
-            {/* Products & Services - full details */}
-            <div className="bg-primary/5 rounded-2xl p-6 border border-primary/10">
-              <h3 className="font-bold text-slate-900 mb-2">Products &amp; Services</h3>
-              <p className="text-sm text-slate-600 mb-4">Line items with full product/service details.</p>
-              {items.length === 0 ? (
-                <p className="text-slate-500 text-center py-6">No items added</p>
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="py-2 pr-4 text-xs font-semibold text-slate-600 uppercase">Product / Service</th>
-                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-center w-14">Qty</th>
-                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase w-24">Unit</th>
-                          <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right">Rate</th>
-                          {hasItemTax && (
-                            <>
-                              <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right w-16">Tax %</th>
-                              <th className="py-2 px-2 text-xs font-semibold text-slate-600 uppercase text-right">Item Tax</th>
-                            </>
-                          )}
-                          <th className="py-2 pl-2 text-xs font-semibold text-slate-600 uppercase text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, index) => {
-                          const qty = Number(item.quantity ?? item.qty ?? 1);
-                          const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
-                          const lineTotal = Number(item.total_price ?? item.total ?? qty * unitPrice);
-                          const itemTaxRate = Number(item.item_tax_rate ?? 0);
-                          const itemTaxAmt = Number(item.item_tax_amount ?? 0);
-                          const totalWithTax = lineTotal + itemTaxAmt;
-                          const name = item.service_name || item.name || "Item";
-                          const itemType = item.item_type || "service";
-                          const unitType = item.unit_type || "unit";
-                          const unitLabel = getUnitLabel(itemType, unitType);
-                          const typeLabel = getItemTypeLabel(itemType);
-                          return (
-                            <tr key={index} className="border-b border-slate-100 align-top">
-                              <td className="py-3 pr-4">
-                                <p className="font-medium text-slate-900">{name}</p>
-                                {(item.sku || item.part_number) && (
-                                  <p className="text-xs text-slate-500 mt-0.5">
-                                    {item.sku && <span>SKU: {item.sku}</span>}
-                                    {item.sku && item.part_number && " · "}
-                                    {item.part_number && <span>Part #: {item.part_number}</span>}
-                                  </p>
-                                )}
-                                {item.description && (
-                                  <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{item.description}</p>
-                                )}
-                                {item.details && (
-                                  <p className="text-xs text-slate-500 mt-1 italic">{item.details}</p>
-                                )}
-                                <p className="text-xs text-slate-500 mt-1">
-                                  Type: {typeLabel} · Unit: {unitLabel}
-                                </p>
-                              </td>
-                              <td className="py-3 px-2 text-center text-slate-700">{qty}</td>
-                              <td className="py-3 px-2 text-slate-700 text-sm">{unitLabel}</td>
-                              <td className="py-3 px-2 text-right text-slate-700">{formatCurrency(unitPrice, currency)}</td>
-                              {hasItemTax && (
-                                <>
-                                  <td className="py-3 px-2 text-right text-slate-600">{itemTaxRate ? `${itemTaxRate}%` : "—"}</td>
-                                  <td className="py-3 px-2 text-right text-slate-700">{formatCurrency(itemTaxAmt, currency)}</td>
-                                </>
-                              )}
-                              <td className="py-3 pl-2 text-right font-medium text-slate-900">
-                                {formatCurrency(hasItemTax ? totalWithTax : lineTotal, currency)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-slate-200 space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span>Subtotal ({currency}):</span>
-                      <span>{formatCurrency(subtotal, currency)}</span>
-                    </div>
-                    {showDiscount && (
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>
-                          Discount
-                          {invoiceData?.discount_type === "percentage" && invoiceData?.discount_value != null
-                            ? ` (${invoiceData.discount_value}%)`
-                            : ""}
-                          :
-                        </span>
-                        <span>-{formatCurrency(discountAmount, currency)}</span>
-                      </div>
-                    )}
-                    {showTax && (
-                      <div className="flex justify-between text-sm">
-                        <span>Tax ({taxRate}%):</span>
-                        <span>{formatCurrency(taxAmount, currency)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-lg font-bold mt-2 pt-2 border-t border-slate-200">
-                      <span>Total ({currency}):</span>
-                      <span>{formatCurrency(totalAmount, currency)}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            {/* Notes & Terms */}
-            {(invoiceData?.notes || invoiceData?.terms_conditions) && (
-              <div className="grid md:grid-cols-2 gap-6">
-                {invoiceData?.notes && (
-                  <div className="bg-amber-50 rounded-2xl p-6">
-                    <h3 className="font-bold text-slate-900 mb-4">Additional Notes</h3>
-                    <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.notes}</p>
-                  </div>
-                )}
-                {invoiceData?.terms_conditions && (
-                  <div className="bg-purple-50 rounded-2xl p-6">
-                    <h3 className="font-bold text-slate-900 mb-4">Terms & Conditions</h3>
-                    <p className="text-slate-800 whitespace-pre-wrap">{invoiceData.terms_conditions}</p>
-                  </div>
-                )}
+            {/* Payable To (client) | Bank Details — linked to invoiceData.client_id and optional bankingDetail */}
+            {projectDescription && (
+              <div className="mb-6">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Project</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{projectDescription}</p>
               </div>
             )}
+
+            {/* Payable To | Bank Details */}
+            <div className="grid md:grid-cols-2 gap-8 mb-8">
+              <div>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payable To</h3>
+                <p className="font-medium text-foreground">{client?.name || "—"}</p>
+                {client?.contact_person && <p className="text-sm text-muted-foreground">Attn: {client.contact_person}</p>}
+                {client?.address && <p className="text-sm text-muted-foreground mt-0.5">{client.address}</p>}
+                {client?.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
+                {client?.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
+              </div>
+              <div className="text-right md:text-right">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Bank Details</h3>
+                {bankingDetail ? (
+                  <>
+                    <p className="font-medium text-foreground">{bankingDetail.account_name || bankingDetail.bank_name}</p>
+                    {bankingDetail.account_number && <p className="text-sm text-muted-foreground">{bankingDetail.account_number}</p>}
+                    {bankingDetail.bank_name && <p className="text-sm text-muted-foreground">{bankingDetail.bank_name}</p>}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">—</p>
+                )}
+              </div>
+            </div>
+
+            {/* Itemized table: beige header, 4 columns only */}
+            <div className="overflow-x-auto rounded-t-lg overflow-hidden mb-6">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={`${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
+                    <th className="px-4 py-3.5 text-left text-xs font-bold text-foreground uppercase tracking-wider">Item Description</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-20">Qty</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Price</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">No items added</td>
+                    </tr>
+                  ) : (
+                    items.map((item, index) => {
+                      const qty = Number(item.quantity ?? item.qty ?? 1);
+                      const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
+                      const lineTotal = Number(item.total_price ?? item.total ?? qty * unitPrice);
+                      const name = item.service_name || item.name || "Item";
+                      const description = item.description ?? "";
+                      return (
+                        <tr key={index} className="border-b border-border">
+                          <td className="px-4 py-4 text-foreground">
+                            <span className="font-medium">{name}</span>
+                            {description && <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{description}</p>}
+                          </td>
+                          <td className="px-4 py-4 text-right text-foreground tabular-nums">{qty}</td>
+                          <td className="px-4 py-4 text-right text-foreground tabular-nums">{formatCurrency(unitPrice, currency)}</td>
+                          <td className="px-4 py-4 text-right font-medium text-foreground tabular-nums">{formatCurrency(lineTotal, currency)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Notes */}
+            {(invoiceData?.notes || invoiceData?.terms_conditions) && (
+              <div className="mb-8">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Notes</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                  {[invoiceData?.notes, invoiceData?.terms_conditions].filter(Boolean).join("\n\n")}
+                </p>
+              </div>
+            )}
+
+            {/* Totals: right-aligned beige box */}
+            <div className="flex justify-end">
+              <div className={`w-full max-w-xs rounded-lg border ${CARD_ACCENT_BORDER} ${CARD_ACCENT_BG} px-5 py-4`}>
+                <div className="flex justify-between py-2 text-sm text-foreground">
+                  <span>Sub Total</span>
+                  <span className="tabular-nums">{formatCurrency(subtotal, currency)}</span>
+                </div>
+                {showDiscount && (
+                  <div className="flex justify-between py-2 text-sm text-destructive">
+                    <span>Discount</span>
+                    <span className="tabular-nums">-{formatCurrency(discountAmount, currency)}</span>
+                  </div>
+                )}
+                {showTax && (
+                  <div className="flex justify-between py-2 text-sm text-foreground">
+                    <span>Tax ({taxRate}%)</span>
+                    <span className="tabular-nums">{formatCurrency(taxAmount, currency)}</span>
+                  </div>
+                )}
+                <div className="border-t border-border mt-2 pt-3 flex justify-between text-base font-bold text-foreground">
+                  <span>Grand Total</span>
+                  <span className="tabular-nums">{formatCurrency(totalAmount, currency)}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className={`flex ${showBack && !previewOnly ? "justify-between" : "justify-end"} mt-8 gap-3`}>
@@ -380,6 +304,7 @@ export default function InvoicePreview({
 InvoicePreview.propTypes = {
   invoiceData: PropTypes.object.isRequired,
   clients: PropTypes.array,
+  client: PropTypes.object,
   onPrevious: PropTypes.func,
   onCreate: PropTypes.func,
   onClose: PropTypes.func,
@@ -387,4 +312,5 @@ InvoicePreview.propTypes = {
   user: PropTypes.object,
   loading: PropTypes.bool,
   previewOnly: PropTypes.bool,
+  bankingDetail: PropTypes.object,
 };

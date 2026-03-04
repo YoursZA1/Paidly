@@ -59,7 +59,7 @@ export const getPlanLimits = (planKey) => {
 export const getStatusBadgeColor = (status) => {
   const colors = {
     active: 'bg-green-100 text-green-800',
-    trial: 'bg-blue-100 text-blue-800',
+    trial: 'bg-primary/15 text-primary',
     paused: 'bg-yellow-100 text-yellow-800',
     cancelled: 'bg-red-100 text-red-800'
   };
@@ -136,7 +136,7 @@ export const getPlanInfo = (planKey) => {
 export const getPlanBadgeColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
-    starter: 'bg-blue-100 text-blue-800',
+    starter: 'bg-primary/15 text-primary',
     professional: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800'
   };

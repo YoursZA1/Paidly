@@ -667,7 +667,7 @@ export default function ProjectDetails({
                 <CardContent className="p-4 sm:p-8">
                     <div className="space-y-6">
                         {/* Invoice Header - Core Fields */}
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-xl border border-blue-100">
+                        <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-4 sm:p-6 rounded-xl border border-primary/20">
                             <h3 className="text-sm font-semibold text-slate-900 mb-4">Invoice Information</h3>
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* Client Selection */}
@@ -682,7 +682,7 @@ export default function ProjectDetails({
                                                 onValueChange={(value) => handleInputChange('client_id', value)}
                                                 className="flex-grow"
                                             >
-                                                <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20">
+                                                <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20">
                                                     <SelectValue placeholder="Choose a client" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -710,7 +710,7 @@ export default function ProjectDetails({
                                         value={invoiceData.project_title}
                                         onChange={(e) => handleInputChange('project_title', e.target.value)}
                                         placeholder="e.g., Monthly Marketing Services"
-                                        className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                        className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                     />
                                 </div>
 
@@ -724,7 +724,7 @@ export default function ProjectDetails({
                                         value={invoiceData.reference_number || ''}
                                         onChange={(e) => handleInputChange('reference_number', e.target.value)}
                                         placeholder="e.g., PO-2024-001 or REF-ABC123"
-                                        className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                        className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                     />
                                 </div>
 
@@ -738,7 +738,7 @@ export default function ProjectDetails({
                                                 type="date"
                                                 value={invoiceData.invoice_date}
                                                 onChange={(e) => handleInputChange('invoice_date', e.target.value)}
-                                                className="h-12 pl-10 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                                className="h-12 pl-10 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                             />
                                         </div>
                                     </div>
@@ -754,7 +754,7 @@ export default function ProjectDetails({
                                                 type="date"
                                                 value={invoiceData.delivery_date}
                                                 onChange={(e) => handleInputChange('delivery_date', e.target.value)}
-                                                className="h-12 pl-10 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                                className="h-12 pl-10 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                             />
                                         </div>
                                     </div>
@@ -848,7 +848,7 @@ export default function ProjectDetails({
                                     <Button
                                         type="button"
                                         onClick={addItem}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                                        className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
                                         Add Custom Item
@@ -905,7 +905,7 @@ export default function ProjectDetails({
 
                             {/* Group Management Section */}
                             {showGroupManager && (
-                                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4 space-y-4">
+                                <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h3 className="font-semibold text-slate-900">Smart Grouping</h3>
                                         <span className="text-xs text-slate-600 bg-white px-2 py-1 rounded">For Construction, Automotive, Manufacturing</span>
@@ -922,7 +922,7 @@ export default function ProjectDetails({
                                         <Button
                                             type="button"
                                             onClick={addGroup}
-                                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                            className="bg-primary hover:bg-primary/90 text-white"
                                         >
                                             <Plus className="w-4 h-4 mr-1" />
                                             Add Group
@@ -934,7 +934,7 @@ export default function ProjectDetails({
                                             <Label className="text-sm text-slate-600">Active Groups:</Label>
                                             <div className="flex flex-wrap gap-2">
                                                 {groups.map(group => (
-                                                    <div key={group.id} className="flex items-center gap-1 bg-white border border-indigo-200 rounded-lg px-3 py-1.5">
+                                                    <div key={group.id} className="flex items-center gap-1 bg-white border border-primary/20 rounded-lg px-3 py-1.5">
                                                         <span className="text-sm font-medium text-slate-700">{group.name}</span>
                                                         <Button
                                                             type="button"
@@ -1042,7 +1042,7 @@ export default function ProjectDetails({
 
                                     {/* Service Specific Layout */}
                                     {isService && (
-                                        <div className="bg-blue-100/30 border border-blue-200 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
+                                        <div className="bg-primary/15 border border-primary/20 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
                                             <div className="grid md:grid-cols-2 gap-4">
                                                 {/* Service Name */}
                                                 <div className="space-y-2 md:col-span-2">
@@ -1065,7 +1065,7 @@ export default function ProjectDetails({
                                                             type="button"
                                                             variant="ghost"
                                                             onClick={() => setExpandedItems([...expandedItems, index])}
-                                                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                                            className="text-primary hover:text-primary/80 text-sm font-medium"
                                                         >
                                                             + Add Description & Tax Rate
                                                         </Button>
@@ -1182,7 +1182,7 @@ export default function ProjectDetails({
                                                         type="button"
                                                         variant="ghost"
                                                         onClick={() => setExpandedItems([...expandedItems, index])}
-                                                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                                        className="text-primary hover:text-primary/80 text-sm font-medium"
                                                     >
                                                         + Add Description & Tax Rate
                                                     </Button>
@@ -1695,7 +1695,7 @@ export default function ProjectDetails({
                                         
                                         // Group header
                                         result.push(
-                                            <div key={`group-header-${group.id}`} className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg mt-4">
+                                            <div key={`group-header-${group.id}`} className="bg-gradient-to-r from-primary to-[#ff7c00] text-white px-6 py-3 rounded-lg mt-4">
                                                 <div className="flex items-center justify-between">
                                                     <h3 className="font-bold text-lg">{group.name}</h3>
                                                     <span className="text-sm opacity-90">{groupItems.length} {groupItems.length === 1 ? 'item' : 'items'}</span>
@@ -1744,10 +1744,10 @@ export default function ProjectDetails({
                                         // Group subtotal
                                         const groupSubtotal = getGroupSubtotal(groupItems);
                                         result.push(
-                                            <div key={`group-subtotal-${group.id}`} className="bg-indigo-100 border border-indigo-300 px-6 py-3 rounded-lg ml-4 mb-4">
+                                            <div key={`group-subtotal-${group.id}`} className="bg-primary/15 border border-primary/30 px-6 py-3 rounded-lg ml-4 mb-4">
                                                 <div className="flex items-center justify-between">
-                                                    <span className="font-semibold text-indigo-900">{group.name} Subtotal:</span>
-                                                    <span className="text-xl font-bold text-indigo-900">{formatCurrency(groupSubtotal, userCurrency)}</span>
+                                                    <span className="font-semibold text-foreground">{group.name} Subtotal:</span>
+                                                    <span className="text-xl font-bold text-foreground">{formatCurrency(groupSubtotal, userCurrency)}</span>
                                                 </div>
                                             </div>
                                         );
@@ -1803,8 +1803,8 @@ export default function ProjectDetails({
 
                         {/* Totals & Summary Section - Always Visible */}
                         {(invoiceData.items || []).length > 0 && (
-                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6 shadow-lg space-y-6">
-                                <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+                            <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/20 rounded-2xl p-6 shadow-lg space-y-6">
+                                <div className="flex items-center justify-between border-b border-primary/20 pb-3">
                                     <h3 className="text-lg font-bold text-slate-900">Invoice Summary</h3>
                                     <span className="text-sm text-slate-600 bg-white px-3 py-1 rounded-full">{(invoiceData.items || []).length} {(invoiceData.items || []).length === 1 ? 'item' : 'items'}</span>
                                 </div>
@@ -1822,7 +1822,7 @@ export default function ProjectDetails({
                                             value={invoiceData.tax_rate || 0}
                                             onChange={(e) => handleTaxRateChange(e.target.value)}
                                             placeholder="0"
-                                            className="h-11 rounded-lg border-2 focus:border-blue-400"
+                                            className="h-11 rounded-lg border-2 focus:border-primary"
                                         />
                                         <p className="text-xs text-slate-500">Applied to subtotal after discounts</p>
                                     </div>
@@ -1835,7 +1835,7 @@ export default function ProjectDetails({
                                             value={invoiceData.discount_type || 'fixed'}
                                             onValueChange={(value) => handleDiscountChange(value, invoiceData.discount_value || 0)}
                                         >
-                                            <SelectTrigger className="h-11 rounded-lg border-2 focus:border-blue-400">
+                                            <SelectTrigger className="h-11 rounded-lg border-2 focus:border-primary">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1856,7 +1856,7 @@ export default function ProjectDetails({
                                             value={invoiceData.discount_value || 0}
                                             onChange={(e) => handleDiscountChange(invoiceData.discount_type || 'fixed', e.target.value)}
                                             placeholder="0"
-                                            className="h-11 rounded-lg border-2 focus:border-blue-400"
+                                            className="h-11 rounded-lg border-2 focus:border-primary"
                                         />
                                     </div>
                                 </div>
@@ -1910,7 +1910,7 @@ export default function ProjectDetails({
 
                                     {/* Grand Total */}
                                     <div className="border-t-2 border-slate-300 pt-4 mt-3">
-                                        <div className="flex justify-between items-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl py-4 px-5 shadow-md">
+                                        <div className="flex justify-between items-center bg-gradient-to-r from-primary to-[#ff7c00] text-white rounded-xl py-4 px-5 shadow-md">
                                             <span className="text-xl font-bold">Grand Total</span>
                                             <span className="text-3xl font-black">{formatCurrency(invoiceData.total_amount || 0, userCurrency)}</span>
                                         </div>
@@ -1931,7 +1931,7 @@ export default function ProjectDetails({
                                         onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
                                         className="flex-grow"
                                     >
-                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20">
+                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20">
                                             <SelectValue placeholder="Select payment method (optional)" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1959,7 +1959,7 @@ export default function ProjectDetails({
                                     value={invoiceData.project_description}
                                     onChange={(e) => handleInputChange('project_description', e.target.value)}
                                     placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                    className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
 
@@ -1973,7 +1973,7 @@ export default function ProjectDetails({
                                         value={invoiceData.delivery_address || ""}
                                         onChange={(e) => handleInputChange('delivery_address', e.target.value)}
                                         placeholder="Enter a delivery or shipping address if applicable"
-                                        className="min-h-24 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                        className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
                                     />
                                 </div>
                             )}
@@ -1997,7 +1997,7 @@ export default function ProjectDetails({
                                         value={invoiceData.notes || ""}
                                         onChange={(e) => handleInputChange('notes', e.target.value)}
                                         placeholder="e.g., Thank you for your business! Please review the items above and contact us with any questions."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
                                     />
                                     <p className="text-xs text-slate-600">Friendly message or instructions for your customer</p>
                                 </div>
@@ -2012,7 +2012,7 @@ export default function ProjectDetails({
                                         value={invoiceData.payment_terms || ""}
                                         onChange={(e) => handleInputChange('payment_terms', e.target.value)}
                                         placeholder="e.g., Net 30 days. Payment due within 30 days of invoice date. Late payments subject to 1.5% monthly interest."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
                                     />
                                     <p className="text-xs text-slate-600">Due dates, late fees, accepted payment methods</p>
                                 </div>
@@ -2027,7 +2027,7 @@ export default function ProjectDetails({
                                         value={invoiceData.warranty_notes || ""}
                                         onChange={(e) => handleInputChange('warranty_notes', e.target.value)}
                                         placeholder="e.g., All parts covered by 1-year manufacturer warranty. Labor warranty: 90 days from service date. Does not cover misuse or neglect."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
                                     />
                                     <p className="text-xs text-slate-600">Warranty coverage, service guarantees, limitations</p>
                                 </div>
@@ -2042,7 +2042,7 @@ export default function ProjectDetails({
                                         value={invoiceData.terms_conditions || ""}
                                         onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
                                         placeholder="e.g., By accepting this invoice, customer agrees to all terms. Work must be inspected within 7 days. Claims after this period may not be honored..."
-                                        className="min-h-32 rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                        className="min-h-32 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
                                     />
                                     <p className="text-xs text-slate-600">General legal terms, liability limitations, dispute resolution</p>
                                 </div>
@@ -2061,7 +2061,7 @@ export default function ProjectDetails({
                                         onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
                                         className="flex-grow"
                                     >
-                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20">
+                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20">
                                             <SelectValue placeholder="Select payment method (optional)" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -2089,7 +2089,7 @@ export default function ProjectDetails({
                                     value={invoiceData.project_description}
                                     onChange={(e) => handleInputChange('project_description', e.target.value)}
                                     placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                    className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
                         </div>
@@ -2099,7 +2099,7 @@ export default function ProjectDetails({
                                 <Button
                                     onClick={onNext}
                                     disabled={!isValid}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Continue to Payment Breakdown
                                     <ArrowRight className="w-4 h-4 ml-2" />

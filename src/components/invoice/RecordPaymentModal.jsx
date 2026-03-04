@@ -121,27 +121,27 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
         </DialogHeader>
         <div className="space-y-4 py-4">
           {/* Payment Progress */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-medium text-blue-900">Invoice Total</p>
-                <p className="text-2xl font-bold text-blue-900">{formatCurrency(invoice.total_amount, invoice.currency || 'USD')}</p>
+                <p className="text-sm font-medium text-foreground">Invoice Total</p>
+                <p className="text-2xl font-bold text-foreground">{formatCurrency(invoice.total_amount, invoice.currency || 'USD')}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-medium text-blue-900">Remaining</p>
+                <p className="text-sm font-medium text-foreground">Remaining</p>
                 <p className="text-2xl font-bold text-orange-600">{formatCurrency(remainingBalance, invoice.currency || 'USD')}</p>
               </div>
             </div>
             
             {totalPaid > 0 && (
               <div className="space-y-2">
-                <div className="flex justify-between text-xs text-blue-800">
+                <div className="flex justify-between text-xs text-primary">
                   <span>Already Paid: {formatCurrency(totalPaid, invoice.currency || 'USD')}</span>
                   <span className="font-semibold">{paymentProgress.toFixed(1)}%</span>
                 </div>
-                <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
+                <div className="h-2 bg-primary/20 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-primary to-[#ff7c00] transition-all duration-500"
                     style={{ width: `${Math.min(paymentProgress, 100)}%` }}
                   />
                 </div>
@@ -169,7 +169,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
                 <button
                   type="button"
                   onClick={() => setShowSuggestions(!showSuggestions)}
-                  className="text-xs text-blue-600 hover:text-blue-700"
+                  className="text-xs text-primary hover:text-primary"
                 >
                   {showSuggestions ? 'Hide' : 'Show'} suggestions
                 </button>
@@ -186,10 +186,10 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
                       setAmount(suggestion.value.toFixed(2));
                       setError('');
                     }}
-                    className="px-3 py-2 text-sm border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-colors text-left"
+                    className="px-3 py-2 text-sm border border-primary/20 rounded-lg hover:bg-primary/10 hover:border-primary transition-colors text-left"
                   >
-                    <div className="font-medium text-blue-900">{formatCurrency(suggestion.value, invoice.currency || 'USD')}</div>
-                    <div className="text-xs text-blue-600">{suggestion.label}</div>
+                    <div className="font-medium text-foreground">{formatCurrency(suggestion.value, invoice.currency || 'USD')}</div>
+                    <div className="text-xs text-primary">{suggestion.label}</div>
                   </button>
                 ))}
               </div>

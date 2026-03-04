@@ -185,7 +185,7 @@ export default function CurrencyConfiguration() {
                 key={currency.code}
                 className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
                   selectedCurrency === currency.code
-                    ? 'border-blue-500 bg-blue-50'
+                    ? 'border-primary bg-primary/10'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
                 onClick={() => handleCurrencyChange(currency.code)}
@@ -203,7 +203,7 @@ export default function CurrencyConfiguration() {
                     </div>
                   </div>
                   {selectedCurrency === currency.code && (
-                    <span className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                    <span className="bg-primary/100 text-white px-2 py-1 rounded text-xs font-semibold">
                       Current
                     </span>
                   )}

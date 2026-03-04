@@ -122,7 +122,7 @@ export default function DocumentActivity() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-500" />
+              <FileText className="h-4 w-4 text-primary" />
               Total Documents
             </CardTitle>
           </CardHeader>
@@ -181,7 +181,7 @@ export default function DocumentActivity() {
           <CardContent className="space-y-3">
             {[
               { label: 'Draft', value: summaryStats?.draftCount, color: 'bg-gray-100 text-gray-700' },
-              { label: 'Sent', value: summaryStats?.sentCount, color: 'bg-blue-100 text-blue-700' },
+              { label: 'Sent', value: summaryStats?.sentCount, color: 'bg-primary/15 text-primary' },
               { label: 'Paid', value: summaryStats?.paidCount, color: 'bg-green-100 text-green-700' }
             ].map((item, idx) => (
               <div key={idx}>
@@ -388,9 +388,9 @@ export default function DocumentActivity() {
                     <Badge variant="outline">{plan.totalDocuments} documents</Badge>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <p className="text-xs text-blue-600 font-medium">Invoices</p>
-                      <p className="text-2xl font-bold text-blue-900">{plan.invoices}</p>
+                    <div className="bg-primary/10 p-3 rounded-lg">
+                      <p className="text-xs text-primary font-medium">Invoices</p>
+                      <p className="text-2xl font-bold text-foreground">{plan.invoices}</p>
                     </div>
                     <div className="bg-green-50 p-3 rounded-lg">
                       <p className="text-xs text-green-600 font-medium">Quotes</p>
@@ -425,7 +425,7 @@ export default function DocumentActivity() {
                 {topClients.map((client, idx) => (
                   <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                      <div className="w-8 h-8 bg-primary/100 rounded-full flex items-center justify-center text-white font-bold text-sm">
                         {idx + 1}
                       </div>
                       <div>

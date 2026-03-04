@@ -136,7 +136,7 @@ export default function CurrencySelector({ value, onChange, className = "" }) {
                     <div className="text-xs text-gray-500">{currency.name}</div>
                 </div>
                 {code === suggestedCurrency && code !== 'ZAR' && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                    <span className="text-xs bg-primary/15 text-primary px-2 py-1 rounded">
                         Suggested
                     </span>
                 )}

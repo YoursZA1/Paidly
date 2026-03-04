@@ -17,11 +17,11 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-    travel: { bg: 'bg-blue-100', text: 'text-blue-600' },
+    travel: { bg: 'bg-primary/15', text: 'text-primary' },
     office: { bg: 'bg-purple-100', text: 'text-purple-600' },
     supplies: { bg: 'bg-green-100', text: 'text-green-600' },
     utilities: { bg: 'bg-orange-100', text: 'text-orange-600' },
-    software: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+    software: { bg: 'bg-primary/15', text: 'text-primary' },
     other: { bg: 'bg-slate-100', text: 'text-slate-600' }
 };
 

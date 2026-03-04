@@ -234,7 +234,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                             disabled={isScanning}
                                         />
                                         <Button type="button" variant="outline" className="border-dashed border-2 w-full" disabled={isScanning}>
-                                            {isScanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanLine className="w-4 h-4 mr-2 text-indigo-600" />}
+                                            {isScanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanLine className="w-4 h-4 mr-2 text-primary" />}
                                             {isScanning ? "Scanning Receipt..." : "Scan Receipt with AI"}
                                         </Button>
                                     </div>
@@ -295,7 +295,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                             type="button" 
                                             onClick={suggestCategory}
                                             disabled={isSuggesting || !formData.description}
-                                            className="text-xs text-indigo-600 flex items-center hover:underline disabled:opacity-50"
+                                            className="text-xs text-primary flex items-center hover:underline disabled:opacity-50"
                                         >
                                             {isSuggesting ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
                                             Suggest Category
@@ -488,7 +488,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     <a href={file.url} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLink className="w-4 h-4 text-blue-600" />
+                                                        <ExternalLink className="w-4 h-4 text-primary" />
                                                     </a>
                                                     <button type="button" onClick={() => removeAttachment(index)}>
                                                         <X className="w-4 h-4 text-red-500" />
@@ -545,7 +545,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                     <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} className="flex-1 bg-indigo-600 hover:bg-indigo-700">
+                    <Button onClick={handleSubmit} className="flex-1 bg-primary hover:bg-primary/90">
                         {expense ? 'Update' : 'Create'} {activeTab === 'mileage' ? 'Trip' : 'Expense'}
                     </Button>
                 </div>

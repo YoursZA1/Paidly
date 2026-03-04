@@ -11,8 +11,8 @@ import { RefreshCw, ExternalLink, Pencil, FileText, Repeat, CreditCard, Package 
 
 const STATUS_COLORS = {
   draft: 'bg-slate-200 text-slate-700',
-  sent: 'bg-blue-100 text-blue-700',
-  viewed: 'bg-indigo-100 text-indigo-700',
+  sent: 'bg-primary/15 text-primary',
+  viewed: 'bg-primary/15 text-primary',
   paid: 'bg-green-100 text-green-700',
   partial_paid: 'bg-amber-100 text-amber-700',
   overdue: 'bg-red-100 text-red-700',

@@ -35,7 +35,7 @@ export default function ProfitLossReport({ data, currency = 'ZAR', dateRange }) 
 
     return (
         <Card className="bg-white border-0 shadow-xl">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-primary/10 to-primary/5">
                 <div className="flex justify-between items-center">
                     <div>
                         <CardTitle className="text-slate-900 text-2xl">Profit & Loss Statement</CardTitle>
@@ -98,9 +98,9 @@ export default function ProfitLossReport({ data, currency = 'ZAR', dateRange }) 
                         <p className="text-sm text-green-600 font-medium mb-1">Gross Profit</p>
                         <p className="text-xl font-bold text-green-700">{formatCurrency(grossProfit, currency)}</p>
                     </div>
-                    <div className="bg-blue-50 rounded-xl p-4 text-center">
-                        <p className="text-sm text-blue-600 font-medium mb-1">Total Expenses</p>
-                        <p className="text-xl font-bold text-blue-700">{formatCurrency(totalOperatingExpenses, currency)}</p>
+                    <div className="bg-primary/10 rounded-xl p-4 text-center">
+                        <p className="text-sm text-primary font-medium mb-1">Total Expenses</p>
+                        <p className="text-xl font-bold text-primary">{formatCurrency(totalOperatingExpenses, currency)}</p>
                     </div>
                     <div className={`${netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50'} rounded-xl p-4 text-center`}>
                         <p className={`text-sm font-medium mb-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>

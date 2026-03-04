@@ -397,10 +397,10 @@ export default function Clients() {
                     transition={{ duration: 0.5, delay: 0.08 }}
                     className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
                 >
-                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-0 shadow-lg">
+                    <Card className="bg-gradient-to-br from-primary/10 to-primary/15 border-0 shadow-lg">
                         <CardContent className="p-4">
-                            <p className="text-sm text-blue-600 font-medium">Total Clients</p>
-                            <p className="text-3xl font-bold text-blue-900">{clientStats.total}</p>
+                            <p className="text-sm text-primary font-medium">Total Clients</p>
+                            <p className="text-3xl font-bold text-foreground">{clientStats.total}</p>
                         </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-0 shadow-lg">
@@ -443,12 +443,12 @@ export default function Clients() {
                         </CardContent>
                     </Card>
                     <Card 
-                        className={`cursor-pointer transition-all ${filters.segment === 'regular' ? 'ring-2 ring-blue-500' : ''}`}
+                        className={`cursor-pointer transition-all ${filters.segment === 'regular' ? 'ring-2 ring-primary' : ''}`}
                         onClick={() => handleSegmentClick('regular')}
                     >
                         <CardContent className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <Star className="w-5 h-5 text-blue-600" />
+                            <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
+                                <Star className="w-5 h-5 text-primary" />
                             </div>
                             <div>
                                 <p className="text-2xl font-bold text-slate-900">{segmentCounts.regular}</p>
@@ -501,7 +501,7 @@ export default function Clients() {
                                 placeholder="Search by client name, email, phone, or contact person..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-10 pl-4 pr-10 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                className="h-10 pl-4 pr-10 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                             />
                             {searchTerm && (
                                 <button
@@ -541,7 +541,7 @@ export default function Clients() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -549,7 +549,7 @@ export default function Clients() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-blue-600' : 'text-slate-400'}`}
+                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
                             >
                                 <List className="w-4 h-4" />
                             </Button>

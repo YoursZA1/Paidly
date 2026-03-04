@@ -8,14 +8,14 @@ import { format, parseISO, isPast, isToday } from 'date-fns';
 
 const priorityColors = {
     low: 'bg-slate-100 text-slate-700',
-    medium: 'bg-blue-100 text-blue-700',
+    medium: 'bg-primary/15 text-primary',
     high: 'bg-orange-100 text-orange-700',
     urgent: 'bg-red-100 text-red-700'
 };
 
 const statusIcons = {
     pending: <Circle className="w-4 h-4 text-slate-400" />,
-    in_progress: <Clock className="w-4 h-4 text-blue-500" />,
+    in_progress: <Clock className="w-4 h-4 text-primary" />,
     completed: <CheckCircle className="w-4 h-4 text-green-500" />,
     blocked: <AlertTriangle className="w-4 h-4 text-red-500" />,
     cancelled: <Circle className="w-4 h-4 text-slate-300" />
@@ -27,7 +27,7 @@ const categoryColors = {
     deadline: 'bg-red-100 text-red-700',
     payment: 'bg-green-100 text-green-700',
     delivery: 'bg-yellow-100 text-yellow-700',
-    review: 'bg-indigo-100 text-indigo-700',
+    review: 'bg-primary/15 text-primary',
     other: 'bg-slate-100 text-slate-700'
 };
 

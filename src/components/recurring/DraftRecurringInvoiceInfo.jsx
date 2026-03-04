@@ -22,7 +22,7 @@ export default function DraftRecurringInvoiceInfo({ template }) {
     };
 
     return (
-        <Card className={`border-2 ${template.status === "draft" ? "border-blue-200" : "border-gray-200"}`}>
+        <Card className={`border-2 ${template.status === "draft" ? "border-primary/20" : "border-gray-200"}`}>
             <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -52,7 +52,7 @@ export default function DraftRecurringInvoiceInfo({ template }) {
 
                         {/* Frequency */}
                         <div className="flex items-start gap-3">
-                            <Zap className="w-4 h-4 text-blue-600 mt-1" />
+                            <Zap className="w-4 h-4 text-primary mt-1" />
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-600">Frequency</p>
                                 <p className="text-base font-semibold text-gray-900">
@@ -119,11 +119,11 @@ export default function DraftRecurringInvoiceInfo({ template }) {
 
                 {/* Status Message */}
                 {template.status === "draft" && (
-                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200 flex gap-3">
-                        <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-primary/20 flex gap-3">
+                        <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                         <div>
-                            <p className="text-sm font-medium text-blue-900">Draft Status</p>
-                            <p className="text-sm text-blue-800 mt-1">
+                            <p className="text-sm font-medium text-foreground">Draft Status</p>
+                            <p className="text-sm text-primary mt-1">
                                 This template is in draft status and won&apos;t generate automatic invoices. Activate it
                                 when you&apos;re ready to start the recurring cycle.
                             </p>

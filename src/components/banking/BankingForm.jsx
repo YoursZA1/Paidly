@@ -177,7 +177,7 @@ export default function BankingForm({ detail, onSave, onCancel }) {
                             <Button type="button" variant="outline" onClick={onCancel} className="rounded-xl">
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={!isValid} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-50">
+                            <Button type="submit" disabled={!isValid} className="bg-primary hover:bg-primary/90 text-white rounded-xl disabled:opacity-50">
                                 <Save className="w-4 h-4 mr-2" />
                                 {detail ? "Update Method" : "Save Method"}
                             </Button>

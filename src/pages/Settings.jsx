@@ -308,22 +308,22 @@ function CompanyProfileSettings() {
                         )}
                     </div>
                     <div className="flex-1">
-                        <h3 className={`font-bold text-lg mb-1 ${isBrandingComplete ? 'text-green-900' : 'text-amber-900'}`}>
+                        <h3 className={`font-bold text-lg mb-1 ${isBrandingComplete ? 'text-status-paid' : 'text-foreground'}`}>
                             {isBrandingComplete ? '✓ Professional Branding Complete!' : '⚠️ Complete Your Branding'}
                         </h3>
-                        <p className={`text-sm mb-3 ${isBrandingComplete ? 'text-green-700' : 'text-amber-700'}`}>
+                        <p className={`text-sm mb-3 ${isBrandingComplete ? 'text-status-paid' : 'text-muted-foreground'}`}>
                             {isBrandingComplete 
                                 ? 'Your invoices will look professional with your logo, company name, and address.' 
                                 : 'Add your logo, company name, and address to create professional, credible invoices.'}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_name ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_name ? 'bg-status-paid/10 text-status-paid' : 'bg-muted text-muted-foreground'}`}>
                                 {formData.company_name ? '✓' : '○'} Company Name
                             </div>
-                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_address ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.company_address ? 'bg-status-paid/10 text-status-paid' : 'bg-muted text-muted-foreground'}`}>
                                 {formData.company_address ? '✓' : '○'} Address
                             </div>
-                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.logo_url ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${formData.logo_url ? 'bg-status-paid/10 text-status-paid' : 'bg-muted text-muted-foreground'}`}>
                                 {formData.logo_url ? '✓' : '○'} Logo
                             </div>
                         </div>
@@ -332,7 +332,7 @@ function CompanyProfileSettings() {
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="display_name" className="text-sm font-semibold text-slate-700">Dashboard Display Name</Label>
+                <Label htmlFor="display_name" className="text-sm font-semibold text-foreground">Dashboard Display Name</Label>
                 <Input
                     id="display_name"
                     value={formData.display_name}
@@ -340,14 +340,14 @@ function CompanyProfileSettings() {
                     placeholder="How you want to be greeted (e.g., John, Boss, etc.)"
                     className="h-12 rounded-xl"
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                     This name will be shown on your dashboard greeting.
                 </p>
             </div>
 
             {/* Company Name - Enhanced */}
             <div className="space-y-2">
-                <Label htmlFor="company_name" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label htmlFor="company_name" className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <SettingsIcon className="w-4 h-4" />
                     Company Name (Required for Professional Invoices)
                     <HelpTooltip content="This is your official business name that appears on all invoices and quotes." />
@@ -360,13 +360,13 @@ function CompanyProfileSettings() {
                     className="h-12 rounded-xl"
                 />
                 {!formData.company_name && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <p className="text-xs text-destructive flex items-center gap-1">
                         <span>⚠️</span>
                         <span>Company name is required for professional invoices. It appears prominently in PDF headers.</span>
                     </p>
                 )}
                 {formData.company_name && (
-                    <p className="text-xs text-green-600">
+                    <p className="text-xs text-status-paid">
                         ✓ Will appear on all invoices {formData.logo_url ? "(below your logo)" : "(as main heading)"}
                     </p>
                 )}
@@ -374,7 +374,7 @@ function CompanyProfileSettings() {
             
             {/* Company Address - Enhanced */}
             <div className="space-y-2">
-                <Label htmlFor="company_address" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label htmlFor="company_address" className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <Globe className="w-4 h-4" />
                     Company Address (Highly Recommended)
                     <HelpTooltip content="Your business address adds credibility and is often legally required on invoices." />
@@ -387,20 +387,20 @@ function CompanyProfileSettings() {
                     className="min-h-28 rounded-xl resize-none font-mono text-sm"
                 />
                 {!formData.company_address && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <p className="text-xs text-destructive flex items-center gap-1">
                         <span>⚠️</span>
                         <span>Address recommended for credibility and legal compliance (especially for VAT invoices).</span>
                     </p>
                 )}
                 {formData.company_address && (
-                    <p className="text-xs text-green-600">
+                    <p className="text-xs text-status-paid">
                         ✓ Address will appear in invoice headers for professional presentation
                     </p>
                 )}
             </div>
 
             <div className="space-y-2">
-                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <Globe className="w-4 h-4" />
                     Default Currency
                 </Label>
@@ -409,26 +409,26 @@ function CompanyProfileSettings() {
                     onChange={(value) => handleInputChange('currency', value)}
                     className="h-12 rounded-xl"
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                     This currency will be used for all new invoices. You can still change it per invoice if needed.
                 </p>
             </div>
             
             {/* Logo & Profile Picture Section - Unified */}
             <div className="space-y-3">
-                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <ImageIcon className="w-4 h-4" />
                     Logo & Profile Picture
                     <HelpTooltip content="Upload one image that serves as both your company logo (on invoices) and profile picture (in the app)." />
                 </Label>
                 
                 {/* Combined Preview & Upload */}
-                <div className="p-5 bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl border border-slate-200 space-y-4">
+                <div className="p-5 bg-gradient-to-br from-muted to-primary/5 rounded-xl border border-border space-y-4">
                     {/* Dual Preview */}
                     <div className="flex items-center gap-6">
                         {/* Profile Preview (Circular) */}
                         <div className="text-center">
-                            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-2 border-slate-300 shadow-sm overflow-hidden mb-2">
+                            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-2 border-border shadow-sm overflow-hidden mb-2">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith('blob:') ? (
                                         <img src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
@@ -436,15 +436,15 @@ function CompanyProfileSettings() {
                                         <LogoImage src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
                                     )
                                 ) : (
-                                    <UserIcon className="w-10 h-10 text-slate-300" />
+                                    <UserIcon className="w-10 h-10 text-muted-foreground" />
                                 )}
                             </div>
-                            <p className="text-[10px] font-semibold text-slate-600">Profile</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground">Profile</p>
                         </div>
 
                         {/* Logo Preview (Square) */}
                         <div className="text-center">
-                            <div className="w-28 h-20 rounded-lg bg-white flex items-center justify-center border-2 border-dashed border-slate-300 shadow-sm mb-2">
+                            <div className="w-28 h-20 rounded-lg bg-white flex items-center justify-center border-2 border-dashed border-border shadow-sm mb-2">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith('blob:') ? (
                                         <img src={formData.logo_url} alt="Logo" className="object-contain w-full h-full p-2" />
@@ -453,17 +453,17 @@ function CompanyProfileSettings() {
                                     )
                                 ) : (
                                     <div className="text-center">
-                                        <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
+                                        <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto" />
                                     </div>
                                 )}
                             </div>
-                            <p className="text-[10px] font-semibold text-slate-600">Invoice Logo</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground">Invoice Logo</p>
                         </div>
 
                         {/* Upload Button & Remove */}
                         <div className="flex-1 flex flex-col gap-2">
                             <div className="flex gap-2">
-                                <label htmlFor="logo-upload" className="cursor-pointer flex-1 bg-white border-2 border-blue-300 rounded-xl px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 flex items-center justify-center gap-2 transition-all shadow-sm">
+                                <label htmlFor="logo-upload" className="cursor-pointer flex-1 bg-card border-2 border-primary/50 rounded-xl px-5 py-3 text-sm font-semibold text-primary hover:bg-primary/10 hover:border-primary flex items-center justify-center gap-2 transition-all shadow-sm">
                                     <UploadCloud className="w-5 h-5" />
                                     <span>{logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}</span>
                                 </label>
@@ -472,7 +472,7 @@ function CompanyProfileSettings() {
                                         type="button"
                                         variant="outline"
                                         size="default"
-                                        className="shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+                                        className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10 hover:border-destructive/50"
                                         onClick={handleRemoveLogo}
                                     >
                                         <Trash2 className="w-4 h-4 mr-1" />
@@ -487,9 +487,9 @@ function CompanyProfileSettings() {
                                 className="hidden" 
                                 onChange={handleLogoChange}
                             />
-                            <p className="text-xs text-slate-500">PNG, JPG or SVG, max 2MB</p>
+                            <p className="text-xs text-muted-foreground">PNG, JPG or SVG, max 2MB</p>
                             {logoFile && (
-                                <p className="text-xs text-green-600 flex items-center gap-1">
+                                <p className="text-xs text-status-paid flex items-center gap-1">
                                     <Check className="w-3 h-3" />
                                     Ready to save: {logoFile.name}
                                 </p>
@@ -498,19 +498,19 @@ function CompanyProfileSettings() {
                     </div>
                     
                     {/* Guidelines */}
-                    <div className="bg-white rounded-lg p-3 border border-blue-100">
-                        <p className="text-xs font-semibold text-slate-700 mb-2">📐 Image Guidelines:</p>
-                        <ul className="text-xs text-slate-600 space-y-1">
+                    <div className="bg-white rounded-lg p-3 border border-primary/20">
+                        <p className="text-xs font-semibold text-foreground mb-2">📐 Image Guidelines:</p>
+                        <ul className="text-xs text-muted-foreground space-y-1">
                             <li className="flex items-start gap-1.5">
-                                <span className="text-green-600 font-bold mt-0.5">✓</span>
+                                <span className="text-status-paid font-bold mt-0.5">✓</span>
                                 <span><strong>Format:</strong> Square (400×400px+), PNG with transparent background recommended</span>
                             </li>
                             <li className="flex items-start gap-1.5">
-                                <span className="text-green-600 font-bold mt-0.5">✓</span>
+                                <span className="text-status-paid font-bold mt-0.5">✓</span>
                                 <span><strong>Usage:</strong> Appears as profile picture (circular) and invoice logo (full)</span>
                             </li>
                             <li className="flex items-start gap-1.5">
-                                <span className="text-blue-600 font-bold mt-0.5">ℹ</span>
+                                <span className="text-primary font-bold mt-0.5">ℹ</span>
                                 <span><strong>Size:</strong> Keep under 2MB for optimal performance</span>
                             </li>
                         </ul>
@@ -519,12 +519,12 @@ function CompanyProfileSettings() {
             </div>
 
             {/* Branding & documents */}
-            <h3 className="text-base font-semibold text-slate-800 pt-2 border-t border-slate-200 mt-6">Branding & documents</h3>
-            <p className="text-xs text-slate-500 -mt-1 mb-2">These options apply to invoices and quotes.</p>
+            <h3 className="text-base font-semibold text-foreground pt-2 border-t border-border mt-6">Branding & documents</h3>
+            <p className="text-xs text-muted-foreground -mt-1 mb-2">These options apply to invoices and quotes.</p>
 
             {/* Invoice Header Message */}
             <div className="space-y-2">
-                <Label htmlFor="invoice_header" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label htmlFor="invoice_header" className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     Invoice Header Message
                     <HelpTooltip content="A standard message displayed near the top of every invoice, e.g., 'Tax Invoice' or your slogan." />
@@ -536,19 +536,19 @@ function CompanyProfileSettings() {
                     placeholder="Add a custom message that appears at the top of your invoices (e.g., 'Thank you for your business!')"
                     className="min-h-20 rounded-xl resize-none"
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                     This message will appear on all your invoices below the header.
                 </p>
             </div>
 
             {/* Invoice Template Selection */}
             <div className="space-y-3">
-                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     Document Template
                     <HelpTooltip content="This template design will apply to all your PDF exports for both Invoices and Quotes." />
                 </Label>
-                <p className="text-xs text-slate-500 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                     Choose a template style for your invoices and quotes
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4" role="radiogroup" aria-label="Document templates">
@@ -559,20 +559,20 @@ function CompanyProfileSettings() {
                             onClick={() => handleInputChange('invoice_template', template.id)}
                             aria-checked={formData.invoice_template === template.id}
                             role="radio"
-                            className={`relative text-left rounded-xl border-2 p-3 transition-all hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                            className={`relative text-left rounded-xl border-2 p-3 transition-all hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                                 formData.invoice_template === template.id
-                                    ? 'border-blue-500 ring-2 ring-blue-200'
-                                    : 'border-slate-200 hover:border-slate-300'
+                                    ? 'border-primary ring-2 ring-primary/20'
+                                    : 'border-border hover:border-border'
                             }`}
                         >
                             {formData.invoice_template === template.id && (
-                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
                                     <Check className="w-4 h-4 text-white" />
                                 </div>
                             )}
                             {/* Template Preview */}
                             <div 
-                                className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-slate-100"
+                                className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-border"
                                 style={{ backgroundColor: template.colors[1] }}
                             >
                                 {/* Header */}
@@ -586,12 +586,12 @@ function CompanyProfileSettings() {
                                 {/* Content */}
                                 <div className="p-2 space-y-1.5">
                                     <div className="flex gap-1">
-                                        <div className="w-8 h-1 rounded-full bg-slate-300"></div>
-                                        <div className="w-6 h-1 rounded-full bg-slate-200"></div>
+                                        <div className="w-8 h-1 rounded-full bg-muted"></div>
+                                        <div className="w-6 h-1 rounded-full bg-muted"></div>
                                     </div>
-                                    <div className="w-full h-0.5 bg-slate-200 rounded-full"></div>
-                                    <div className="w-full h-0.5 bg-slate-200 rounded-full"></div>
-                                    <div className="w-3/4 h-0.5 bg-slate-200 rounded-full"></div>
+                                    <div className="w-full h-0.5 bg-muted rounded-full"></div>
+                                    <div className="w-full h-0.5 bg-muted rounded-full"></div>
+                                    <div className="w-3/4 h-0.5 bg-muted rounded-full"></div>
                                     <div className="mt-2 flex justify-end">
                                         <div 
                                             className="w-8 h-2 rounded"
@@ -600,8 +600,8 @@ function CompanyProfileSettings() {
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-sm font-medium text-slate-700 text-center">{template.name}</p>
-                            <p className="text-[11px] text-slate-500 text-center mt-1">{template.description}</p>
+                            <p className="text-sm font-medium text-foreground text-center">{template.name}</p>
+                            <p className="text-[11px] text-muted-foreground text-center mt-1">{template.description}</p>
                         </button>
                     ))}
                 </div>
@@ -614,7 +614,7 @@ function CompanyProfileSettings() {
                     className={`${
                         logoFile 
                             ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 animate-pulse' 
-                            : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                            : 'bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00]'
                     } text-white px-8 py-3 rounded-xl shadow-lg transition-all`}
                 >
                     <Save className="w-4 h-4 mr-2" />
@@ -792,7 +792,7 @@ function PaymentMethodsSettings() {
                 </Button>
                 <Button
                     onClick={() => setShowForm(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    className="bg-primary hover:bg-primary/90 text-white"
                 >
                     <Plus className="w-4 h-4 mr-2" />
                     Add Payment Method
@@ -814,17 +814,17 @@ function PaymentMethodsSettings() {
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {Array(3).fill(0).map((_, i) => (
                         <Card key={i} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-                            <CardContent className="p-6"><div className="animate-pulse space-y-4"><div className="h-4 bg-slate-200 rounded w-3/4"></div><div className="h-3 bg-slate-200 rounded w-1/2"></div><div className="h-3 bg-slate-200 rounded w-2/3"></div></div></CardContent>
+                            <CardContent className="p-6"><div className="animate-pulse space-y-4"><div className="h-4 bg-muted rounded w-3/4"></div><div className="h-3 bg-muted rounded w-1/2"></div><div className="h-3 bg-muted rounded w-2/3"></div></div></CardContent>
                         </Card>
                     ))}
                 </div>
             ) : bankingDetails.length === 0 && !showForm ? (
                  <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
                     <CardContent className="p-8 md:p-12 text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4"><CreditCard className="w-8 h-8 text-slate-400" /></div>
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">No payment methods yet</h3>
-                        <p className="text-slate-600 mb-6">Add your banking details to get paid.</p>
-                        <Button onClick={() => setShowForm(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white"><Plus className="w-4 h-4 mr-2" />Add Your First Payment Method</Button>
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><CreditCard className="w-8 h-8 text-muted-foreground" /></div>
+                        <h3 className="text-lg font-semibold text-foreground mb-2">No payment methods yet</h3>
+                        <p className="text-muted-foreground mb-6">Add your banking details to get paid.</p>
+                        <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 text-white"><Plus className="w-4 h-4 mr-2" />Add Your First Payment Method</Button>
                     </CardContent>
                 </Card>
             ) : (
@@ -850,7 +850,7 @@ export default function Settings() {
     const initialTab = urlParams.get('tab') || 'profile';
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -858,7 +858,7 @@ export default function Settings() {
                     className="mb-8"
                 >
                     <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Settings</h1>
-                    <p className="text-slate-600 mt-1">Manage your company branding, payment details, and subscription.</p>
+                    <p className="text-muted-foreground mt-1">Manage your company branding, payment details, and subscription.</p>
                 </motion.div>
 
                 <Tabs defaultValue={initialTab} className="w-full">

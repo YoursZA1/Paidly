@@ -35,7 +35,7 @@ export default function RecurringSaveActions({
             <Button
                 onClick={onActivateNow}
                 disabled={disabled || loading}
-                className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white"
             >
                 {loading ? (
                     <>

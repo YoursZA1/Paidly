@@ -102,7 +102,7 @@ export default function BudgetsPage() {
                     <Progress 
                         value={percentage} 
                         className={`h-2 ${isOverBudget ? "bg-red-100" : "bg-slate-100"}`}
-                        indicatorClassName={isOverBudget ? "bg-red-500" : budget.type === 'income' ? "bg-green-500" : "bg-blue-500"} 
+                        indicatorClassName={isOverBudget ? "bg-red-500" : budget.type === 'income' ? "bg-green-500" : "bg-primary/100"} 
                     />
                     <div className="mt-2 text-xs text-slate-500 flex justify-between">
                         <span>{percentage.toFixed(0)}% {budget.type === 'income' ? 'Achieved' : 'Used'}</span>
@@ -121,7 +121,7 @@ export default function BudgetsPage() {
                         <h1 className="text-3xl font-bold text-slate-900">Budgets & Forecasting</h1>
                         <p className="text-slate-600">Track spending and predict future cash flow</p>
                     </div>
-                    <Button onClick={() => { setEditingBudget(null); setShowBudgetForm(true); }} className="bg-indigo-600 hover:bg-indigo-700">
+                    <Button onClick={() => { setEditingBudget(null); setShowBudgetForm(true); }} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
                         Set New Budget
                     </Button>

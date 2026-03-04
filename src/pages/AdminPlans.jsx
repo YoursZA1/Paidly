@@ -243,7 +243,7 @@ export default function AdminPlans() {
           {plans.map((plan) => (
             <Card
               key={plan.key}
-              className={`cursor-pointer transition-all ${selectedKey === plan.key && !isCreating ? "border-indigo-500 shadow-lg" : "hover:border-slate-300"}`}
+              className={`cursor-pointer transition-all ${selectedKey === plan.key && !isCreating ? "border-primary shadow-lg" : "hover:border-slate-300"}`}
               onClick={() => handleSelectPlan(plan.key)}
             >
               <CardHeader className="pb-2">

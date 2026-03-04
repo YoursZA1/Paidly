@@ -94,7 +94,7 @@ export const getPlanLabel = (plan) => {
 export const getPlanColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
-    starter: 'bg-blue-100 text-blue-800',
+    starter: 'bg-primary/15 text-primary',
     professional: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800'
   };
@@ -227,7 +227,7 @@ export const getDaysUntilTrialExpiry = (trialEndsAt) => {
 export const getRoleBadgeColor = (role) => {
   const colors = {
     admin: 'bg-purple-100 text-purple-800',
-    support: 'bg-blue-100 text-blue-800',
+    support: 'bg-primary/15 text-primary',
     user: 'bg-gray-100 text-gray-800'
   };
   return colors[role] || 'bg-gray-100 text-gray-800';

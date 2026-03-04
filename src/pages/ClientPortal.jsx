@@ -30,7 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 const statusStyles = {
     draft: "bg-slate-100 text-slate-700",
-    sent: "bg-blue-100 text-blue-700",
+    sent: "bg-primary/15 text-primary",
     viewed: "bg-purple-100 text-purple-700",
     paid: "bg-emerald-100 text-emerald-700",
     partial_paid: "bg-yellow-100 text-yellow-700",
@@ -295,10 +295,10 @@ export default function ClientPortal() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm text-slate-600 mb-1">Pending Quotes</p>
-                                    <p className="text-2xl font-bold text-blue-600">{pendingQuotes}</p>
+                                    <p className="text-2xl font-bold text-primary">{pendingQuotes}</p>
                                 </div>
-                                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <Clock className="w-6 h-6 text-blue-600" />
+                                <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
+                                    <Clock className="w-6 h-6 text-primary" />
                                 </div>
                             </div>
                         </CardContent>
@@ -469,8 +469,8 @@ export default function ClientPortal() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-slate-50 transition-colors">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                <FileText className="w-6 h-6 text-blue-600" />
+                                            <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
+                                                <FileText className="w-6 h-6 text-primary" />
                                             </div>
                                             <div>
                                                 <h4 className="font-semibold text-slate-900">Statement of Account</h4>

@@ -63,8 +63,8 @@ const quoteStatusLabels = {
 
 const invoiceStatusStyles = {
   draft: "bg-slate-100 text-slate-700",
-  sent: "bg-blue-100 text-blue-700",
-  viewed: "bg-indigo-100 text-indigo-700",
+  sent: "bg-primary/15 text-primary",
+  viewed: "bg-primary/15 text-primary",
   paid: "bg-emerald-100 text-emerald-700",
   partial_paid: "bg-amber-100 text-amber-700",
   overdue: "bg-rose-100 text-rose-700",
@@ -75,8 +75,8 @@ const invoiceStatusStyles = {
 
 const quoteStatusStyles = {
   draft: "bg-slate-100 text-slate-700",
-  sent: "bg-blue-100 text-blue-700",
-  viewed: "bg-indigo-100 text-indigo-700",
+  sent: "bg-primary/15 text-primary",
+  viewed: "bg-primary/15 text-primary",
   accepted: "bg-emerald-100 text-emerald-700",
   rejected: "bg-rose-100 text-rose-700",
   expired: "bg-amber-100 text-amber-700",
@@ -647,21 +647,21 @@ export default function UserManagement() {
         </Card>
         {/* Plan Info Banner */}
         {currentUser && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-blue-600" />
+                <Shield className="w-5 h-5 text-primary" />
                 <div>
-                  <p className="font-semibold text-blue-900">
+                  <p className="font-semibold text-foreground">
                     {PLANS[planKey].name} Plan
                   </p>
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-primary">
                     {getActiveUserCount(users)} / {PLANS[planKey].userLimit === null ? "Unlimited" : PLANS[planKey].userLimit} users
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm font-medium text-blue-900">
+                <p className="text-sm font-medium text-foreground">
                   {getRemainingUserSlots(users, planKey) === Infinity
                     ? "Unlimited slots"
                     : `${getRemainingUserSlots(users, planKey)} slot${getRemainingUserSlots(users, planKey) === 1 ? "" : "s"} remaining`}
@@ -694,7 +694,7 @@ export default function UserManagement() {
             <Button
               onClick={() => setInviteModal(true)}
               disabled={isUserLimitReached(users, planKey)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-primary hover:bg-primary/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               title={isUserLimitReached(users, planKey) ? "User limit reached for your plan" : ""}
             >
               <Mail className="w-4 h-4 mr-2" />
@@ -794,9 +794,9 @@ export default function UserManagement() {
                   </div>
                 </>
               ) : (
-                <div className="md:col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-900">System Admin</p>
-                  <p className="text-xs text-blue-700 mt-1">No payment plan • Currency: ZAR (R)</p>
+                <div className="md:col-span-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                  <p className="text-sm font-medium text-foreground">System Admin</p>
+                  <p className="text-xs text-primary mt-1">No payment plan • Currency: ZAR (R)</p>
                 </div>
               )}
 
@@ -807,7 +807,7 @@ export default function UserManagement() {
               )}
 
               <div className="md:col-span-2 flex items-center gap-2">
-                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
+                <Button type="submit" className="bg-primary hover:bg-primary/90">
                   <UserPlus className="w-4 h-4 mr-2" />
                   {form.id ? "Update user" : "Add user"}
                 </Button>
@@ -1378,7 +1378,7 @@ export default function UserManagement() {
                       resetInviteForm();
                       setInviteModal(false);
                     }}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700"
+                    className="w-full bg-primary hover:bg-primary/90"
                   >
                     Done
                   </Button>
@@ -1460,7 +1460,7 @@ export default function UserManagement() {
                   <div className="flex gap-2">
                     <Button
                       type="submit"
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                      className="flex-1 bg-primary hover:bg-primary/90"
                     >
                       <Mail className="w-4 h-4 mr-2" />
                       Send invite

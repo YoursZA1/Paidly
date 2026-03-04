@@ -277,7 +277,7 @@ const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialC
                     onClick={() => handleFieldChange('frequency', freq.id)}
                     className={`p-3 rounded-lg border-2 transition-all text-left ${
                       formData.frequency === freq.id
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-primary bg-primary/10'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -456,7 +456,7 @@ const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialC
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-600 mb-1">Total</p>
-                <p className="text-lg font-bold text-blue-600">{formatCurrency(finalAmount, 'USD')}</p>
+                <p className="text-lg font-bold text-primary">{formatCurrency(finalAmount, 'USD')}</p>
               </div>
             </div>
           </div>
@@ -490,7 +490,7 @@ const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialC
                 )}
                 <div className="border-t pt-3 flex justify-between">
                   <span className="font-medium">Total Amount:</span>
-                  <span className="text-lg font-bold text-blue-600">{formatCurrency(finalAmount, 'USD')}</span>
+                  <span className="text-lg font-bold text-primary">{formatCurrency(finalAmount, 'USD')}</span>
                 </div>
               </CardContent>
             </Card>

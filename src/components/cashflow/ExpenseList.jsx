@@ -12,13 +12,13 @@ import { User } from "@/api/entities";
 import { Expense } from "@/api/entities";
 
 const categoryColors = {
-    office: "bg-blue-100 text-blue-700",
+    office: "bg-primary/15 text-primary",
     travel: "bg-purple-100 text-purple-700",
     utilities: "bg-yellow-100 text-yellow-700",
     supplies: "bg-green-100 text-green-700",
     salary: "bg-red-100 text-red-700",
     marketing: "bg-pink-100 text-pink-700",
-    software: "bg-indigo-100 text-indigo-700",
+    software: "bg-primary/15 text-primary",
     other: "bg-muted text-muted-foreground"
 };
 

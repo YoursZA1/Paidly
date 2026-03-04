@@ -107,7 +107,7 @@ export default function TaskSettingsPage() {
                         <h1 className="text-3xl font-bold text-slate-900 mb-2">Task Settings</h1>
                         <p className="text-slate-600">Configure automatic task assignment rules</p>
                     </div>
-                    <Button onClick={() => { setEditingRule(null); setFormData({ name: '', client_id: '', category: '', assign_to_email: '', assign_to_name: '', is_active: true }); setShowForm(true); }} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={() => { setEditingRule(null); setFormData({ name: '', client_id: '', category: '', assign_to_email: '', assign_to_name: '', is_active: true }); setShowForm(true); }} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
                         Add Rule
                     </Button>
@@ -246,7 +246,7 @@ export default function TaskSettingsPage() {
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-                            <Button onClick={handleSave} disabled={!formData.name || !formData.assign_to_name} className="bg-blue-600 hover:bg-blue-700">
+                            <Button onClick={handleSave} disabled={!formData.name || !formData.assign_to_name} className="bg-primary hover:bg-primary/90">
                                 {editingRule ? 'Update' : 'Create'} Rule
                             </Button>
                         </DialogFooter>

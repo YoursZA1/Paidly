@@ -30,9 +30,9 @@ export default function QuoteStatusTracker({ status }) {
                 let textClass = "text-slate-400";
 
                 if (isCompleted || isCurrent) {
-                    colorClass = "text-indigo-600";
-                    bgClass = "bg-indigo-100";
-                    textClass = "text-indigo-900 font-medium";
+                    colorClass = "text-primary";
+                    bgClass = "bg-primary/15";
+                    textClass = "text-primary font-medium";
                 }
 
                 // Special handling for the final step
@@ -73,7 +73,7 @@ export default function QuoteStatusTracker({ status }) {
                             </span>
                         </div>
                         {!isLast && (
-                            <div className={`flex-1 h-0.5 mx-2 min-w-[20px] ${index < currentStepIndex ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+                            <div className={`flex-1 h-0.5 mx-2 min-w-[20px] ${index < currentStepIndex ? 'bg-primary' : 'bg-muted'}`} />
                         )}
                     </React.Fragment>
                 );

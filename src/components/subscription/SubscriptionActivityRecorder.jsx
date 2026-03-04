@@ -132,13 +132,13 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
 
           {/* Plan Change Summary */}
           {newPlan && oldPlan && (
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-blue-600 font-medium">
+                  <p className="text-sm text-primary font-medium">
                     {oldPlan.toUpperCase()} → {newPlan.toUpperCase()}
                   </p>
-                  <p className="text-xs text-blue-500 mt-1">
+                  <p className="text-xs text-primary mt-1">
                     MRR Change: {mrrDifference > 0 ? '+' : ''}{formatCurrency(mrrDifference)}
                   </p>
                 </div>
@@ -180,7 +180,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
                 </SelectItem>
                 <SelectItem value="reactivate">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-blue-500" />
+                    <CheckCircle className="h-4 w-4 text-primary" />
                     Reactivation
                   </div>
                 </SelectItem>

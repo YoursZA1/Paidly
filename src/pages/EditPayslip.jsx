@@ -450,9 +450,9 @@ export default function EditPayslip() {
                                     <p className="text-sm text-red-600 font-medium">Total Deductions</p>
                                     <p className="text-2xl font-bold text-red-700">{formatCurrency(totalDeductions, 'ZAR')}</p>
                                 </div>
-                                <div className="bg-blue-50 rounded-lg p-4">
-                                    <p className="text-sm text-blue-600 font-medium">Net Pay</p>
-                                    <p className="text-2xl font-bold text-blue-700">{formatCurrency(netPay, 'ZAR')}</p>
+                                <div className="bg-primary/10 rounded-lg p-4">
+                                    <p className="text-sm text-primary font-medium">Net Pay</p>
+                                    <p className="text-2xl font-bold text-primary">{formatCurrency(netPay, 'ZAR')}</p>
                                 </div>
                             </div>
                         </CardContent>
@@ -460,7 +460,7 @@ export default function EditPayslip() {
 
                     {/* Actions */}
                     <div className="flex justify-end">
-                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-indigo-600 hover:bg-indigo-700">
+                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90">
                             <Save className="w-4 h-4 mr-2" />
                             Update Payslip
                         </Button>

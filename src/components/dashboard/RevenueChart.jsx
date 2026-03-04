@@ -150,7 +150,7 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                             onClick={() => setPeriod(p)}
                             className={`text-xs flex-1 rounded-lg ${
                                 period === p 
-                                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-sm' 
+                                    ? 'bg-gradient-to-r from-primary to-[#ff7c00] text-white shadow-sm' 
                                     : 'text-slate-600 hover:text-slate-900 hover:bg-transparent'
                             }`}
                         >

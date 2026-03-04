@@ -300,7 +300,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                             <Label className="text-xs text-slate-500">Attachments</Label>
                             <div className="flex flex-wrap gap-2">
                                 {attachInvoice && formData.invoice_id && (
-                                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-sm text-blue-700">
+                                    <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5 text-sm text-primary">
                                         <FileText className="w-3 h-3" />
                                         <span>Invoice #{invoices.find(i => i.id === formData.invoice_id)?.invoice_number}</span>
                                     </div>
@@ -342,7 +342,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                         </div>
                         <div className="flex gap-2">
                             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                            <Button type="submit" disabled={isSending || !formData.client_id || !formData.content} className="bg-blue-600 hover:bg-blue-700">
+                            <Button type="submit" disabled={isSending || !formData.client_id || !formData.content} className="bg-primary hover:bg-primary/90">
                                 <Send className="w-4 h-4 mr-2" />
                                 {isSending ? 'Sending...' : 'Send'}
                             </Button>

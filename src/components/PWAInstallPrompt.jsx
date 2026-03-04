@@ -100,12 +100,12 @@ export default function PWAInstallPrompt() {
                 exit={{ opacity: 0, y: 50 }}
                 className="fixed bottom-4 right-4 z-50 max-w-sm"
             >
-                <Card className="bg-white border border-blue-200 shadow-xl">
+                <Card className="bg-white border border-primary/20 shadow-xl">
                     <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <Icon className="w-5 h-5 text-blue-600" />
+                                <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
+                                    <Icon className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
                                     <h3 className="font-semibold text-slate-900 text-sm">{title}</h3>
@@ -125,7 +125,7 @@ export default function PWAInstallPrompt() {
                         {deferredPrompt && (
                             <Button
                                 onClick={handleInstall}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2"
+                                className="w-full bg-primary hover:bg-primary/90 text-white text-sm py-2"
                             >
                                 <Download className="w-4 h-4 mr-2" />
                                 Install App

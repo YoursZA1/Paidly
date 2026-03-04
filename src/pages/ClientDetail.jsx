@@ -24,7 +24,7 @@ const INVOICES_PER_PAGE = 5;
 
 const statusStyles = {
     draft: "bg-gray-100 text-gray-700",
-    sent: "bg-blue-100 text-blue-700",
+    sent: "bg-primary/15 text-primary",
     viewed: "bg-purple-100 text-purple-700",
     partial_paid: "bg-yellow-100 text-yellow-700",
     paid: "bg-green-100 text-green-700",
@@ -251,7 +251,7 @@ export default function ClientDetail() {
                         <CardContent className="p-6">
                             <div className="flex items-start justify-between mb-6">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-primary to-[#ff7c00] rounded-full flex items-center justify-center">
                                         <UserIcon className="w-8 h-8 text-white" />
                                     </div>
                                     <div>
@@ -311,7 +311,7 @@ export default function ClientDetail() {
                                             href={client.website} 
                                             target="_blank" 
                                             rel="noopener noreferrer"
-                                            className="text-blue-600 hover:text-blue-700"
+                                            className="text-primary hover:text-primary"
                                         >
                                             {client.website.replace(/^https?:\/\//, '')}
                                         </a>
@@ -332,10 +332,10 @@ export default function ClientDetail() {
                             </div>
 
                             {client.notes && (
-                                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <div className="mt-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <StickyNote className="w-4 h-4 text-blue-600" />
-                                        <p className="text-xs font-semibold text-blue-700 uppercase">Client Notes</p>
+                                        <StickyNote className="w-4 h-4 text-primary" />
+                                        <p className="text-xs font-semibold text-primary uppercase">Client Notes</p>
                                     </div>
                                     <p className="text-sm text-slate-700">{client.notes}</p>
                                 </div>
@@ -352,12 +352,12 @@ export default function ClientDetail() {
                             )}
 
                             {/* Payment Terms */}
-                            <div className="mt-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                            <div className="mt-4 p-4 bg-primary/10 rounded-lg border border-primary/20">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <CreditCard className="w-4 h-4 text-indigo-600" />
-                                    <p className="text-xs font-semibold text-indigo-900 uppercase">Default Payment Terms</p>
+                                    <CreditCard className="w-4 h-4 text-primary" />
+                                    <p className="text-xs font-semibold text-foreground uppercase">Default Payment Terms</p>
                                 </div>
-                                <p className="text-lg font-bold text-indigo-900">
+                                <p className="text-lg font-bold text-foreground">
                                     {getPaymentTermsText(client.payment_terms, client.payment_terms_days)}
                                 </p>
                                 <p className="text-xs text-slate-600 mt-1">Auto-applies to new invoices</p>
@@ -409,7 +409,7 @@ export default function ClientDetail() {
                                             setStatusFilter(e.target.value);
                                             setCurrentPage(1);
                                         }}
-                                        className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                                     >
                                         <option value="all">All Invoices</option>
                                         <option value="draft">Draft</option>
@@ -421,7 +421,7 @@ export default function ClientDetail() {
                                     </select>
                                     
                                     <Link to={createPageUrl("CreateInvoice") + `?client_id=${clientId}`}>
-                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                                        <Button size="sm" className="bg-primary hover:bg-primary/90">
                                             <Plus className="w-4 h-4 mr-2" />
                                             New Invoice
                                         </Button>
@@ -435,7 +435,7 @@ export default function ClientDetail() {
                                     <FileText className="w-12 h-12 mx-auto mb-4 text-slate-300" />
                                     <p className="text-slate-600 mb-4">No invoices yet for this client</p>
                                     <Link to={createPageUrl("CreateInvoice") + `?client_id=${clientId}`}>
-                                        <Button className="bg-blue-600 hover:bg-blue-700">
+                                        <Button className="bg-primary hover:bg-primary/90">
                                             <Plus className="w-4 h-4 mr-2" />
                                             Create First Invoice
                                         </Button>

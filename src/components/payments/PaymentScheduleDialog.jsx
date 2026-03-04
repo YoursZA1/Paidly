@@ -177,7 +177,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 variant="outline" 
                 size="sm" 
                 onClick={() => applyTemplate('split_2')}
-                className={template === 'split_2' ? 'border-blue-500 bg-blue-50' : ''}
+                className={template === 'split_2' ? 'border-primary bg-primary/10' : ''}
               >
                 2 Payments
               </Button>
@@ -185,7 +185,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 variant="outline" 
                 size="sm" 
                 onClick={() => applyTemplate('split_3')}
-                className={template === 'split_3' ? 'border-blue-500 bg-blue-50' : ''}
+                className={template === 'split_3' ? 'border-primary bg-primary/10' : ''}
               >
                 3 Payments
               </Button>
@@ -193,7 +193,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 variant="outline" 
                 size="sm" 
                 onClick={() => applyTemplate('split_4')}
-                className={template === 'split_4' ? 'border-blue-500 bg-blue-50' : ''}
+                className={template === 'split_4' ? 'border-primary bg-primary/10' : ''}
               >
                 4 Payments
               </Button>
@@ -201,7 +201,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 variant="outline" 
                 size="sm" 
                 onClick={() => applyTemplate('weekly_4')}
-                className={template === 'weekly_4' ? 'border-blue-500 bg-blue-50' : ''}
+                className={template === 'weekly_4' ? 'border-primary bg-primary/10' : ''}
               >
                 4 Weekly
               </Button>
@@ -209,7 +209,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 variant="outline" 
                 size="sm" 
                 onClick={() => applyTemplate('deposit_balance')}
-                className={template === 'deposit_balance' ? 'border-blue-500 bg-blue-50' : ''}
+                className={template === 'deposit_balance' ? 'border-primary bg-primary/10' : ''}
               >
                 Deposit + Balance
               </Button>
@@ -281,7 +281,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
           </div>
 
           {/* Summary */}
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+          <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg space-y-2">
             <div className="flex justify-between text-sm">
               <span className="font-medium">Total Scheduled:</span>
               <span className={`font-bold ${Math.abs(remainingAmount) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>

@@ -194,10 +194,10 @@ export default function EditRecurringInvoice() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3 }}
                     >
-                        <Alert className="border-blue-200 bg-blue-50">
-                            <AlertCircle className="h-4 w-4 text-blue-600" />
-                            <AlertTitle className="text-blue-900">Draft Template</AlertTitle>
-                            <AlertDescription className="text-blue-800">
+                        <Alert className="border-primary/20 bg-primary/10">
+                            <AlertCircle className="h-4 w-4 text-primary" />
+                            <AlertTitle className="text-foreground">Draft Template</AlertTitle>
+                            <AlertDescription className="text-primary">
                                 This template is still a draft and won&apos;t generate invoices automatically.
                                 You can continue editing and activate it when ready.
                             </AlertDescription>
@@ -229,7 +229,7 @@ export default function EditRecurringInvoice() {
                         <div className="flex justify-end mt-6">
                             <Button
                                 onClick={() => handleStepChange("preview")}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl"
+                                className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-xl"
                             >
                                 Continue to Preview →
                             </Button>

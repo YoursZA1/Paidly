@@ -359,7 +359,7 @@ export default function CashFlowPage() {
                             title="Income (This Month)" 
                             value={metrics.currentMonthIncome}
                             icon={TrendingUp}
-                            color="bg-blue-500"
+                            color="bg-primary/100"
                         />
                         <MetricCard 
                             title="Expenses (This Month)" 
@@ -668,9 +668,9 @@ export default function CashFlowPage() {
                                 <CardTitle>Statistics</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
                                     <p className="text-sm text-gray-600">Average Monthly Income</p>
-                                    <p className="text-2xl font-bold text-blue-600">
+                                    <p className="text-2xl font-bold text-primary">
                                         {formatCurrency(metrics.totalIncome / Math.max(chartData.length, 1), userCurrency)}
                                     </p>
                                 </div>

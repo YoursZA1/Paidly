@@ -96,7 +96,7 @@ export default function InvoicePDF() {
                     window.print();
                 }
             } finally {
-                if (!cancelled) setIsGeneratingPdf(false);
+                setIsGeneratingPdf(false);
             }
         }, 600);
         return () => {
@@ -121,7 +121,17 @@ export default function InvoicePDF() {
                     : Promise.resolve(null)
             ]);
             
-            setInvoice(invoiceRecord);
+            // Normalize items so templates always get service_name, quantity, unit_price, total_price
+            const items = Array.isArray(invoiceRecord.items)
+                ? invoiceRecord.items.map((item) => ({
+                    service_name: item.service_name || item.name || 'Item',
+                    description: item.description || '',
+                    quantity: Number(item.quantity ?? item.qty ?? 1),
+                    unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
+                    total_price: Number(item.total_price ?? item.total ?? (Number(item.quantity ?? item.qty ?? 1) * Number(item.unit_price ?? item.rate ?? item.price ?? 0))),
+                }))
+                : [];
+            setInvoice({ ...invoiceRecord, items });
             setClient(clientData || null);
             setUser(userData);
             setBankingDetail(bankingData || null);

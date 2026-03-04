@@ -208,7 +208,7 @@ const RecurringInvoiceAnalytics = ({ recurringInvoices }) => {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-blue-600" />
+              <Calendar className="w-4 h-4 text-primary" />
               Total Templates
             </CardTitle>
           </CardHeader>
@@ -221,15 +221,15 @@ const RecurringInvoiceAnalytics = ({ recurringInvoices }) => {
         </Card>
 
         {/* Due for Generation */}
-        <Card className={stats.due > 0 ? 'border-blue-200 bg-blue-50' : ''}>
+        <Card className={stats.due > 0 ? 'border-primary/20 bg-primary/10' : ''}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-blue-600" />
+              <AlertCircle className="w-4 h-4 text-primary" />
               Due for Generation
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-blue-600">{stats.due}</p>
+            <p className="text-3xl font-bold text-primary">{stats.due}</p>
             <p className="text-xs text-gray-500 mt-1">Ready to generate invoices</p>
           </CardContent>
         </Card>

@@ -44,7 +44,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const QUICK_ACTION_ACCENT = {
   green: { bg: 'bg-emerald-500/25', icon: 'text-emerald-400', hoverBg: 'group-hover:bg-emerald-500/35', border: 'hover:border-emerald-400/30' },
   red: { bg: 'bg-red-500/25', icon: 'text-red-400', hoverBg: 'group-hover:bg-red-500/35', border: 'hover:border-red-400/30' },
-  blue: { bg: 'bg-blue-500/25', icon: 'text-blue-400', hoverBg: 'group-hover:bg-blue-500/35', border: 'hover:border-blue-400/30' },
+  blue: { bg: 'bg-primary/25', icon: 'text-primary', hoverBg: 'group-hover:bg-primary/35', border: 'hover:border-primary/30' },
   violet: { bg: 'bg-violet-500/25', icon: 'text-violet-400', hoverBg: 'group-hover:bg-violet-500/35', border: 'hover:border-violet-400/30' }
 };
 
@@ -697,31 +697,31 @@ export default function Dashboard() {
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6 lg:p-8">
+      <div className="min-h-screen bg-background p-6 lg:p-8">
         <div className="max-w-7xl mx-auto space-y-8">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">Admin Dashboard</h1>
-            <p className="text-sm text-slate-600">Is the business healthy today?</p>
+            <h1 className="text-3xl font-semibold text-foreground">Admin Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Is the business healthy today?</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {/* Total Revenue (Today / MTD / YTD) */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Total Revenue</p>
-                <p className="text-2xl font-semibold text-slate-900">{formatCurrency(adminStats.revenue, 'ZAR')}</p>
+                <p className="text-xs text-muted-foreground">Total Revenue</p>
+                <p className="text-2xl font-semibold text-foreground">{formatCurrency(adminStats.revenue, 'ZAR')}</p>
                 <div className="flex flex-wrap gap-2 mt-2 text-xs">
-                  <span className="text-slate-500">Today: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                  <span className="text-muted-foreground">Today: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
                     return created.toDateString() === now.toDateString() && (inv.status === 'paid' || inv.status === 'partial_paid');
                   }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0), 'ZAR')}</span></span>
-                  <span className="text-slate-500">MTD: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                  <span className="text-muted-foreground">MTD: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
                     return created >= startOfMonth(now) && created <= now && (inv.status === 'paid' || inv.status === 'partial_paid');
                   }).reduce((sum, inv) => sum + (inv.total_amount || 0), 'ZAR'))}</span></span>
-                  <span className="text-slate-500">YTD: <span className="font-semibold text-slate-900">{formatCurrency(invoices.filter(inv => {
+                  <span className="text-muted-foreground">YTD: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
                     return created.getFullYear() === now.getFullYear() && (inv.status === 'paid' || inv.status === 'partial_paid');
@@ -732,22 +732,22 @@ export default function Dashboard() {
             {/* Active Businesses */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Active Businesses</p>
-                <p className="text-2xl font-semibold text-slate-900">{adminStats.activeUsers}</p>
+                <p className="text-xs text-muted-foreground">Active Businesses</p>
+                <p className="text-2xl font-semibold text-foreground">{adminStats.activeUsers}</p>
               </CardContent>
             </Card>
             {/* Active Subscriptions */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Active Subscriptions</p>
-                <p className="text-2xl font-semibold text-slate-900">{adminStats.activeSubscribers}</p>
+                <p className="text-xs text-muted-foreground">Active Subscriptions</p>
+                <p className="text-2xl font-semibold text-foreground">{adminStats.activeSubscribers}</p>
               </CardContent>
             </Card>
             {/* Total Transactions (24h) */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Total Transactions (24h)</p>
-                <p className="text-2xl font-semibold text-slate-900">{
+                <p className="text-xs text-muted-foreground">Total Transactions (24h)</p>
+                <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
@@ -760,8 +760,8 @@ export default function Dashboard() {
             {/* Failed Payments */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Failed Payments</p>
-                <p className="text-2xl font-semibold text-slate-900">{
+                <p className="text-xs text-muted-foreground">Failed Payments</p>
+                <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => inv.status === 'failed' || inv.status === 'overdue').length
                 }</p>
               </CardContent>
@@ -769,8 +769,8 @@ export default function Dashboard() {
             {/* Pending Payouts */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Pending Payouts</p>
-                <p className="text-2xl font-semibold text-slate-900">{
+                <p className="text-xs text-muted-foreground">Pending Payouts</p>
+                <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => inv.status === 'pending_payout' || inv.status === 'awaiting_payout').length
                 }</p>
               </CardContent>
@@ -778,8 +778,8 @@ export default function Dashboard() {
             {/* Platform Balance */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">Platform Balance</p>
-                <p className="text-2xl font-semibold text-slate-900">{
+                <p className="text-xs text-muted-foreground">Platform Balance</p>
+                <p className="text-2xl font-semibold text-foreground">{
                   formatCurrency(OutstandingBalanceService.calculateTotalOutstanding(invoices).totalOutstanding, 'ZAR')
                 }</p>
               </CardContent>
@@ -787,8 +787,8 @@ export default function Dashboard() {
             {/* System Alerts */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
-                <p className="text-xs text-slate-500">System Alerts</p>
-                <p className="text-2xl font-semibold text-slate-900">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
+                <p className="text-xs text-muted-foreground">System Alerts</p>
+                <p className="text-2xl font-semibold text-foreground">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
               </CardContent>
             </Card>
           </div>
@@ -804,16 +804,16 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Starter</span>
-                      <span className="text-sm font-semibold text-slate-900">{adminStats.individualUsers}</span>
+                      <span className="text-sm text-muted-foreground">Starter</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.individualUsers}</span>
                     </div>
-                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                      <span className="text-sm font-semibold text-amber-800">Entrepreneur</span>
-                      <span className="text-sm font-semibold text-amber-900">{adminStats.smeUsers}</span>
+                    <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-md px-3 py-2">
+                      <span className="text-sm font-semibold text-primary">Entrepreneur</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.smeUsers}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Corporate</span>
-                      <span className="text-sm font-semibold text-slate-900">{adminStats.corporateUsers}</span>
+                      <span className="text-sm text-muted-foreground">Corporate</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.corporateUsers}</span>
                     </div>
                   </>
                 )}
@@ -830,8 +830,8 @@ export default function Dashboard() {
                       onClick={() => setRevenueRange(range)}
                       className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition ${
                         revenueRange === range
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-card text-muted-foreground border-border hover:border-border'
                       }`}
                     >
                       {range}d
@@ -865,7 +865,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-slate-900">Admin Analytics</h2>
+            <h2 className="text-lg font-semibold text-foreground">Admin Analytics</h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="border-0 shadow-sm">
                 <CardHeader className="border-b">
@@ -873,28 +873,28 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-xs text-slate-500">New users (7d)</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.newUsersThisWeek}</p>
+                    <p className="text-xs text-muted-foreground">New users (7d)</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.newUsersThisWeek}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">New users (30d)</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.newUsersThisMonth}</p>
+                    <p className="text-xs text-muted-foreground">New users (30d)</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.newUsersThisMonth}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Growth rate</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.growthRate}%</p>
+                    <p className="text-xs text-muted-foreground">Growth rate</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.growthRate}%</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Trial conversions</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.trialsConverted}</p>
+                    <p className="text-xs text-muted-foreground">Trial conversions</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.trialsConverted}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Upgrades</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.upgrades}</p>
+                    <p className="text-xs text-muted-foreground">Upgrades</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.upgrades}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Downgrades</p>
-                    <p className="text-lg font-semibold text-slate-900">{growthStats.downgrades}</p>
+                    <p className="text-xs text-muted-foreground">Downgrades</p>
+                    <p className="text-lg font-semibold text-foreground">{growthStats.downgrades}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -905,13 +905,13 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="p-4 space-y-3">
                   {activityLogs.recentActions.length === 0 ? (
-                    <p className="text-sm text-slate-500">No recent admin actions.</p>
+                    <p className="text-sm text-muted-foreground">No recent admin actions.</p>
                   ) : (
                     activityLogs.recentActions.map(action => (
                       <div key={action.id} className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{action.user}</p>
-                          <p className="text-xs text-slate-500">{action.action}</p>
+                          <p className="text-sm font-medium text-foreground">{action.user}</p>
+                          <p className="text-xs text-muted-foreground">{action.action}</p>
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {action.timestamp ? formatDate(new Date(action.timestamp), 'MMM d') : '—'}
@@ -921,12 +921,12 @@ export default function Dashboard() {
                   )}
                   {activityLogs.suspensions.length > 0 && (
                     <div className="pt-2 border-t">
-                      <p className="text-xs font-semibold text-slate-500 mb-2">Suspensions</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Suspensions</p>
                       {activityLogs.suspensions.slice(0, 2).map(suspension => (
                         <div key={suspension.id} className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{suspension.user}</p>
-                            <p className="text-xs text-slate-500">{suspension.reason}</p>
+                            <p className="text-sm font-medium text-foreground">{suspension.user}</p>
+                            <p className="text-xs text-muted-foreground">{suspension.reason}</p>
                           </div>
                           <span className="text-xs text-muted-foreground">
                             {suspension.timestamp ? formatDate(new Date(suspension.timestamp), 'MMM d') : '—'}
@@ -937,7 +937,7 @@ export default function Dashboard() {
                   )}
                   {activityLogs.planChanges.length > 0 && (
                     <div className="pt-2 border-t">
-                      <p className="text-xs font-semibold text-slate-500 mb-2">Plan changes</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Plan changes</p>
                       {activityLogs.planChanges.map(change => {
                         const label = change.type === 'downgrade'
                           ? 'Downgrade'
@@ -945,18 +945,18 @@ export default function Dashboard() {
                             ? 'Upgrade'
                             : 'Change';
                         const badgeClass = change.type === 'downgrade'
-                          ? 'bg-rose-100 text-rose-700'
+                          ? 'bg-destructive/10 text-destructive'
                           : change.type === 'upgrade'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-100 text-slate-700';
+                            ? 'bg-status-paid/10 text-status-paid'
+                            : 'bg-muted text-muted-foreground';
                         return (
                           <div key={change.id} className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-slate-900">{change.user}</p>
+                                <p className="text-sm font-medium text-foreground">{change.user}</p>
                                 <Badge className={badgeClass}>{label}</Badge>
                               </div>
-                              <p className="text-xs text-slate-500">{change.from} → {change.to}</p>
+                              <p className="text-xs text-muted-foreground">{change.from} → {change.to}</p>
                             </div>
                             <span className="text-xs text-muted-foreground">
                               {change.timestamp ? formatDate(new Date(change.timestamp), 'MMM d') : '—'}
@@ -1030,7 +1030,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-slate-900">Alerts & Actions</h2>
+            <h2 className="text-lg font-semibold text-foreground">Alerts & Actions</h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="border-0 shadow-sm">
                 <CardHeader className="border-b">
@@ -1038,15 +1038,15 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="p-4 space-y-3">
                   {alerts.planLimits.length === 0 ? (
-                    <p className="text-sm text-slate-500">No plan limits reached.</p>
+                    <p className="text-sm text-muted-foreground">No plan limits reached.</p>
                   ) : (
                     alerts.planLimits.slice(0, 4).map(user => (
                       <div key={user.id} className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">
+                          <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
                           </p>
-                          <p className="text-xs text-slate-500">{user.email}</p>
+                          <p className="text-xs text-muted-foreground">{user.email}</p>
                         </div>
                         <Button size="sm" variant="outline" onClick={() => openAccount(user)}>
                           Review
@@ -1063,15 +1063,15 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="p-4 space-y-3">
                   {alerts.failedSubscriptions.length === 0 ? (
-                    <p className="text-sm text-slate-500">No failed subscriptions.</p>
+                    <p className="text-sm text-muted-foreground">No failed subscriptions.</p>
                   ) : (
                     alerts.failedSubscriptions.slice(0, 4).map(user => (
                       <div key={user.id} className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">
+                          <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
                           </p>
-                          <p className="text-xs text-slate-500">{user.status || 'inactive'}</p>
+                          <p className="text-xs text-muted-foreground">{user.status || 'inactive'}</p>
                         </div>
                         <Button size="sm" variant="outline" onClick={() => openAccount(user)}>
                           Resolve
@@ -1088,15 +1088,15 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="p-4 space-y-3">
                   {alerts.highVolumeLowPlan.length === 0 ? (
-                    <p className="text-sm text-slate-500">No upgrade candidates.</p>
+                    <p className="text-sm text-muted-foreground">No upgrade candidates.</p>
                   ) : (
                     alerts.highVolumeLowPlan.slice(0, 4).map(user => (
                       <div key={user.id} className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">
+                          <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
                           </p>
-                          <p className="text-xs text-slate-500">{user.invoiceCount} invoices (30 days)</p>
+                          <p className="text-xs text-muted-foreground">{user.invoiceCount} invoices (30 days)</p>
                         </div>
                         <Button size="sm" onClick={() => openAccount(user)}>
                           Upgrade
@@ -1128,13 +1128,13 @@ export default function Dashboard() {
   const goalProgress = Math.min(100, (totalRevenue / 50000) * 100);
 
   const statusColors = {
-    'paid': 'bg-emerald-200 text-emerald-800',
-    'sent': 'bg-blue-200 text-blue-800',
-    'viewed': 'bg-purple-200 text-purple-800',
-    'draft': 'bg-slate-200 text-slate-800',
-    'overdue': 'bg-red-200 text-red-800',
-    'partial_paid': 'bg-yellow-200 text-yellow-800',
-    'cancelled': 'bg-slate-300 text-slate-700'
+    'paid': 'bg-status-paid/10 text-status-paid',
+    'sent': 'bg-primary/20 text-primary',
+    'viewed': 'bg-primary/20 text-primary',
+    'draft': 'bg-muted text-muted-foreground',
+    'overdue': 'bg-status-overdue/10 text-status-overdue',
+    'partial_paid': 'bg-status-pending/10 text-status-pending',
+    'cancelled': 'bg-muted text-muted-foreground'
   };
 
   const isProfileComplete = Boolean(user?.company_name && user?.company_address && user?.logo_url);
@@ -1262,7 +1262,7 @@ export default function Dashboard() {
           <div className="glass-card rounded-fintech p-6 mb-6 border border-border">
             <h2 className="text-lg font-semibold mb-2 text-foreground">Admin Roles Management</h2>
             <div className="mb-4">
-              <label className="font-semibold text-slate-700 mr-2">Select Admin Role:</label>
+              <label className="font-semibold text-foreground mr-2">Select Admin Role:</label>
               <select
                 value={selectedRole}
                 onChange={e => setSelectedRole(e.target.value)}
@@ -1272,11 +1272,11 @@ export default function Dashboard() {
                   <option key={role.key} value={role.key}>{role.label}</option>
                 ))}
               </select>
-              <span className="ml-4 text-xs text-slate-500">{roleInfo?.description}</span>
+              <span className="ml-4 text-xs text-muted-foreground">{roleInfo?.description}</span>
             </div>
             <div className="mb-4">
               <button
-                className="bg-indigo-500 text-white px-3 py-1 rounded mr-2"
+                className="bg-primary/100 text-white px-3 py-1 rounded mr-2"
                 onClick={async () => {
                   setLoadingAdmin(true);
                   const users = await syncAndCleanUsers();
@@ -1287,7 +1287,7 @@ export default function Dashboard() {
               >
                 Sync & Clean Users
               </button>
-              <span className="text-xs text-slate-500">Best practice: sync and clean orphaned users</span>
+              <span className="text-xs text-muted-foreground">Best practice: sync and clean orphaned users</span>
             </div>
             <form
               className="mb-4 flex gap-2"
@@ -1333,18 +1333,18 @@ export default function Dashboard() {
               >Add User</button>
             </form>
             {loadingAdmin ? (
-              <p className="text-slate-500">Loading...</p>
+              <p className="text-muted-foreground">Loading...</p>
             ) : supabaseUsers.length === 0 ? (
-              <p className="text-slate-500">No users found.</p>
+              <p className="text-muted-foreground">No users found.</p>
             ) : (
               <ul className="divide-y">
                 {supabaseUsers.map(user => (
                   <li key={user.id} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between">
                     <div>
-                      <span className="font-medium text-slate-800">{user.email}</span>
-                      <span className="text-xs text-slate-500 ml-2">ID: {user.id}</span>
+                      <span className="font-medium text-foreground">{user.email}</span>
+                      <span className="text-xs text-muted-foreground ml-2">ID: {user.id}</span>
                       {user.profile && (
-                        <span className="text-xs text-slate-600 ml-2">Name: {user.profile.full_name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">Name: {user.profile.full_name}</span>
                       )}
                     </div>
                     <div className="flex gap-2 mt-2 md:mt-0">
@@ -1398,12 +1398,12 @@ export default function Dashboard() {
               <h3 className="text-lg font-semibold text-foreground font-display">Quick insights</h3>
               <div className="flex flex-wrap items-center gap-6 text-sm">
                 {overdueCount > 0 ? (
-                  <Link to={createPageUrl("Invoices")} className="flex items-center gap-2 text-amber-300 hover:text-amber-200">
+                  <Link to={createPageUrl("Invoices")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                     <FileText className="w-4 h-4 shrink-0" />
                     <span>{overdueCount} invoice{overdueCount !== 1 ? 's' : ''} overdue — send reminders</span>
                   </Link>
                 ) : fintechKpis.vatLiability > 0 ? (
-                  <span className="flex items-center gap-2 text-slate-300">
+                  <span className="flex items-center gap-2 text-muted-foreground">
                     <Landmark className="w-4 h-4 shrink-0" />
                     Set aside {formatCurrency(fintechKpis.vatLiability, userCurrency)} for VAT / SARS
                   </span>
@@ -1652,8 +1652,8 @@ export default function Dashboard() {
                     return (
                       <div key={invoice.id} className="group flex items-center justify-between py-5 px-6 hover:bg-white/5 transition-all">
                         <div className="flex items-center gap-4 flex-1">
-                          <div className="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
-                            <FileText className="w-7 h-7 text-blue-400" />
+                          <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+                            <FileText className="w-7 h-7 text-primary" />
                           </div>
                           <div className="flex-1">
                             <p className="font-bold text-foreground">{invoice.invoice_number}</p>

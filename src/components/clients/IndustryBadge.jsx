@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 const industryConfig = {
-    technology: { label: "Technology", icon: Monitor, color: "bg-blue-50 text-blue-700" },
+    technology: { label: "Technology", icon: Monitor, color: "bg-primary/10 text-primary" },
     healthcare: { label: "Healthcare", icon: Heart, color: "bg-red-50 text-red-700" },
     finance: { label: "Finance", icon: Banknote, color: "bg-green-50 text-green-700" },
     retail: { label: "Retail", icon: ShoppingBag, color: "bg-purple-50 text-purple-700" },
@@ -24,7 +24,7 @@ const industryConfig = {
     education: { label: "Education", icon: GraduationCap, color: "bg-yellow-50 text-yellow-700" },
     real_estate: { label: "Real Estate", icon: Building2, color: "bg-orange-50 text-orange-700" },
     hospitality: { label: "Hospitality", icon: UtensilsCrossed, color: "bg-orange-50 text-orange-700" },
-    consulting: { label: "Consulting", icon: Briefcase, color: "bg-indigo-50 text-indigo-700" },
+    consulting: { label: "Consulting", icon: Briefcase, color: "bg-primary/10 text-primary" },
     creative: { label: "Creative", icon: Palette, color: "bg-pink-50 text-pink-700" },
     legal: { label: "Legal", icon: Scale, color: "bg-slate-50 text-slate-700" },
     other: { label: "Other", icon: MoreHorizontal, color: "bg-gray-50 text-gray-700" }

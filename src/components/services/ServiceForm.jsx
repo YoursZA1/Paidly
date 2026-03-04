@@ -292,8 +292,8 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                 <CardContent className="p-8">
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* ====== BASE FIELDS SECTION (Required for all catalog items) ====== */}
-                        <div className="border-l-4 border-blue-500 pl-6 py-4">
-                            <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wide mb-6">
+                        <div className="border-l-4 border-primary pl-6 py-4">
+                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wide mb-6">
                                 Required Base Fields
                             </h3>
 
@@ -422,8 +422,8 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                         {/* ====== TYPE-SPECIFIC FIELDS SECTION ====== */}
                         {formData.item_type && typeSpecificConfig[formData.item_type] && (
-                            <div className="border-l-4 border-indigo-500 pl-6 py-4 bg-indigo-50 rounded">
-                                <h3 className="text-sm font-bold text-indigo-900 uppercase tracking-wide mb-6">
+                            <div className="border-l-4 border-primary pl-6 py-4 bg-primary/10 rounded">
+                                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide mb-6">
                                     {typeSpecificConfig[formData.item_type].label} • Type-Specific Fields
                                 </h3>
 

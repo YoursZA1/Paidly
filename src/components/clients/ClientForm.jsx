@@ -83,7 +83,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.name}
                                     onChange={(e) => handleInputChange('name', e.target.value)}
                                     placeholder="Enter client name"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -97,7 +97,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.email}
                                     onChange={(e) => handleInputChange('email', e.target.value)}
                                     placeholder="client@example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -110,7 +110,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.phone}
                                     onChange={(e) => handleInputChange('phone', e.target.value)}
                                     placeholder="+1 (555) 000-0000"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -123,7 +123,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.contact_person}
                                     onChange={(e) => handleInputChange('contact_person', e.target.value)}
                                     placeholder="Primary contact name"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -137,7 +137,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.website}
                                     onChange={(e) => handleInputChange('website', e.target.value)}
                                     placeholder="https://example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -150,7 +150,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.tax_id}
                                     onChange={(e) => handleInputChange('tax_id', e.target.value)}
                                     placeholder="Tax ID or VAT number"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -164,7 +164,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.alternate_email}
                                     onChange={(e) => handleInputChange('alternate_email', e.target.value)}
                                     placeholder="alternate@example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -177,7 +177,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.fax}
                                     onChange={(e) => handleInputChange('fax', e.target.value)}
                                     placeholder="+1 (555) 000-0001"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
@@ -204,10 +204,10 @@ export default function ClientForm({ client, onSave, onCancel }) {
                         </div>
 
                         {/* Payment Terms Section */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 space-y-4">
+                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-6 space-y-4">
                             <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-sm font-bold text-blue-900 uppercase">Default Payment Terms</h3>
-                                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                                <h3 className="text-sm font-bold text-foreground uppercase">Default Payment Terms</h3>
+                                <Badge variant="outline" className="bg-primary/15 text-primary border-primary/30">
                                     Auto-applies to invoices
                                 </Badge>
                             </div>
@@ -257,7 +257,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                             value={formData.payment_terms_days}
                                             onChange={(e) => handleInputChange('payment_terms_days', parseInt(e.target.value) || 0)}
                                             placeholder="Number of days"
-                                            className="h-12 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                                            className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
                                         />
                                     </div>
                                 )}
@@ -277,7 +277,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                 value={formData.address}
                                 onChange={(e) => handleInputChange('address', e.target.value)}
                                 placeholder="Client's business address"
-                                className="min-h-24 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
                             />
                         </div>
 
@@ -292,7 +292,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.notes}
                                     onChange={(e) => handleInputChange('notes', e.target.value)}
                                     placeholder="Public notes about this client..."
-                                    className="min-h-32 rounded-xl border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 resize-none"
+                                    className="min-h-32 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
 
@@ -340,7 +340,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                             <Button
                                 type="submit"
                                 disabled={!isValid}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
+                                className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
                             >
                                 <Save className="w-4 h-4 mr-2" />
                                 {client ? "Update Client" : "Save Client"}

@@ -334,7 +334,7 @@ export default function TaskForm({ open, onClose, onSave, task, clients = [], ta
 
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                        <Button type="submit" className="bg-primary hover:bg-primary/90">
                             {task ? 'Update Task' : 'Create Task'}
                         </Button>
                     </DialogFooter>

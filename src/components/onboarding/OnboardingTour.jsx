@@ -142,7 +142,7 @@ export default function OnboardingTour({ isOpen, onClose }) {
                 </button>
 
                 <div className="mb-4">
-                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
                         Step {currentStep + 1} of {tourSteps.length}
                     </span>
                     <h3 className="text-lg font-bold text-slate-900 mt-1">{step.title}</h3>
@@ -157,12 +157,12 @@ export default function OnboardingTour({ isOpen, onClose }) {
                             <div 
                                 key={idx} 
                                 className={`w-2 h-2 rounded-full transition-colors ${
-                                    idx === currentStep ? 'bg-indigo-600' : 'bg-slate-200'
+                                    idx === currentStep ? 'bg-primary' : 'bg-slate-200'
                                 }`} 
                             />
                         ))}
                     </div>
-                    <Button onClick={handleNext} size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Button onClick={handleNext} size="sm" className="bg-primary hover:bg-primary/90 text-white">
                         {currentStep === tourSteps.length - 1 ? 'Finish' : 'Next'}
                         {currentStep !== tourSteps.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
                     </Button>

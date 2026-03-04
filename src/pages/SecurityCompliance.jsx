@@ -80,7 +80,7 @@ export default function SecurityCompliance() {
             <div className="flex gap-2">
               <Button 
                 onClick={() => navigate('/admin/roles-management')}
-                className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+                className="gap-2 bg-primary hover:bg-primary/90"
               >
                 <Key className="w-4 h-4" />
                 Admin Roles
@@ -284,8 +284,8 @@ function RoleBasedAccessTab({ currentUser }) {
         </CardHeader>
         <CardContent>
           {showAssignForm && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
-              <h4 className="font-semibold text-blue-900">Assign Admin Role</h4>
+            <div className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-lg space-y-4">
+              <h4 className="font-semibold text-foreground">Assign Admin Role</h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -509,7 +509,7 @@ function AuditLogsTab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">
+              <div className="text-3xl font-bold text-primary">
                 {Object.keys(stats.byType).length}
               </div>
               <p className="text-xs text-slate-600 mt-1">Different types</p>
@@ -691,7 +691,7 @@ function DataAccessControlTab() {
       case 'public':
         return 'bg-green-100 text-green-800';
       case 'internal':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-primary/15 text-primary';
       case 'confidential':
         return 'bg-yellow-100 text-yellow-800';
       case 'restricted':
@@ -767,8 +767,8 @@ function DataAccessControlTab() {
         </CardHeader>
         <CardContent>
           {showNewPolicyForm && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
-              <h4 className="font-semibold text-blue-900">Create New Policy</h4>
+            <div className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-lg space-y-4">
+              <h4 className="font-semibold text-foreground">Create New Policy</h4>
 
               <div className="space-y-4">
                 <div>
@@ -1105,19 +1105,19 @@ function BackupRecoveryTab({ currentUser }) {
       </Card>
 
       {/* Recovery Information */}
-      <Card className="border-blue-200 bg-blue-50">
+      <Card className="border-primary/20 bg-primary/10">
         <CardHeader>
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-blue-600 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-primary mt-0.5" />
             <div>
-              <CardTitle className="text-blue-900">Recovery Procedures</CardTitle>
-              <CardDescription className="text-blue-800">
+              <CardTitle className="text-foreground">Recovery Procedures</CardTitle>
+              <CardDescription className="text-primary">
                 Important information about backup and recovery
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="text-sm text-blue-800 space-y-2">
+        <CardContent className="text-sm text-primary space-y-2">
           <div>
             <strong>• Backup Creation:</strong> Weekly automated backups are
             recommended for system stability

@@ -249,7 +249,7 @@ export default function MessagesPage() {
                         <h1 className="text-3xl font-bold text-slate-900 mb-2">Messages</h1>
                         <p className="text-slate-600">Communicate with your clients</p>
                     </div>
-                    <Button onClick={() => setShowComposer(true)} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={() => setShowComposer(true)} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
                         New Message
                     </Button>
@@ -270,7 +270,7 @@ export default function MessagesPage() {
                                         Conversations
                                     </CardTitle>
                                     {unreadCount > 0 && (
-                                        <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                                        <span className="bg-primary text-white text-xs px-2 py-1 rounded-full">
                                             {unreadCount} new
                                         </span>
                                     )}

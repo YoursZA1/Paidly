@@ -153,7 +153,7 @@ export default function PublicInvoice() {
             <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
                     <div className="text-center mb-6">
-                        <Mail className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+                        <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
                         <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
                         <p className="text-slate-600">
                             To view this invoice, please enter the email address it was sent to.
@@ -185,7 +185,7 @@ export default function PublicInvoice() {
                         <Button
                             onClick={handleEmailVerification}
                             disabled={isVerifying || !emailVerification.trim()}
-                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            className="w-full bg-primary hover:bg-primary/90"
                         >
                             {isVerifying ? (
                                 <>
@@ -227,7 +227,7 @@ export default function PublicInvoice() {
                         </a>
                     )}
                     <a href={createPageUrl(`InvoicePDF?id=${invoice.id}`)} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
-                        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
+                        <button className="w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
                             <Download className="w-5 h-5" />
                             Download as PDF
                         </button>
@@ -251,7 +251,7 @@ export default function PublicInvoice() {
                                 )}
                             </div>
                             <div className="text-left sm:text-right w-full sm:w-auto">
-                                <h2 className="text-3xl font-bold text-blue-600 mb-2">INVOICE</h2>
+                                <h2 className="text-3xl font-bold text-primary mb-2">INVOICE</h2>
                                 <p className="text-slate-500 text-sm"># {invoice.invoice_number}</p>
                                 <p className="text-slate-500 text-sm mt-1">
                                     Issued: {format(new Date(invoice.created_date), 'MMMM d, yyyy')}

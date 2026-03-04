@@ -33,12 +33,12 @@ export default function PlanSelector({ currentPlan, onPlanChange, activeUsers })
               key={key}
               className={`relative transition-all ${
                 isCurrent 
-                  ? "border-indigo-600 border-2 bg-indigo-50" 
-                  : "hover:border-indigo-300"
+                  ? "border-primary border-2 bg-primary/10" 
+                  : "hover:border-primary/30"
               }`}
             >
               {isCurrent && (
-                <div className="absolute top-0 right-0 bg-indigo-600 text-white px-3 py-1 rounded-bl-lg text-xs font-semibold">
+                <div className="absolute top-0 right-0 bg-primary text-white px-3 py-1 rounded-bl-lg text-xs font-semibold">
                   Current Plan
                 </div>
               )}
@@ -69,7 +69,7 @@ export default function PlanSelector({ currentPlan, onPlanChange, activeUsers })
                 )}
 
                 {isCurrent ? (
-                  <Badge className="w-full justify-center py-2 bg-indigo-600">
+                  <Badge className="w-full justify-center py-2 bg-primary">
                     <Check className="w-4 h-4 mr-1" />
                     Current Plan
                   </Badge>
@@ -80,7 +80,7 @@ export default function PlanSelector({ currentPlan, onPlanChange, activeUsers })
                     variant={isUpgrade ? "default" : "outline"}
                     className={`w-full ${
                       isUpgrade 
-                        ? "bg-indigo-600 hover:bg-indigo-700" 
+                        ? "bg-primary hover:bg-primary/90" 
                         : ""
                     } ${canDowngrade ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
@@ -93,9 +93,9 @@ export default function PlanSelector({ currentPlan, onPlanChange, activeUsers })
         })}
       </div>
 
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-primary/10 border-primary/20">
         <CardContent className="pt-6">
-          <p className="text-sm text-blue-900">
+          <p className="text-sm text-foreground">
             <strong>Need more flexibility?</strong> Enterprise plans offer unlimited users and custom features. 
             Contact sales for a personalized quote.
           </p>

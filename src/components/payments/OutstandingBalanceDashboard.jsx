@@ -75,7 +75,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
             <CardTitle className="text-sm font-medium text-gray-600">Avg Days to Pay</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-blue-600">
+            <p className="text-3xl font-bold text-primary">
               {analysis.metrics.averageDaysToPayment.toFixed(0)}
             </p>
             <p className="text-xs text-gray-500 mt-1">days from creation</p>
@@ -92,7 +92,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
             </p>
             <p className={`text-xs mt-1 font-semibold ${
               analysis.metrics.trend === 'excellent' ? 'text-green-600' :
-              analysis.metrics.trend === 'good' ? 'text-blue-600' :
+              analysis.metrics.trend === 'good' ? 'text-primary' :
               analysis.metrics.trend === 'fair' ? 'text-orange-600' :
               'text-red-600'
             }`}>
@@ -111,7 +111,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           <div className="space-y-4">
             {Object.entries(analysis.byDueStatus).map(([key, status]) => {
               const statusColors = {
-                notDue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900', bar: 'bg-blue-500' },
+                notDue: { bg: 'bg-primary/10', border: 'border-primary/20', text: 'text-foreground', bar: 'bg-primary/100' },
                 dueToday: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-900', bar: 'bg-yellow-500' },
                 overdue: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-900', bar: 'bg-red-500' }
               };
@@ -253,12 +253,12 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm font-medium text-blue-900 mb-2">Estimated Time to Clear</p>
-                <p className="text-3xl font-bold text-blue-600">
+              <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                <p className="text-sm font-medium text-foreground mb-2">Estimated Time to Clear</p>
+                <p className="text-3xl font-bold text-primary">
                   {analysis.forecast.estimatedMonthsToClear.toFixed(1)}
                 </p>
-                <p className="text-xs text-blue-700 mt-2">months at current payment rate</p>
+                <p className="text-xs text-primary mt-2">months at current payment rate</p>
               </div>
 
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">

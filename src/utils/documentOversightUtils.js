@@ -52,7 +52,7 @@ export const getEngagementLevelLabel = (level) => {
 export const getEngagementLevelColor = (level) => {
   const colors = {
     power_user: 'bg-purple-100 text-purple-800',
-    regular_user: 'bg-blue-100 text-blue-800',
+    regular_user: 'bg-primary/15 text-primary',
     occasional_user: 'bg-yellow-100 text-yellow-800',
     inactive_user: 'bg-gray-100 text-gray-800'
   };
@@ -78,7 +78,7 @@ export const getDocumentTypeLabel = (type) => {
 export const getDocumentTypeColor = (type) => {
   const colors = {
     invoice: 'bg-green-100 text-green-800',
-    quote: 'bg-blue-100 text-blue-800',
+    quote: 'bg-primary/15 text-primary',
     receipt: 'bg-yellow-100 text-yellow-800',
     estimate: 'bg-purple-100 text-purple-800'
   };
@@ -347,7 +347,7 @@ export const calculateEngagementScore = (documentCount, daysActive) => {
  */
 export const getEngagementScoreColor = (score) => {
   if (score >= 75) return 'text-green-600';
-  if (score >= 50) return 'text-blue-600';
+  if (score >= 50) return 'text-primary';
   if (score >= 25) return 'text-yellow-600';
   return 'text-red-600';
 };

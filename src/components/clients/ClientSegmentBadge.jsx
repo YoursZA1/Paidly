@@ -11,7 +11,7 @@ const segmentConfig = {
     regular: {
         label: "Regular",
         icon: Star,
-        className: "bg-blue-100 text-blue-800 border-blue-200"
+        className: "bg-primary/15 text-primary border-primary/20"
     },
     new: {
         label: "New",

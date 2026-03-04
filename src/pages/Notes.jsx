@@ -301,7 +301,7 @@ export default function Notes() {
                         <p className="text-gray-600 text-center max-w-xs mb-6">
                             Choose a note from the list or create a new one to get started
                         </p>
-                        <Button onClick={handleNewNote} className="bg-blue-600 hover:bg-blue-700">
+                        <Button onClick={handleNewNote} className="bg-primary hover:bg-primary/90">
                             <Plus className="w-4 h-4 mr-2" />
                             Create New Note
                         </Button>
@@ -321,7 +321,7 @@ const NoteItem = ({ note, isSelected, onSelect, onPin }) => {
             onClick={() => onSelect(note)}
             className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors ${
                 isSelected 
-                    ? 'bg-blue-50 border-l-4 border-l-blue-600' 
+                    ? 'bg-primary/10 border-l-4 border-l-primary' 
                     : 'hover:bg-gray-50'
             }`}
             whileHover={{ backgroundColor: 'rgba(0, 0, 0, 0.02)' }}
@@ -340,7 +340,7 @@ const NoteItem = ({ note, isSelected, onSelect, onPin }) => {
                     </p>
                 </div>
                 {note.is_pinned && (
-                    <Pin className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <Pin className="w-4 h-4 text-primary flex-shrink-0" />
                 )}
             </div>
         </motion.button>

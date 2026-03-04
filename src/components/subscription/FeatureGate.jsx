@@ -91,10 +91,10 @@ export default function FeatureGate({ children, feature, userPlan, fallback }) {
                 Feature Locked
             </h3>
             <p className="text-slate-600 mb-4 max-w-sm">
-                This feature requires the <span className="font-semibold text-indigo-600">{requiredPlan}</span> plan or higher.
+                This feature requires the <span className="font-semibold text-primary">{requiredPlan}</span> plan or higher.
             </p>
             <Link to={createPageUrl('Settings') + '?tab=subscription'}>
-                <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+                <Button className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00]">
                     <Crown className="w-4 h-4 mr-2" />
                     Upgrade Plan
                 </Button>

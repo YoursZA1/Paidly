@@ -41,7 +41,7 @@ export default function PaymentBreakdown({
                 <CardContent className="p-8">
                     <div className="space-y-8">
                         {/* Project Summary */}
-                        <div className="bg-blue-50 rounded-2xl p-6">
+                        <div className="bg-primary/10 rounded-2xl p-6">
                             <h3 className="font-bold text-slate-900 mb-4">Project Summary</h3>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div>
@@ -101,10 +101,10 @@ export default function PaymentBreakdown({
                             </div>
 
                             {/* Milestone Payment */}
-                            <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
+                            <div className="bg-primary/10 rounded-2xl p-6 border border-primary/20">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+                                        <div className="w-10 h-10 bg-primary/100 rounded-full flex items-center justify-center">
                                             <span className="text-white font-bold">2</span>
                                         </div>
                                         <div>
@@ -177,7 +177,7 @@ export default function PaymentBreakdown({
                         
                         <Button
                             onClick={onNext}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                            className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
                         >
                             Continue to Preview
                             <ArrowRight className="w-4 h-4 ml-2" />

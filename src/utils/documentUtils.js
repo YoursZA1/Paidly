@@ -185,7 +185,7 @@ export function getPlanUsagePercentage(userPlan, documentType) {
 export function getStatusColor(status) {
   const colors = {
     [DOCUMENT_STATUSES.DRAFT]: 'bg-gray-100 text-gray-800',
-    [DOCUMENT_STATUSES.SENT]: 'bg-blue-100 text-blue-800',
+    [DOCUMENT_STATUSES.SENT]: 'bg-primary/15 text-primary',
     [DOCUMENT_STATUSES.VIEWED]: 'bg-purple-100 text-purple-800',
     [DOCUMENT_STATUSES.PAID]: 'bg-green-100 text-green-800',
     [DOCUMENT_STATUSES.PARTIAL_PAID]: 'bg-amber-100 text-amber-800',

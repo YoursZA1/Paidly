@@ -312,7 +312,7 @@ export default function SystemStatus() {
               <li>
                 <a
                   href="/admin/platform-settings"
-                  className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
                 >
                   Platform settings
                   <ExternalLink className="h-3 w-3" />
@@ -321,7 +321,7 @@ export default function SystemStatus() {
               <li>
                 <a
                   href="/admin/support-tools"
-                  className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
                 >
                   Support & admin tools
                   <ExternalLink className="h-3 w-3" />

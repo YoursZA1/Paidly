@@ -178,9 +178,9 @@ export default function PaymentModal({ isOpen, onClose, invoice, onPaymentSucces
                                 </div>
                             </div>
 
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-                                <Lock className="w-4 h-4 text-blue-600 mt-0.5" />
-                                <p className="text-xs text-blue-700">
+                            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-2">
+                                <Lock className="w-4 h-4 text-primary mt-0.5" />
+                                <p className="text-xs text-primary">
                                     Your payment is secured with 256-bit SSL encryption. Card details are not stored.
                                 </p>
                             </div>
