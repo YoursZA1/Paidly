@@ -125,7 +125,10 @@ export default function ViewInvoice() {
     
     const handleDownloadPDF = () => {
         try {
-            InvoiceService.downloadInvoicePDF(invoice.id, invoice.invoice_number);
+            InvoiceService.downloadInvoicePDF(invoice.id, invoice.invoice_number, {
+                navigate,
+                inAppPath: createPageUrl('InvoicePDF') + '?id=' + invoice.id + '&download=true',
+            });
         } catch (error) {
             console.error("Failed to download PDF:", error);
             alert('Failed to download PDF. Please try again.');
@@ -134,7 +137,10 @@ export default function ViewInvoice() {
 
     const handlePreviewPDF = () => {
         try {
-            InvoiceService.previewInvoicePDF(invoice.id);
+            InvoiceService.previewInvoicePDF(invoice.id, {
+                navigate,
+                inAppPath: createPageUrl('InvoicePDF') + '?id=' + invoice.id,
+            });
         } catch (error) {
             console.error("Failed to preview PDF:", error);
             alert('Failed to preview PDF. Please try again.');
@@ -143,7 +149,10 @@ export default function ViewInvoice() {
 
     const handlePrint = () => {
         try {
-            InvoiceService.printInvoice(invoice.id);
+            InvoiceService.printInvoice(invoice.id, {
+                navigate,
+                inAppPath: createPageUrl('InvoicePDF') + '?id=' + invoice.id,
+            });
         } catch (error) {
             console.error("Failed to print:", error);
             alert('Failed to print. Please try again.');

@@ -6,11 +6,20 @@ import { supabase } from "@/lib/supabaseClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import Button from "@/components/ui/button";
 
+function getCachedUser() {
+  try {
+    const s = localStorage.getItem("breakapi_user");
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(getCachedUser);
+  const [loading, setLoading] = useState(() => !getCachedUser());
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState("");
@@ -39,7 +48,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Initialize: restore Supabase session and user state (session persistence across reloads)
+  // Initialize: one getSession, then restore user from profile (avoids duplicate getSession + User.me round trips)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -49,26 +58,24 @@ export function AuthProvider({ children }) {
         setSession(initialSession);
         let currentUser = null;
 
-        // If we have a Supabase session, try restoring user from it first (works when localStorage is empty or stale)
         if (initialSession?.user) {
           try {
-            currentUser = await User.restoreFromSupabaseSession();
+            currentUser = await User.restoreFromSupabaseSession(initialSession);
           } catch (restoreErr) {
             console.warn("Restore from session failed:", restoreErr);
           }
         }
 
-        // If no user yet, try User.me() (uses localStorage + refreshes from Supabase profiles)
-        if (!currentUser) {
+        if (!currentUser && initialSession?.user) {
           try {
             currentUser = await User.me();
           } catch {
-            // No local user; restore already attempted above
+            // fallback
           }
         }
 
         if (cancelled) return;
-        setUser(currentUser);
+        setUser(currentUser ?? getCachedUser());
         setError(initialSession?.user && !currentUser ? "Failed to restore session" : "");
       } catch (err) {
         console.warn("Auth init error:", err);

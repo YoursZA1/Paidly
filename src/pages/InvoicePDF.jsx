@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ const DRAFT_STORAGE_KEY = 'invoiceDraft';
 
 export default function InvoicePDF() {
     const location = useLocation();
+    const navigate = useNavigate();
     const urlParams = new URLSearchParams(location.search);
     const invoiceId = urlParams.get('id');
     const isDraft = urlParams.get('draft') === '1';
@@ -127,7 +128,7 @@ export default function InvoicePDF() {
                 <p className="text-gray-600">
                     {isDraft ? 'No draft data found. Please try downloading from the Create Invoice page again.' : 'Document not found.'}
                 </p>
-                <Button variant="outline" onClick={() => window.close()} className="rounded-lg">Close</Button>
+                <Button variant="outline" onClick={() => navigate(-1)} className="rounded-lg">Back</Button>
             </div>
         );
     }
@@ -170,7 +171,7 @@ export default function InvoicePDF() {
                 <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
                     <div className="no-print mb-4 flex justify-end gap-2">
                         <Button
-                            onClick={() => (isDraft ? window.close() : window.history.back())}
+                            onClick={() => (isDraft ? window.close() : navigate(-1))}
                             variant="outline"
                             className="px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >

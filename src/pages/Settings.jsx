@@ -69,12 +69,30 @@ function CompanyProfileSettings() {
     const { user: authUser, refreshUser } = useAuth();
 
     useEffect(() => {
+        if (!authUser?.id) {
+            setIsLoading(false);
+            return;
+        }
         loadUserData();
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when current user id is set or changes
+    }, [authUser?.id]);
 
     // When profile updates (e.g. Realtime from another tab or after save), keep form in sync so logo and fields auto-update
     useEffect(() => {
-        if (!authUser) return;
+        if (!authUser) {
+            setFormData({
+                display_name: "",
+                company_name: "",
+                company_address: "",
+                logo_url: "",
+                currency: "USD",
+                country: "",
+                timezone: "",
+                invoice_template: "classic",
+                invoice_header: ""
+            });
+            return;
+        }
         setFormData(prev => ({
             ...prev,
             display_name: authUser.full_name || authUser.display_name || "",
@@ -109,6 +127,7 @@ function CompanyProfileSettings() {
     }, [formData.logo_url]);
 
     const loadUserData = async () => {
+        if (!authUser?.id) return;
         setIsLoading(true);
         try {
             // User.me() loads profile from Supabase profiles table (one row per user, keyed by auth user id)
@@ -124,6 +143,8 @@ function CompanyProfileSettings() {
                 invoice_template: currentUser.invoice_template || "classic",
                 invoice_header: currentUser.invoice_header || ""
             });
+            // Keep auth context in sync with latest profile so other components and sync effect see correct data
+            await refreshUser();
         } catch (error) {
             console.error("Error loading user data:", error);
         }
@@ -232,12 +253,17 @@ function CompanyProfileSettings() {
             
             // Map display_name to full_name for Supabase profile (saved per user, restored on login)
             const payload = {
-                ...updatedData,
                 full_name: updatedData.display_name ?? updatedData.full_name,
+                company_name: updatedData.company_name,
+                company_address: updatedData.company_address,
+                logo_url: updatedData.logo_url,
+                currency: updatedData.currency || "USD",
+                timezone: updatedData.timezone || "",
+                invoice_template: updatedData.invoice_template || "classic",
+                invoice_header: updatedData.invoice_header ?? "",
             };
-            console.log("Updating user data:", payload);
             await User.updateMyUserData(payload);
-            setFormData(updatedData);
+            setFormData(prev => ({ ...prev, ...payload, display_name: payload.full_name }));
             setLogoFile(null);
             await refreshUser();
             toast({

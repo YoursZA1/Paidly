@@ -20,10 +20,15 @@ class InvoiceService {
   }
 
   /**
-   * Download invoice as PDF
+   * Download invoice as PDF.
+   * If options.navigate and options.inAppPath are provided, navigates in-app (no new tab).
    */
-  static downloadInvoicePDF(invoiceId, invoiceNumber = 'invoice') {
+  static downloadInvoicePDF(invoiceId, invoiceNumber = 'invoice', options = {}) {
     try {
+      if (options.navigate && typeof options.navigate === 'function' && options.inAppPath) {
+        options.navigate(options.inAppPath);
+        return true;
+      }
       const pdfUrl = this.getInvoicePdfUrl(invoiceId, true);
       window.open(pdfUrl, '_blank');
       return true;
@@ -46,12 +51,15 @@ class InvoiceService {
   }
 
   /**
-   * Preview invoice PDF in same tab
+   * Preview invoice PDF. If options.navigate and options.inAppPath are provided, navigates in-app (no new tab).
    */
-  static previewInvoicePDF(invoiceId) {
+  static previewInvoicePDF(invoiceId, options = {}) {
     try {
-      const pdfUrl = this.getInvoicePdfUrl(invoiceId);
-      window.location.href = pdfUrl;
+      if (options.navigate && typeof options.navigate === 'function' && options.inAppPath) {
+        options.navigate(options.inAppPath);
+        return true;
+      }
+      window.location.href = this.getInvoicePdfUrl(invoiceId);
       return true;
     } catch (error) {
       console.error('Failed to preview PDF:', error);
@@ -60,17 +68,18 @@ class InvoiceService {
   }
 
   /**
-   * Print invoice
+   * Print invoice. If options.navigate and options.inAppPath are provided, navigates in-app to PDF page (user can print there).
    */
-  static printInvoice(invoiceId) {
+  static printInvoice(invoiceId, options = {}) {
     try {
-      const pdfUrl = this.getInvoicePdfUrl(invoiceId);
-      const printWindow = window.open(pdfUrl, '_blank');
+      if (options.navigate && typeof options.navigate === 'function' && options.inAppPath) {
+        options.navigate(options.inAppPath);
+        return true;
+      }
+      const printWindow = window.open(this.getInvoicePdfUrl(invoiceId), '_blank');
       if (printWindow) {
         printWindow.addEventListener('load', () => {
-          setTimeout(() => {
-            printWindow.print();
-          }, 250);
+          setTimeout(() => printWindow.print(), 250);
         });
       }
       return true;
@@ -296,35 +305,6 @@ class InvoiceService {
   static generatePublicShareLink(invoiceId, shareToken) {
     const baseUrl = window.location.origin;
     return `${baseUrl}/PublicInvoice?token=${shareToken}`;
-  }
-
-  /**
-   * Export invoice as JSON
-   */
-  static exportInvoiceJSON(invoice, client, user) {
-    try {
-      const exportData = {
-        invoice: invoice,
-        client: client,
-        company: user,
-        exportedAt: new Date().toISOString()
-      };
-
-      const dataStr = JSON.stringify(exportData, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Invoice-${invoice.invoice_number}-${new Date().getTime()}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      return true;
-    } catch (error) {
-      console.error('Failed to export JSON:', error);
-      throw error;
-    }
   }
 
   /**

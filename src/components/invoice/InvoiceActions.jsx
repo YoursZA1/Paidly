@@ -11,7 +11,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuContent
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Copy, FileJson, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
+import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Copy, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Invoice, Payment } from '@/api/entities';
@@ -42,7 +42,6 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
     const [isDownloading, setIsDownloading] = useState(false);
     const [isRecordingPayment, setIsRecordingPayment] = useState(false);
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
-    const [isExporting, setIsExporting] = useState(false);
     const [isSending, setIsSending] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showManualShare, setShowManualShare] = useState(false);
@@ -279,10 +278,13 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
     const handleDownloadPDF = async () => {
         setIsDownloading(true);
         try {
-            InvoiceService.downloadInvoicePDF(invoice.id, invoice.invoice_number);
+            InvoiceService.downloadInvoicePDF(invoice.id, invoice.invoice_number, {
+                navigate,
+                inAppPath: createPageUrl('InvoicePDF') + '?id=' + invoice.id + '&download=true',
+            });
             toast({
                 title: "Download started",
-                description: "Your PDF will download shortly",
+                description: "Opening PDF in-app; print dialog will open to save.",
                 variant: "success",
                 duration: 4000
             });
@@ -300,10 +302,13 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
 
     const handlePreviewPDF = () => {
         try {
-            InvoiceService.previewInvoicePDF(invoice.id);
+            InvoiceService.previewInvoicePDF(invoice.id, {
+                navigate,
+                inAppPath: createPageUrl('InvoicePDF') + '?id=' + invoice.id,
+            });
             toast({
                 title: "Opening preview",
-                description: "Loading PDF preview...",
+                description: "Loading PDF preview in-app...",
                 duration: 2000
             });
         } catch (error) {
@@ -313,27 +318,6 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                 description: error.message || "Please try again.",
                 variant: "destructive"
             });
-        }
-    };
-
-    const handleExportJSON = async () => {
-        setIsExporting(true);
-        try {
-            InvoiceService.exportInvoiceJSON(invoice, client);
-            toast({
-                title: "Export successful",
-                description: "Invoice exported as JSON",
-                duration: 4000
-            });
-        } catch (error) {
-            console.error("Failed to export JSON:", error);
-            toast({
-                title: "Failed to export JSON",
-                description: error.message || "Please try again.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsExporting(false);
         }
     };
 
@@ -506,10 +490,6 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                     <DropdownMenuItem onClick={handleDownloadPDF}>
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExportJSON}>
-                        <FileJson className="w-4 h-4 mr-2" />
-                        Export as JSON
                     </DropdownMenuItem>
 
                     <DropdownMenuSub>

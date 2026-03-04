@@ -214,6 +214,8 @@ Review all admin workflows to ensure seamless Supabase integration. Use the tabl
 - [ ] **Notifications:** If using NotificationBell, insert a row into `notifications`; confirm bell count/list update without refresh.
 - [ ] **Platform settings:** Change system or branding settings; confirm save/load from localStorage and no Supabase errors (optional: add backend persistence later).
 
+- [ ] **Activity notifications:** The notification bell shows activity (invoice viewed/paid, quote viewed/accepted). Triggers in **`supabase/schema.postgres.sql`** (or **`scripts/activity-notification-triggers.sql`**) insert into `public.notifications` when invoice/quote status changes. Ensure `invoices.created_by` and `quotes.created_by` are set so the correct user receives notifications.
+
 ### Optional improvements
 
 - **Platform settings persistence:** Store system/branding settings in a Supabase table (e.g. `platform_settings`) and add an API so all admins see the same config.

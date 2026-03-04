@@ -6,6 +6,13 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
+// Cache org_id per user to avoid repeated membership/org lookups on every entity sync
+const orgIdCache = {};
+
+function clearOrgIdCache() {
+  Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
+}
+
 class EntityManager {
   constructor(entityName = '', userId = null) {
     this.entityName = entityName;
@@ -13,6 +20,18 @@ class EntityManager {
     this.updateStorageKey();
     this.data = this.loadFromStorage();
     this.subscriptions = [];
+  }
+
+  /** Normalize payment record from Supabase (paid_at, method, reference) to app shape (payment_date, payment_method, reference_number) */
+  static normalizePaymentRecord(record) {
+    if (!record || typeof record !== 'object') return record;
+    return {
+      ...record,
+      payment_date: record.payment_date ?? record.paid_at,
+      payment_method: record.payment_method ?? record.method,
+      reference_number: record.reference_number ?? record.reference,
+      created_date: record.created_date ?? record.created_at,
+    };
   }
 
   updateStorageKey() {
@@ -140,6 +159,9 @@ class EntityManager {
             if (supabaseTable === 'recurring_invoices' && rec.profile_name != null && rec.template_name == null) {
               rec.template_name = rec.profile_name;
             }
+            if (supabaseTable === 'payments') {
+              Object.assign(rec, EntityManager.normalizePaymentRecord(rec));
+            }
             this.data[item.id] = rec;
           });
           this.saveToStorage();
@@ -222,6 +244,9 @@ class EntityManager {
                 };
                 if (supabaseTable === 'recurring_invoices' && record.profile_name != null && record.template_name == null) {
                   record.template_name = record.profile_name;
+                }
+                if (supabaseTable === 'payments') {
+                  Object.assign(record, EntityManager.normalizePaymentRecord(record));
                 }
                 // Attach line items for invoices and quotes (stored in separate tables)
                 if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
@@ -324,6 +349,7 @@ class EntityManager {
   }
 
   async ensureUserHasOrganization(userId) {
+    if (userId && orgIdCache[userId]) return orgIdCache[userId];
     try {
       // Check if user has a membership
       const { data: existingMembership, error: membershipCheckError } = await supabase
@@ -441,10 +467,10 @@ class EntityManager {
         throw new Error('Unable to determine organization ID');
       }
 
+      if (userId) orgIdCache[userId] = orgId;
       return orgId;
     } catch (error) {
       console.error('Error in ensureUserHasOrganization:', error);
-      // Re-throw with more context
       throw error;
     }
   }
@@ -557,6 +583,14 @@ class EntityManager {
         }
         delete supabaseData.created_date;
         if (!supabaseData.status) supabaseData.status = 'completed';
+        // Whitelist so we only send valid columns
+        const PAYMENT_INSERT_COLUMNS = [
+          'org_id', 'invoice_id', 'client_id', 'amount', 'status', 'paid_at', 'method', 'reference', 'notes',
+          'created_at', 'updated_at'
+        ];
+        Object.keys(supabaseData).forEach(key => {
+          if (!PAYMENT_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
       }
 
       // Only add created_at if not already set (let database handle defaults)
@@ -803,6 +837,9 @@ class EntityManager {
       }
       if (supabaseTable === 'packages' && record.features && typeof record.features === 'object' && !Array.isArray(record.features)) {
         record.features = Array.isArray(record.features) ? record.features : [];
+      }
+      if (supabaseTable === 'payments') {
+        Object.assign(record, EntityManager.normalizePaymentRecord(record));
       }
 
       this.data[record.id] = record;
@@ -1297,6 +1334,7 @@ class AuthManager {
     this.isAuthenticated = false;
     this.user = null;
     localStorage.removeItem('breakapi_user');
+    clearOrgIdCache();
   }
 
   async me() {
@@ -1358,14 +1396,18 @@ class AuthManager {
   /**
    * Restore user state from Supabase session when localStorage was cleared.
    * Loads profile from Supabase profiles table (one row per user, id = auth.users.id).
-   * If profiles fetch fails (e.g. RLS), still returns a minimal user from session so the app can load.
+   * If optionalSession is provided, skips getSession() for faster init (single round-trip: profile only).
+   * @param {object} [optionalSession] - If provided, { user } is used; avoids extra getSession() call
    * @returns {Promise<object|null>} Restored user or null
    */
-  async restoreFromSupabaseSession() {
+  async restoreFromSupabaseSession(optionalSession = null) {
     try {
-      const { data, error } = await supabase.auth.getSession();
-      if (error || !data?.session?.user) return null;
-      const su = data.session.user;
+      let su = optionalSession?.user ?? null;
+      if (!su) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error || !data?.session?.user) return null;
+        su = data.session.user;
+      }
 
       let profileData = {};
       try {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { createPageUrl } from '@/utils';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ArrowRight } from 'lucide-react';
 
 const HERO_SHADOW = '0px 20px 40px rgba(0, 102, 119, 0.15)';
 
@@ -55,23 +55,25 @@ export default function CreditCardDisplay({ balance, currency = 'ZAR', user, ren
                 </div>
             </div>
 
-            {/* Functional bar: View income + Sync Now */}
-            <div className="mt-3 flex items-center justify-between gap-2">
+            {/* Action bar: clear hierarchy, touch-friendly, semantic tokens */}
+            <div className="mt-4 flex items-center gap-3">
                 <Link
                     to={createPageUrl("Invoices")}
-                    className="text-xs font-medium text-foreground/80 hover:text-foreground transition-colors"
+                    className="inline-flex items-center gap-2 min-h-10 px-4 rounded-xl bg-muted/80 hover:bg-muted text-foreground text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+                    aria-label="View all income and invoices"
                 >
-                    View all income →
+                    View all income
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" aria-hidden />
                 </Link>
                 {typeof onRefresh === 'function' && (
                     <button
                         type="button"
                         onClick={handleRefresh}
                         disabled={syncing}
-                        className="flex items-center gap-1.5 text-xs font-medium text-foreground/80 hover:text-foreground transition-colors disabled:opacity-60"
-                        aria-label="Refresh balance"
+                        aria-label={syncing ? 'Syncing balance' : 'Sync balance now'}
+                        className="inline-flex items-center gap-2 min-h-10 px-4 rounded-xl border border-border bg-card hover:bg-muted/80 text-foreground text-sm font-medium transition-colors disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
                     >
-                        <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden />
                         {syncing ? 'Syncing…' : 'Sync now'}
                     </button>
                 )}

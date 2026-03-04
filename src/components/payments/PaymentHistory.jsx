@@ -67,8 +67,9 @@ export default function PaymentHistory({ payments = [], currency = 'USD' }) {
             <CardContent className="p-0">
                 <div className="divide-y divide-slate-100">
                     {payments.map((payment) => {
-                        const Icon = paymentMethodIcons[payment.payment_method] || DollarSign;
-                        const methodLabel = paymentMethodLabels[payment.payment_method] || payment.payment_method;
+                        const methodKey = payment.payment_method || payment.method;
+                        const Icon = paymentMethodIcons[methodKey] || DollarSign;
+                        const methodLabel = paymentMethodLabels[methodKey] || methodKey || 'Other';
                         
                         return (
                             <div key={payment.id} className="p-4 hover:bg-slate-50 transition-colors">
@@ -89,12 +90,12 @@ export default function PaymentHistory({ payments = [], currency = 'USD' }) {
                                             <div className="flex items-center gap-4 text-xs text-slate-500">
                                                 <span className="flex items-center gap-1">
                                                     <Calendar className="w-3 h-3" />
-                                                    {format(parseISO(payment.payment_date), 'MMM d, yyyy')}
+                                                    {(payment.payment_date || payment.paid_at) ? format(parseISO(payment.payment_date || payment.paid_at), 'MMM d, yyyy') : '—'}
                                                 </span>
-                                                {payment.reference_number && (
+                                                {(payment.reference_number || payment.reference) && (
                                                     <span className="flex items-center gap-1">
                                                         <FileText className="w-3 h-3" />
-                                                        Ref: {payment.reference_number}
+                                                        Ref: {payment.reference_number || payment.reference}
                                                     </span>
                                                 )}
                                             </div>
@@ -106,8 +107,8 @@ export default function PaymentHistory({ payments = [], currency = 'USD' }) {
                                         </div>
                                     </div>
                                     <div className="text-right text-xs text-slate-400">
-                                        {payment.created_date && (
-                                            <p>Recorded {format(parseISO(payment.created_date), 'MMM d')}</p>
+                                        {(payment.created_date || payment.created_at) && (
+                                            <p>Recorded {format(parseISO(payment.created_date || payment.created_at), 'MMM d')}</p>
                                         )}
                                     </div>
                                 </div>
