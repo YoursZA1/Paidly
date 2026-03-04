@@ -68,8 +68,8 @@ export default function Login() {
       <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
         <Card className="w-full max-w-md rounded-2xl border border-border shadow-lg overflow-hidden">
           <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary/10 flex items-center justify-center mx-auto mb-3 sm:mb-4 rounded-2xl">
-              <Lock className="size-6 text-primary" />
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-primary/20">
+              <img src="/logo.svg" alt="Paidly" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
             </div>
             <CardTitle className="text-xl sm:text-2xl font-semibold text-foreground font-display">Welcome back</CardTitle>
             <p className="text-sm text-muted-foreground">Sign in to manage your business.</p>

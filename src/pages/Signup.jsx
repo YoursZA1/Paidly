@@ -112,10 +112,10 @@ export default function Signup() {
         });
       } catch (supabaseErr) {
         const msg = supabaseErr?.message || "Failed to create Supabase user";
-        const isSchemaError = /company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist/i.test(msg);
+        const isSchemaOrDbError = /database error saving new user|company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist|signup.*failed/i.test(msg);
         setError(
-          isSchemaError
-            ? "Signup failed due to database setup. Ask your administrator to run in Supabase SQL Editor: scripts/fix-signup-trigger.sql (or supabase/schema.postgres.sql). Then try again."
+          isSchemaOrDbError
+            ? "Signup failed due to database setup. If you're the administrator, open your Supabase project → SQL Editor, run the script in scripts/fix-signup-trigger.sql (or apply supabase/schema.postgres.sql), then try again."
             : msg
         );
         setIsLoading(false);
@@ -240,8 +240,8 @@ export default function Signup() {
     <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x overflow-auto">
       <Card className="w-full max-w-md shadow-xl rounded-2xl border border-border overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col my-auto">
         <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6 shrink-0">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
-            <User className="w-8 h-8 text-primary" />
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-primary/20">
+            <img src="/logo.svg" alt="Paidly" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
           </div>
           <CardTitle className="text-xl sm:text-2xl font-semibold text-foreground font-display">Create your account</CardTitle>
           <p className="text-sm text-muted-foreground">Step {step} of 2</p>

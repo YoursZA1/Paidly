@@ -1,6 +1,6 @@
 -- Fix signup: update handle_new_user trigger so it does not require company_address column.
--- Run this in Supabase SQL Editor if new user signup fails with "Database error" or schema/trigger errors.
--- Also ensures company_address column exists so the app can save it later from Settings.
+-- Run this in Supabase SQL Editor if new user signup fails with "Database error saving new user"
+-- or other schema/trigger errors. Also ensures company_address column exists so the app can save it later from Settings.
 
 alter table public.profiles add column if not exists company_address text;
 
@@ -13,7 +13,7 @@ as $$
 declare
   new_org_id uuid;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, currency, timezone)
+  insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, currency, timezone)
   values (
     new.id,
     new.email,
@@ -21,6 +21,7 @@ begin
     new.raw_user_meta_data->>'avatar_url',
     new.raw_user_meta_data->>'logo_url',
     new.raw_user_meta_data->>'company_name',
+    new.raw_user_meta_data->>'company_address',
     coalesce(new.raw_user_meta_data->>'currency', 'USD'),
     coalesce(new.raw_user_meta_data->>'timezone', 'UTC')
   )
@@ -30,6 +31,7 @@ begin
     avatar_url = excluded.avatar_url,
     logo_url = coalesce(excluded.logo_url, profiles.logo_url),
     company_name = coalesce(excluded.company_name, profiles.company_name),
+    company_address = coalesce(excluded.company_address, profiles.company_address),
     currency = coalesce(excluded.currency, profiles.currency),
     timezone = coalesce(excluded.timezone, profiles.timezone),
     updated_at = now();
