@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import generatePdfFromElement from '@/utils/generatePdfFromElement';
 
 // Import templates
 import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
@@ -77,10 +78,18 @@ export default function InvoicePDF() {
         }
     }, [invoiceId, isDraft]);
 
+    const pdfRef = useRef(null);
+
     useEffect(() => {
-        if (autoDownload && !isLoading && invoice) {
-            const timer = setTimeout(() => {
-                window.print();
+        if (autoDownload && !isLoading && invoice && pdfRef.current) {
+            const timer = setTimeout(async () => {
+                try {
+                    const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
+                    await generatePdfFromElement(pdfRef.current, filename);
+                } catch (e) {
+                    console.error('Auto-download PDF failed, falling back to print:', e);
+                    window.print();
+                }
             }, 500);
             return () => clearTimeout(timer);
         }
@@ -186,7 +195,7 @@ export default function InvoicePDF() {
                     </div>
 
                     <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content">
+                        <div className="pdf-content" ref={pdfRef}>
                             <TemplateComponent
                                 invoice={invoice}
                                 client={client}

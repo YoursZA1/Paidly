@@ -61,7 +61,8 @@ export default function InvoicePreview({
           user: user || {},
         })
       );
-      window.open(createPageUrl("InvoicePDF") + "?draft=1", "_blank", "noopener,noreferrer");
+      // Open PDF preview and trigger auto-download
+      window.open(createPageUrl("InvoicePDF") + "?draft=1&download=true", "_blank", "noopener,noreferrer");
     } catch (e) {
       console.error("Failed to open PDF preview:", e);
     }
