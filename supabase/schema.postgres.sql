@@ -40,7 +40,7 @@ create table if not exists public.memberships (
   unique (org_id, user_id)
 );
 
--- Trigger: requires profiles.company_address to exist (run scripts/fix-signup-trigger.sql if signup fails with "Database error saving new user").
+-- Trigger: auto-creates profile + org + membership on auth user signup. Handles missing metadata gracefully.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -49,36 +49,46 @@ set search_path = public
 as $$
 declare
   new_org_id uuid;
+  user_full_name text;
+  user_company_name text;
 begin
+  -- Extract metadata with safe defaults
+  user_full_name := coalesce(nullif(new.raw_user_meta_data->>'full_name', ''), new.email);
+  user_company_name := coalesce(nullif(new.raw_user_meta_data->>'company_name', ''), 'My Company');
+
+  -- Insert profile; if user exists (conflict), update fields
   insert into public.profiles (id, email, full_name, avatar_url, logo_url, company_name, company_address, currency, timezone)
   values (
     new.id,
     new.email,
-    new.raw_user_meta_data->>'full_name',
+    user_full_name,
     new.raw_user_meta_data->>'avatar_url',
     new.raw_user_meta_data->>'logo_url',
-    new.raw_user_meta_data->>'company_name',
-    new.raw_user_meta_data->>'company_address',
-    coalesce(new.raw_user_meta_data->>'currency', 'USD'),
-    coalesce(new.raw_user_meta_data->>'timezone', 'UTC')
+    user_company_name,
+    coalesce(nullif(new.raw_user_meta_data->>'company_address', ''), ''),
+    coalesce(nullif(new.raw_user_meta_data->>'currency', ''), 'USD'),
+    coalesce(nullif(new.raw_user_meta_data->>'timezone', ''), 'UTC')
   )
   on conflict (id) do update set
     email = excluded.email,
-    full_name = excluded.full_name,
+    full_name = coalesce(nullif(excluded.full_name, ''), profiles.full_name),
     avatar_url = excluded.avatar_url,
     logo_url = coalesce(excluded.logo_url, profiles.logo_url),
-    company_name = coalesce(excluded.company_name, profiles.company_name),
-    company_address = coalesce(excluded.company_address, profiles.company_address),
-    currency = coalesce(excluded.currency, profiles.currency),
-    timezone = coalesce(excluded.timezone, profiles.timezone),
+    company_name = coalesce(nullif(excluded.company_name, ''), profiles.company_name),
+    company_address = coalesce(nullif(excluded.company_address, ''), profiles.company_address),
+    currency = coalesce(nullif(excluded.currency, ''), profiles.currency),
+    timezone = coalesce(nullif(excluded.timezone, ''), profiles.timezone),
     updated_at = now();
 
+  -- Create org for user
   insert into public.organizations (name, owner_id)
-  values (coalesce(new.raw_user_meta_data->>'org_name', 'My Organization'), new.id)
+  values (user_company_name, new.id)
   returning id into new_org_id;
 
+  -- Add user to org as owner
   insert into public.memberships (org_id, user_id, role)
-  values (new_org_id, new.id, 'owner');
+  values (new_org_id, new.id, 'owner')
+  on conflict do nothing;
 
   return new;
 end;

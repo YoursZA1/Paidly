@@ -114,12 +114,22 @@ export default function Signup() {
         });
       } catch (supabaseErr) {
         const msg = supabaseErr?.message || "Failed to create Supabase user";
+        console.error('[signup] Supabase error:', { error: supabaseErr, message: msg });
+        
         const isSchemaOrDbError = /database error saving new user|company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist|signup.*failed/i.test(msg);
-        setError(
-          isSchemaOrDbError
-            ? "Signup failed due to database setup. If you're the administrator, open your Supabase project → SQL Editor, run the script in scripts/fix-signup-trigger.sql (or apply supabase/schema.postgres.sql), then try again."
-            : msg
-        );
+        const isEmailError = /email.*already|user.*exists|duplicate/i.test(msg);
+        const isNetworkError = /network|timeout|connection|fetch|offline/i.test(msg);
+        
+        let userMessage = msg;
+        if (isSchemaOrDbError) {
+          userMessage = "Signup failed due to database setup. If you admin Supabase, run: Supabase Dashboard → SQL Editor → Copy & run scripts/fix-signup-trigger.sql";
+        } else if (isEmailError) {
+          userMessage = "An account with this email already exists. Try logging in or use a different email.";
+        } else if (isNetworkError) {
+          userMessage = "Network error. Check your connection and try again.";
+        }
+        
+        setError(userMessage);
         setIsLoading(false);
         return;
       }
