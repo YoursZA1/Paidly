@@ -227,6 +227,22 @@ export default function Signup() {
         company_name: companyName.trim(),
         company_address: companyAddress.trim()
       });
+      
+      // After login, sync Step 2 company updates to Supabase profile
+      try {
+        const { User } = await import("@/api/entities");
+        await User.updateMyUserData({
+          full_name: fullName.trim(),
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim(),
+          phone: phone.trim(),
+          currency: "ZAR"
+        });
+      } catch (profileErr) {
+        console.warn("Could not sync profile updates:", profileErr);
+        // Don't fail signup if profile sync fails; user can update in Settings later
+      }
+      
       setSuccess(true);
       setTimeout(() => {
         navigate(createPageUrl("Dashboard"));
