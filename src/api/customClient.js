@@ -365,6 +365,7 @@ class EntityManager {
       }
 
       if (existingMembership?.org_id) {
+        if (userId) orgIdCache[userId] = existingMembership.org_id;
         return existingMembership.org_id;
       }
 
@@ -450,6 +451,7 @@ class EntityManager {
               .maybeSingle();
             
             if (existingMem?.org_id) {
+              if (userId) orgIdCache[userId] = existingMem.org_id;
               return existingMem.org_id;
             }
           } else {

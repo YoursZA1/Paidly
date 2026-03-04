@@ -214,7 +214,51 @@ Review all admin workflows to ensure seamless Supabase integration. Use the tabl
 - [ ] **Notifications:** If using NotificationBell, insert a row into `notifications`; confirm bell count/list update without refresh.
 - [ ] **Platform settings:** Change system or branding settings; confirm save/load from localStorage and no Supabase errors (optional: add backend persistence later).
 
-- [ ] **Activity notifications:** The notification bell shows activity (invoice viewed/paid, quote viewed/accepted). Triggers in **`supabase/schema.postgres.sql`** (or **`scripts/activity-notification-triggers.sql`**) insert into `public.notifications` when invoice/quote status changes. Ensure `invoices.created_by` and `quotes.created_by` are set so the correct user receives notifications.
+ - [ ] **Activity notifications:** The notification bell shows activity (invoice viewed/paid, quote viewed/accepted). Triggers in **`supabase/schema.postgres.sql`** (or **`scripts/activity-notification-triggers.sql`**) insert into `public.notifications` when invoice/quote status changes. Ensure `invoices.created_by` and `quotes.created_by` are set so the correct user receives notifications.
+
+### Send via WhatsApp (recommended process)
+
+Add WhatsApp as a delivery channel for `notifications` so users can receive time-sensitive alerts off-app.
+
+- Schema additions (recommended):
+  - Add columns to `public.notifications`: `channel TEXT` (e.g. `in_app`, `email`, `whatsapp`), `status TEXT` (`pending`, `sent`, `failed`), `external_id TEXT`, `sent_at TIMESTAMPTZ`.
+  - Optional queue table `notification_queue` with payload and `processed BOOLEAN DEFAULT false` for reliable delivery.
+
+- Delivery workflow (server-backed, reliable):
+  1. Insert a row into `public.notifications` with `channel = 'whatsapp'` and `status = 'pending'` from a DB trigger or server process.
+  2. A server worker or Edge Function subscribes to `notifications` (Realtime) or polls `notification_queue` for `pending` items.
+  3. The worker formats the message using a templated payload (invoice id, amount, customer name, short link) and calls your WhatsApp provider API (Twilio, MessageBird, 360dialog, etc.).
+  4. On success: update `notifications.status = 'sent'`, set `external_id` to provider message id, and `sent_at = now()`.
+  5. On failure: set `status = 'failed'`, increment `retry_count` (or leave in queue) and schedule retry with backoff.
+
+- Provider & infra notes:
+  - Use a server-side secret (never expose WhatsApp API keys to the frontend). Store provider credentials in your host env vars (e.g. `WHATSAPP_API_URL`, `WHATSAPP_API_KEY`, `WHATSAPP_FROM_NUMBER`).
+  - Whatsapp templates often require pre-approved message templates (especially for templated notifications). Use session messages only when the user initiated the conversation.
+  - Record opt-in consent and prefer sending transactional messages only (invoices, payment receipts, critical alerts).
+
+- Minimal example (Node/Express + Twilio):
+
+```js
+// POST /send-whatsapp
+const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+app.post('/send-whatsapp', async (req, res) => {
+  const { to, body } = req.body; // to: WhatsApp number in format 'whatsapp:+123456789'
+  try {
+    const msg = await twilio.messages.create({
+      from: 'whatsapp:' + process.env.WHATSAPP_FROM_NUMBER,
+      to,
+      body,
+    });
+    res.json({ ok: true, sid: msg.sid });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+```
+
+Add server-side logic to update `notifications` rows after the provider response.
+
+Refer to your chosen provider's docs for template usage and rate limits.
 
 ### Optional improvements
 
