@@ -1,0 +1,31 @@
+Confirm Your Email
+
+Hello {{ .Email }},
+
+Thank you for signing up for Paidly! To complete your account creation and access all the features, please confirm your email address by clicking the link below.
+
+This link will expire in 24 hours for security reasons.
+
+{{ .ConfirmationURL }}
+
+---
+
+Once confirmed, your 7-day free trial will begin, and you'll have instant access to:
+- Professional invoice creation
+- Client management
+- Payment tracking
+- Recurring invoices
+- And much more!
+
+---
+
+Didn't create this account?
+If you didn't sign up for Paidly, please ignore this email. Your account will not be created until you confirm your email address.
+
+---
+
+Questions? Contact our support team at support@paidly.com
+
+Paidly – Invoice & Payment Management
+© 2026 Paidly. All rights reserved.
+123 Anderson Street, Johannesburg, South Africa
