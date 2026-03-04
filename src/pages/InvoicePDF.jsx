@@ -32,6 +32,7 @@ export default function InvoicePDF() {
     const [user, setUser] = useState(null);
     const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
     useEffect(() => {
         if (isDraft) {
@@ -81,18 +82,27 @@ export default function InvoicePDF() {
     const pdfRef = useRef(null);
 
     useEffect(() => {
-        if (autoDownload && !isLoading && invoice && pdfRef.current) {
-            const timer = setTimeout(async () => {
-                try {
-                    const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                    await generatePdfFromElement(pdfRef.current, filename);
-                } catch (e) {
+        if (!autoDownload || isLoading || !invoice) return;
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (cancelled || !pdfRef.current) return;
+            try {
+                setIsGeneratingPdf(true);
+                const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
+                await generatePdfFromElement(pdfRef.current, filename);
+            } catch (e) {
+                if (!cancelled) {
                     console.error('Auto-download PDF failed, falling back to print:', e);
                     window.print();
                 }
-            }, 500);
-            return () => clearTimeout(timer);
-        }
+            } finally {
+                if (!cancelled) setIsGeneratingPdf(false);
+            }
+        }, 600);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
     }, [autoDownload, isLoading, invoice]);
 
     const loadInvoiceData = async () => {
@@ -187,10 +197,23 @@ export default function InvoicePDF() {
                             {isDraft ? 'Close' : 'Back'}
                         </Button>
                         <Button
-                            onClick={() => window.print()}
+                            onClick={async () => {
+                                if (!pdfRef.current || isGeneratingPdf) return;
+                                setIsGeneratingPdf(true);
+                                try {
+                                    const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
+                                    await generatePdfFromElement(pdfRef.current, filename);
+                                } catch (e) {
+                                    console.error('PDF generation failed, falling back to print:', e);
+                                    window.print();
+                                } finally {
+                                    setIsGeneratingPdf(false);
+                                }
+                            }}
+                            disabled={isGeneratingPdf}
                             className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
-                            Download PDF
+                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
                         </Button>
                     </div>
 
