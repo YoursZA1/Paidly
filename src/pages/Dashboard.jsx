@@ -57,7 +57,7 @@ const QuickActionCard = ({ title, icon: Icon, href, fintech, accent = 'blue' }) 
           ? `glass-card glass-card-hover rounded-fintech border border-border hover:border-primary/40 ${style.border}`
           : "bg-card hover:shadow-md rounded-xl border border-border"
       }`}>
-        <CardContent className="p-6 relative flex items-center gap-4">
+        <CardContent className={`p-4 sm:p-6 relative flex items-center gap-3 sm:gap-4`}>
           <div className={`w-14 h-14 flex items-center justify-center rounded-xl transition-colors duration-300 ${
             fintech ? `${style.bg} ${style.hoverBg}` : "bg-primary/10 group-hover:bg-primary"
           }`}>
@@ -86,15 +86,15 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
       ? "glass-card rounded-fintech border border-border"
       : "bg-card rounded-xl border border-border shadow-sm"
   }`}>
-    <CardContent className={`p-6 relative ${fintech ? "pb-5" : ""}`}>
-      <div className="flex justify-between items-start gap-4">
+    <CardContent className={`p-4 sm:p-6 relative ${fintech ? "pb-5" : ""}`}>
+      <div className="flex justify-between items-start gap-3 sm:gap-4">
         <div className="flex-1 min-w-0">
           <p className={`text-xs font-medium mb-1.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{title}</p>
           {isLoading ? (
-            <Skeleton className={`h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
+            <Skeleton className={`h-8 sm:h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
           ) : (
             <>
-              <p className={`tabular-nums font-bold truncate ${fintech ? "text-3xl text-foreground drop-shadow-subtle" : "text-2xl font-semibold text-foreground"}`}>{value}</p>
+              <p className={`tabular-nums font-bold truncate ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>{value}</p>
               {subtitle && (
                 <div className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{subtitle}</div>
               )}
@@ -108,10 +108,10 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
         </div>
         <div className={`rounded-xl flex items-center justify-center shrink-0 ${
           fintech
-            ? `w-12 h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-primary/20"}`
-            : "w-14 h-14 bg-muted"
+            ? `w-10 h-10 sm:w-12 sm:h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-primary/20"}`
+            : "w-12 h-12 sm:w-14 sm:h-14 bg-muted"
         }`}>
-          <Icon className={`${fintech ? "w-6 h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-primary") : "w-7 h-7 text-muted-foreground"}`} />
+          <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-primary") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
         </div>
       </div>
       {fintech && (
@@ -697,14 +697,14 @@ export default function Dashboard() {
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
-      <div className="min-h-screen bg-background p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto space-y-8">
+      <div className="min-h-screen bg-background w-full min-w-0 px-3 py-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 w-full min-w-0">
           <div>
-            <h1 className="text-3xl font-semibold text-foreground">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Is the business healthy today?</p>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-foreground font-display">Admin Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Is the business healthy today?</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
             {/* Total Revenue (Today / MTD / YTD) */}
             <Card className="border-0 shadow-sm">
               <CardContent className="p-4">
@@ -1155,15 +1155,15 @@ export default function Dashboard() {
   }).length;
 
   return (
-    <div className="min-h-full">
-      <div className="max-w-7xl mx-auto p-4 sm:p-8">
+    <div className="min-h-full w-full min-w-0">
+      <div className="max-w-7xl mx-auto w-full min-w-0 px-3 py-2 sm:p-6 md:p-8">
         {/* Welcome Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
+          className="mb-4 sm:mb-6"
         >
-          <h1 className="text-[28px] font-bold text-foreground mb-2 font-display leading-tight">
+          <h1 className="text-xl sm:text-2xl md:text-[28px] font-bold text-foreground mb-1 sm:mb-2 font-display leading-tight">
             Welcome back, {userName}
           </h1>
           <p className="finbank-body text-sm text-foreground">Track cash flow, get paid faster, and stay on top of your business.</p>
@@ -1176,8 +1176,8 @@ export default function Dashboard() {
           transition={{ delay: 0.05 }}
           className="mb-6"
         >
-          <div className="glass-card rounded-fintech border border-border p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             title="Revenue"
             value={formatCurrency(fintechKpis.revenue, userCurrency)}
@@ -1423,8 +1423,8 @@ export default function Dashboard() {
           transition={{ delay: 0.1 }}
           className="mb-6"
         >
-          <div className="glass-card rounded-fintech border border-border p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <QuickActionCard title="Create Invoice" icon={FileText} href={createPageUrl("CreateInvoice")} fintech accent="green" />
           <QuickActionCard title="Add Expense" icon={Receipt} href={createPageUrl("CashFlow")} fintech accent="red" />
           <QuickActionCard title="Add Customer" icon={UsersIcon} href={createPageUrl("Clients")} fintech accent="blue" />
@@ -1434,7 +1434,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Main Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
           {/* Left Column - Card & Recent Transactions */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -1446,8 +1446,8 @@ export default function Dashboard() {
 
             {/* Transaction List — clean list, 16px padding per row, circular avatar with 10% status color */}
             <div className="glass-card rounded-fintech border border-border overflow-hidden">
-              <div className="p-6 border-b border-border flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-foreground font-display">Transactions</h3>
+              <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
                 <div className="flex gap-2">
                   <Link to={createPageUrl("Invoices")}>
                     <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
@@ -1486,7 +1486,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between py-4 px-4 hover:bg-muted/50 transition-colors"
+                        className="flex items-center justify-between py-3 px-3 sm:py-4 sm:px-4 hover:bg-muted/50 transition-colors gap-2"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div

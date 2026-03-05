@@ -466,7 +466,7 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
         ))}
       </nav>
 
-      {/* Footer: user, actions, safe-bottom for home indicator */}
+      {/* Footer: user, actions, safe-bottom for home indicator — mobile: only Create Invoice + Logout */}
       <div className="shrink-0 border-t border-border pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] px-4 space-y-3">
         <div className="flex flex-col items-center gap-2">
           <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden shrink-0">
@@ -481,20 +481,16 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
             <div className="text-xs text-muted-foreground truncate">{user?.full_name || user?.email}</div>
           </div>
         </div>
-        <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); navigate(createPageUrl("Settings")); }}>
-          <Settings className="size-5 mr-2" /> Settings
-        </Button>
-        <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); navigate(createPageUrl("Settings") + "?tab=subscription"); }}>
-          <Bell className="size-5 mr-2" /> Subscription
-        </Button>
-        <Button variant="destructive" className="w-full min-h-12 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
-          <LogOut className="size-5 mr-2" /> Logout
-        </Button>
-        <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
-          <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation">
-            <Plus className="size-5 mr-2" /> Create Invoice
+        <div className="flex flex-col gap-3">
+          <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
+            <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation shadow-md shadow-primary/20">
+              <Plus className="size-5 mr-2" /> Create Invoice
+            </Button>
+          </Link>
+          <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
+            <LogOut className="size-5 mr-2" /> Logout
           </Button>
-        </Link>
+        </div>
       </div>
     </div>
     <div className="flex-1 bg-black/50 min-h-screen" onClick={onClose} aria-hidden="true" />
@@ -637,13 +633,9 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
-    <div
-      className={`grid min-h-screen w-full ${{
-        true: "md:grid-cols-[72px_1fr]",
-        false: "md:grid-cols-[240px_1fr]"
-      }[isSidebarCollapsed]}`}
-    >
-      {/* Sidebar */}
+    <div className={`overflow-x-hidden min-h-screen w-full grid grid-cols-1 min-w-0 ${isSidebarCollapsed ? "md:grid-cols-[72px_1fr]" : "md:grid-cols-[240px_1fr]"}`}>
+      {/* Sidebar: hidden on mobile */}
+      <motion.div
       <motion.div
         initial={{ x: -280 }}
         animate={{ x: 0 }}
@@ -776,18 +768,18 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
       <div className={`flex flex-col min-h-screen ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
-        {/* Header */}
+        {/* Header: touch targets 44px on mobile, no horizontal overflow */}
         <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm"
+          className="h-14 sm:h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 shadow-sm min-h-[56px]"
         >
-          <div className="flex items-center gap-4 flex-1">
-            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl min-h-10 min-w-10 touch-manipulation" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl min-h-11 min-w-11 touch-manipulation shrink-0" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
               <Menu className="size-5" />
             </Button>
-            <div className="relative hidden sm:block max-w-md flex-1">
+            <div className="relative hidden sm:block max-w-md flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
                 placeholder="Search invoices, clients…"
@@ -796,21 +788,21 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
              <NotificationBell />
             
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground">
-                    <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden">
+                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground min-h-11 min-w-11 sm:min-w-0 sm:min-h-10 touch-manipulation px-2 sm:px-3">
+                    <div className="w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden shrink-0">
                       {user.logo_url ? (
                         <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
                       ) : (
                         user.full_name ? user.full_name[0].toUpperCase() : 'U'
                       )}
                     </div>
-                    <span className="font-medium hidden sm:block text-foreground">{user.company_name || user.full_name || 'User'}</span>
+                    <span className="font-medium hidden sm:block text-foreground truncate max-w-[120px]">{user.company_name || user.full_name || 'User'}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border bg-card shadow-elevation-lg">
@@ -838,12 +830,12 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </motion.header>
 
-        {/* Main Content Area — fintech navy gradient when on Dashboard */}
+        {/* Main Content Area — scrollable, no horizontal overflow, safe areas */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-6 sm:py-8 px-4 sm:px-8 safe-x safe-bottom ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-4 sm:py-6 md:py-8 px-3 sm:px-6 md:px-8 safe-x safe-bottom min-w-0 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-7xl mx-auto w-full min-w-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -859,15 +851,15 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </main>
 
-        {/* Footer */}
-        <footer className="border-t border-border bg-card/30 py-4 px-4 sm:px-8 safe-x safe-bottom">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-sm text-foreground">
+        {/* Footer: stacked on mobile, touch-friendly links */}
+        <footer className="border-t border-border bg-card/30 py-4 px-3 sm:px-6 md:px-8 safe-x safe-bottom">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-foreground text-center sm:text-left">
             <span>© {new Date().getFullYear()} Paidly. All rights reserved.</span>
-            <div className="flex items-center gap-6">
-              <Link to={createPageUrl("About")} className="text-foreground underline-offset-4 hover:underline transition-colors">
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6">
+              <Link to={createPageUrl("About")} className="text-foreground underline-offset-4 hover:underline transition-colors min-h-[44px] inline-flex items-center justify-center py-2">
                 Mission &amp; About
               </Link>
-              <Link to={createPageUrl("Settings")} className="text-foreground underline-offset-4 hover:underline transition-colors">
+              <Link to={createPageUrl("Settings")} className="text-foreground underline-offset-4 hover:underline transition-colors min-h-[44px] inline-flex items-center justify-center py-2">
                 Settings
               </Link>
             </div>

@@ -220,6 +220,31 @@ body {
     .dashboard-scroll-area {
       padding-bottom: max(env(safe-area-inset-bottom), 1.5rem);
     }
+    /* Prevent horizontal scroll on app shell */
+    body { overflow-x: hidden; }
+    #root { overflow-x: hidden; }
+    /* Minimum touch target 44px for tap areas (accessibility) */
+    .touch-target-min {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    /* Slightly larger base for readable body text on small screens */
+    .mobile-text-base {
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+  }
+  /* Prevent inputs from zooming on iOS (16px minimum) */
+  @media (max-width: 767px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="search"],
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 
   /* Dashboard: FinBank light (soft off-white) */

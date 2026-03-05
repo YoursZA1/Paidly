@@ -2,7 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Invoice, Client, User, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { invoicesToCsv, parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
@@ -282,85 +288,40 @@ export default function InvoicesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-background w-full min-w-0">
+            <div className="max-w-7xl mx-auto w-full min-w-0">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
+                    className="flex flex-col gap-4 mb-6 sm:mb-8"
                 >
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-foreground font-display">
                             Invoices
                         </h1>
                         <p className="text-sm text-muted-foreground">
                             Track, manage, and download all your invoices.
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
-                        <input
-                            type="file"
-                            ref={invoiceFileInputRef}
-                            accept=".csv"
-                            className="hidden"
-                            onChange={handleImportInvoicesFile}
-                        />
-                        <input
-                            type="file"
-                            ref={invoiceViewsFileInputRef}
-                            accept=".csv"
-                            className="hidden"
-                            onChange={handleImportInvoiceViewsFile}
-                        />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleImportInvoices}
-                            disabled={isImporting}
-                            className="rounded-xl"
-                        >
-                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
-                            {isImporting ? "Importing…" : "Import CSV"}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportInvoices}
-                            disabled={isExporting || filteredInvoices.length === 0}
-                            className="rounded-xl"
-                        >
-                            <Download className="w-4 h-4 mr-2" />
-                            {isExporting ? "Exporting…" : "Export CSV"}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleImportInvoiceViews}
-                            disabled={isImportingViews}
-                            className="rounded-xl"
-                            title="Import invoice view activity (InvoiceView_export.csv)"
-                        >
-                            <Upload className={`w-4 h-4 mr-2 ${isImportingViews ? "animate-pulse" : ""}`} />
-                            {isImportingViews ? "Importing…" : "Import views CSV"}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportInvoiceViews}
-                            disabled={invoiceViews.length === 0}
-                            className="rounded-xl"
-                            title="Export invoice view activity"
-                        >
-                            <Download className="w-4 h-4 mr-2" />
-                            Export views CSV
-                        </Button>
-                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <input type="file" ref={invoiceFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoicesFile} />
+                        <input type="file" ref={invoiceViewsFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoiceViewsFile} />
+                        {/* Primary action first on mobile */}
+                        <Link to={createPageUrl("CreateInvoice")} className="order-first sm:order-none w-full sm:w-auto">
+                            <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">
+                                <Plus className="w-4 h-4 shrink-0" />
+                                Create Invoice
+                            </Button>
+                        </Link>
+                        {/* View toggle: always visible */}
+                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10 shrink-0">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                aria-label="Grid view"
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -368,22 +329,61 @@ export default function InvoicesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-lg ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                aria-label="List view"
                             >
                                 <List className="w-4 h-4" />
                             </Button>
                         </div>
-                        <Link to={createPageUrl("CreateInvoice")} className="flex-1 sm:flex-none">
-                            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 w-full sm:w-auto rounded-xl gap-2">
-                                <Plus className="w-4 h-4" />
-                                Create Invoice
+                        {/* Mobile: Import/Export in dropdown; Desktop: all visible */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="sm:hidden h-10 min-w-[44px] rounded-xl touch-manipulation" aria-label="More actions">
+                                    <MoreVertical className="w-5 h-5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                                <DropdownMenuItem onClick={handleImportInvoices} disabled={isImporting} className="rounded-lg">
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {isImporting ? "Importing…" : "Import CSV"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="rounded-lg">
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {isExporting ? "Exporting…" : "Export CSV"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleImportInvoiceViews} disabled={isImportingViews} className="rounded-lg">
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {isImportingViews ? "Importing…" : "Import views CSV"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportInvoiceViews} disabled={invoiceViews.length === 0} className="rounded-lg">
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Export views CSV
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <div className="hidden sm:flex flex-wrap gap-2 items-center">
+                            <Button variant="outline" size="sm" onClick={handleImportInvoices} disabled={isImporting} className="rounded-xl">
+                                <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                                {isImporting ? "Importing…" : "Import CSV"}
                             </Button>
-                        </Link>
+                            <Button variant="outline" size="sm" onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="rounded-xl">
+                                <Download className="w-4 h-4 mr-2" />
+                                {isExporting ? "Exporting…" : "Export CSV"}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleImportInvoiceViews} disabled={isImportingViews} className="rounded-xl" title="Import invoice view activity (InvoiceView_export.csv)">
+                                <Upload className={`w-4 h-4 mr-2 ${isImportingViews ? "animate-pulse" : ""}`} />
+                                {isImportingViews ? "Importing…" : "Import views CSV"}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleExportInvoiceViews} disabled={invoiceViews.length === 0} className="rounded-xl" title="Export invoice view activity">
+                                <Download className="w-4 h-4 mr-2" />
+                                Export views CSV
+                            </Button>
+                        </div>
                     </div>
                 </motion.div>
 
-                <Card className="rounded-xl overflow-hidden">
-                    <CardHeader>
+                <Card className="rounded-xl overflow-hidden w-full min-w-0">
+                    <CardHeader className="p-4 sm:p-6">
                         <div className="space-y-4">
                             <CardTitle className="text-base font-semibold text-foreground">Invoice List</CardTitle>
                             <InvoiceFilters 
