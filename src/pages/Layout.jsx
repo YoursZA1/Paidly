@@ -636,7 +636,6 @@ export default function Layout({ children, currentPageName }) {
     <div className={`overflow-x-hidden min-h-screen w-full grid grid-cols-1 min-w-0 ${isSidebarCollapsed ? "md:grid-cols-[72px_1fr]" : "md:grid-cols-[240px_1fr]"}`}>
       {/* Sidebar: hidden on mobile */}
       <motion.div
-      <motion.div
         initial={{ x: -280 }}
         animate={{ x: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
@@ -773,12 +772,17 @@ export default function Layout({ children, currentPageName }) {
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="h-14 sm:h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 shadow-sm min-h-[56px]"
+          className="relative z-20 h-14 sm:h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 shadow-sm min-h-[56px]"
         >
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-            <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:bg-muted rounded-xl min-h-11 min-w-11 touch-manipulation shrink-0" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
-              <Menu className="size-5" />
-            </Button>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open menu"
+              className="md:hidden flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation shrink-0 cursor-pointer select-none w-12 h-12 min-w-[48px] min-h-[48px] p-0 border-0 bg-transparent"
+            >
+              <Menu className="size-6 pointer-events-none" aria-hidden />
+            </button>
             <div className="relative hidden sm:block max-w-md flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input

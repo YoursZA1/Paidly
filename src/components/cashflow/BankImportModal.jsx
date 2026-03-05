@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { UploadToBankDetails } from '@/api/integrations';
+import { UploadToBankDetails, ExtractDataFromUploadedFile } from '@/api/integrations';
 import { Expense } from '@/api/entities';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -48,7 +48,7 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
                 }
             };
 
-            const result = await breakApi.integrations.Core.ExtractDataFromUploadedFile({
+            const result = await ExtractDataFromUploadedFile({
                 file_url,
                 json_schema: schema
             });

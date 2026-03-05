@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { X, ExternalLink, ScanLine, Paperclip, Upload, Loader2, Sparkles, MapPin, Car } from "lucide-react";
 import { format } from "date-fns";
 import { Vendor } from "@/api/entities";
-import { UploadToActivities } from "@/api/integrations";
+import { UploadToActivities, ExtractDataFromUploadedFile, InvokeLLM } from "@/api/integrations";
 import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -138,7 +138,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                 }
             };
 
-            const result = await breakApi.integrations.Core.ExtractDataFromUploadedFile({
+            const result = await ExtractDataFromUploadedFile({
                 file_url,
                 json_schema: schema
             });
@@ -176,7 +176,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             Categories: office, travel, utilities, supplies, salary, marketing, software, consulting, legal, maintenance, vehicle, meals, other.
             Return ONLY the category name.`;
             
-            const category = await breakApi.integrations.Core.InvokeLLM({ prompt });
+            const category = await InvokeLLM({ prompt });
             if (category) {
                 const cleanCat = category.trim().toLowerCase().replace(/['"]/g, '');
                 // Verify it exists in our list

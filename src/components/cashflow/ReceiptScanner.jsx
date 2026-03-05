@@ -62,7 +62,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                                 <Camera className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                 <p className="text-slate-600 mb-2">Upload a receipt image</p>
                                 <p className="text-sm text-slate-500 mb-4">
-                                    We'll extract the details automatically
+                                    We&apos;ll extract the details automatically
                                 </p>
                                 <label htmlFor="receipt-upload">
                                     <Button asChild className="bg-primary hover:bg-primary/90">
