@@ -24,7 +24,7 @@ function MobileBottomNav({ onOpenMenu }) {
   const isActive = (url) => location.pathname === url.split("?")[0];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 px-6 pb-8 z-50">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 px-6 pb-2 z-50">
       <nav
         className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-[32px] h-20 flex items-center justify-between px-4"
         aria-label="Primary navigation"
