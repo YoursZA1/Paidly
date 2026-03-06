@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Globe, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload } from "lucide-react";
 import { motion } from "framer-motion";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -51,9 +50,16 @@ const DOCUMENT_TEMPLATES = [
     }
 ];
 
+const PROFILE_COLUMNS = "full_name,email,company_name,company_address,logo_url,currency,timezone,invoice_template,invoice_header";
+
 function CompanyProfileSettings() {
-    const [formData, setFormData] = useState({
-        display_name: "",
+    const { user: authUser, refreshUser } = useAuth();
+    const { toast } = useToast();
+
+    // Use Auth session metadata as initial state so Name/Email aren't empty on load
+    const [formData, setFormData] = useState(() => ({
+        display_name: authUser?.full_name || authUser?.display_name || "",
+        email: authUser?.email || "",
         company_name: "",
         company_address: "",
         logo_url: "",
@@ -62,61 +68,98 @@ function CompanyProfileSettings() {
         timezone: "",
         invoice_template: "classic",
         invoice_header: ""
-    });
+    }));
     const [logoFile, setLogoFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const { toast } = useToast();
-    const { user: authUser, refreshUser } = useAuth();
 
+    // Sync Name/Email from auth as soon as authUser is available
+    useEffect(() => {
+        if (!authUser) return;
+        setFormData(prev => ({
+            ...prev,
+            display_name: authUser.full_name || authUser.display_name || prev.display_name || "",
+            email: authUser.email || prev.email || ""
+        }));
+    }, [authUser?.id, authUser?.full_name, authUser?.display_name, authUser?.email]);
+
+    // Sync company fields when authUser updates (e.g. Realtime from another tab or after save)
+    useEffect(() => {
+        if (!authUser?.id) return;
+        setFormData(prev => ({
+            ...prev,
+            company_name: authUser.company_name ?? prev.company_name,
+            company_address: authUser.company_address ?? prev.company_address,
+            logo_url: authUser.logo_url ?? prev.logo_url,
+            currency: authUser.currency || prev.currency || "USD",
+            timezone: authUser.timezone ?? prev.timezone,
+            invoice_template: authUser.invoice_template || prev.invoice_template || "classic",
+            invoice_header: authUser.invoice_header ?? prev.invoice_header
+        }));
+    }, [
+        authUser?.id,
+        authUser?.company_name,
+        authUser?.company_address,
+        authUser?.logo_url,
+        authUser?.currency,
+        authUser?.timezone,
+        authUser?.invoice_template,
+        authUser?.invoice_header
+    ]);
+
+    // Load Company Profile fields from DB (select only needed columns to reduce payload)
     useEffect(() => {
         if (!authUser?.id) {
             setIsLoading(false);
             return;
         }
-        loadUserData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when current user id is set or changes
-    }, [authUser?.id]);
+        let cancelled = false;
+        (async () => {
+            setIsLoading(true);
+            try {
+                const { data } = await supabase
+                    .from("profiles")
+                    .select(PROFILE_COLUMNS)
+                    .eq("id", authUser.id)
+                    .maybeSingle();
 
-    // When profile updates (e.g. Realtime from another tab or after save), keep form in sync so logo and fields auto-update
-    useEffect(() => {
-        if (!authUser) {
-            setFormData({
-                display_name: "",
-                company_name: "",
-                company_address: "",
-                logo_url: "",
-                currency: "USD",
-                country: "",
-                timezone: "",
-                invoice_template: "classic",
-                invoice_header: ""
-            });
-            return;
-        }
-        setFormData(prev => ({
-            ...prev,
-            display_name: authUser.full_name || authUser.display_name || "",
-            company_name: authUser.company_name ?? prev.company_name,
-            company_address: authUser.company_address ?? prev.company_address,
-            logo_url: authUser.logo_url ?? prev.logo_url,
-            currency: authUser.currency || "USD",
-            country: authUser.country ?? prev.country,
-            timezone: authUser.timezone ?? prev.timezone,
-            invoice_template: authUser.invoice_template || "classic",
-            invoice_header: authUser.invoice_header ?? prev.invoice_header,
-        }));
-    }, [
-        authUser?.id,
-        authUser?.logo_url,
-        authUser?.company_name,
-        authUser?.company_address,
-        authUser?.full_name,
-        authUser?.currency,
-        authUser?.timezone,
-        authUser?.invoice_template,
-        authUser?.invoice_header,
-    ]);
+                if (cancelled) return;
+                if (data) {
+                    setFormData(prev => ({
+                        ...prev,
+                        display_name: data.full_name || prev.display_name,
+                        email: data.email || prev.email,
+                        company_name: data.company_name || "",
+                        company_address: data.company_address || "",
+                        logo_url: data.logo_url || "",
+                        currency: data.currency || "USD",
+                        timezone: data.timezone || "",
+                        invoice_template: data.invoice_template || "classic",
+                        invoice_header: data.invoice_header || ""
+                    }));
+                }
+                // Upsert if profile empty but we have auth data
+                const { data: { user: su } } = await supabase.auth.getUser();
+                const profileEmpty = !data || (!data.full_name && !data.email);
+                if (!cancelled && profileEmpty && (su?.email || su?.user_metadata?.full_name) && su?.id) {
+                    try {
+                        await User.updateMyUserData({
+                            full_name: su.user_metadata?.full_name || su.email?.split("@")[0] || "",
+                            email: su.email || ""
+                        });
+                        await refreshUser();
+                    } catch (upsertErr) {
+                        console.warn("Profile upsert fallback failed:", upsertErr);
+                    }
+                }
+            } catch (error) {
+                if (!cancelled) console.error("Error loading user data:", error);
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [authUser?.id]);
 
     // Cleanup blob URLs on unmount to prevent memory leaks
     useEffect(() => {
@@ -126,59 +169,6 @@ function CompanyProfileSettings() {
             }
         };
     }, [formData.logo_url]);
-
-    const loadUserData = async () => {
-        if (!authUser?.id) return;
-        setIsLoading(true);
-        try {
-            let dbProfile = null;
-            try {
-                dbProfile = await User.me();
-            } catch {
-                // User.me() may throw when this.user not yet set; fetch directly from profiles by auth.uid()
-                const { data } = await supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle();
-                dbProfile = data || null;
-            }
-            const { data: { user: authSessionUser } } = await supabase.auth.getUser();
-
-            // Fallback: if profile is empty, use data from the auth session
-            const displayName = dbProfile?.full_name || dbProfile?.display_name || authSessionUser?.user_metadata?.full_name || "";
-            const email = dbProfile?.email || authSessionUser?.email || "";
-
-            const profileData = {
-                display_name: displayName,
-                company_name: dbProfile?.company_name || "",
-                company_address: dbProfile?.company_address || "",
-                logo_url: dbProfile?.logo_url || "",
-                currency: dbProfile?.currency || "USD",
-                country: dbProfile?.country || "",
-                timezone: dbProfile?.timezone || "",
-                invoice_template: dbProfile?.invoice_template || "classic",
-                invoice_header: dbProfile?.invoice_header || ""
-            };
-            setFormData(profileData);
-
-            // Upsert: if profile is empty but we have auth data, persist to DB so it's saved
-            const profileEmpty = !dbProfile || (!dbProfile.full_name && !dbProfile.email);
-            const hasAuthData = authSessionUser?.email || authSessionUser?.user_metadata?.full_name;
-            if (profileEmpty && hasAuthData && authSessionUser?.id) {
-                try {
-                    await User.updateMyUserData({
-                        full_name: authSessionUser?.user_metadata?.full_name || displayName,
-                        email: authSessionUser?.email || email,
-                    });
-                } catch (upsertErr) {
-                    console.warn("Profile upsert fallback failed:", upsertErr);
-                }
-            }
-
-            // Keep auth context in sync with latest profile so other components and sync effect see correct data
-            await refreshUser();
-        } catch (error) {
-            console.error("Error loading user data:", error);
-        }
-        setIsLoading(false);
-    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -312,12 +302,14 @@ function CompanyProfileSettings() {
     
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-32 w-full" />
+            <div className="animate-pulse space-y-6">
+                <div className="h-12 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
+                <div className="h-12 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
+                <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
+                <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
+                <div className="h-32 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
             </div>
-        )
+        );
     }
     
     // Check if branding is complete

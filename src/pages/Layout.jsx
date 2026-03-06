@@ -588,8 +588,8 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  // Premium SaaS feel: start collapsed to keep focus on data
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  // Default to expanded sidebar (especially after login/signup) so nav items are visible
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const mainContentRef = useRef(null);
