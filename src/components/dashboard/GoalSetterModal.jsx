@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   XMarkIcon,
-  TargetIcon,
+  FlagIcon,
   RocketLaunchIcon,
   ArrowTrendingUpIcon,
   BanknotesIcon,
@@ -89,7 +89,7 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-500 rounded-xl">
-              <TargetIcon className="w-5 h-5 text-white" />
+              <FlagIcon className="w-5 h-5 text-white" />
             </div>
             <h2 className="text-xl font-black text-slate-900">Set 2026 Targets</h2>
           </div>

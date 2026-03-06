@@ -1607,9 +1607,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Transactions), 30% right (Setup, Pending, Quick Actions) */}
+        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Recent Invoices), 30% right (Setup, Quick Creator, Plan 2026, Transactions) */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
-          {/* Left Column (70%) — Large Revenue Graph + Recent Transactions */}
+          {/* Left Column (70%) — Revenue trend + Recent Invoices */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -1691,6 +1691,87 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </motion.div>
               )}
+            </div>
+
+            {/* Recent Invoices — same width as Revenue trend, directly below */}
+            <div className="glass-card rounded-fintech border border-border overflow-hidden">
+              <div className="p-6 pb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-6 bg-orange-500 rounded-full shrink-0" />
+                  <h3 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h3>
+                </div>
+                <Link
+                  to={createPageUrl("Invoices")}
+                  className="text-xs font-bold text-orange-600 hover:text-orange-700 transition-colors"
+                >
+                  View All →
+                </Link>
+              </div>
+              <div className="px-6 pb-6 overflow-x-auto">
+                {isLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="flex items-center justify-between py-3 px-0">
+                        <Skeleton className="h-5 w-28" />
+                        <Skeleton className="h-6 w-16 rounded-full" />
+                        <Skeleton className="h-5 w-20" />
+                      </div>
+                    ))}
+                  </div>
+                ) : invoices.length === 0 ? (
+                  <div className="text-center py-8 px-4">
+                    <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
+                    <p className="text-sm text-muted-foreground mb-4">No invoices yet</p>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(createPageUrl("CreateInvoice"))}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Create invoice
+                    </Button>
+                  </div>
+                ) : (
+                  <table className="w-full min-w-[320px] text-left">
+                    <thead>
+                      <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                        <th className="py-3 pr-4">Client</th>
+                        <th className="py-3 pr-4">Status</th>
+                        <th className="py-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {invoices.slice(0, 6).map((invoice) => {
+                        const client = clients.find((c) => c.id === invoice.client_id);
+                        const statusClass = statusColors[invoice.status] || "bg-muted text-muted-foreground";
+                        return (
+                          <tr
+                            key={invoice.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedInvoiceId(invoice.id)}
+                            onKeyDown={(e) => e.key === "Enter" && setSelectedInvoiceId(invoice.id)}
+                            className="group hover:bg-muted/50 transition-colors cursor-pointer"
+                          >
+                            <td className="py-3 pr-4">
+                              <p className="font-semibold text-foreground text-sm">{client?.name || "Unknown"}</p>
+                              <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
+                            </td>
+                            <td className="py-3 pr-4">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusClass} border-0`}>
+                                {getStatusLabel(invoice.status)}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right font-bold text-foreground tabular-nums text-sm">
+                              {formatCurrency(invoice.total_amount, userCurrency)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
 
           </motion.div>
@@ -1848,96 +1929,6 @@ export default function Dashboard() {
             </div>
           </motion.div>
         </div>
-
-        {/* Recent Invoices — glass table */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h2>
-            <Link to={createPageUrl("Invoices")}>
-              <Button variant="outline" size="sm" className="rounded-lg border-border text-muted-foreground hover:bg-muted hover:text-foreground text-sm font-medium">View all</Button>
-            </Link>
-          </div>
-          <div className="glass-card rounded-fintech border border-border overflow-hidden">
-            <div className="p-0">
-              {isLoading ? (
-                <div className="p-6 space-y-4">
-                  {Array(3).fill(0).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between py-4 px-4">
-                      <div className="flex items-center gap-4 flex-1">
-                        <Skeleton className="h-14 w-14 rounded-2xl bg-white/10" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-32 mb-2 bg-white/10" />
-                          <Skeleton className="h-3 w-24 bg-white/10" />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Skeleton className="h-6 w-24 bg-white/10" />
-                        <Skeleton className="h-6 w-16 rounded-full bg-white/10" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : invoices.length === 0 ? (
-                <div className="text-center p-12">
-                  <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-5">
-                    <FileText className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2 font-display">No invoices yet</h3>
-                  <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">Create professional invoices in seconds. Supports ZAR and all major currencies.</p>
-                  <Button onClick={() => navigate(createPageUrl('CreateInvoice'))} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl px-6 py-2.5 shadow-lg shadow-primary/20">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create your first invoice
-                  </Button>
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {invoices.slice(0, 5).map((invoice) => {
-                    const client = clients.find((c) => c.id === invoice.client_id);
-                    return (
-                      <div
-                        key={invoice.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedInvoiceId(invoice.id)}
-                        onKeyDown={(e) => e.key === 'Enter' && setSelectedInvoiceId(invoice.id)}
-                        className="group flex items-center justify-between py-5 px-6 hover:bg-white/5 transition-all cursor-pointer"
-                      >
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center group-hover:bg-primary/30 transition-colors shrink-0">
-                            <FileText className="w-7 h-7 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-foreground">{invoice.invoice_number}</p>
-                            <p className="text-sm text-muted-foreground truncate">{client?.name || 'Unknown Client'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <div className="text-right hidden sm:block">
-                            <p className="font-bold text-lg text-foreground">{formatCurrency(invoice.total_amount, userCurrency)}</p>
-                          </div>
-                          <Badge className={`${statusColors[invoice.status] || 'bg-muted text-foreground'} border-0 font-semibold px-3 py-1.5`}>
-                            {getStatusLabel(invoice.status)}
-                          </Badge>
-                          <InvoiceActions
-                            invoice={invoice}
-                            client={client}
-                            onActionSuccess={loadUserData}
-                            onPaymentFullyPaid={runPaidConfetti}
-                            onOptimisticUpdate={(id, status) => setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status } : inv))}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
       </div>
 
       {/* Invoice slide-over panel — contextual transition from Recent Invoices */}
