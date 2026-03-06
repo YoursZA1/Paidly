@@ -288,23 +288,23 @@ export default function InvoicesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background w-full min-w-0">
+        <div className="min-h-screen bg-background w-full min-w-0 mobile-page">
             <div className="max-w-7xl mx-auto w-full min-w-0">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col gap-4 mb-6 sm:mb-8"
+                    className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8"
                 >
-                    <div className="flex flex-col gap-1">
-                        <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-foreground font-display">
+                    <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
+                        <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">
                             Invoices
                         </h1>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                             Track, manage, and download all your invoices.
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
                         <input type="file" ref={invoiceFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoicesFile} />
                         <input type="file" ref={invoiceViewsFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoiceViewsFile} />
                         {/* Primary action first on mobile */}
@@ -382,8 +382,8 @@ export default function InvoicesPage() {
                     </div>
                 </motion.div>
 
-                <Card className="rounded-xl overflow-hidden w-full min-w-0">
-                    <CardHeader className="p-4 sm:p-6">
+                <Card className="rounded-xl overflow-hidden w-full min-w-0 mobile-card-wrap">
+                    <CardHeader className="p-3 sm:p-4 md:p-6">
                         <div className="space-y-4">
                             <CardTitle className="text-base font-semibold text-foreground">Invoice List</CardTitle>
                             <InvoiceFilters 
@@ -392,7 +392,7 @@ export default function InvoicesPage() {
                             />
                         </div>
                     </CardHeader>
-                    <CardContent className="p-4 sm:p-6">
+                    <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
                         {isLoading ? (
                              viewMode === 'list' ? (
                                 <InvoiceList isLoading={true} />

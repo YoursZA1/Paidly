@@ -333,18 +333,18 @@ const QuoteReminderService = {
   checkAndSendReminders: async () => {}
 };
 
-const NavLink = ({ item, onClick, collapsed = false }) => {
+const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
   if (!item) return null;
 
   if (item.type === "section") {
-    if (collapsed) {
+    if (collapsed && !mobile) {
       return <div className="my-2 h-px bg-border" />;
     }
     return (
-      <div className="px-4 py-2 text-[12px] font-semibold uppercase tracking-wide text-foreground">
+      <div className={`px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-foreground ${mobile ? "mt-2" : ""}`}>
         {item.title}
       </div>
     );
@@ -357,7 +357,7 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
         <motion.div whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}>
           <button
             type="button"
-            className={`group flex items-center py-2 w-full transition-all font-mono ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}
+            className={`group flex items-center w-full transition-all font-mono rounded-full ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : `py-2 ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}`}
             style={{ cursor: 'pointer' }}
             onClick={() => setOpen((prev) => !prev)}
             aria-expanded={open}
@@ -408,9 +408,9 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
         id={item.id}
         to={item.url}
         onClick={onClick}
-        title={collapsed ? item.title : undefined}
-        aria-label={collapsed ? item.title : undefined}
-        className={`group flex items-center py-2.5 transition-all ${collapsed ? "justify-center px-2" : "gap-3 px-3"} rounded-full`}
+        title={collapsed && !mobile ? item.title : undefined}
+        aria-label={collapsed && !mobile ? item.title : undefined}
+        className={`group flex items-center transition-all rounded-full ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : `py-2.5 ${collapsed ? "justify-center px-2" : "gap-3 px-3"}`}`}
       >
         <span
           className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
@@ -419,7 +419,7 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
         >
           <item.icon className="size-5" strokeWidth={2.5} />
         </span>
-        {!collapsed && (
+        {(!collapsed || mobile) && (
           <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : "text-foreground font-normal"}`}>{item.title}</span>
         )}
       </Link>
@@ -430,7 +430,8 @@ const NavLink = ({ item, onClick, collapsed = false }) => {
 NavLink.propTypes = {
   item: navItemShape,
   onClick: PropTypes.func,
-  collapsed: PropTypes.bool
+  collapsed: PropTypes.bool,
+  mobile: PropTypes.bool
 };
 
 const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
@@ -444,30 +445,30 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
     aria-modal="true"
     aria-label="Main menu"
   >
-    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly */}
-    <div className="w-full max-w-[min(320px,85vw)] flex flex-col bg-card border-r border-border text-foreground shadow-elevation-lg p-4 mobile-nav-panel">
+    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly, fits narrow screens */}
+    <div className="w-full max-w-[min(300px,90vw)] flex flex-col bg-card border-r border-border text-foreground shadow-elevation-lg p-3 sm:p-4 mobile-nav-panel">
       {/* Header with safe-top applied via mobile-nav-panel */}
-      <div className="flex h-14 min-h-[3.5rem] items-center justify-between shrink-0">
-        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0 min-h-[44px] items-center touch-manipulation" aria-label="Paidly home">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-            <img src="/logo.svg" alt="" className="w-8 h-8" aria-hidden="true" />
+      <div className="flex min-h-[52px] items-center justify-between shrink-0 gap-2">
+        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-2 min-w-0 min-h-[44px] flex-1 items-center touch-manipulation" aria-label="Paidly home">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+            <img src="/logo.svg" alt="" className="w-7 h-7 sm:w-8 sm:h-8" aria-hidden="true" />
           </div>
-          <span className="text-[15px] font-semibold text-foreground truncate font-display">Paidly</span>
+          <span className="text-[14px] sm:text-[15px] font-semibold text-foreground truncate font-display">Paidly</span>
         </Link>
-        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 min-h-12 min-w-12 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation" aria-label="Close menu">
+        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 min-h-11 min-w-11 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation" aria-label="Close menu">
           <X className="size-5" />
         </Button>
       </div>
 
-      {/* Nav list: scrollable, theme spacing */}
-      <nav className="space-y-0.5 mt-2 flex-1 overflow-y-auto overflow-x-hidden -mx-2 py-2 min-h-0" aria-label="App navigation">
+      {/* Nav list: scrollable, theme spacing, touch-friendly link height */}
+      <nav className="space-y-0.5 mt-2 flex-1 overflow-y-auto overflow-x-hidden -mx-1 py-2 min-h-0" aria-label="App navigation">
         {items.map(item => (
-          <NavLink key={item.id || item.title} item={item} onClick={onClose} />
+          <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
         ))}
       </nav>
 
       {/* Footer: user, actions, safe-bottom for home indicator — mobile: only Create Invoice + Logout */}
-      <div className="shrink-0 border-t border-border pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] px-4 space-y-3">
+      <div className="shrink-0 border-t border-border pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] px-2 sm:px-4 space-y-3">
         <div className="flex flex-col items-center gap-2">
           <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden shrink-0">
             {user?.logo_url ? (
@@ -839,7 +840,7 @@ export default function Layout({ children, currentPageName }) {
           ref={mainContentRef}
           className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-4 sm:py-6 md:py-8 px-3 sm:px-6 md:px-8 safe-x safe-bottom min-w-0 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
-          <div className="max-w-7xl mx-auto w-full min-w-0">
+          <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -847,7 +848,7 @@ export default function Layout({ children, currentPageName }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-              className="min-h-full"
+              className="min-h-full w-full min-w-0"
             >
               {children}
             </motion.div>

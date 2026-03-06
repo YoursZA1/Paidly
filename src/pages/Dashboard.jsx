@@ -51,20 +51,20 @@ const QUICK_ACTION_ACCENT = {
 const QuickActionCard = ({ title, icon: Icon, href, fintech, accent = 'blue' }) => {
   const style = QUICK_ACTION_ACCENT[accent] || QUICK_ACTION_ACCENT.blue;
   return (
-    <Link to={href}>
-      <Card className={`group cursor-pointer h-full overflow-hidden relative transition-all duration-300 ${
+    <Link to={href} className="block min-w-0">
+      <Card className={`group cursor-pointer h-full overflow-hidden relative transition-all duration-300 min-w-0 ${
         fintech
           ? `glass-card glass-card-hover rounded-fintech border border-border hover:border-primary/40 ${style.border}`
           : "bg-card hover:shadow-md rounded-xl border border-border"
       }`}>
-        <CardContent className={`p-4 sm:p-6 relative flex items-center gap-3 sm:gap-4`}>
-          <div className={`w-14 h-14 flex items-center justify-center rounded-xl transition-colors duration-300 ${
+        <CardContent className={`p-3 sm:p-4 md:p-6 relative flex items-center gap-3 sm:gap-4 min-w-0`}>
+          <div className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-xl transition-colors duration-300 shrink-0 ${
             fintech ? `${style.bg} ${style.hoverBg}` : "bg-primary/10 group-hover:bg-primary"
           }`}>
             <Icon className={`w-7 h-7 ${fintech ? `${style.icon} group-hover:text-primary-foreground` : "text-primary group-hover:text-primary-foreground"}`} />
           </div>
-          <div>
-            <h3 className={`text-sm font-semibold ${fintech ? "text-foreground" : "text-foreground"}`}>{title}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className={`text-sm font-semibold truncate ${fintech ? "text-foreground" : "text-foreground"}`}>{title}</h3>
           </div>
         </CardContent>
       </Card>
@@ -94,7 +94,7 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
             <Skeleton className={`h-8 sm:h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
           ) : (
             <>
-              <p className={`tabular-nums font-bold truncate ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>{value}</p>
+              <p className={`tabular-nums font-bold truncate min-w-0 ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>{value}</p>
               {subtitle && (
                 <div className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{subtitle}</div>
               )}
@@ -1155,7 +1155,7 @@ export default function Dashboard() {
   }).length;
 
   return (
-    <div className="min-h-full w-full min-w-0">
+    <div className="min-h-full w-full min-w-0 mobile-page">
       <div className="max-w-7xl mx-auto w-full min-w-0 px-3 py-2 sm:p-6 md:p-8">
         {/* Welcome Header */}
         <motion.div
@@ -1176,7 +1176,7 @@ export default function Dashboard() {
           transition={{ delay: 0.05 }}
           className="mb-6"
         >
-          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6">
+          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             title="Revenue"
@@ -1423,7 +1423,7 @@ export default function Dashboard() {
           transition={{ delay: 0.1 }}
           className="mb-6"
         >
-          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6">
+          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <QuickActionCard title="Create Invoice" icon={FileText} href={createPageUrl("CreateInvoice")} fintech accent="green" />
           <QuickActionCard title="Add Expense" icon={Receipt} href={createPageUrl("CashFlow")} fintech accent="red" />

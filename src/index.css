@@ -233,6 +233,28 @@ body {
       font-size: 1rem;
       line-height: 1.5;
     }
+    /* Page content: fit within viewport, no overflow */
+    .mobile-page {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    /* Cards and containers: prevent children from bursting out */
+    .mobile-card-wrap {
+      overflow: hidden;
+      min-width: 0;
+    }
+    /* Long text in cells/cards: break instead of overflow */
+    .mobile-break-words {
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+    /* Horizontal scroll areas (e.g. tables): subtle padding so shadow/scroll is visible */
+    .mobile-scroll-x {
+      -webkit-overflow-scrolling: touch;
+      overflow-x: auto;
+    }
   }
   /* Prevent inputs from zooming on iOS (16px minimum) */
   @media (max-width: 767px) {
