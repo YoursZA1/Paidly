@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, Calendar, CreditCard, Save, AlertCircle, Building2, Banknote, Smartphone } from 'lucide-react';
+import { DollarSign, Calendar, CreditCard, Save, AlertCircle, Building2, Banknote, Smartphone, CheckCircle } from 'lucide-react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { Payment } from '@/api/entities';
 
@@ -25,6 +26,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
   const [existingPayments, setExistingPayments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [phase, setPhase] = useState('form'); // 'form' | 'recording' | 'success'
 
   // Load existing payments from Payment entity
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
 
   useEffect(() => {
     if (!isOpen) return;
+    setPhase('form');
     const presetAmount = defaultValues?.amount;
     setAmount(presetAmount ? Number(presetAmount).toFixed(2) : '');
     setDate(toDateInputValue(defaultValues?.payment_date));
@@ -70,6 +73,12 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     setNotes(defaultValues?.notes || '');
     setError('');
   }, [isOpen, defaultValues?.amount, defaultValues?.payment_date, defaultValues?.payment_method, defaultValues?.notes]);
+
+  // Default amount to full balance once payments are loaded
+  useEffect(() => {
+    if (!isOpen || loading || remainingBalance <= 0) return;
+    setAmount((prev) => (prev === '' ? remainingBalance.toFixed(2) : prev));
+  }, [isOpen, loading, remainingBalance]);
   
   // Generate smart payment suggestions
   const suggestedAmounts = [
@@ -79,7 +88,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     { label: '10% of Balance', value: remainingBalance / 10 }
   ].filter(suggestion => suggestion.value >= 1 && remainingBalance > 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!amount || !date || !method) {
       setError('Amount, date, and payment method are required');
       return;
@@ -96,26 +105,46 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
       return;
     }
 
-    onSave({
-      amount: parsedAmount,
-      payment_date: new Date(date).toISOString(),
-      payment_method: method,
-      reference_number: notes.split('\n')[0] || '',
-      notes
-    });
-    
-    // Reset form
-    setAmount('');
-    setDate(new Date().toISOString().slice(0, 10));
-    setMethod('');
-    setNotes('');
+    setPhase('recording');
     setError('');
-    onClose();
+    try {
+      await onSave({
+        amount: parsedAmount,
+        payment_date: new Date(date).toISOString(),
+        payment_method: method,
+        reference_number: notes.split('\n')[0] || '',
+        notes
+      });
+      setPhase('success');
+      setTimeout(() => {
+        setAmount('');
+        setDate(new Date().toISOString().slice(0, 10));
+        setMethod('');
+        setNotes('');
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setError(err?.message || 'Failed to record payment. Please try again.');
+      setPhase('form');
+    }
   };
 
+  const showForm = phase === 'form';
+  const showRecording = phase === 'recording';
+  const showSuccess = phase === 'success';
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && phase === 'form' && onClose()}>
+      <DialogContent className={showSuccess ? 'sm:max-w-md' : ''}>
+        <AnimatePresence mode="wait">
+          {showForm && (
+            <motion.div
+              key="form"
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
         <DialogHeader>
           <DialogTitle>Record Payment for Invoice #{invoice.invoice_number}</DialogTitle>
         </DialogHeader>
@@ -313,6 +342,45 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
             Record Payment
           </Button>
         </DialogFooter>
+            </motion.div>
+          )}
+          {showRecording && (
+            <motion.div
+              key="recording"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center py-12 gap-4"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full"
+              />
+              <p className="text-muted-foreground font-medium">Recording payment…</p>
+            </motion.div>
+          )}
+          {showSuccess && (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className="flex flex-col items-center justify-center py-12 gap-4"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.1 }}
+                className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center"
+              >
+                <CheckCircle className="w-10 h-10 text-white" strokeWidth={2.5} />
+              </motion.div>
+              <p className="text-lg font-semibold text-foreground">Payment recorded</p>
+              <p className="text-sm text-muted-foreground text-center">Dashboard updated</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );

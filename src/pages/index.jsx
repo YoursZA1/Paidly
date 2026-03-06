@@ -69,6 +69,7 @@ import SystemStatus from "./SystemStatus";
 import BackgroundJobs from "./BackgroundJobs";
 import BuildLogs from "./BuildLogs";
 import About from "./About";
+import PrivacyPolicy from "./PrivacyPolicy";
 import BentoDemoPage from "./BentoDemo";
 import AnimatedIconsDemoPage from "./AnimatedIconsDemo";
 
@@ -114,6 +115,8 @@ const MAIN_ROUTES = [
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
+    { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
+    { path: "/privacy-policy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
     { path: "/BentoDemo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/bento-demo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/AnimatedIconsDemo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },

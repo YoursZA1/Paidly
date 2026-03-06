@@ -17,7 +17,7 @@ const statusStyles = {
     overdue: "bg-red-100 text-red-700 border-red-200"
 };
 
-export default function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess }) {
+export default function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate }) {
     const getClientName = (clientId) => {
         const client = clients.find(c => c.id === clientId);
         return client ? client.name : "N/A";
@@ -100,6 +100,8 @@ export default function InvoiceList({ invoices, clients, isLoading, userCurrency
                                                 invoice={invoice}
                                                 client={clients.find(c => c.id === invoice.client_id)}
                                                 onActionSuccess={onActionSuccess}
+                                                onPaymentFullyPaid={onPaymentFullyPaid}
+                                                onOptimisticUpdate={onOptimisticUpdate}
                                             />
                                         </TableCell>
                                     </TableRow>

@@ -33,16 +33,20 @@ import {
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
+import ViewInvoice from "@/pages/ViewInvoice";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { NumberTicker } from "@/components/dashboard/NumberTicker";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import WelcomeGuide from '@/components/shared/WelcomeGuide';
 import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
+import KPICarousel from '@/components/dashboard/KPICarousel';
 import GoalProgress from '@/components/dashboard/GoalProgress';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { runPaidConfetti } from '@/utils/confetti';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -240,6 +244,7 @@ export default function Dashboard() {
     failedPayments: []
   });
   const [revenueRange, setRevenueRange] = useState(30);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [alerts, setAlerts] = useState({
     planLimits: [],
     failedSubscriptions: [],
@@ -255,13 +260,14 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    if (!authUser?.id) return;
     if (isAdmin) {
       loadAdminData();
     } else {
       loadUserData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isAdmin, authUser?.id]);
 
   // Removed calculateFinancialMetrics (no longer used)
 
@@ -585,10 +591,20 @@ export default function Dashboard() {
         setUserCurrencyPreference(currencyPref.currency);
       }
 
-      const [invoicesData, clientsData, userData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
+      // Fetch user from profiles: User.me() requires this.user; fallback to restoreFromSupabaseSession when not yet set
+      let userData;
+      try {
+        userData = await User.me();
+      } catch {
+        userData = await User.restoreFromSupabaseSession();
+      }
+      if (!userData) {
+        throw new Error("Not authenticated");
+      }
+
+      const [invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
         Invoice.list("-created_date"),
         Client.list("-created_date"),
-        User.me(),
         Expense.list("-date", 100),
         Payment.list().catch(() => []),
         BankingDetail.list()
@@ -634,7 +650,8 @@ export default function Dashboard() {
       buckets.set(formatDate(date, 'MMM d'), 0);
     }
 
-    invoices.forEach(inv => {
+    const paidOrPartial = (inv) => inv.status === 'paid' || inv.status === 'partial_paid';
+    invoices.filter(paidOrPartial).forEach(inv => {
       const createdAt = new Date(inv.created_date || inv.created_at || 0);
       if (createdAt < start || createdAt > now) return;
       const label = formatDate(createdAt, 'MMM d');
@@ -989,19 +1006,18 @@ export default function Dashboard() {
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={revenueTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-                      <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
-                      <YAxis stroke="var(--chart-axis)" fontSize={10} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                      <YAxis stroke="#64748b" fontSize={10} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: 'var(--bg-card)',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'var(--text-main)'
+                          backgroundColor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px'
                         }}
                         formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                       />
-                      <Line type="monotone" dataKey="value" stroke="var(--chart-line)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="value" stroke="#0f172a" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -1124,19 +1140,18 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={timeBreakdown.usersPerWeek}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-                        <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
-                        <YAxis stroke="var(--chart-axis)" fontSize={10} allowDecimals={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                        <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: 'var(--bg-card)',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            color: 'var(--text-main)'
+                            backgroundColor: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px'
                           }}
                         />
-                        <Line type="monotone" dataKey="users" stroke="var(--chart-line)" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="invoices" stroke="var(--brand-primary)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="users" stroke="#0f172a" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="invoices" stroke="#f24e00" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -1155,19 +1170,18 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
                       <LineChart data={timeBreakdown.revenuePerMonth}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-                        <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
-                        <YAxis stroke="var(--chart-axis)" fontSize={10} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+                        <YAxis stroke="#64748b" fontSize={10} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: 'var(--bg-card)',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            color: 'var(--text-main)'
+                            backgroundColor: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px'
                           }}
                           formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                         />
-                        <Line type="monotone" dataKey="revenue" stroke="var(--brand-primary)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="revenue" stroke="#f24e00" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -1277,11 +1291,19 @@ export default function Dashboard() {
   const statusColors = {
     'paid': 'bg-status-paid/10 text-status-paid',
     'sent': 'bg-primary/20 text-primary',
+    'sending': 'bg-primary/15 text-primary animate-pulse',
+    'preparing': 'bg-primary/10 text-primary animate-pulse',
     'viewed': 'bg-primary/20 text-primary',
     'draft': 'bg-muted text-muted-foreground',
     'overdue': 'bg-status-overdue/10 text-status-overdue',
     'partial_paid': 'bg-status-pending/10 text-status-pending',
     'cancelled': 'bg-muted text-muted-foreground'
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === 'sending') return 'Sending…';
+    if (status === 'preparing') return 'Preparing…';
+    return (status || 'draft').replace('_', ' ');
   };
 
   const isProfileComplete = Boolean(user?.company_name && user?.company_address && user?.logo_url);
@@ -1309,98 +1331,105 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
-          className="mb-4 sm:mb-6"
+          className="mb-2 sm:mb-6"
         >
-          <h1 className="text-xl sm:text-2xl md:text-[28px] font-bold text-foreground mb-1 sm:mb-2 font-display leading-tight">
-            Welcome back, {userName}
+          <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-2 font-display leading-tight">
+            Hello, {user?.company_name || userName}
           </h1>
-          <p className="finbank-body text-sm text-foreground">Track cash flow, get paid faster, and stay on top of your business.</p>
+          <p className="finbank-body text-xs sm:text-sm text-foreground hidden sm:block">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
 
-        {/* KPI Summary — staggered entrance with spring physics */}
-        <div className="mb-6">
-          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
-            >
-          <motion.div variants={itemVariants}>
-          <StatCard
-            title="Revenue"
-            value={formatCurrency(fintechKpis.revenue, userCurrency)}
-            icon={TrendingUp}
-            isLoading={isLoading}
-            fintech
-            accent="blue"
-            growth={fintechKpis.revenueGrowth}
-            sparklineData={kpiSparklines.revenue}
-            sparklineColor="#475569"
-            animateFromZero
-            numericValue={fintechKpis.revenue}
-            currencyForAnimation={userCurrency}
-          />
-          </motion.div>
-          <motion.div variants={itemVariants}>
-          <StatCard
-            title="Awaiting payment"
-            value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)}
-            subtitle={
-              fintechKpis.outstandingCount === 0
-                ? 'No unpaid invoices'
-                : dueThisWeekCount > 0 || overdueCount > 0
-                  ? (
-                      <span className="flex flex-wrap items-center gap-2">
-                        {dueThisWeekCount > 0 && (
-                          <span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">
-                            Due this week: {dueThisWeekCount}
-                          </span>
-                        )}
-                        {overdueCount > 0 && (
-                          <span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">
-                            Overdue: {overdueCount}
-                          </span>
-                        )}
-                      </span>
-                    )
-                  : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`
-            }
-            icon={DollarSign}
-            isLoading={isLoading}
-            fintech
-            accent="purple"
-            sparklineData={kpiSparklines.outstanding}
-            sparklineColor="#6366f1"
-          />
-          </motion.div>
-          <motion.div variants={itemVariants}>
-          <StatCard
-            title="VAT / Tax liability"
-            value={formatCurrency(fintechKpis.vatLiability, userCurrency)}
-            subtitle="Set aside for SARS"
-            icon={Landmark}
-            isLoading={isLoading}
-            fintech
-            accent="amber"
-            sparklineData={kpiSparklines.vat}
-            sparklineColor="#f59e0b"
-          />
-          </motion.div>
-          <motion.div variants={itemVariants}>
-          <StatCard
-            title="Cash flow"
-            value={formatCurrency(fintechKpis.cashFlow, userCurrency)}
-            icon={Receipt}
-            isLoading={isLoading}
-            fintech
-            accent="blue"
-            growth={fintechKpis.cashFlowGrowth}
-            sparklineData={kpiSparklines.cashFlow}
-            sparklineColor="#10b981"
-          />
-          </motion.div>
-          </motion.div>
+        {/* KPI Carousel — Framer Motion swipe on mobile, grid on desktop */}
+        <div className="mb-4 sm:mb-6">
+          <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
+            {/* Mobile: Framer Motion carousel */}
+            <div className="md:hidden">
+              <KPICarousel>
+                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
+                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" />
+                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" />
+                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" />
+              </KPICarousel>
+            </div>
+            {/* Desktop: grid */}
+            <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" /></motion.div>
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Total Income — full width, glassmorphism, below KPI carousel on mobile */}
+        <div className="mb-4 sm:mb-6 md:hidden w-full max-w-full">
+          <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} variant="carousel" />
+        </div>
+
+        {/* Mobile: Action buttons + Recent Transactions — premium fintech order */}
+        <div className="md:hidden space-y-4 mb-6">
+          <div className="glass-card rounded-2xl border border-border p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl min-h-[48px] h-12 px-4 gap-2 text-base transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] touch-manipulation"
+                onClick={() => navigate(createPageUrl("CreateInvoice"))}
+              >
+                <FileText className="w-5 h-5 shrink-0" />
+                New Invoice
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-2 border-border text-foreground font-semibold hover:bg-muted text-base transition-all active:scale-[0.98] touch-manipulation"
+                onClick={() => navigate(createPageUrl("CashFlow"))}
+              >
+                <Receipt className="w-5 h-5 shrink-0" />
+                Add Expense
+              </Button>
+            </div>
+          </div>
+          {/* Recent Transactions — compact mobile list */}
+          <div className="glass-card rounded-2xl border border-border overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <h3 className="text-base font-semibold text-foreground font-display">Recent Transactions</h3>
+            </div>
+            <div className="divide-y divide-border">
+              {mergedTransactions.length === 0 ? (
+                <div className="py-8 px-4 text-center">
+                  <p className="text-muted-foreground text-sm">No transactions yet.</p>
+                  <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
+                </div>
+              ) : (
+                mergedTransactions.slice(0, 5).map((tx) => {
+                  const isIncome = tx.type === 'income';
+                  const statusColor = isIncome ? 'bg-status-paid/15 text-status-paid border-status-paid/30' : 'bg-status-pending/15 text-status-pending border-status-pending/30';
+                  const displayAmount = isIncome ? tx.amount : Math.abs(tx.amount);
+                  return (
+                    <div key={tx.id} className="py-4 px-4 min-h-[56px]">
+                      {/* Name + Amount on one line */}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-sm text-foreground truncate flex-1">{tx.label}</p>
+                        <p className="font-bold text-sm text-foreground currency-nums shrink-0">
+                          {isIncome ? '+' : '-'}{formatCurrency(displayAmount, userCurrency)}
+                        </p>
+                      </div>
+                      {/* Status badge underneath */}
+                      <div className="mt-1.5">
+                        <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-md border ${statusColor}`}>
+                          {isIncome ? 'Paid' : 'Expense'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {mergedTransactions.length > 5 && (
+              <Link to={createPageUrl("Invoices")} className="block p-4 border-t border-border text-center">
+                <span className="text-sm font-medium text-primary">View all transactions</span>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -1564,9 +1593,11 @@ export default function Dashboard() {
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            {/* Top row: Total Income + Pending Payments */}
+            {/* Top row: Total Income (desktop) + Pending Payments */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
-              <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} />
+              <div className="hidden md:block">
+                <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} />
+              </div>
               <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
             </div>
 
@@ -1608,13 +1639,13 @@ export default function Dashboard() {
                     >
                       <defs>
                         <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" style={{ stopColor: 'var(--chart-line)' }} stopOpacity={0.18} />
-                          <stop offset="100%" style={{ stopColor: 'var(--chart-line)' }} stopOpacity={0} />
+                          <stop offset="0%" style={{ stopColor: '#475569' }} stopOpacity={0.12} />
+                          <stop offset="100%" style={{ stopColor: '#475569' }} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-subtle)" vertical={false} />
-                      <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis stroke="var(--chart-axis)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
                         labelStyle={{ color: "var(--text-main)" }}
@@ -1623,12 +1654,12 @@ export default function Dashboard() {
                       <Area
                         type="monotone"
                         dataKey="value"
-                        stroke="var(--chart-line)"
+                        stroke="#475569"
                         strokeWidth={2}
                         fill="url(#fintechRevenueGrad)"
                         fillOpacity={1}
                         dot={false}
-                        activeDot={{ r: 4, fill: "var(--chart-line)", stroke: "hsl(var(--card))", strokeWidth: 1 }}
+                        activeDot={{ r: 4, fill: "#475569", stroke: "#fff", strokeWidth: 1 }}
                         isAnimationActive
                         animationDuration={1200}
                         animationEasing="ease-in-out"
@@ -1652,31 +1683,31 @@ export default function Dashboard() {
               <SetupProgressStepper user={user} hasBankingDetails={hasBankingDetails} invoices={invoices} />
             )}
 
-            {/* Quick Creator — streamlined horizontal bar with hover lift + shadow + icon emphasis */}
-            <div className="glass-card rounded-fintech border border-border p-4 sm:p-5">
-              <h3 className="text-sm font-semibold text-foreground font-display mb-3 tracking-tight">Quick Creator</h3>
-              <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Creator — hidden on mobile (shown in mobile block above) */}
+            <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-5 hidden md:block">
+              <h3 className="text-sm font-semibold text-foreground font-display mb-3 tracking-tight hidden sm:block">Quick Creator</h3>
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 sm:gap-2">
                 <Button
                   size="sm"
-                  className="group bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg h-9 px-4 gap-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md hover:shadow-primary/20 active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
+                  className="group bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 text-base sm:text-sm transition-all duration-200 ease-out hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] touch-manipulation"
                   onClick={() => navigate(createPageUrl("CreateInvoice"))}
                 >
-                  <FileText className="w-4 h-4 shrink-0" />
-                  Invoice
+                  <FileText className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                  New Invoice
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-2 border-border text-foreground font-semibold hover:bg-muted text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
                   onClick={() => navigate(createPageUrl("CashFlow"))}
                 >
-                  <Receipt className="w-4 h-4 shrink-0" />
-                  Expense
+                  <Receipt className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                  Add Expense
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  className="hidden sm:inline-flex group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
                   onClick={() => navigate(createPageUrl("Clients"))}
                 >
                   <UsersIcon className="w-4 h-4 shrink-0" />
@@ -1685,18 +1716,14 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  className="hidden sm:inline-flex group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
                   onClick={() => navigate(createPageUrl("Services"))}
                 >
                   <Headset className="w-4 h-4 shrink-0" />
                   Service
                 </Button>
-                <Link to={createPageUrl("Invoices")} className="inline-flex ml-auto">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="group rounded-lg h-9 text-muted-foreground hover:text-foreground text-sm font-medium transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-sm active:translate-y-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-105"
-                  >
+                <Link to={createPageUrl("Invoices")} className="hidden sm:inline-flex sm:ml-auto">
+                  <Button variant="ghost" size="sm" className="group rounded-lg h-9 text-muted-foreground hover:text-foreground text-sm font-medium">
                     View all
                   </Button>
                 </Link>
@@ -1705,8 +1732,8 @@ export default function Dashboard() {
 
             <GoalProgress year={new Date().getFullYear()} progress={goalProgress} />
 
-            {/* Transaction List — below Plan for 2026 */}
-            <div className="glass-card rounded-fintech border border-border overflow-hidden">
+            {/* Transaction List — hidden on mobile (shown in mobile block above) */}
+            <div className="glass-card rounded-fintech border border-border overflow-hidden hidden md:block">
               <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
                 <div className="flex gap-2">
@@ -1833,27 +1860,36 @@ export default function Dashboard() {
                   {invoices.slice(0, 5).map((invoice) => {
                     const client = clients.find((c) => c.id === invoice.client_id);
                     return (
-                      <div key={invoice.id} className="group flex items-center justify-between py-5 px-6 hover:bg-white/5 transition-all">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+                      <div
+                        key={invoice.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedInvoiceId(invoice.id)}
+                        onKeyDown={(e) => e.key === 'Enter' && setSelectedInvoiceId(invoice.id)}
+                        className="group flex items-center justify-between py-5 px-6 hover:bg-white/5 transition-all cursor-pointer"
+                      >
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center group-hover:bg-primary/30 transition-colors shrink-0">
                             <FileText className="w-7 h-7 text-primary" />
                           </div>
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <p className="font-bold text-foreground">{invoice.invoice_number}</p>
-                            <p className="text-sm text-muted-foreground">{client?.name || 'Unknown Client'}</p>
+                            <p className="text-sm text-muted-foreground truncate">{client?.name || 'Unknown Client'}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-6 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <div className="text-right hidden sm:block">
                             <p className="font-bold text-lg text-foreground">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                           </div>
                           <Badge className={`${statusColors[invoice.status] || 'bg-muted text-foreground'} border-0 font-semibold px-3 py-1.5`}>
-                            {(invoice.status || 'draft').replace('_', ' ')}
+                            {getStatusLabel(invoice.status)}
                           </Badge>
                           <InvoiceActions
                             invoice={invoice}
                             client={client}
                             onActionSuccess={loadUserData}
+                            onPaymentFullyPaid={runPaidConfetti}
+                            onOptimisticUpdate={(id, status) => setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status } : inv))}
                           />
                         </div>
                       </div>
@@ -1865,6 +1901,24 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </div>
+
+      {/* Invoice slide-over panel — contextual transition from Recent Invoices */}
+      <Sheet open={!!selectedInvoiceId} onOpenChange={(open) => !open && setSelectedInvoiceId(null)}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-2xl lg:max-w-3xl p-0 overflow-hidden flex flex-col [&>button]:z-10"
+        >
+          <div className="flex-1 overflow-auto pt-14 px-4 sm:px-6 pb-6">
+            {selectedInvoiceId && (
+              <ViewInvoice
+                invoiceId={selectedInvoiceId}
+                embedded
+                onClose={() => setSelectedInvoiceId(null)}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Create Account Dialog */}
       <CreateAccountDialog

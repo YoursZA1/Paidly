@@ -1300,16 +1300,9 @@ class AuthManager {
         }
       }
     } catch (error) {
-      console.warn("Failed to load profile from Supabase, trying localStorage:", getSupabaseErrorMessage(error, "Load profile failed"));
-      // Fallback to localStorage
-      try {
-        const storedProfile = localStorage.getItem(`breakapi_${userId}_company_profile`);
-        if (storedProfile) {
-          companyProfile = JSON.parse(storedProfile);
-        }
-      } catch {
-        // Ignore errors loading company profile from localStorage
-      }
+      console.warn("Failed to load profile from Supabase:", getSupabaseErrorMessage(error, "Load profile failed"));
+      // Do NOT fall back to localStorage - database is the source of truth.
+      // Stale localStorage can cause profile data to appear "lost" after logout/login.
     }
 
     this.isAuthenticated = true;

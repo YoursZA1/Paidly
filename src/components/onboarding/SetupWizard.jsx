@@ -97,16 +97,6 @@ export default function SetupWizard({ isOpen, onComplete }) {
                 onboarding_completed: true
             });
 
-            // Persist company profile info to user-specific key (fallback and display name)
-            const companyProfile = {
-                full_name: formData.full_name?.trim() || "",
-                company_name: formData.company_name,
-                company_address: formData.company_address,
-                logo_url: finalLogoUrl,
-                currency: formData.currency
-            };
-            localStorage.setItem(`breakapi_${userId}_company_profile`, JSON.stringify(companyProfile));
-
             // Create Banking Detail if filled
             if (formData.bank_name && formData.account_number) {
                 await BankingDetail.create({

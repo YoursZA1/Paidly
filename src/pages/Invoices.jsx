@@ -15,6 +15,7 @@ import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } fr
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
+import { runPaidConfetti } from '@/utils/confetti';
 import { motion } from "framer-motion";
 import InvoiceList from "../components/invoice/InvoiceList";
 import InvoiceGrid from "../components/invoice/InvoiceGrid";
@@ -424,6 +425,8 @@ export default function InvoicesPage() {
                                         userCurrency={userCurrency}
                                         paymentsMap={paymentsMap}
                                         onActionSuccess={loadData}
+                                        onPaymentFullyPaid={runPaidConfetti}
+                                        onOptimisticUpdate={(id, status) => setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status } : inv))}
                                     />
                                 ) : (
                                     <InvoiceGrid 
@@ -432,6 +435,8 @@ export default function InvoicesPage() {
                                         userCurrency={userCurrency}
                                         paymentsMap={paymentsMap}
                                         onActionSuccess={loadData}
+                                        onPaymentFullyPaid={runPaidConfetti}
+                                        onOptimisticUpdate={(id, status) => setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status } : inv))}
                                     />
                                 )}
                                 

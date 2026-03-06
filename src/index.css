@@ -11,6 +11,7 @@ html {
 @supports (padding: env(safe-area-inset-top)) {
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .safe-left { padding-left: env(safe-area-inset-left); }
   .safe-right { padding-right: env(safe-area-inset-right); }
   .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
@@ -114,7 +115,7 @@ body {
     --sidebar-foreground: 0 0% 98%;
     --sidebar-primary: 17 100% 47%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 14%;
+    --sidebar-accent: 222 47% 18%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 222 47% 16%;
     --sidebar-ring: 17 100% 47%;
@@ -131,11 +132,6 @@ body {
     --text-h2-size: 18px;
     --text-body-size: 14px;
     --text-caption-size: 12px;
-    /* Chart axes, grids, lines (light mode) */
-    --chart-axis: #64748b;
-    --chart-grid: #e2e8f0;
-    --chart-grid-subtle: rgba(0,0,0,0.06);
-    --chart-line: #0f172a;
   }
   /* Auth pages: warm gradient matching logo (coral/orange/cream) */
   .auth-page-bg {
@@ -174,7 +170,7 @@ body {
     --sidebar-foreground: 210 20% 98%;
     --sidebar-primary: 17 100% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 18% 16%;
+    --sidebar-accent: 222 18% 20%;
     --sidebar-accent-foreground: 210 20% 98%;
     --sidebar-border: 222 18% 18%;
     --sidebar-ring: 17 100% 52%;
@@ -186,17 +182,6 @@ body {
     --content-bg: #0f1419;
     --panel-bg: #161b22;
     --sidebar-border-color: #21262d;
-    /* Numbers & currency: high-contrast for readability */
-    --text-numeric: #f0f6fc;
-    --text-numeric-muted: #8b949e;
-    --text-numeric-positive: #3fb950;
-    --text-numeric-negative: #f85149;
-    --text-numeric-warning: #d29922;
-    /* Chart axes, grids, lines for dark mode */
-    --chart-axis: #8b949e;
-    --chart-grid: #21262d;
-    --chart-grid-subtle: rgba(255,255,255,0.08);
-    --chart-line: #e6edf3;
   }
 
   /* Base reset & body */
@@ -218,52 +203,6 @@ body {
     font-feature-settings: "tnum" 1;
     font-family: var(--font-mono);
   }
-  .dark .currency-nums {
-    color: var(--text-numeric);
-  }
-
-  /* Dark mode: override hardcoded slate/gray text so numbers and labels are readable */
-  .dark .text-slate-900,
-  .dark .text-slate-800,
-  .dark .text-gray-900,
-  .dark .text-gray-800 { color: var(--text-main) !important; }
-  .dark .text-slate-700,
-  .dark .text-gray-700 { color: hsl(var(--foreground)) !important; }
-  .dark .text-slate-600,
-  .dark .text-slate-500,
-  .dark .text-gray-600,
-  .dark .text-gray-500 { color: var(--text-muted) !important; }
-  .dark .text-slate-400,
-  .dark .text-gray-400 { color: var(--text-muted) !important; }
-  .dark .text-neutral-700,
-  .dark .text-neutral-600 { color: var(--text-muted) !important; }
-  .dark .text-neutral-300 { color: hsl(var(--foreground)) !important; }
-  /* Dark mode: numeric emphasis (bold numbers in tables, stats) */
-  .dark .font-bold.text-slate-900,
-  .dark .font-semibold.text-slate-900,
-  .dark .font-bold.text-gray-900,
-  .dark .font-semibold.text-gray-900 { color: var(--text-numeric) !important; }
-  /* Dark mode: status colors keep semantic meaning, adjust for dark bg */
-  .dark .text-emerald-700 { color: #3fb950 !important; }
-  .dark .text-rose-700,
-  .dark .text-red-600 { color: #f85149 !important; }
-  .dark .text-amber-700,
-  .dark .text-yellow-600 { color: #d29922 !important; }
-  .dark .text-green-600 { color: #3fb950 !important; }
-  .dark .text-purple-600 { color: #a371f7 !important; }
-  /* Dark mode: backgrounds for badges/chips */
-  .dark .bg-slate-100,
-  .dark .bg-slate-50,
-  .dark .bg-gray-100,
-  .dark .bg-gray-50 { background-color: hsl(var(--muted)) !important; }
-  .dark .bg-slate-200,
-  .dark .bg-gray-200 { background-color: hsl(var(--border)) !important; }
-  .dark .bg-white { background-color: hsl(var(--card)) !important; }
-  .dark .border-slate-200,
-  .dark .border-gray-200,
-  .dark .border-gray-300 { border-color: hsl(var(--border)) !important; }
-  .dark .text-slate-700.bg-slate-100,
-  .dark .text-slate-800.bg-slate-100 { color: var(--text-muted) !important; background-color: hsl(var(--muted)) !important; }
   /* Inputs: consistent focus for product feel */
   input:focus-visible,
   select:focus-visible,
@@ -421,9 +360,10 @@ body {
   .sidebar-panel {
     background: hsl(var(--sidebar-background));
     border-right: 1px solid hsl(var(--sidebar-border));
+    overflow-x: hidden;
   }
   .sidebar-nav-icon {
-    stroke-width: 2.5;
+    stroke-width: 2;
     width: 20px;
     height: 20px;
   }
@@ -431,17 +371,19 @@ body {
     width: 20px;
     height: 20px;
   }
+  /* Ghost active state: transparent bg, orange text/icon, 3px left bar */
   .sidebar-nav-item-active {
-    background: hsl(var(--sidebar-primary)) !important;
-    color: hsl(var(--sidebar-primary-foreground)) !important;
-    border-radius: 9999px;
+    background: transparent !important;
+    border-left: 3px solid hsl(var(--primary)) !important;
+    border-radius: 0.5rem;
     box-shadow: none;
   }
   .sidebar-nav-item-active .sidebar-nav-icon {
-    color: hsl(var(--sidebar-primary-foreground)) !important;
+    color: hsl(var(--primary)) !important;
   }
-  .sidebar-nav-item-active a {
-    border-radius: 9999px;
+  .sidebar-nav-item-active a,
+  .sidebar-nav-item-active span {
+    color: hsl(var(--primary)) !important;
   }
 
   /* Collapsed sidebar (icon rail): "ghost" active + quiet hover */

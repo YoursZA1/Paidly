@@ -1302,8 +1302,12 @@ begin
   end if;
 
   if target_user_id is not null and msg is not null then
-    insert into public.notifications (user_id, message, read)
-    values (target_user_id, msg, false);
+    begin
+      insert into public.notifications (user_id, message, read)
+      values (target_user_id, msg, false);
+    exception when others then
+      raise notice 'notify_activity: failed to insert notification: %', SQLERRM;
+    end;
   end if;
 
   return new;

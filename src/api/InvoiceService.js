@@ -3,6 +3,7 @@
  */
 
 import { breakApi } from './apiClient';
+import { isAbortError } from '@/utils/retryOnAbort';
 
 class InvoiceService {
   /**
@@ -129,6 +130,9 @@ class InvoiceService {
       };
     } catch (error) {
       console.error('Failed to send email:', error);
+      if (isAbortError(error)) {
+        throw new Error('Request was interrupted. Please try again.');
+      }
       throw new Error(`Failed to send invoice email: ${error.message}`);
     }
   }

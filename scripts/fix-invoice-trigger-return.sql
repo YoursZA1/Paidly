@@ -1,8 +1,17 @@
--- Activity notifications: notify document owner when invoice/quote status changes (viewed, paid, accepted).
--- Run this in Supabase SQL Editor after applying the main schema. Requires public.notifications (user_id, message, read).
--- Ensures the bell shows: "Invoice #X was viewed", "Invoice #X has been fully paid", "Quote #X was viewed/accepted", etc.
+-- Fix: "control reached end of trigger procedure without RETURN"
+-- Ensures all Invoices table trigger functions return a value in every execution path.
+-- Run this in Supabase SQL Editor.
 
--- Function: insert notification for a user (runs with definer rights so we can insert for document owner)
+-- 1. update_updated_at_column (BEFORE UPDATE) - must return NEW
+create or replace function public.update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+-- 2. notify_activity (AFTER UPDATE) - must return NEW; wrap insert in exception so failures don't prevent return
 create or replace function public.notify_activity()
 returns trigger
 language plpgsql
@@ -51,16 +60,7 @@ begin
 end;
 $$;
 
--- Trigger on invoices
-drop trigger if exists activity_notify_invoices on public.invoices;
-create trigger activity_notify_invoices
-  after update on public.invoices
-  for each row
-  execute function public.notify_activity();
-
--- Trigger on quotes
-drop trigger if exists activity_notify_quotes on public.quotes;
-create trigger activity_notify_quotes
-  after update on public.quotes
-  for each row
-  execute function public.notify_activity();
+-- Verify triggers exist
+-- SELECT trigger_name, event_manipulation, action_statement
+-- FROM information_schema.triggers
+-- WHERE event_object_table = 'invoices';

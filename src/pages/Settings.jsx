@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import LogoImage from "@/components/shared/LogoImage";
 
 import BankingCard from "@/components/banking/BankingCard";
@@ -130,19 +131,47 @@ function CompanyProfileSettings() {
         if (!authUser?.id) return;
         setIsLoading(true);
         try {
-            // User.me() loads profile from Supabase profiles table (one row per user, keyed by auth user id)
-            const currentUser = await User.me();
-            setFormData({
-                display_name: currentUser.full_name || currentUser.display_name || "",
-                company_name: currentUser.company_name || "",
-                company_address: currentUser.company_address || "",
-                logo_url: currentUser.logo_url || "",
-                currency: currentUser.currency || "USD",
-                country: currentUser.country || "",
-                timezone: currentUser.timezone || "",
-                invoice_template: currentUser.invoice_template || "classic",
-                invoice_header: currentUser.invoice_header || ""
-            });
+            let dbProfile = null;
+            try {
+                dbProfile = await User.me();
+            } catch {
+                // User.me() may throw when this.user not yet set; fetch directly from profiles by auth.uid()
+                const { data } = await supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle();
+                dbProfile = data || null;
+            }
+            const { data: { user: authSessionUser } } = await supabase.auth.getUser();
+
+            // Fallback: if profile is empty, use data from the auth session
+            const displayName = dbProfile?.full_name || dbProfile?.display_name || authSessionUser?.user_metadata?.full_name || "";
+            const email = dbProfile?.email || authSessionUser?.email || "";
+
+            const profileData = {
+                display_name: displayName,
+                company_name: dbProfile?.company_name || "",
+                company_address: dbProfile?.company_address || "",
+                logo_url: dbProfile?.logo_url || "",
+                currency: dbProfile?.currency || "USD",
+                country: dbProfile?.country || "",
+                timezone: dbProfile?.timezone || "",
+                invoice_template: dbProfile?.invoice_template || "classic",
+                invoice_header: dbProfile?.invoice_header || ""
+            };
+            setFormData(profileData);
+
+            // Upsert: if profile is empty but we have auth data, persist to DB so it's saved
+            const profileEmpty = !dbProfile || (!dbProfile.full_name && !dbProfile.email);
+            const hasAuthData = authSessionUser?.email || authSessionUser?.user_metadata?.full_name;
+            if (profileEmpty && hasAuthData && authSessionUser?.id) {
+                try {
+                    await User.updateMyUserData({
+                        full_name: authSessionUser?.user_metadata?.full_name || displayName,
+                        email: authSessionUser?.email || email,
+                    });
+                } catch (upsertErr) {
+                    console.warn("Profile upsert fallback failed:", upsertErr);
+                }
+            }
+
             // Keep auth context in sync with latest profile so other components and sync effect see correct data
             await refreshUser();
         } catch (error) {
@@ -226,8 +255,7 @@ function CompanyProfileSettings() {
                     URL.revokeObjectURL(formData.logo_url);
                 }
                 try {
-                    const currentUser = await User.me();
-                    const userId = currentUser?.id;
+                    const userId = authUser?.id;
                     if (!userId) {
                         toast({
                             title: "Not signed in",

@@ -27,16 +27,18 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT 
 -- 2. Enable RLS and provide a simple policy allowing users to read their own record
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- create policy; ignore error if it already exists (Postgres <15 doesn't support IF NOT EXISTS)
-DO $$
-BEGIN
-  CREATE POLICY "Users can view own profile" ON public.profiles
-    FOR SELECT USING (auth.uid() = id);
-EXCEPTION WHEN duplicate_object THEN
-  -- policy already exists, ignore
-  NULL;
-END
-$$;
+-- RLS policies: users can view, update, and insert their own profile (needed for Settings save/upsert)
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+CREATE POLICY "Users can view own profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles
+  FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile" ON public.profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
 
 alter table public.profiles add column if not exists company_address text;
 alter table public.profiles add column if not exists phone text;

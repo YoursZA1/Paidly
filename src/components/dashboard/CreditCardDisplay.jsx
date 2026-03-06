@@ -4,7 +4,7 @@ import { createPageUrl } from '@/utils';
 import { RefreshCw, ArrowRight } from 'lucide-react';
 import { NumberTicker } from '@/components/dashboard/NumberTicker';
 
-export default function CreditCardDisplay({ balance, currency = 'ZAR', user, renewalDate: _renewalDate, onRefresh, title, isDataReady = true }) {
+export default function CreditCardDisplay({ balance, currency = 'ZAR', user, renewalDate: _renewalDate, onRefresh, title, isDataReady = true, variant = 'default' }) {
     const [syncing, setSyncing] = useState(false);
     const cardholder = user?.company_name || user?.full_name || 'Company Name';
     const displayTitle = title === 'Business Balance' ? 'Business Balance' : 'Total Income';
@@ -20,8 +20,10 @@ export default function CreditCardDisplay({ balance, currency = 'ZAR', user, ren
         }
     };
 
+    const isCarousel = variant === 'carousel';
+
     return (
-        <div className="relative w-full max-w-[380px]">
+        <div className={`relative w-full ${isCarousel ? 'w-full min-w-0' : 'max-w-[380px]'}`}>
             {/* Total Income card: vibrant orange gradient + glassmorphism + soft glow */}
             <div
                 className="relative w-full min-h-[220px] overflow-hidden rounded-2xl p-6 sm:p-8 flex flex-col justify-between text-white transition-all duration-300 hover:shadow-[0_20px_50px_-12px_rgba(242,78,0,0.35)] backdrop-blur-xl border border-white/20"
@@ -62,7 +64,8 @@ export default function CreditCardDisplay({ balance, currency = 'ZAR', user, ren
                 </div>
             </div>
 
-            {/* Action bar */}
+            {/* Action bar — hidden in carousel to save space */}
+            {!isCarousel && (
             <div className="mt-4 flex items-center gap-3">
                 <Link
                     to={createPageUrl("Invoices")}
@@ -85,6 +88,7 @@ export default function CreditCardDisplay({ balance, currency = 'ZAR', user, ren
                     </button>
                 )}
             </div>
+            )}
         </div>
     );
 }

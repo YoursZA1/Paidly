@@ -4,6 +4,7 @@
  */
 
 import { Invoice } from '@/api/entities';
+import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 
 /**
  * Send invoice to client
@@ -17,11 +18,13 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
     // Currently: emailSubject, emailMessage, cc, bcc, sendSMS, sendNotification
     void options;
 
-    // Update invoice status to 'sent'
-    await Invoice.update(invoiceId, {
-      status: 'sent',
-      sent_date: new Date().toISOString(),
-    });
+    // Update invoice status to 'sent' (with retry on spurious AbortError)
+    await retryOnAbort(() =>
+      Invoice.update(invoiceId, {
+        status: 'sent',
+        sent_date: new Date().toISOString(),
+      })
+    );
 
     // TODO: Implement actual email sending via API
     // await breakApi.post(`/api/invoices/${invoiceId}/send`, {
@@ -40,6 +43,9 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
     };
   } catch (error) {
     console.error('Error sending invoice:', error);
+    if (isAbortError(error)) {
+      throw new Error('Request was interrupted. Please try again.');
+    }
     throw error;
   }
 };
@@ -51,7 +57,7 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
  */
 export const sendDraftInvoice = async (invoiceId) => {
   try {
-    const invoice = await Invoice.get(invoiceId);
+    const invoice = await retryOnAbort(() => Invoice.get(invoiceId));
 
     if (invoice.status !== 'draft') {
       throw new Error('Invoice is not a draft');
@@ -60,6 +66,9 @@ export const sendDraftInvoice = async (invoiceId) => {
     return await sendInvoiceToClient(invoiceId);
   } catch (error) {
     console.error('Error sending draft invoice:', error);
+    if (isAbortError(error)) {
+      throw new Error('Request was interrupted. Please try again.');
+    }
     throw error;
   }
 };

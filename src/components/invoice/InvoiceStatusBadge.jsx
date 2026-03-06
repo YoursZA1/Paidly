@@ -20,6 +20,18 @@ export default function InvoiceStatusBadge({ status, size = 'default' }) {
       className: 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-300',
       description: 'Not sent to client',
     },
+    sending: {
+      icon: Send,
+      label: 'Sending…',
+      className: 'bg-primary/15 text-primary border-primary/20 animate-pulse',
+      description: 'Sending to client',
+    },
+    preparing: {
+      icon: Send,
+      label: 'Preparing…',
+      className: 'bg-primary/10 text-primary border-primary/20 animate-pulse',
+      description: 'Preparing to send',
+    },
     sent: {
       icon: Send,
       label: 'Sent',

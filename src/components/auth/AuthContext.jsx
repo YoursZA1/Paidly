@@ -28,8 +28,14 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const currentUser = await User.me();
-      setUser(currentUser);
+      const session = await SupabaseAuthService.getSession();
+      if (session?.user) {
+        // Fetch profile from Supabase as soon as session is confirmed (handles login, refresh, new tab)
+        const currentUser = await User.restoreFromSupabaseSession(session);
+        setUser(currentUser ?? null);
+      } else {
+        setUser(null);
+      }
       setError("");
     } catch {
       setUser(null);
@@ -110,6 +116,15 @@ export function AuthProvider({ children }) {
           expiresAt: nextSession.expires_at,
           user: nextSession.user,
         });
+        await refreshUser();
+      } else if (event === "INITIAL_SESSION" && nextSession?.user) {
+        setSession({
+          accessToken: nextSession.access_token,
+          refreshToken: nextSession.refresh_token,
+          expiresAt: nextSession.expires_at,
+          user: nextSession.user,
+        });
+        await refreshUser();
       }
     });
     return () => subscription.unsubscribe();

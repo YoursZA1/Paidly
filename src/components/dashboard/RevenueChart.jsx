@@ -131,17 +131,17 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
     const total = chartData?.reduce((sum, item) => sum + item.value, 0) || 0;
 
     return (
-        <Card className="bg-card border border-border shadow-xl rounded-3xl">
+        <Card className="bg-white border-0 shadow-xl rounded-3xl">
             <CardHeader className="pb-4">
                 <div className="flex justify-between items-start">
                     <div>
-                        <CardTitle className="text-foreground mb-2 text-base font-bold">Revenue {periodLabels[period]}</CardTitle>
-                        <p className="text-3xl font-bold text-foreground currency-nums">{formatCurrency(total, currency)}</p>
+                        <CardTitle className="text-slate-900 mb-2 text-base font-bold">Revenue {periodLabels[period]}</CardTitle>
+                        <p className="text-3xl font-bold text-slate-900">{formatCurrency(total, currency)}</p>
                     </div>
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="flex gap-2 mb-6 bg-muted rounded-xl p-1">
+                <div className="flex gap-2 mb-6 bg-slate-100 rounded-xl p-1">
                     {periods.map((p) => (
                         <Button
                             key={p}
@@ -151,7 +151,7 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                             className={`text-xs flex-1 rounded-lg ${
                                 period === p 
                                     ? 'bg-gradient-to-r from-primary to-[#ff7c00] text-white shadow-sm' 
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-transparent'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-transparent'
                             }`}
                         >
                             {p}
@@ -170,13 +170,13 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                         </defs>
                         <XAxis 
                             dataKey="name" 
-                            stroke="var(--chart-axis)"
+                            stroke="#7E9294"
                             fontSize={12}
                             tickLine={false}
                             axisLine={false}
                         />
                         <YAxis 
-                            stroke="var(--chart-axis)"
+                            stroke="#7E9294"
                             fontSize={12}
                             tickLine={false}
                             axisLine={false}
@@ -190,7 +190,7 @@ export default function RevenueChart({ invoices = [], currency = 'ZAR' }) {
                             strokeWidth={3}
                             fill="url(#colorRevenue)"
                             dot={false}
-                            activeDot={{ r: 4, fill: "var(--brand-primary)", stroke: "hsl(var(--card))", strokeWidth: 1 }}
+                            activeDot={{ r: 4, fill: "var(--brand-primary)", stroke: "#fff", strokeWidth: 1 }}
                             isAnimationActive
                             animationDuration={1000}
                             animationEasing="ease-out"

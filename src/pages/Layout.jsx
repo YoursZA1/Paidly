@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
+import MobileBottomNav from "@/components/ui/MobileBottomNav";
+import MobileFAB from "@/components/ui/MobileFAB";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl, createAdminPageUrl } from "@/utils";
@@ -220,7 +222,6 @@ const adminNavigationItems = [
 ];
 
 const allNavigationItems = [
-  { type: "section", title: "Overview", id: "nav-section-overview" },
   {
     title: "Dashboard",
     url: createPageUrl("Dashboard"),
@@ -229,6 +230,7 @@ const allNavigationItems = [
     roles: ["user", "admin"],
     id: "nav-dashboard",
   },
+  { type: "section", title: "Overview", id: "nav-section-overview" },
   {
     title: "Clients",
     url: createPageUrl("Clients"),
@@ -261,6 +263,7 @@ const allNavigationItems = [
     roles: ["user", "admin"],
     id: "nav-services",
   },
+  { type: "section", title: "Finance", id: "nav-section-finance" },
   {
     title: "Cash Flow",
     url: createPageUrl("CashFlow"),
@@ -358,7 +361,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
       return <div className="my-2 h-px bg-sidebar-border" />;
     }
     return (
-      <div className={`px-3 py-2 text-[12px] font-semibold uppercase tracking-wide ${mobile ? "text-muted-foreground" : "text-sidebar-foreground/80"} ${mobile ? "mt-2" : ""}`}>
+      <div className={`px-3 py-1.5 mt-4 first:mt-2 text-[10px] font-medium uppercase tracking-widest ${mobile ? "text-muted-foreground/70" : "text-sidebar-foreground/45"}`}>
         {item.title}
       </div>
     );
@@ -370,14 +373,14 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
     const buttonEl = (
       <button
         type="button"
-        className={`group flex items-center w-full transition-all font-mono ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl" : mobile ? "rounded-full" : "rounded-full hover:bg-sidebar-accent"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : (!collapsed ? "py-2 gap-3 px-4" : "")}`}
+        className={`group flex items-center w-full transition-all font-mono ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl hover:bg-white/10" : mobile ? "rounded-full" : "rounded-full hover:bg-sidebar-accent"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : (!collapsed ? "py-2 gap-3 px-4" : "")}`}
         style={{ cursor: 'pointer' }}
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-controls={`nav-children-${item.id}`}
       >
         <span className={`sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-xl transition-all bg-transparent [&_svg]:size-5 ${collapsed && !mobile ? "text-sidebar-foreground/80 group-hover:text-sidebar-foreground group-hover:bg-white/5" : mobile ? "text-foreground" : "text-sidebar-foreground"}`}>
-          <item.icon className="size-5" strokeWidth={2.5} />
+          <item.icon className="size-5" strokeWidth={2} />
         </span>
         {!collapsed && (
           <span className={`text-[13px] font-normal transition-colors ${mobile ? "text-foreground" : "text-sidebar-foreground"}`}>{item.title}</span>
@@ -390,7 +393,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
       </button>
     );
     return (
-      <div className="mb-1">
+      <div className="mb-1 sidebar-nav-item">
         <motion.div whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}>
           {isCollapsedRailParent ? (
             <Tooltip delayDuration={0}>
@@ -431,17 +434,8 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
     <motion.div
       whileHover={{ x: 2 }}
       whileTap={{ scale: 0.98 }}
-      className={`relative ${isCollapsedRail ? "rounded-xl" : "rounded-full"} ${mobile && isActive ? "sidebar-nav-item-active" : ""}`}
+      className={`sidebar-nav-item relative ${isCollapsedRail ? "rounded-xl" : "rounded-lg"} ${mobile && isActive ? "sidebar-nav-item-active" : ""}`}
     >
-      {/* Desktop sidebar: sliding pill for active state (Layout ID transition) */}
-      {!mobile && isActive && (
-        <motion.div
-          layoutId="active-sidebar-pill"
-          className={`absolute inset-0 z-0 ${isCollapsedRail ? "rounded-xl bg-white/10" : "rounded-full bg-[hsl(var(--sidebar-primary))]"}`}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          aria-hidden
-        />
-      )}
       {isCollapsedRail ? (
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
@@ -450,14 +444,14 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
               to={item.url}
               onClick={onClick}
               aria-label={item.title}
-              className={`relative z-10 group flex items-center transition-all justify-center px-2 py-2 rounded-xl`}
+              className={`relative z-10 group flex items-center transition-all justify-center px-2 py-2 rounded-lg border-l-[3px] ${isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-white/10"}`}
             >
               <span
-                className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-5
-                  ${isActive ? (isCollapsedRail ? "text-sidebar-foreground" : "text-sidebar-primary-foreground") : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground group-hover:bg-white/5"}
+                className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
+                  ${isActive ? "text-primary" : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"}
                 `}
               >
-                <item.icon className="size-5" strokeWidth={2.5} />
+                <item.icon className="size-5" strokeWidth={2} />
               </span>
             </Link>
           </TooltipTrigger>
@@ -470,16 +464,16 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
           id={item.id}
           to={item.url}
           onClick={onClick}
-          className={`relative z-10 group flex items-center transition-all ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : "rounded-full py-2.5 gap-3 px-3"}`}
+          className={`relative z-10 group flex items-center transition-all rounded-lg border-l-[3px] ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : "py-2.5 gap-3 px-3 pl-4"} ${isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-sidebar-accent"}`}
         >
           <span
-            className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-5
-              ${mobile ? (isActive ? "text-primary-foreground" : "text-foreground group-hover:bg-muted/80") : (isActive ? "text-primary-foreground" : "text-sidebar-foreground group-hover:bg-sidebar-accent")}
+            className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
+              ${mobile ? (isActive ? "text-primary" : "text-foreground group-hover:bg-muted/80") : (isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-sidebar-foreground")}
             `}
           >
-            <item.icon className="size-5" strokeWidth={2.5} />
+            <item.icon className="size-5" strokeWidth={2} />
           </span>
-          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
+          <span className={`text-[13px] transition-colors ${isActive ? "text-primary font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
         </Link>
       )}
     </motion.div>
@@ -717,7 +711,7 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
-    <div className={`overflow-x-hidden h-[100dvh] md:h-screen w-full grid grid-cols-1 min-w-0 ${isSidebarCollapsed ? "md:grid-cols-[88px_1fr]" : "md:grid-cols-[240px_1fr]"}`}>
+    <div className={`overflow-x-hidden h-[100dvh] md:h-screen w-full grid grid-cols-1 min-w-0 transition-[grid-template-columns] duration-300 ease-in-out ${isSidebarCollapsed ? "md:grid-cols-[5rem_1fr]" : "md:grid-cols-[16rem_1fr]"}`}>
       {/* Sidebar: hidden on mobile — slides in first (staggered sequence start) */}
       <motion.div
         initial={{ opacity: 0, x: -16 }}
@@ -821,23 +815,23 @@ export default function Layout({ children, currentPageName }) {
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   size="icon"
                 >
-                  <Plus className="size-5" />
+                  <Plus className="size-5" strokeWidth={2} />
                 </Button>
               ) : (
               <Button id="create-invoice-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2 shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <Plus className="size-5" /> Create Invoice
+                <Plus className="size-5" strokeWidth={2} /> Create Invoice
               </Button>
               )}
             </Link>
           </div>
 
-          {/* Logout */}
-          <div className={`border-t border-sidebar-border ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
+          {/* Logout — bottom, separated, muted with red hover */}
+          <div className={`mt-4 pt-4 border-t border-sidebar-border ${isSidebarCollapsed ? "px-2 pb-4" : "px-4 pb-4"}`}>
             <button
               onClick={handleLogout}
               title={isSidebarCollapsed ? "Log out" : undefined}
               aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-sidebar-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-sidebar-accent hover:text-sidebar-foreground ${
+              className={`flex items-center text-slate-400 hover:text-red-500 transition-colors w-full py-2.5 text-[13px] rounded-lg ${
                 isSidebarCollapsed ? "justify-center" : "gap-3"
               }`}
             >
@@ -865,7 +859,7 @@ export default function Layout({ children, currentPageName }) {
       </AnimatePresence>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col h-[100dvh] md:h-screen ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+      <div className={`flex flex-col h-[100dvh] md:h-screen min-h-0 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
         {/* Header: touch targets 44px on mobile, no horizontal overflow */}
         <motion.header
           initial={{ y: -100 }}
@@ -897,7 +891,7 @@ export default function Layout({ children, currentPageName }) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-10 min-w-10"
+                  className="rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-[48px] min-w-[48px] md:min-h-10 md:min-w-10"
                   aria-label="Theme"
                   title="Appearance"
                 >
@@ -934,7 +928,7 @@ export default function Layout({ children, currentPageName }) {
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground min-h-11 min-w-11 sm:min-w-0 sm:min-h-10 touch-manipulation px-2 sm:px-3">
+                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground min-h-[48px] min-w-[48px] md:min-h-11 md:min-w-11 sm:min-w-0 sm:min-h-10 touch-manipulation px-2 sm:px-3">
                     <div className="w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden shrink-0">
                       {user.logo_url ? (
                         <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
@@ -973,41 +967,46 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area flex-1 overflow-auto overflow-x-hidden scroll-smooth py-4 sm:py-6 md:py-8 px-3 sm:px-6 md:px-8 safe-x safe-bottom min-w-0 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth py-4 sm:py-6 md:py-8 px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
-          <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page">
+          <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1">
           <AnimatePresence mode="wait">
             <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, x: 20 }}
+              key={location.pathname + location.search}
+              initial={{ opacity: 0, x: 60 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
               className="min-h-full w-full min-w-0"
             >
               {children}
             </motion.div>
           </AnimatePresence>
           </div>
-        </main>
 
-        {/* Footer: stacked on mobile, touch-friendly links */}
-        <footer className="border-t border-border bg-card/30 py-4 px-3 sm:px-6 md:px-8 safe-x safe-bottom">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-foreground text-center sm:text-left">
-            <span>© {new Date().getFullYear()} Paidly. All rights reserved.</span>
-            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6">
-              <Link to={createPageUrl("About")} className="text-foreground underline-offset-4 hover:underline transition-colors min-h-[44px] inline-flex items-center justify-center py-2">
-                Mission &amp; About
-              </Link>
-              <Link to={createPageUrl("Settings")} className="text-foreground underline-offset-4 hover:underline transition-colors min-h-[44px] inline-flex items-center justify-center py-2">
-                Settings
-              </Link>
+          {/* Footer: grounded at bottom, theme-aligned, full width of content area */}
+          <footer className="shrink-0 mt-auto w-full border-t border-border bg-muted/40 pt-6 mt-10 pb-2">
+            <div className="max-w-7xl mx-auto flex flex-col-reverse sm:flex-row items-center justify-between gap-4 px-0 text-xs text-muted-foreground">
+              <span className="text-center sm:text-left">© {new Date().getFullYear()} Paidly. All rights reserved.</span>
+              <nav className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6" aria-label="Footer links">
+                <Link to={createPageUrl("About")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
+                  Mission &amp; About
+                </Link>
+                <Link to={createPageUrl("PrivacyPolicy")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
+                  Privacy Policy
+                </Link>
+                <Link to={createPageUrl("Settings")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
+                  Settings
+                </Link>
+              </nav>
             </div>
-          </div>
-        </footer>
+          </footer>
+        </main>
 
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
+        <MobileBottomNav />
+        <MobileFAB />
         </div>
         </div>
       );

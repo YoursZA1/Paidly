@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -11,20 +12,26 @@ import {
   DropdownMenuSubContent,
   DropdownMenuContent
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Copy, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
+import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
+import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Invoice, Payment } from '@/api/entities';
+import { Invoice } from '@/api/entities';
 import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
+import { RecordPaymentForm } from './RecordPaymentForm';
 import ManualShareModal from '../shared/ManualShareModal';
 import EmailPreviewModal from './EmailPreviewModal';
 import InvoiceService from '@/api/InvoiceService';
 import { useToast } from '@/components/ui/use-toast';
 import { sendDraftInvoice } from '@/services/InvoiceSendService';
+import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { getAutoStatusUpdate, isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
+import { usePaymentActions } from '@/hooks/usePaymentActions';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -35,25 +42,80 @@ const statusOptions = [
     { value: 'cancelled', label: 'Mark as Cancelled', icon: XCircle },
 ];
 
-export default function InvoiceActions({ invoice, client, onActionSuccess }) {
+export default function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
-    const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+    const { recordPayment, isProcessing: isRecordingPayment } = usePaymentActions(invoice, {
+        onSuccess: (result) => {
+            onActionSuccess?.();
+            if (result?.isFullyPaid) onPaymentFullyPaid?.();
+        },
+    });
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
     const [isSending, setIsSending] = useState(false);
+    const [sendPhase, setSendPhase] = useState('idle'); // 'idle' | 'preparing' | 'sending' | 'success'
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showManualShare, setShowManualShare] = useState(false);
     const [showEmailPreview, setShowEmailPreview] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const navigate = useNavigate();
     const { toast } = useToast();
 
-    const handleSendDraft = async () => {
-        setIsSending(true);
+    const closeDrawer = () => {
+        setDrawerOpen(false);
+        setShowPaymentForm(false);
+    };
+
+    const handleRecordPaymentFromForm = async (paymentData) => {
         try {
-            await sendDraftInvoice(invoice.id);
+            await recordPayment(paymentData);
+            setShowPaymentForm(false);
+            setDrawerOpen(false);
+        } catch {
+            // Toast shown by usePaymentActions; form stays open
+        }
+    };
+
+    const validateForSend = () => {
+        const email = client?.email?.trim();
+        if (!email) {
+            toast({
+                title: "Missing client email",
+                description: "Add a client with a valid email address before sending.",
+                variant: "destructive"
+            });
+            return false;
+        }
+        const items = Array.isArray(invoice.items) ? invoice.items : [];
+        const hasValidItem = items.some(item => (item?.name || item?.service_name) && (item?.quantity ?? 0) > 0);
+        if (!hasValidItem) {
+            toast({
+                title: "No line items",
+                description: "Add at least one line item to the invoice before sending.",
+                variant: "destructive"
+            });
+            return false;
+        }
+        return true;
+    };
+
+    const handleSendDraft = async () => {
+        if (!validateForSend()) return;
+
+        setSendPhase('preparing');
+        setIsSending(true);
+        onOptimisticUpdate?.(invoice.id, 'sending');
+
+        await new Promise((r) => setTimeout(r, 280));
+
+        setSendPhase('sending');
+
+        try {
+            await retryOnAbort(() => sendDraftInvoice(invoice.id));
             const historyEntry = createHistoryEntry({
                 action: 'send',
                 summary: 'Draft sent to client',
@@ -62,17 +124,25 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
             await Invoice.update(invoice.id, {
                 version_history: appendHistory(invoice.version_history, historyEntry),
             });
+            onOptimisticUpdate?.(invoice.id, 'sent');
+            setSendPhase('success');
             toast({
-                title: "✓ Invoice Sent",
-                description: "Draft invoice has been sent to client.",
+                title: "Invoice sent",
+                description: "Your invoice is on its way to the client.",
                 variant: "success"
             });
-            onActionSuccess();
+            setTimeout(() => {
+                onActionSuccess();
+                setSendPhase('idle');
+            }, 900);
         } catch (error) {
             console.error("Error sending draft invoice:", error);
+            onOptimisticUpdate?.(invoice.id, 'draft');
+            setSendPhase('idle');
+            const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || "Failed to send invoice. Please try again.");
             toast({
-                title: "✗ Error",
-                description: error.message || "Failed to send invoice. Please try again.",
+                title: "Send failed",
+                description: message,
                 variant: "destructive"
             });
         } finally {
@@ -84,7 +154,7 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
         let token = invoice.public_share_token;
         if (!token) {
             token = crypto.randomUUID();
-            await Invoice.update(invoice.id, { public_share_token: token });
+            await retryOnAbort(() => Invoice.update(invoice.id, { public_share_token: token }));
             // Optimistic update for current scope
             invoice.public_share_token = token;
             onActionSuccess();
@@ -162,7 +232,7 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                 body: htmlContent
             });
             
-            // Mark as sent
+            // Mark as sent (with retry on spurious AbortError)
             if (invoice.status === 'draft') {
                 const historyEntry = createHistoryEntry({
                     action: 'send',
@@ -172,11 +242,13 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                         { field: 'sent_to_email', from: invoice.sent_to_email || null, to: client.email },
                     ],
                 });
-                await Invoice.update(invoice.id, { 
-                    status: 'sent',
-                    sent_to_email: client.email,
-                    version_history: appendHistory(invoice.version_history, historyEntry),
-                });
+                await retryOnAbort(() =>
+                    Invoice.update(invoice.id, {
+                        status: 'sent',
+                        sent_to_email: client.email,
+                        version_history: appendHistory(invoice.version_history, historyEntry),
+                    })
+                );
                 onActionSuccess();
             }
             
@@ -189,9 +261,10 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
             });
         } catch (error) {
             console.error("Failed to send email:", error);
+            const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || "Please try again.");
             toast({
                 title: "Failed to send email",
-                description: error.message || "Please try again.",
+                description: message,
                 variant: "destructive"
             });
         } finally {
@@ -344,179 +417,327 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
         }
     };
 
-    const handleRecordPayment = async (paymentData) => {
-        setIsRecordingPayment(true);
-        try {
-            // Create payment record in Payment entity
-            const newPayment = await Payment.create({
-                invoice_id: invoice.id,
-                client_id: invoice.client_id,
-                amount: paymentData.amount,
-                payment_date: paymentData.payment_date,
-                payment_method: paymentData.payment_method,
-                reference_number: paymentData.reference_number,
-                notes: paymentData.notes,
-                created_date: new Date().toISOString()
-            });
+    const isMobile = useIsMobile();
+    const isPaid = invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled';
+    const isDraft = invoice.status === 'draft';
+    const showManageEdit = !isPaid;
+    const showManageRecordPayment = !isPaid;
+    const showShareLink = !isDraft;
 
-            // Get all payments for this invoice to calculate total
-            const allPayments = await Payment.list('-payment_date');
-            const invoicePayments = (allPayments || []).filter(p => p.invoice_id === invoice.id);
-            const mergedPaymentsMap = new Map();
-            [...invoicePayments, newPayment].forEach((payment) => {
-                if (payment?.id) {
-                    mergedPaymentsMap.set(payment.id, payment);
-                }
-            });
-            const mergedPayments = Array.from(mergedPaymentsMap.values());
+    const itemClass = "text-muted-foreground";
+    const iconClass = "w-4 h-4 mr-2";
 
-            const autoUpdate = getAutoStatusUpdate({
-                ...invoice,
-                payments: mergedPayments
-            });
-            const nextStatus = autoUpdate?.status || invoice.status;
+    const ActionMenuContent = ({ onItemClick, isDrawer }) => {
+        const wrap = (fn) => () => { onItemClick?.(); fn?.(); };
 
-            const changes = [
-                { field: 'payment_recorded', from: null, to: newPayment },
-            ];
+        const Section = ({ label, children }) => (
+            <div className={isDrawer ? "py-3" : ""}>
+                {!isDrawer && <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">{label}</DropdownMenuLabel>}
+                {isDrawer && <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-2 mb-2">{label}</p>}
+                {children}
+            </div>
+        );
 
-            if (nextStatus !== invoice.status) {
-                changes.push({ field: 'status', from: invoice.status, to: nextStatus });
+        const DrawerItem = ({ icon: Icon, label, onClick, href }) => {
+            if (href) {
+                return (
+                    <Link
+                        to={href}
+                        onClick={onItemClick}
+                        className="flex w-full items-center min-h-[48px] px-4 py-3 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors touch-manipulation"
+                    >
+                        <Icon className={iconClass} />
+                        <span>{label}</span>
+                    </Link>
+                );
             }
+            return (
+                <button
+                    type="button"
+                    onClick={wrap(onClick)}
+                    className="flex w-full items-center min-h-[48px] px-4 py-3 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors touch-manipulation"
+                >
+                    <Icon className={iconClass} />
+                    <span>{label}</span>
+                </button>
+            );
+        };
 
-            const historyEntry = createHistoryEntry({
-                action: 'payment_recorded',
-                summary: `Payment recorded ($${paymentData.amount.toFixed(2)})`,
-                changes,
-                meta: { amount: paymentData.amount, payment_method: paymentData.payment_method },
-            });
+        const SendInvoiceItem = () => {
+            const isDisabled = sendPhase === 'preparing' || sendPhase === 'sending';
+            const isSent = sendPhase === 'success';
+            const showSpinner = sendPhase === 'preparing' || sendPhase === 'sending';
+            const label = isSent ? 'Sent to Client' : showSpinner ? (sendPhase === 'preparing' ? 'Preparing…' : 'Sending…') : 'Send Invoice Now';
+            return (
+                <motion.button
+                    type="button"
+                    disabled={isDisabled || isSent}
+                    onClick={wrap(handleSendDraft)}
+                    whileTap={!isDisabled && !isSent ? { scale: 0.98 } : undefined}
+                    className={`relative flex items-center justify-center gap-3 w-full min-h-[52px] p-4 rounded-2xl font-semibold transition-all touch-manipulation
+                        ${isSent ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90'}
+                        ${(isDisabled || isSent) ? 'cursor-not-allowed' : ''}`}
+                >
+                    {showSpinner ? (
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                            className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full shrink-0"
+                        />
+                    ) : isSent ? (
+                        <>
+                            <CheckIcon className="w-6 h-6 shrink-0" strokeWidth={2.5} />
+                            <span>{label}</span>
+                        </>
+                    ) : (
+                        <>
+                            <PaperAirplaneIcon className="w-6 h-6 -rotate-45 shrink-0" strokeWidth={2} />
+                            <span>{label}</span>
+                        </>
+                    )}
+                </motion.button>
+            );
+        };
 
-            const updatePayload = {
-                ...(autoUpdate || {}),
-                version_history: appendHistory(invoice.version_history, historyEntry)
-            };
+        const SendInvoiceDropdownItem = () => {
+            const showSpinner = sendPhase === 'preparing' || sendPhase === 'sending';
+            const label = sendPhase === 'success' ? 'Sent!' : sendPhase === 'sending' ? 'Sending…' : sendPhase === 'preparing' ? 'Preparing…' : 'Send Invoice Now';
+            return (
+                <DropdownMenuItem
+                    onClick={handleSendDraft}
+                    disabled={showSpinner}
+                    className={`${itemClass} min-w-0 ${sendPhase === 'success' ? 'text-green-600 dark:text-green-400' : ''} ${showSpinner ? 'animate-pulse' : ''}`}
+                >
+                    <span className="w-4 h-4 flex items-center justify-center shrink-0 mr-2">
+                        <AnimatePresence mode="wait">
+                            {sendPhase === 'success' ? (
+                                <motion.span
+                                    key="check"
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                                    className="text-green-600 dark:text-green-400"
+                                >
+                                    <CheckCircle className="w-4 h-4" strokeWidth={2.5} />
+                                </motion.span>
+                            ) : showSpinner ? (
+                                <Loader2 key="spinner" className="w-4 h-4 animate-spin text-primary" />
+                            ) : (
+                                <Send key="send" className="w-4 h-4" />
+                            )}
+                        </AnimatePresence>
+                    </span>
+                    {label}
+                </DropdownMenuItem>
+            );
+        };
 
-            await Invoice.update(invoice.id, updatePayload);
-            
-            setShowPaymentModal(false);
-            toast({
-                title: "Payment recorded",
-                description: `Payment of $${paymentData.amount.toFixed(2)} recorded successfully`,
-                duration: 4000
-            });
-            onActionSuccess();
-        } catch (error) {
-            console.error("Failed to record payment:", error);
-            toast({
-                title: "Failed to record payment",
-                description: error.message || "Please try again.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsRecordingPayment(false);
+        if (isDrawer) {
+            return (
+                <div className="px-4 pb-6 pb-safe">
+                    <DrawerHeader className="text-left pb-2">
+                        <DrawerTitle>Invoice Actions</DrawerTitle>
+                    </DrawerHeader>
+                    <div className="space-y-1">
+                        <Section label="Manage">
+                            {isDraft && (
+                                <SendInvoiceItem />
+                            )}
+                            {showManageRecordPayment && (
+                                <DrawerItem icon={DollarSign} label="Record Payment" onClick={() => setShowPaymentForm(true)} />
+                            )}
+                            {showManageEdit && (
+                                <DrawerItem icon={Edit} label="Edit Invoice" href={createPageUrl(`EditInvoice?id=${invoice.id}`)} />
+                            )}
+                            {isPaid && (
+                                <DrawerItem icon={Eye} label="View Invoice" href={createPageUrl(`ViewInvoice?id=${invoice.id}`)} />
+                            )}
+                        </Section>
+                        <Section label="Share">
+                            <DrawerItem icon={Mail} label="Email to Client" onClick={handleEmailClient} />
+                            <DrawerItem icon={MessageCircle} label="Send via WhatsApp" onClick={handleSendViaWhatsApp} />
+                            {showShareLink && (
+                                <DrawerItem icon={Share2} label="Get Share Link" onClick={handleShare} />
+                            )}
+                        </Section>
+                        <Section label="Export">
+                            <DrawerItem icon={FileText} label="Preview PDF" onClick={handlePreviewPDF} />
+                            <DrawerItem icon={isDownloading ? Loader2 : Download} label={isDownloading ? "Downloading…" : "Download PDF"} onClick={handleDownloadPDF} />
+                            {!isPaid && (
+                                <DrawerItem icon={Eye} label="View Invoice" href={createPageUrl(`ViewInvoice?id=${invoice.id}`)} />
+                            )}
+                        </Section>
+                        {invoice.status !== 'draft' && !isPaid && (
+                            <Section label="Status">
+                                <div className="space-y-1">
+                                    {statusOptions.map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={wrap(() => handleStatusChange(opt.value))}
+                                            disabled={invoice.status === opt.value || !isManualStatusChangeAllowed(invoice.status, opt.value)}
+                                            className="flex w-full items-center min-h-[48px] px-4 py-3 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg disabled:opacity-50 touch-manipulation"
+                                        >
+                                            <opt.icon className={iconClass} />
+                                            <span>{opt.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </Section>
+                        )}
+                        <div className="pt-4 mt-4 border-t border-border">
+                            <button
+                                type="button"
+                                onClick={wrap(() => setShowDeleteConfirm(true))}
+                                className="flex w-full items-center min-h-[48px] px-4 py-3 text-left text-sm text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400 rounded-lg transition-colors touch-manipulation"
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                <span>Delete Invoice</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
         }
+
+        return (
+            <>
+                <Section label="Manage">
+                    {isDraft && (
+                        <SendInvoiceDropdownItem />
+                    )}
+                    {showManageRecordPayment && (
+                        <DropdownMenuItem onClick={() => setShowPaymentModal(true)} className={itemClass}>
+                            <DollarSign className={iconClass} />
+                            Record Payment
+                        </DropdownMenuItem>
+                    )}
+                    {showManageEdit && (
+                        <DropdownMenuItem asChild>
+                            <Link to={createPageUrl(`EditInvoice?id=${invoice.id}`)} className={itemClass}>
+                                <Edit className={iconClass} />
+                                Edit Invoice
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
+                    {isPaid && (
+                        <DropdownMenuItem asChild>
+                            <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass}>
+                                <Eye className={iconClass} />
+                                View Invoice
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
+                </Section>
+                <DropdownMenuSeparator />
+                <Section label="Share">
+                    <DropdownMenuItem onClick={handleEmailClient} className={itemClass}>
+                        <Mail className={iconClass} />
+                        Email to Client
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleSendViaWhatsApp} className={itemClass}>
+                        <MessageCircle className={iconClass} />
+                        Send via WhatsApp
+                    </DropdownMenuItem>
+                    {showShareLink && (
+                        <DropdownMenuItem onClick={handleShare} className={itemClass}>
+                            <Share2 className={iconClass} />
+                            Get Share Link
+                        </DropdownMenuItem>
+                    )}
+                </Section>
+                <DropdownMenuSeparator />
+                <Section label="Export">
+                    <DropdownMenuItem onClick={handlePreviewPDF} className={itemClass}>
+                        <FileText className={iconClass} />
+                        Preview PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadPDF} disabled={isDownloading} className={itemClass}>
+                        {isDownloading ? <Loader2 className={iconClass + " animate-spin"} /> : <Download className={iconClass} />}
+                        Download PDF
+                    </DropdownMenuItem>
+                    {!isPaid && (
+                        <DropdownMenuItem asChild>
+                            <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass}>
+                                <Eye className={iconClass} />
+                                View Invoice
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
+                </Section>
+                {invoice.status !== 'draft' && !isPaid && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <Section label="Status">
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger className={itemClass}>
+                                    <Clock className={iconClass} />
+                                    Update Status
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    {statusOptions.map(opt => (
+                                        <DropdownMenuItem
+                                            key={opt.value}
+                                            onClick={() => handleStatusChange(opt.value)}
+                                            disabled={invoice.status === opt.value || !isManualStatusChangeAllowed(invoice.status, opt.value)}
+                                            className={itemClass}
+                                        >
+                                            <opt.icon className={iconClass} />
+                                            {opt.label}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                        </Section>
+                    </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="text-red-500 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/50 cursor-pointer"
+                >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Invoice
+                </DropdownMenuItem>
+            </>
+        );
     };
+
+    const triggerButton = (
+        <Button variant="ghost" size="icon" className="h-8 w-8 md:min-h-[44px] md:min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-accent">
+            <MoreHorizontal className="w-4 h-4" />
+        </Button>
+    );
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="w-4 h-4 text-slate-500" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    
-                    {/* Show Send Now option for draft invoices */}
-                    {invoice.status === 'draft' && (
-                        <>
-                            <DropdownMenuItem onClick={handleSendDraft} disabled={isSending}>
-                                {isSending ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                    <Send className="w-4 h-4 mr-2" />
-                                )}
-                                Send Invoice Now
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                        </>
-                    )}
-                    
-                     <DropdownMenuItem onClick={() => setShowPaymentModal(true)}>
-                        <DollarSign className="w-4 h-4 mr-2" />
-                        Record Payment
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                        <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Invoice
-                        </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handlePreviewPDF}>
-                        <FileText className="w-4 h-4 mr-2" />
-                        Preview PDF
-                    </DropdownMenuItem>
-                     <DropdownMenuItem 
-                        asChild={!(invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled')}
-                        disabled={invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled'}
-                        className={invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled' ? 'opacity-50 cursor-not-allowed' : ''}
-                    >
-                        {invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled' ? (
-                            <span className="flex items-center">
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit Invoice (Locked)
-                            </span>
-                        ) : (
-                            <Link to={createPageUrl(`EditInvoice?id=${invoice.id}`)}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit Invoice
-                            </Link>
-                        )}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleEmailClient}>
-                        <Mail className="w-4 h-4 mr-2" />
-                        Email to Client
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleSendViaWhatsApp}>
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Send via WhatsApp
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleShare}>
-                        <Copy className="w-4 h-4 mr-2" />
-                        Get Share Link
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDownloadPDF}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Download PDF
-                    </DropdownMenuItem>
-
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <Clock className="w-4 h-4 mr-2" />
-                            Update Status
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            {statusOptions.map(opt => (
-                                <DropdownMenuItem 
-                                    key={opt.value} 
-                                    onClick={() => handleStatusChange(opt.value)}
-                                    disabled={invoice.status === opt.value || !isManualStatusChangeAllowed(invoice.status, opt.value)}
-                                >
-                                    <opt.icon className="w-4 h-4 mr-2" />
-                                    {opt.label}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete Invoice
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            {isMobile ? (
+                <Drawer open={drawerOpen} onOpenChange={(open) => { setDrawerOpen(open); if (!open) setShowPaymentForm(false); }}>
+                    <DrawerTrigger asChild>{triggerButton}</DrawerTrigger>
+                    <DrawerContent className="max-h-[85vh] overflow-auto">
+                        <AnimatePresence mode="wait">
+                            {showPaymentForm ? (
+                                <RecordPaymentForm
+                                    key="form"
+                                    invoice={invoice}
+                                    onConfirm={handleRecordPaymentFromForm}
+                                    onBack={() => setShowPaymentForm(false)}
+                                    isProcessing={isRecordingPayment}
+                                />
+                            ) : (
+                                <ActionMenuContent key="menu" isDrawer onItemClick={closeDrawer} />
+                            )}
+                        </AnimatePresence>
+                    </DrawerContent>
+                </Drawer>
+            ) : (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                        <ActionMenuContent />
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
 
             <ConfirmationDialog
                 isOpen={showDeleteConfirm}
@@ -533,7 +754,7 @@ export default function InvoiceActions({ invoice, client, onActionSuccess }) {
                     invoice={invoice}
                     isOpen={showPaymentModal}
                     onClose={() => setShowPaymentModal(false)}
-                    onSave={handleRecordPayment}
+                    onSave={recordPayment}
                 />
             )}
 

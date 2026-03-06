@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Check, Building2, Landmark, FileText, Send } from 'lucide-react';
+import { Check, Building2, Landmark, FileText, Send, ChevronDown, ChevronUp } from 'lucide-react';
 
 const steps = [
   { id: 'profile', label: 'Company profile', href: createPageUrl('Settings'), icon: Building2 },
@@ -11,6 +11,7 @@ const steps = [
 ];
 
 export default function SetupProgressStepper({ user, hasBankingDetails, invoices }) {
+  const [collapsed, setCollapsed] = useState(true);
   const completed = {
     profile: !!(user?.company_name && user?.company_address),
     banking: !!hasBankingDetails,
@@ -23,8 +24,18 @@ export default function SetupProgressStepper({ user, hasBankingDetails, invoices
 
   return (
     <div className="glass-card rounded-fintech border border-border p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-foreground font-display mb-4">Setup progress</h3>
-      <div className="relative pl-1">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between gap-2 mb-4 sm:mb-4 md:pointer-events-none md:cursor-default touch-manipulation min-h-[44px] -m-2 p-2 rounded-lg hover:bg-muted/50 md:hover:bg-transparent"
+        aria-expanded={!collapsed}
+      >
+        <h3 className="text-sm font-semibold text-foreground font-display">Setup progress</h3>
+        <span className="md:hidden text-muted-foreground shrink-0">
+          {collapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+        </span>
+      </button>
+      <div className={`relative pl-1 ${collapsed ? "hidden md:block" : ""}`}>
         {steps.map((step, index) => {
           const done = completed[step.id];
           const Icon = step.icon;

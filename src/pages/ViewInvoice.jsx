@@ -15,10 +15,12 @@ import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
-import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
+import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
+import { usePaymentActions } from '@/hooks/usePaymentActions';
+import { runPaidConfetti } from '@/utils/confetti';
 import LogoImage from '@/components/shared/LogoImage';
 
-export default function ViewInvoice() {
+export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClose }) {
     const [invoice, setInvoice] = useState(null);
     const [client, setClient] = useState(null);
     const [company, setCompany] = useState(null);
@@ -33,18 +35,16 @@ export default function ViewInvoice() {
     const [error, setError] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
+    const invoiceId = invoiceIdProp ?? new URLSearchParams(location.search).get('id');
 
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const invoiceId = params.get('id');
-        
         if (invoiceId) {
             loadInvoiceData(invoiceId);
         } else {
             setError("Invoice ID not found");
             setIsLoading(false);
         }
-    }, [location]);
+    }, [invoiceId]);
 
     const loadInvoiceData = async (invoiceId) => {
         setIsLoading(true);
@@ -111,13 +111,14 @@ export default function ViewInvoice() {
             );
 
             if (invoice.status === 'draft') {
-                await Invoice.update(invoice.id, { ...invoice, status: 'sent' });
+                await retryOnAbort(() => Invoice.update(invoice.id, { ...invoice, status: 'sent' }));
                 setInvoice(prev => ({...prev, status: 'sent'}));
             }
             alert(result.message);
         } catch (error) {
             console.error("Failed to send email:", error);
-            alert(error.message || 'Failed to send email. Please try again.');
+            const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || 'Failed to send email. Please try again.');
+            alert(message);
         } finally {
             setIsSending(false);
         }
@@ -159,45 +160,17 @@ export default function ViewInvoice() {
         }
     };
 
-    const handleRecordPayment = async (paymentData) => {
-        try {
-            // Create payment record
-            const newPayment = await Payment.create({
-                invoice_id: invoice.id,
-                client_id: invoice.client_id,
-                amount: paymentData.amount,
-                payment_date: paymentData.payment_date,
-                payment_method: paymentData.payment_method,
-                reference_number: paymentData.reference_number,
-                notes: paymentData.notes,
-                created_date: new Date().toISOString()
-            });
-
-            // Calculate total payments
-            const allPayments = [...payments, newPayment];
-            const totalPaid = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-            const autoUpdate = getAutoStatusUpdate({
-                ...invoice,
-                payments: allPayments
-            });
-
-            if (autoUpdate) {
-                await Invoice.update(invoice.id, autoUpdate);
-                setInvoice(prev => ({ ...prev, ...autoUpdate }));
-            }
-
-            // Update payments list
-            setPayments(allPayments);
-            setPaymentPreset(null);
-            setShowPaymentDialog(false);
-            
-            alert('Payment recorded successfully!');
-        } catch (error) {
-            console.error("Error recording payment:", error);
-            alert('Failed to record payment. Please try again.');
+    const { recordPayment } = usePaymentActions(
+        invoice ? { ...invoice, payments } : null,
+        {
+            onSuccess: ({ invoice: updatedInvoice, payments: mergedPayments, isFullyPaid }) => {
+                setInvoice(updatedInvoice);
+                setPayments(mergedPayments);
+                setPaymentPreset(null);
+                if (isFullyPaid) runPaidConfetti();
+            },
         }
-    };
+    );
 
     const handleSaveSchedule = async (schedule) => {
         try {
@@ -243,8 +216,9 @@ export default function ViewInvoice() {
     const history = Array.isArray(invoice?.version_history) ? invoice.version_history : [];
 
     return (
-        <div className="min-h-screen bg-background">
-            {/* Breadcrumb */}
+        <div className={embedded ? "min-h-0" : "min-h-screen bg-background"}>
+            {/* Breadcrumb — hidden when embedded (e.g. slide-over panel) */}
+            {!embedded && (
             <div className="no-print max-w-5xl mx-auto px-4 sm:px-8 pt-2">
                 <Breadcrumb>
                     <BreadcrumbList>
@@ -258,12 +232,13 @@ export default function ViewInvoice() {
                     </BreadcrumbList>
                 </Breadcrumb>
             </div>
+            )}
             {/* Action Bar - No Print */}
             <div className="no-print bg-card border-b border-border p-4 sticky top-0 z-10 shadow-sm">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <Button
                         variant="outline"
-                        onClick={() => navigate(createPageUrl('Invoices'))}
+                        onClick={embedded && onClose ? onClose : () => navigate(createPageUrl('Invoices'))}
                         className="flex items-center gap-2 rounded-xl"
                     >
                         <ArrowLeft className="w-4 h-4" />
@@ -518,7 +493,7 @@ export default function ViewInvoice() {
                     setShowPaymentDialog(false);
                     setPaymentPreset(null);
                 }}
-                onSave={handleRecordPayment}
+                onSave={recordPayment}
                 defaultValues={paymentPreset}
             />
 

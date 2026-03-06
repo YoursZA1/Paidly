@@ -8,6 +8,8 @@ import InvoiceActions from "./InvoiceActions";
 
 const statusStyles = {
     draft: "bg-slate-100 text-slate-700 border-slate-200",
+    sending: "bg-primary/15 text-primary border-primary/20 animate-pulse",
+    preparing: "bg-primary/10 text-primary border-primary/20 animate-pulse",
     sent: "bg-primary/15 text-primary border-primary/20",
     viewed: "bg-purple-100 text-purple-700 border-purple-200",
     partial_paid: "bg-amber-100 text-amber-700 border-amber-200",
@@ -15,7 +17,13 @@ const statusStyles = {
     overdue: "bg-rose-100 text-rose-700 border-rose-200"
 };
 
-export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess }) {
+const getStatusLabel = (status) => {
+    if (status === 'sending') return 'Sending…';
+    if (status === 'preparing') return 'Preparing…';
+    return (status || 'draft').replace('_', ' ');
+};
+
+export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate }) {
     const getClientName = (clientId) => {
         const client = clients.find(c => c.id === clientId);
         return client ? client.name : "N/A";
@@ -52,8 +60,8 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <p className="text-sm text-slate-600">{invoice.invoice_number}</p>
-                                    <Badge variant="secondary" className={`${statusStyles[invoice.status || 'draft']} border text-[10px] px-1.5 py-0 h-5`}>
-                                        {(invoice.status || 'draft').replace('_', ' ')}
+                                    <Badge variant="secondary" className={`${statusStyles[invoice.status || 'draft'] || statusStyles.draft} border text-[10px] px-1.5 py-0 h-5`}>
+                                        {getStatusLabel(invoice.status)}
                                     </Badge>
                                 </div>
                             </div>
@@ -61,6 +69,8 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                                 invoice={invoice}
                                 client={clients.find(c => c.id === invoice.client_id)}
                                 onActionSuccess={onActionSuccess}
+                                onPaymentFullyPaid={onPaymentFullyPaid}
+                                onOptimisticUpdate={onOptimisticUpdate}
                             />
                         </div>
                         
