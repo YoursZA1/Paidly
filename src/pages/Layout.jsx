@@ -601,10 +601,8 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (!user) return;
 
-    // Logic for showing onboarding
-    if (!user.onboarding_completed && !user.company_name) {
-      setShowWizard(true);
-    } else if (!user.tour_completed && currentPageName === 'Dashboard') {
+    // Logic for showing onboarding (Business Profile wizard pop-up disabled)
+    if (!user.tour_completed && currentPageName === 'Dashboard') {
       setTimeout(() => setShowTour(true), 1000);
     }
   }, [currentPageName, user]);

@@ -4,7 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Building2, Loader2, Lock, Mail, Phone, User, Eye, EyeOff } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Building2, Loader2, Lock, Mail, Phone, User, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -33,6 +40,7 @@ export default function Signup() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -161,6 +169,7 @@ export default function Signup() {
       });
 
       setCreatedUserId(newUserRecord.id);
+      setShowEmailConfirmPopup(true);
       setStep(2);
     } catch (err) {
       setError(err?.message || "Failed to create account");
@@ -256,6 +265,33 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x overflow-auto">
+      {/* Popup after Create account: check your email for confirmation link (step 2) */}
+      <Dialog open={showEmailConfirmPopup} onOpenChange={(open) => !open && setShowEmailConfirmPopup(false)}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-border" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="h-5 w-5 shrink-0" />
+              Check your email
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-green-700 font-medium">
+            We&apos;ve sent a confirmation link to <span className="font-semibold">{email}</span>. Please check your inbox and click the link to verify your account, then continue with the setup below.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            If you don&apos;t see it, check your spam or junk folder.
+          </p>
+          <DialogFooter className="sm:justify-end">
+            <Button
+              type="button"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setShowEmailConfirmPopup(false)}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card className="w-full max-w-md shadow-xl rounded-2xl border border-border overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col my-auto">
         <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6 shrink-0">
           <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-primary/20">
