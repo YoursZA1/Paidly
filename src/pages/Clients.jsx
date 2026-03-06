@@ -1,780 +1,685 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Client, User, Invoice } from "@/api/entities";
+import React, { useState, useEffect, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Client, Invoice, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Plus, Users, Crown, Star, Sparkles, AlertTriangle, RefreshCw, LayoutGrid, List, Download, Filter, X, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+  UserPlusIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
+} from "@heroicons/react/24/outline";
 import { useToast } from "@/components/ui/use-toast";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-import ClientCard from "../components/clients/ClientCard";
-import ClientList from "../components/clients/ClientList";
 import ClientForm from "../components/clients/ClientForm";
-import ClientFollowUpService from "../components/clients/ClientFollowUpService";
-import ClientFilters, { applyClientFilters } from "../components/filters/ClientFilters";
 import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
-import { clientsToCsv, parseCsv, csvRowToClientPayload } from "@/utils/clientCsvMapping";
+import { createPageUrl } from "@/utils";
+import { format, parseISO, isValid } from "date-fns";
+
+const statusStyles = {
+  draft: "bg-gray-100 text-gray-700",
+  sent: "bg-primary/15 text-primary",
+  viewed: "bg-purple-100 text-purple-700",
+  partial_paid: "bg-yellow-100 text-yellow-700",
+  paid: "bg-green-100 text-green-700",
+  overdue: "bg-red-100 text-red-700",
+};
+
+function safeFormatDate(dateStr) {
+  if (!dateStr) return "N/A";
+  try {
+    const date = parseISO(dateStr);
+    return isValid(date) ? format(date, "dd MMM yyyy") : "N/A";
+  } catch {
+    return "N/A";
+  }
+}
+
+/** Compute outstanding for a list of invoices (same logic as ClientDetail). */
+function totalOutstandingForInvoices(invoices) {
+  return invoices
+    .filter((inv) =>
+      ["sent", "viewed", "partial_paid", "overdue"].includes(inv.status)
+    )
+    .reduce((sum, inv) => {
+      if (inv.status === "partial_paid" && inv.payments?.length > 0) {
+        const totalPaid = inv.payments.reduce((s, p) => s + (p.amount || 0), 0);
+        return sum + (inv.total_amount || 0) - totalPaid;
+      }
+      return sum + (inv.total_amount || 0);
+    }, 0);
+}
+
+/** Build a map of client_id -> outstanding balance from all invoices. */
+function clientOutstandingMap(invoices) {
+  const byClient = {};
+  (invoices || []).forEach((inv) => {
+    const cid = inv.client_id;
+    if (!cid) return;
+    if (!byClient[cid]) byClient[cid] = [];
+    byClient[cid].push(inv);
+  });
+  const out = {};
+  Object.keys(byClient).forEach((cid) => {
+    out[cid] = totalOutstandingForInvoices(byClient[cid]);
+  });
+  return out;
+}
 
 export default function Clients() {
-    const [clients, setClients] = useState([]);
-    const [user, setUser] = useState(null);
-    const [filters, setFilters] = useState({});
-    const [showForm, setShowForm] = useState(false);
-    const [editingClient, setEditingClient] = useState(null);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [deletingClient, setDeletingClient] = useState(null);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isUpdatingSegments, setIsUpdatingSegments] = useState(false);
-    const [viewMode, setViewMode] = useState('grid');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showFilters, setShowFilters] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(24);
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [lastLoadTime, setLastLoadTime] = useState(Date.now());
-    const { toast } = useToast();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-    // Load clients on mount
-    useEffect(() => {
-        loadClients();
-    }, []);
+  const [clients, setClients] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeClient, setActiveClient] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [detailTab, setDetailTab] = useState("invoices");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Auto-refresh when page becomes visible (user switches back to tab)
-    // Only refresh if page was hidden for more than 5 seconds
-    useEffect(() => {
-        let hiddenTime = null;
+  const outstandingByClient = useMemo(
+    () => clientOutstandingMap(invoices),
+    [invoices]
+  );
 
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
-                hiddenTime = Date.now();
-            } else if (document.visibilityState === 'visible' && !isLoading) {
-                // Only refresh if page was hidden for more than 5 seconds
-                if (hiddenTime && Date.now() - hiddenTime > 5000) {
-                    loadClients(false);
-                }
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [isLoading]);
-
-    // Auto-refresh when window regains focus (only if last load was more than 30 seconds ago)
-    useEffect(() => {
-        const handleFocus = () => {
-            if (!isLoading && Date.now() - lastLoadTime > 30000) {
-                loadClients(false);
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-        };
-    }, [isLoading, lastLoadTime]);
-
-    const loadClients = async (showLoadingState = true) => {
-        if (showLoadingState) {
-            setIsLoading(true);
-        } else {
-            setIsRefreshing(true);
-        }
-        try {
-            const [clientsData, userData] = await Promise.all([
-                Client.list("-created_date"),
-                User.me()
-            ]);
-            setClients(clientsData);
-            setUser(userData);
-            setLastLoadTime(Date.now());
-        } catch (error) {
-            console.error("Error loading clients:", error);
-            toast({
-                title: "Could not load clients",
-                description: error?.message || "Please check your connection and try again.",
-                variant: "destructive",
-            });
-        } finally {
-            if (showLoadingState) {
-                setIsLoading(false);
-            } else {
-                setIsRefreshing(false);
-            }
-        }
-    };
-
-    const handleRefreshClients = async () => {
-        await loadClients(false);
-        toast({
-            title: "✓ Clients Refreshed",
-            description: "Client list has been updated.",
-            variant: "success"
-        });
-    };
-
-    const handleUpdateSegments = async () => {
-        setIsUpdatingSegments(true);
-        try {
-            await ClientFollowUpService.updateClientSegments();
-            await loadClients();
-            toast({
-                title: "✓ Segments Updated",
-                description: "Client segments have been updated successfully.",
-                variant: "success"
-            });
-        } catch (error) {
-            console.error("Error updating segments:", error);
-            toast({
-                title: "✗ Error",
-                description: "Failed to update segments. Please try again.",
-                variant: "destructive"
-            });
-        }
-        setIsUpdatingSegments(false);
-    };
-
-    const handleSaveClient = async (clientData) => {
-        // Validation
-        if (!clientData.name || !clientData.name.trim()) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Client name is required.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        if (!clientData.email || !clientData.email.trim()) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Email address is required.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        // Basic email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(clientData.email.trim())) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Please enter a valid email address.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        try {
-            if (editingClient) {
-                await Client.update(editingClient.id, clientData);
-                toast({
-                    title: "✓ Client Updated",
-                    description: "Client information has been updated successfully.",
-                    variant: "success"
-                });
-            } else {
-                const newClient = await Client.create(clientData);
-                toast({
-                    title: "✓ Client Added",
-                    description: `${clientData.name} has been added to your client list.`,
-                    variant: "success"
-                });
-            }
-            setShowForm(false);
-            setEditingClient(null);
-            // Auto-refresh the client list
-            await loadClients();
-        } catch (error) {
-            console.error("Error saving client:", error);
-            const errorMessage = error.message || error.toString();
-            toast({
-                title: "✗ Error",
-                description: errorMessage.includes('organization') 
-                    ? "No organization found. Please contact support or try logging out and back in."
-                    : errorMessage.includes('permission') || errorMessage.includes('RLS')
-                    ? "Permission denied. Please check your account permissions."
-                    : errorMessage.includes('column') || errorMessage.includes('does not exist')
-                    ? "Database schema mismatch. In Supabase go to SQL Editor and run: scripts/ensure-clients-schema.sql (or supabase/schema.postgres.sql if the clients table is missing)."
-                    : errorMessage.includes('duplicate') || errorMessage.includes('unique')
-                    ? "A client with this email already exists."
-                    : `Failed to save client: ${errorMessage}`,
-                variant: "destructive"
-            });
-        }
-    };
-
-    const handleEditClient = (client) => {
-        setEditingClient(client);
-        setShowForm(true);
-    };
-
-    const handleDeleteRequest = (client) => {
-        setDeletingClient(client);
-        setShowDeleteConfirm(true);
-    };
-
-    const handleDeleteClient = async () => {
-        if (!deletingClient) return;
-        setIsDeleting(true);
-        try {
-            const relatedInvoices = await Invoice.filter({ client_id: deletingClient.id });
-            if (relatedInvoices && relatedInvoices.length > 0) {
-                toast({
-                    title: "Cannot delete client",
-                    description: "This client has invoices. Please archive or delete their invoices first.",
-                    variant: "destructive"
-                });
-                return;
-            }
-
-            await Client.delete(deletingClient.id);
-            toast({
-                title: "✓ Client Deleted",
-                description: "Client has been permanently deleted.",
-                variant: "default"
-            });
-            setShowDeleteConfirm(false);
-            setDeletingClient(null);
-            loadClients();
-        } catch (error) {
-            console.error("Error deleting client:", error);
-            toast({
-                title: "✗ Error",
-                description: "Failed to delete client. Please try again.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    // Filter clients based on search term and filters
-    const searchFilteredClients = clients.filter(client => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-            client.name?.toLowerCase().includes(term) ||
-            client.email?.toLowerCase().includes(term) ||
-            client.phone?.toLowerCase().includes(term) ||
-            client.contact_person?.toLowerCase().includes(term)
-        );
-    });
-
-    const filteredClients = applyClientFilters(searchFilteredClients, filters);
-
-    // Pagination logic
-    const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
-    const paginatedClients = filteredClients.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
+  const searchFilteredClients = useMemo(() => {
+    if (!searchTerm.trim()) return clients;
+    const term = searchTerm.toLowerCase();
+    return clients.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(term) ||
+        c.email?.toLowerCase().includes(term) ||
+        c.phone?.toLowerCase().includes(term) ||
+        c.contact_person?.toLowerCase().includes(term) ||
+        c.company?.toLowerCase?.().includes(term)
     );
+  }, [clients, searchTerm]);
 
-    // Reset to page 1 when search/filters change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, filters]);
+  useEffect(() => {
+    loadData();
+  }, []);
 
-    const segmentCounts = {
-        vip: clients.filter(c => c.segment === 'vip').length,
-        regular: clients.filter(c => c.segment === 'regular').length,
-        new: clients.filter(c => c.segment === 'new' || !c.segment).length,
-        at_risk: clients.filter(c => c.segment === 'at_risk').length
-    };
+  useEffect(() => {
+    if (searchFilteredClients.length > 0 && !activeClient) {
+      setActiveClient(searchFilteredClients[0]);
+    }
+    if (
+      activeClient &&
+      !searchFilteredClients.find((c) => c.id === activeClient.id)
+    ) {
+      setActiveClient(searchFilteredClients[0] || null);
+    }
+  }, [searchFilteredClients, activeClient]);
 
-    const userCurrency = user?.currency || 'ZAR';
+  const loadData = async (showRefreshingState = false) => {
+    if (showRefreshingState) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+    try {
+      const [clientsData, invoicesData, userData] = await Promise.all([
+        Client.list("-created_date"),
+        Invoice.list("-created_date"),
+        User.me(),
+      ]);
+      setClients(clientsData || []);
+      setInvoices(invoicesData || []);
+      setUser(userData);
+      if (showRefreshingState && activeClient && clientsData?.length > 0) {
+        const updated = clientsData.find((c) => c.id === activeClient.id);
+        if (updated) setActiveClient(updated);
+      } else if (!activeClient && clientsData?.length > 0) {
+        setActiveClient(clientsData[0]);
+      }
+    } catch (error) {
+      console.error("Error loading clients:", error);
+      toast({
+        title: "Could not load clients",
+        description:
+          error?.message || "Please check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
-    const clientStats = {
-        total: clients.length,
-        totalSpent: clients.reduce((sum, c) => sum + (c.total_spent || 0), 0),
-        averageSpent: clients.length > 0 ? clients.reduce((sum, c) => sum + (c.total_spent || 0), 0) / clients.length : 0
-    };
-
-    const handleSegmentClick = (segment) => {
-        setFilters(prev => ({
-            ...prev,
-            segment: prev.segment === segment ? 'all' : segment
-        }));
-    };
-
-    const handleExportClients = () => {
-        try {
-            const csvContent = clientsToCsv(filteredClients);
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `Client_export_${new Date().getTime()}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            toast({ title: "Export complete", description: `${filteredClients.length} clients exported (Client_export format).`, variant: "default" });
-        } catch (error) {
-            console.error('Error exporting clients:', error);
-            toast({ title: "Export failed", description: error?.message || "Failed to export clients", variant: "destructive" });
+  const handleSaveClient = async (clientData) => {
+    if (!clientData.name?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Client name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!clientData.email?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Email address is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(clientData.email.trim())) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      if (editingClient) {
+        await Client.update(editingClient.id, clientData);
+        toast({
+          title: "Client Updated",
+          description: "Client information has been updated.",
+          variant: "success",
+        });
+        setClients((prev) =>
+          prev.map((c) => (c.id === editingClient.id ? { ...c, ...clientData } : c))
+        );
+        if (activeClient?.id === editingClient.id) {
+          setActiveClient((prev) => (prev ? { ...prev, ...clientData } : null));
         }
-    };
+      } else {
+        const newClient = await Client.create(clientData);
+        toast({
+          title: "Client Added",
+          description: `${clientData.name} has been added.`,
+          variant: "success",
+        });
+        setClients((prev) => [newClient, ...(prev || [])]);
+        setActiveClient(newClient);
+      }
+      setShowForm(false);
+      setEditingClient(null);
+    } catch (error) {
+      console.error("Error saving client:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to save client.",
+        variant: "destructive",
+      });
+    }
+  };
 
-    const fileInputRef = useRef(null);
-    const [isImporting, setIsImporting] = useState(false);
-    const handleImportClients = () => {
-        fileInputRef.current?.click();
-    };
-    const handleImportFile = async (e) => {
-        const file = e.target?.files?.[0];
-        e.target.value = "";
-        if (!file) return;
-        setIsImporting(true);
-        try {
-            const text = await file.text();
-            const { headers, rows } = parseCsv(text);
-            let created = 0;
-            let skipped = 0;
-            for (const row of rows) {
-                const payload = csvRowToClientPayload(headers, row);
-                if (!payload) {
-                    skipped++;
-                    continue;
-                }
-                try {
-                    await Client.create(payload);
-                    created++;
-                } catch (err) {
-                    console.warn("Import row failed:", payload.name, err);
-                    skipped++;
-                }
-            }
-            await loadClients();
-            toast({
-                title: "Import complete",
-                description: `${created} clients imported${skipped ? `, ${skipped} skipped.` : "."}`,
-                variant: "default"
-            });
-        } catch (error) {
-            console.error("Import error:", error);
-            toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+  const handleEditClient = (client) => {
+    setEditingClient(client);
+    setShowForm(true);
+  };
+
+  const handleDeleteRequest = (client) => {
+    setDeletingClient(client);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteClient = async () => {
+    if (!deletingClient) return;
+    setIsDeleting(true);
+    try {
+      const relatedInvoices = await Invoice.filter({
+        client_id: deletingClient.id,
+      });
+      if (relatedInvoices?.length > 0) {
+        toast({
+          title: "Cannot delete client",
+          description:
+            "This client has invoices. Archive or delete their invoices first.",
+          variant: "destructive",
+        });
+        return;
+      }
+      await Client.delete(deletingClient.id);
+      toast({
+        title: "Client Deleted",
+        description: "Client has been permanently deleted.",
+        variant: "default",
+      });
+      setShowDeleteConfirm(false);
+      setDeletingClient(null);
+      setClients((prev) => {
+        const next = prev.filter((c) => c.id !== deletingClient.id);
+        if (activeClient?.id === deletingClient.id) {
+          setActiveClient(next[0] || null);
         }
-        setIsImporting(false);
+        return next;
+      });
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete client. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const userCurrency = user?.currency || "ZAR";
+
+  const activeInvoices = useMemo(() => {
+    if (!activeClient?.id) return [];
+    return (invoices || []).filter((inv) => inv.client_id === activeClient.id);
+  }, [activeClient?.id, invoices]);
+
+  const activeStats = useMemo(() => {
+    const totalRevenue = activeInvoices.reduce(
+      (s, inv) => s + (inv.total_amount || 0),
+      0
+    );
+    const outstanding = totalOutstandingForInvoices(activeInvoices);
+    const paidInvoices = activeInvoices.filter((i) => i.status === "paid");
+    const avgPaymentDays =
+      paidInvoices.length > 0
+        ? Math.round(
+            paidInvoices.reduce((sum, inv) => {
+              const paidAt =
+                inv.payments?.[0]?.paid_at ||
+                inv.updated_at ||
+                inv.created_date;
+              const created = inv.created_date ? new Date(inv.created_date) : null;
+              const paid = paidAt ? new Date(paidAt) : null;
+              if (!created || !paid) return sum;
+              return sum + Math.round((paid - created) / (24 * 60 * 60 * 1000));
+            }, 0) / paidInvoices.length
+          )
+        : null;
+    return {
+      totalRevenue,
+      outstanding,
+      avgPaymentDays: avgPaymentDays != null ? `${avgPaymentDays} days` : "—",
     };
+  }, [activeInvoices]);
 
-    return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-7xl mx-auto">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6"
+  return (
+    <div className="flex h-[calc(100vh-4rem)] bg-slate-50/50 min-h-0">
+      {/* 1. CLIENT LIST SIDEBAR */}
+      <aside className="w-72 sm:w-80 md:w-96 shrink-0 bg-white border-r border-slate-200 flex flex-col min-h-0">
+        <div className="p-6 border-b border-slate-100 shrink-0">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-black text-slate-900">Clients</h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => loadData(true)}
+                disabled={isRefreshing || isLoading}
+                className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors disabled:opacity-50"
+                aria-label="Refresh clients"
+                title="Refresh"
+              >
+                <ArrowPathIcon
+                  className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingClient(null);
+                  setShowForm(true);
+                }}
+                className="p-2 bg-orange-500 rounded-xl text-white shadow-lg shadow-orange-100 hover:bg-orange-600 transition-colors"
+                aria-label="Add client"
+              >
+                <UserPlusIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <input
+            placeholder="Search clients..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 border-none rounded-2xl p-3 text-sm focus:ring-2 focus:ring-orange-200 outline-none"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="h-16 rounded-[24px] bg-slate-100 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : searchFilteredClients.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
+            </div>
+          ) : (
+            searchFilteredClients.map((client) => {
+              const balance = outstandingByClient[client.id] ?? 0;
+              const status = balance > 0 ? "Overdue" : "Settled";
+              const isActive = activeClient?.id === client.id;
+              return (
+                <button
+                  key={client.id}
+                  type="button"
+                  onClick={() => setActiveClient(client)}
+                  className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left ${
+                    isActive
+                      ? "bg-orange-50 ring-1 ring-orange-100"
+                      : "hover:bg-slate-50"
+                  }`}
                 >
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 font-display">
-                            Clients
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Organize and manage your client relationships.
-                        </p>
-                    </div>
-                    
-                    <Button
-                        onClick={() => setShowForm(true)}
-                        className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2"
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-slate-900 truncate">
+                      {client.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 truncate">
+                      {client.company || client.email || "—"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p
+                      className={`text-xs font-black ${
+                        balance > 0 ? "text-red-500" : "text-emerald-500"
+                      }`}
                     >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add client
-                    </Button>
-                </motion.div>
+                      {formatCurrency(balance, userCurrency)}
+                    </p>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">
+                      {status}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </aside>
 
-                {/* Client Statistics */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.08 }}
-                    className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
+      {/* 2. CLIENT DETAIL VIEW */}
+      <main className="flex-1 overflow-y-auto min-h-0 p-6 md:p-10">
+        {!activeClient ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-500">
+            <p className="text-lg font-medium">
+              {isLoading ? "Loading…" : "Select a client"}
+            </p>
+            <p className="text-sm mt-1">
+              {!isLoading && clients.length === 0
+                ? "Add a client to see their details here."
+                : "Choose a client from the list to view details and invoices."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-10">
+              <div className="min-w-0">
+                <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 truncate">
+                  {activeClient.name}
+                </h2>
+                <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
+                  <span className="flex items-center gap-1 min-w-0">
+                    <EnvelopeIcon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{activeClient.email}</span>
+                  </span>
+                  {activeClient.phone && (
+                    <span className="flex items-center gap-1">
+                      <PhoneIcon className="w-4 h-4 shrink-0" />
+                      {activeClient.phone}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3 shrink-0">
+                <Link
+                  to={createPageUrl("ClientDetail") + "?id=" + encodeURIComponent(activeClient.id)}
+                  className="inline-flex"
                 >
-                    <Card className="bg-gradient-to-br from-primary/10 to-primary/15 border-0 shadow-lg">
-                        <CardContent className="p-4">
-                            <p className="text-sm text-primary font-medium">Total Clients</p>
-                            <p className="text-3xl font-bold text-foreground">{clientStats.total}</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-0 shadow-lg">
-                        <CardContent className="p-4">
-                            <p className="text-sm text-green-600 font-medium">Total Revenue</p>
-                            <p className="text-3xl font-bold text-green-900">
-                                {formatCurrency(clientStats.totalSpent, userCurrency)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-0 shadow-lg">
-                        <CardContent className="p-4">
-                            <p className="text-sm text-purple-600 font-medium">Average Spend</p>
-                            <p className="text-3xl font-bold text-purple-900">
-                                {formatCurrency(clientStats.averageSpent, userCurrency)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                {/* Segment Quick Filters */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.1 }}
-                    className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+                  <Button
+                    variant="outline"
+                    className="rounded-2xl font-bold border-slate-200"
+                  >
+                    <ArrowTopRightOnSquareIcon className="w-4 h-4 mr-2" />
+                    Full profile
+                  </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl font-bold border-slate-200"
+                  onClick={() => handleEditClient(activeClient)}
                 >
-                    <Card 
-                        className={`cursor-pointer transition-all ${filters.segment === 'vip' ? 'ring-2 ring-amber-500' : ''}`}
-                        onClick={() => handleSegmentClick('vip')}
-                    >
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                                <Crown className="w-5 h-5 text-amber-600" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-slate-900">{segmentCounts.vip}</p>
-                                <p className="text-xs text-slate-500">VIP Clients</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card 
-                        className={`cursor-pointer transition-all ${filters.segment === 'regular' ? 'ring-2 ring-primary' : ''}`}
-                        onClick={() => handleSegmentClick('regular')}
-                    >
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
-                                <Star className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-slate-900">{segmentCounts.regular}</p>
-                                <p className="text-xs text-slate-500">Regular</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card 
-                        className={`cursor-pointer transition-all ${filters.segment === 'new' ? 'ring-2 ring-green-500' : ''}`}
-                        onClick={() => handleSegmentClick('new')}
-                    >
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <Sparkles className="w-5 h-5 text-green-600" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-slate-900">{segmentCounts.new}</p>
-                                <p className="text-xs text-slate-500">New Clients</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card 
-                        className={`cursor-pointer transition-all ${filters.segment === 'at_risk' ? 'ring-2 ring-red-500' : ''}`}
-                        onClick={() => handleSegmentClick('at_risk')}
-                    >
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                                <AlertTriangle className="w-5 h-5 text-red-600" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-slate-900">{segmentCounts.at_risk}</p>
-                                <p className="text-xs text-slate-500">At Risk</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                {/* Search and Filters */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.15 }}
-                    className="flex flex-col gap-4 mb-8"
+                  <PencilSquareIcon className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl font-bold border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => handleDeleteRequest(activeClient)}
                 >
-                    {/* Search Bar */}
-                    <div className="flex gap-3">
-                        <div className="flex-1 relative">
-                            <Input
-                                type="text"
-                                placeholder="Search by client name, email, phone, or contact person..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-10 pl-4 pr-10 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
-                            />
-                            {searchTerm && (
-                                <button
-                                    onClick={() => setSearchTerm('')}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            variant="outline"
-                            className="h-10 rounded-xl"
-                        >
-                            <Filter className="w-4 h-4 mr-2" />
-                            Filters {Object.keys(filters).length > 0 && `(${Object.keys(filters).length})`}
-                        </Button>
-                    </div>
-
-                    {/* Advanced Filters */}
-                    {showFilters && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"
-                        >
-                            <ClientFilters onFilterChange={setFilters} />
-                        </motion.div>
-                    )}
-
-                    {/* View Mode and Export */}
-                    <div className="flex gap-2 justify-end">
-                        <div className="flex bg-white p-1 rounded-lg border shadow-sm h-10">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'grid' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
-                            >
-                                <LayoutGrid className="w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-md ${viewMode === 'list' ? 'bg-slate-100 text-primary' : 'text-slate-400'}`}
-                            >
-                                <List className="w-4 h-4" />
-                            </Button>
-                        </div>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            accept=".csv"
-                            className="hidden"
-                            onChange={handleImportFile}
-                        />
-                        <Button
-                            onClick={handleImportClients}
-                            variant="outline"
-                            disabled={isImporting}
-                            className="h-10 rounded-xl"
-                            title="Import clients from Client_export.csv format"
-                        >
-                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? 'animate-pulse' : ''}`} />
-                            {isImporting ? "Importing…" : "Import CSV"}
-                        </Button>
-                        <Button
-                            onClick={handleExportClients}
-                            variant="outline"
-                            disabled={filteredClients.length === 0}
-                            className="h-10 rounded-xl"
-                        >
-                            <Download className="w-4 h-4 mr-2" />
-                            Export CSV
-                        </Button>
-                        <Button
-                            onClick={handleRefreshClients}
-                            variant="outline"
-                            disabled={isRefreshing || isLoading}
-                            className="h-10 rounded-xl"
-                            title="Refresh client list"
-                        >
-                            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            Refresh
-                        </Button>
-                        <Button
-                            onClick={handleUpdateSegments}
-                            variant="outline"
-                            disabled={isUpdatingSegments}
-                            className="h-10 rounded-xl"
-                        >
-                            <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingSegments ? 'animate-spin' : ''}`} />
-                            Update Segments
-                        </Button>
-                    </div>
-                </motion.div>
-
-                {/* Client Form Dialog */}
-                <Dialog open={showForm} onOpenChange={setShowForm}>
-                    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                        <ClientForm
-                            client={editingClient}
-                            onSave={handleSaveClient}
-                            onCancel={() => {
-                                setShowForm(false);
-                                setEditingClient(null);
-                            }}
-                        />
-                    </DialogContent>
-                </Dialog>
-
-                {/* Clients Grid */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
+                  <TrashIcon className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+                <Link
+                  to={
+                    createPageUrl("CreateInvoice") +
+                    "?client_id=" +
+                    encodeURIComponent(activeClient.id)
+                  }
                 >
-                    {isLoading ? (
-                        <div className={`grid ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'} gap-6`}>
-                            {Array(6).fill(0).map((_, i) => (
-                                <Card key={i} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-                                    <CardContent className="p-6">
-                                        <div className="animate-pulse space-y-4">
-                                            <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                                            <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                            <div className="h-3 bg-slate-200 rounded w-2/3"></div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    ) : filteredClients.length === 0 ? (
-                        <Card className="border-dashed border-border">
-                            <CardContent className="p-12 text-center">
-                                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                    <Users className="w-7 h-7 text-muted-foreground" />
-                                </div>
-                                <h3 className="text-base font-semibold text-foreground mb-2 font-display">
-                                    {searchTerm || Object.keys(filters).length > 0 ? "No clients found" : "No clients yet"}
-                                </h3>
-                                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                                    {searchTerm
-                                        ? `No clients match "${searchTerm}"`
-                                        : Object.keys(filters).length > 0
-                                        ? "Try adjusting your filters."
-                                        : "Add clients to send invoices and quotes. Supports ZAR and all major currencies."
-                                    }
-                                </p>
-                                {!searchTerm && Object.keys(filters).length === 0 && (
-                                    <Button
-                                        onClick={() => setShowForm(true)}
-                                        className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
-                                    >
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Add your first client
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <>
-                            {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {paginatedClients.map((client, index) => (
-                                        <ClientCard
-                                            key={client.id}
-                                            client={client}
-                                            onEdit={handleEditClient}
-                                            onDelete={handleDeleteRequest}
-                                            delay={index * 0.1}
-                                            currency={userCurrency}
-                                        />
-                                    ))}
-                                </div>
-                            ) : (
-                                <ClientList
-                                    clients={paginatedClients}
-                                    onEdit={handleEditClient}
-                                    onDelete={handleDeleteRequest}
-                                    currency={userCurrency}
-                                />
-                            )}
-                            
-                            {/* Pagination Controls */}
-                            {totalPages > 1 && (
-                                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-slate-600">Show</span>
-                                        <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                                            <SelectTrigger className="w-[70px] h-9">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="12">12</SelectItem>
-                                                <SelectItem value="24">24</SelectItem>
-                                                <SelectItem value="48">48</SelectItem>
-                                                <SelectItem value="96">96</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <span className="text-sm text-slate-600">
-                                            of {filteredClients.length} clients
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                            disabled={currentPage === 1}
-                                        >
-                                            <ChevronLeft className="w-4 h-4 mr-1" />
-                                            Previous
-                                        </Button>
-                                        
-                                        <div className="flex items-center gap-1">
-                                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                                let pageNum;
-                                                if (totalPages <= 5) {
-                                                    pageNum = i + 1;
-                                                } else if (currentPage <= 3) {
-                                                    pageNum = i + 1;
-                                                } else if (currentPage >= totalPages - 2) {
-                                                    pageNum = totalPages - 4 + i;
-                                                } else {
-                                                    pageNum = currentPage - 2 + i;
-                                                }
-                                                return (
-                                                    <Button
-                                                        key={i}
-                                                        variant={currentPage === pageNum ? "default" : "outline"}
-                                                        size="sm"
-                                                        onClick={() => setCurrentPage(pageNum)}
-                                                        className="w-9 h-9"
-                                                    >
-                                                        {pageNum}
-                                                    </Button>
-                                                );
-                                            })}
-                                        </div>
-                                        
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                            disabled={currentPage === totalPages}
-                                        >
-                                            Next
-                                            <ChevronRight className="w-4 h-4 ml-1" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </motion.div>
+                  <Button className="px-6 py-3 bg-orange-600 hover:bg-orange-700 rounded-2xl font-bold text-white shadow-lg shadow-orange-200">
+                    Bill Client
+                  </Button>
+                </Link>
+              </div>
+            </header>
+
+            {/* KPI Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+              {[
+                {
+                  label: "Total Revenue",
+                  value: formatCurrency(activeStats.totalRevenue, userCurrency),
+                  color: "text-slate-900",
+                },
+                {
+                  label: "Outstanding",
+                  value: formatCurrency(activeStats.outstanding, userCurrency),
+                  color: "text-red-500",
+                },
+                {
+                  label: "Avg. Payment",
+                  value: activeStats.avgPaymentDays,
+                  color: "text-emerald-500",
+                },
+              ].map((stat, i) => (
+                <div
+                  key={i}
+                  className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm"
+                >
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    {stat.label}
+                  </p>
+                  <p className={`text-2xl font-black ${stat.color}`}>
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
             </div>
 
-            <ConfirmationDialog
-                isOpen={showDeleteConfirm}
-                onClose={() => {
-                    setShowDeleteConfirm(false);
-                    setDeletingClient(null);
-                }}
-                onConfirm={handleDeleteClient}
-                title={`Delete ${deletingClient?.name || 'Client'}?`}
-                description="This action cannot be undone. This will permanently delete the client."
-                confirmText="Delete"
-                isConfirming={isDeleting}
-            />
-        </div>
-    );
+            {/* Tabbed Content: Invoices */}
+            <section className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-8 py-6 border-b border-slate-50 flex gap-8">
+                <button
+                  type="button"
+                  onClick={() => setDetailTab("invoices")}
+                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                    detailTab === "invoices"
+                      ? "text-orange-600 border-orange-600"
+                      : "text-slate-400 border-transparent hover:text-slate-600"
+                  }`}
+                >
+                  Invoices
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailTab("quotations")}
+                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                    detailTab === "quotations"
+                      ? "text-orange-600 border-orange-600"
+                      : "text-slate-400 border-transparent hover:text-slate-600"
+                  }`}
+                >
+                  Quotations
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailTab("statement")}
+                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                    detailTab === "statement"
+                      ? "text-orange-600 border-orange-600"
+                      : "text-slate-400 border-transparent hover:text-slate-600"
+                  }`}
+                >
+                  Statement
+                </button>
+              </div>
+
+              <div className="p-8">
+                {detailTab === "invoices" && (
+                  <>
+                    {activeInvoices.length === 0 ? (
+                      <div className="py-12 text-center text-slate-500">
+                        <p className="font-medium">No invoices yet</p>
+                        <p className="text-sm mt-1 mb-4">
+                          Create an invoice for this client to see it here.
+                        </p>
+                        <Link
+                          to={
+                            createPageUrl("CreateInvoice") +
+                            "?client_id=" +
+                            encodeURIComponent(activeClient.id)
+                          }
+                        >
+                          <Button className="bg-orange-600 hover:bg-orange-700">
+                            Bill Client
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50">
+                            <th className="pb-4">Invoice #</th>
+                            <th className="pb-4">Date</th>
+                            <th className="pb-4 text-right">Amount</th>
+                            <th className="pb-4 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-sm font-medium text-slate-600">
+                          {activeInvoices.slice(0, 20).map((inv) => (
+                            <tr
+                              key={inv.id}
+                              className="border-b border-slate-50 hover:bg-slate-50/50"
+                            >
+                              <td className="py-4">
+                                <Link
+                                  to={
+                                    createPageUrl("ViewInvoice") + "?id=" + inv.id
+                                  }
+                                  className="text-slate-900 font-semibold hover:text-orange-600"
+                                >
+                                  {inv.invoice_number || inv.id?.slice(0, 8)}
+                                </Link>
+                              </td>
+                              <td className="py-4">
+                                {safeFormatDate(inv.issue_date || inv.created_date)}
+                              </td>
+                              <td className="py-4 text-right font-bold text-slate-900">
+                                {formatCurrency(inv.total_amount, userCurrency)}
+                              </td>
+                              <td className="py-4 text-right">
+                                <span
+                                  className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                                    statusStyles[inv.status] || statusStyles.draft
+                                  }`}
+                                >
+                                  {inv.status?.replace("_", " ") || "Draft"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </>
+                )}
+                {detailTab === "quotations" && (
+                  <div className="py-12 text-center text-slate-500">
+                    <p className="font-medium">Quotations</p>
+                    <p className="text-sm mt-1">
+                      Link to quotes for this client can be added here.
+                    </p>
+                    <Link to={createPageUrl("Quotes")}>
+                      <Button variant="outline" className="mt-4">
+                        View all quotes
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                {detailTab === "statement" && (
+                  <div className="py-12 text-center text-slate-500">
+                    <p className="font-medium">Statement</p>
+                    <p className="text-sm mt-1">
+                      Account statement view can be added here.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </>
+        )}
+      </main>
+
+      {/* Add/Edit Client Dialog */}
+      <Dialog
+        open={showForm}
+        onOpenChange={(open) => {
+          setShowForm(open);
+          if (!open) setEditingClient(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <ClientForm
+            client={editingClient}
+            onSave={handleSaveClient}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingClient(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingClient(null);
+        }}
+        onConfirm={handleDeleteClient}
+        title={`Delete ${deletingClient?.name || "Client"}?`}
+        description="This action cannot be undone. This will permanently delete the client."
+        confirmText="Delete"
+        isConfirming={isDeleting}
+      />
+    </div>
+  );
 }

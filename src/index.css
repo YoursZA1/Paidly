@@ -24,6 +24,20 @@ html {
     padding-right: 1rem;
     padding-top: max(1rem, env(safe-area-inset-top));
   }
+  /* Mobile sidebar: floating pill active state (light orange + indicator dot) */
+  .mobile-nav-panel .sidebar-nav-item-active {
+    background: rgba(234, 88, 12, 0.08) !important;
+    border-left: none !important;
+    border-radius: 1rem;
+    box-shadow: none;
+  }
+  .mobile-nav-panel .sidebar-nav-item-active .sidebar-nav-icon {
+    color: hsl(var(--primary)) !important;
+  }
+  .mobile-nav-panel .sidebar-nav-item-active a,
+  .mobile-nav-panel .sidebar-nav-item-active span {
+    color: hsl(var(--primary)) !important;
+  }
 }
 
 body {

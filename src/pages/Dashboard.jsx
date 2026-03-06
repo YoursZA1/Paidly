@@ -42,7 +42,9 @@ import WelcomeGuide from '@/components/shared/WelcomeGuide';
 import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
 import KPICarousel from '@/components/dashboard/KPICarousel';
 import GoalProgress from '@/components/dashboard/GoalProgress';
+import { GoalSetterModal } from '@/components/dashboard/GoalSetterModal';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
+import { getBusinessGoal } from '@/api/businessGoals';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -245,6 +247,8 @@ export default function Dashboard() {
   });
   const [revenueRange, setRevenueRange] = useState(30);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
+  const [businessGoal2026, setBusinessGoal2026] = useState(null);
+  const [goalSetterOpen, setGoalSetterOpen] = useState(false);
   const [alerts, setAlerts] = useState({
     planLimits: [],
     failedSubscriptions: [],
@@ -615,6 +619,8 @@ export default function Dashboard() {
       setExpenses(expensesData);
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetailsData.length > 0);
+      const goal2026 = await getBusinessGoal(userData.id, 2026).catch(() => null);
+      setBusinessGoal2026(goal2026 || null);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
       toast({
@@ -625,6 +631,12 @@ export default function Dashboard() {
     }
     setIsLoading(false);
   }, [toast]); // useCallback
+
+  const refreshGoal2026 = useCallback(async () => {
+    if (!user?.id) return;
+    const goal = await getBusinessGoal(user.id, 2026).catch(() => null);
+    setBusinessGoal2026(goal || null);
+  }, [user?.id]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
   useSupabaseRealtime(
@@ -1283,10 +1295,21 @@ export default function Dashboard() {
     return sum;
   }, 0);
 
+  const lastYear = new Date().getFullYear() - 1;
+  const lastYearRevenue = invoices.reduce((sum, inv) => {
+    if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
+    const created = inv.created_date || inv.created_at;
+    if (!created || new Date(created).getFullYear() !== lastYear) return sum;
+    return sum + (inv.total_amount || 0);
+  }, 0);
+
   const userName = user?.display_name || user?.full_name || 'there';
   const userCurrency = userCurrencyPreference || 'ZAR';
 
-  const goalProgress = Math.min(100, (totalRevenue / 50000) * 100);
+  const revenueTarget2026 = businessGoal2026?.annual_target ?? 2400000;
+  const goalProgress = revenueTarget2026 > 0
+    ? Math.min(100, (totalRevenue / revenueTarget2026) * 100)
+    : 0;
 
   const statusColors = {
     'paid': 'bg-status-paid/10 text-status-paid',
@@ -1730,7 +1753,22 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <GoalProgress year={new Date().getFullYear()} progress={goalProgress} />
+            <GoalProgress
+              year={2026}
+              progress={goalProgress}
+              revenueTarget={revenueTarget2026}
+              currentRevenue={totalRevenue}
+              currency={userCurrency}
+              onClick={() => setGoalSetterOpen(true)}
+            />
+            <GoalSetterModal
+              isOpen={goalSetterOpen}
+              onClose={() => setGoalSetterOpen(false)}
+              onSaved={refreshGoal2026}
+              user={user}
+              initialGoal={businessGoal2026}
+              lastYearRevenue={lastYearRevenue}
+            />
 
             {/* Transaction List — hidden on mobile (shown in mobile block above) */}
             <div className="glass-card rounded-fintech border border-border overflow-hidden hidden md:block">

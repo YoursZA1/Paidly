@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import debounce from "lodash.debounce";
 import { Note } from "@/api/entities";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -20,9 +21,8 @@ export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("Saved"); // 'Typing...' | 'Saving...' | 'Saved' | 'Error saving'
   const [showEditorOverlay, setShowEditorOverlay] = useState(false);
-  const saveTimeoutRef = useRef(null);
   const { toast } = useToast();
 
   const loadNotes = useCallback(async () => {
@@ -49,44 +49,70 @@ export default function Notes() {
     if (selectedNote) {
       setEditTitle(selectedNote.title || "");
       setEditContent(selectedNote.content || "");
+      setSaveStatus("Saved");
     }
   }, [selectedNote]);
 
-  const debouncedSave = useCallback(() => {
-    if (!selectedNote?.id) return;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
-      setIsSaving(true);
+  const saveToDatabase = useCallback(
+    async (title, content) => {
+      if (!selectedNote?.id) return;
+      setSaveStatus("Saving...");
       try {
         await Note.update(selectedNote.id, {
-          title: editTitle,
-          content: editContent,
+          title,
+          content,
           is_pinned: selectedNote.is_pinned,
         });
-        await loadNotes();
-        setSelectedNote((prev) =>
-          prev ? { ...prev, title: editTitle, content: editContent } : null
+        const updated = { ...selectedNote, title, content };
+        setSelectedNote((prev) => (prev?.id === selectedNote.id ? updated : prev));
+        setNotes((prev) =>
+          prev.map((n) => (n.id === selectedNote.id ? { ...n, title, content } : n))
         );
+        setSaveStatus("Saved");
       } catch (err) {
         console.error("Error saving note:", err);
+        setSaveStatus("Error saving");
         toast({
           title: "Failed to save",
-          description: err.message || "Please try again.",
+          description: err?.message || "Please try again.",
           variant: "destructive",
         });
       }
-      setIsSaving(false);
-      saveTimeoutRef.current = null;
-    }, 1500);
-  }, [selectedNote, editTitle, editContent, loadNotes, toast]);
+    },
+    // selectedNote required for in-memory update; debouncer recreated when note changes
+    [selectedNote, toast]
+  );
+
+  const debouncedSave = useMemo(
+    () => debounce((title, content) => saveToDatabase(title, content), 2000),
+    [saveToDatabase]
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, [debouncedSave]);
 
   useEffect(() => {
     if (!selectedNote?.id) return;
-    debouncedSave();
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [editTitle, editContent, selectedNote?.id, debouncedSave]);
+    debouncedSave.cancel();
+    setSaveStatus("Saved");
+  }, [selectedNote?.id, debouncedSave]);
+
+  const handleTitleChange = (e) => {
+    const value = e.target.value;
+    setEditTitle(value);
+    setSaveStatus("Typing...");
+    debouncedSave(value, editContent);
+  };
+
+  const handleContentChange = (e) => {
+    const value = e.target.value;
+    setEditContent(value);
+    setSaveStatus("Typing...");
+    debouncedSave(editTitle, value);
+  };
 
   const handleNewNote = async () => {
     try {
@@ -297,9 +323,9 @@ export default function Notes() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                {isSaving && (
-                  <span className="text-xs text-slate-500">Saving...</span>
-                )}
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 min-w-[4rem] text-right">
+                  {saveStatus}
+                </span>
                 <button
                   onClick={handleDeleteNote}
                   className="flex items-center gap-2 text-red-500 text-sm font-bold px-4 py-2 hover:bg-red-50 rounded-xl transition-colors"
@@ -314,13 +340,13 @@ export default function Notes() {
             <div className="flex-1 p-6 lg:p-12 max-w-4xl mx-auto w-full overflow-auto">
               <input
                 value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
+                onChange={handleTitleChange}
                 className="w-full text-4xl font-black text-slate-900 border-none bg-transparent focus:ring-0 mb-6 placeholder-slate-300"
                 placeholder="Title"
               />
               <textarea
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
+                onChange={handleContentChange}
                 className="w-full min-h-[70vh] text-lg text-slate-600 border-none bg-transparent focus:ring-0 leading-relaxed resize-none placeholder-slate-400"
                 placeholder="Start typing your brilliant business ideas here..."
               />

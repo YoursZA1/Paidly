@@ -463,16 +463,19 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
           id={item.id}
           to={item.url}
           onClick={onClick}
-          className={`relative z-10 group flex items-center transition-all rounded-lg border-l-[3px] ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : "py-2.5 gap-3 px-3 pl-4"} ${isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-sidebar-accent"}`}
+          className={`relative z-10 group flex items-center transition-all rounded-lg border-l-[3px] ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2.5 gap-3 px-3 pl-4"} ${mobile ? (isActive ? "bg-orange-50 border-l-transparent" : "border-l-transparent hover:bg-muted/60") : (isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-sidebar-accent")}`}
         >
           <span
             className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
-              ${mobile ? (isActive ? "text-primary" : "text-foreground group-hover:bg-muted/80") : (isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-sidebar-foreground")}
+              ${mobile ? (isActive ? "text-primary" : "text-foreground group-hover:text-slate-600") : (isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-sidebar-foreground")}
             `}
           >
             <item.icon className="size-5" strokeWidth={2} />
           </span>
-          <span className={`text-[13px] transition-colors ${isActive ? "text-primary font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
+          <span className={`text-[13px] transition-colors flex-1 text-left ${isActive ? "text-primary font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
+          {mobile && isActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_8px_rgba(234,88,12,0.4)]" aria-hidden />
+          )}
         </Link>
       )}
     </motion.div>
@@ -486,7 +489,20 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setTheme, resolvedTheme }) => (
+const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setTheme, resolvedTheme }) => {
+  const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
+  const managementIds = new Set([
+    "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
+    "nav-calendar", "nav-messages", "nav-settings"
+  ]);
+  const mainItems = items.filter((i) => i.id && MAIN_IDS.has(i.id));
+  let managementItems = items.filter((i) => i.id && managementIds.has(i.id));
+  const adminItems = items.filter((i) => i.id && i.id.startsWith("nav-admin-"));
+  if (adminItems.length > 0) {
+    managementItems = [...managementItems, ...adminItems];
+  }
+
+  return (
   <motion.div
     initial={{ x: "-100%" }}
     animate={{ x: 0 }}
@@ -498,78 +514,114 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
     aria-label="Main menu"
   >
     {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly, fits narrow screens */}
-    <div className="w-full max-w-[min(300px,90vw)] flex flex-col bg-card border-r border-border text-foreground shadow-elevation-lg p-3 sm:p-4 mobile-nav-panel">
-      {/* Header with safe-top applied via mobile-nav-panel */}
-      <div className="flex min-h-[52px] items-center justify-between shrink-0 gap-2">
-        <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-2 min-w-0 min-h-[44px] flex-1 items-center touch-manipulation" aria-label="Paidly home">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-            <img src="/logo.svg" alt="" className="w-7 h-7 sm:w-8 sm:h-8" aria-hidden="true" />
-          </div>
-          <span className="text-[14px] sm:text-[15px] font-semibold text-foreground truncate font-display">Paidly</span>
-        </Link>
-        <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 min-h-11 min-w-11 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation" aria-label="Close menu">
-          <X className="size-5" />
-        </Button>
-      </div>
-
-      {/* Nav list: scrollable, theme spacing, touch-friendly link height */}
-      <nav className="space-y-0.5 mt-2 flex-1 overflow-y-auto overflow-x-hidden -mx-1 py-2 min-h-0" aria-label="App navigation">
-        {items.map(item => (
-          <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
-        ))}
-      </nav>
-
-      {/* Footer: user, actions, safe-bottom for home indicator — mobile: only Create Invoice + Logout */}
-      <div className="shrink-0 border-t border-border pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] px-2 sm:px-4 space-y-3">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden shrink-0">
-            {user?.logo_url ? (
-              <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              user?.full_name ? user.full_name[0].toUpperCase() : 'U'
-            )}
-          </div>
-          <div className="text-center min-w-0">
-            <div className="font-semibold text-foreground truncate text-sm">{user?.company_name || 'My Company'}</div>
-            <div className="text-xs text-muted-foreground truncate">{user?.full_name || user?.email}</div>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full min-h-11 justify-start gap-2 border-border text-foreground hover:bg-muted hover:text-foreground rounded-xl touch-manipulation">
-                {resolvedTheme === "dark" ? <Moon className="size-4" /> : resolvedTheme === "light" ? <Sun className="size-4" /> : <Monitor className="size-4" />}
-                <span>Appearance: {theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 rounded-xl">
-              <DropdownMenuRadioGroup value={theme || "system"} onValueChange={(v) => { setTheme(v); onClose?.(); }}>
-                <DropdownMenuRadioItem value="light" className="cursor-pointer">
-                  <Sun className="mr-2 size-4" /> Light
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="dark" className="cursor-pointer">
-                  <Moon className="mr-2 size-4" /> Dark
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="system" className="cursor-pointer">
-                  <Monitor className="mr-2 size-4" /> System
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
-            <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation shadow-md shadow-primary/20">
-              <Plus className="size-5 mr-2" /> Create Invoice
-            </Button>
+    <div className="w-full max-w-[min(300px,90vw)] flex flex-col bg-white dark:bg-card border-r border-slate-100 dark:border-border text-foreground shadow-elevation-lg p-4 sm:p-6 mobile-nav-panel">
+      {/* 1. BRANDING — extra bottom padding for premium spacing */}
+      <div className="mb-10 sm:mb-12 shrink-0">
+        <div className="flex min-h-[52px] items-center justify-between gap-2">
+          <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0 flex-1 touch-manipulation" aria-label="Paidly home">
+            <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+              <img src="/logo.svg" alt="" className="w-8 h-8" aria-hidden="true" />
+            </div>
+            <span className="text-xl font-black text-slate-900 dark:text-foreground tracking-tight truncate font-display">Paidly</span>
           </Link>
-          <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted hover:text-foreground py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
-            <LogOut className="size-5 mr-2" /> Logout
+          <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 min-h-11 min-w-11 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation" aria-label="Close menu">
+            <X className="size-5" />
           </Button>
         </div>
+      </div>
+
+      {/* 2. NAVIGATION — grouped into Main & Management with muted headers */}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 -mx-1 space-y-8" aria-label="App navigation">
+        {mainItems.length > 0 && (
+          <div>
+            <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
+              Main
+            </p>
+            <div className="space-y-1">
+              {mainItems.map((item) => (
+                <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
+              ))}
+            </div>
+          </div>
+        )}
+        {managementItems.length > 0 && (
+          <div>
+            <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
+              Management
+            </p>
+            <div className="space-y-1">
+              {managementItems.map((item) => (
+                <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
+              ))}
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* 3. FOOTER — user profile at bottom, separated by thin line */}
+      <div className="shrink-0 pt-6 border-t border-slate-100 dark:border-border space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
+          <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-2xl touch-manipulation shadow-md shadow-primary/20">
+            <Plus className="size-5 mr-2" /> Create Invoice
+          </Button>
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-muted transition-all text-left touch-manipulation"
+            >
+              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-muted border-2 border-white dark:border-card shadow-sm overflow-hidden shrink-0 flex items-center justify-center font-semibold text-slate-600 dark:text-muted-foreground text-sm">
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-900 dark:text-foreground truncate">{user?.full_name || user?.company_name || "User"}</p>
+                <p className="text-[10px] text-slate-400 dark:text-muted-foreground font-medium truncate">{user?.email || ""}</p>
+              </div>
+              <Settings className="w-5 h-5 text-slate-300 dark:text-muted-foreground shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 rounded-xl">
+            <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings")); onClose?.(); }} className="cursor-pointer">
+              <Settings className="mr-2 size-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings") + "?tab=subscription"); onClose?.(); }} className="cursor-pointer">
+              <Bell className="mr-2 size-4" />
+              Subscription
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground font-normal">Appearance</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={theme || "system"} onValueChange={(v) => { setTheme(v); onClose?.(); }}>
+              <DropdownMenuRadioItem value="light" className="cursor-pointer">
+                <Sun className="mr-2 size-4" /> Light
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark" className="cursor-pointer">
+                <Moon className="mr-2 size-4" /> Dark
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system" className="cursor-pointer">
+                <Monitor className="mr-2 size-4" /> System
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          variant="outline"
+          className="w-full min-h-12 border-slate-200 dark:border-border text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-900/50 py-3 rounded-2xl touch-manipulation"
+          onClick={() => { onClose(); handleLogout(); }}
+        >
+          <LogOut className="size-5 mr-2" /> Logout
+        </Button>
       </div>
     </div>
     <div className="flex-1 bg-black/50 min-h-screen" onClick={onClose} aria-hidden="true" />
   </motion.div>
-);
+  );
+};
 
 MobileNav.propTypes = {
   items: PropTypes.arrayOf(navItemShape).isRequired,
