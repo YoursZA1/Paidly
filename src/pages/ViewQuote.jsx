@@ -81,10 +81,28 @@ export default function ViewQuote() {
 
     const userCurrency = company?.currency || 'USD';
     const items = Array.isArray(quote?.items) ? quote.items : [];
+    const isSentOrAccepted = quote?.status === 'sent' || quote?.status === 'accepted';
 
     return (
         <div className="min-h-screen bg-background">
             <div className="p-4 sm:p-8 max-w-5xl mx-auto">
+                {/* Prominent Convert to Invoice CTA for sent/accepted quotes */}
+                {isSentOrAccepted && (
+                    <div className="mb-6 p-6 rounded-2xl bg-primary/10 border-2 border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-1">Quote {quote.status === 'accepted' ? 'Accepted' : 'Sent'}</p>
+                            <p className="text-muted-foreground text-sm">Ready to get paid? Convert this quote to an invoice in one click.</p>
+                        </div>
+                        <Button
+                            size="lg"
+                            className="w-full sm:w-auto min-w-[220px] h-14 text-lg font-bold bg-primary hover:bg-primary/90 shadow-lg"
+                            onClick={() => navigate(createPageUrl(`CreateInvoice?quoteId=${quote.id}`))}
+                        >
+                            <ArrowRightSquare className="w-6 h-6 mr-2" />
+                            Convert to Invoice
+                        </Button>
+                    </div>
+                )}
                 <Breadcrumb className="mb-4">
                     <BreadcrumbList>
                         <BreadcrumbItem>

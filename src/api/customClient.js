@@ -95,13 +95,14 @@ class EntityManager {
         return;
       }
 
-      if (!orgId) {
+      const table = this.entityName.toLowerCase() + "s";
+      const isNotesEntity = table === "notes";
+      if (!orgId && !isNotesEntity) {
         console.warn(`No organization found for user ${userId}`);
         return;
       }
 
       // Supabase CRUD: only these entities map to Supabase tables (see docs/SUPABASE_DATA_MODEL.md)
-      const table = this.entityName.toLowerCase() + "s";
       const supabaseTable =
         table === "services"
           ? "services"
@@ -127,13 +128,17 @@ class EntityManager {
                               ? "expenses"
                               : table === "tasks"
                                 ? "tasks"
-                                : null;
+                                : table === "notes"
+                                  ? "notes"
+                                  : null;
 
       if (supabaseTable) {
         let query = supabase.from(supabaseTable).select("*");
         
-        // Only filter by org_id if the table has that column
-        if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+        // Notes: filter by user_id (auth.uid())
+        if (supabaseTable === 'notes') {
+          query = query.eq('user_id', userId);
+        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
           query = query.eq('org_id', orgId);
         }
         // Packages: platform (org_id null) or user's org
@@ -213,7 +218,7 @@ class EntityManager {
             // Continue without org_id filter if we can't ensure organization
           }
 
-          if (orgId) {
+          if (orgId || this.entityName === 'Note') {
             const table = this.entityName.toLowerCase() + 's';
             const supabaseTable = table === 'services' ? 'services' :
                                  table === 'clients' ? 'clients' :
@@ -226,11 +231,14 @@ class EntityManager {
                                  table === 'invoiceviews' ? 'invoice_views' :
                                  table === 'payrolls' ? 'payslips' :
                                  table === 'expenses' ? 'expenses' :
-                                 table === 'tasks' ? 'tasks' : null;
+                                 table === 'tasks' ? 'tasks' :
+                                 table === 'notes' ? 'notes' : null;
 
             if (supabaseTable) {
               let query = supabase.from(supabaseTable).select('*').eq('id', idStr);
-              if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+              if (supabaseTable === 'notes') {
+                query = query.eq('user_id', userId);
+              } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
                 query = query.eq('org_id', orgId);
               }
               // packages: RLS enforces visibility (platform or own org)
@@ -495,7 +503,8 @@ class EntityManager {
         throw new Error(`Failed to set up organization: ${error.message}. Please contact support.`);
       }
 
-      if (!orgId) {
+      const isNotesEntity = this.entityName === 'Note';
+      if (!orgId && !isNotesEntity) {
         throw new Error('No organization found for user. Please contact support.');
       }
 
@@ -525,14 +534,18 @@ class EntityManager {
                               ? "expenses"
                               : table === "tasks"
                                 ? "tasks"
-                                : null;
+                                : table === "notes"
+                                  ? "notes"
+                                  : null;
 
       // Prepare data for Supabase (field names match schema: created_at, updated_at, org_id, etc.)
       const supabaseData = {
         ...data,
         updated_at: new Date().toISOString()
       };
-      if (supabaseTable !== 'packages') {
+      if (supabaseTable === 'notes') {
+        supabaseData.user_id = sessionData.session.user.id;
+      } else if (supabaseTable !== 'packages') {
         supabaseData.org_id = orgId;
       }
       if (supabaseTable === 'packages') {
@@ -754,6 +767,15 @@ class EntityManager {
         });
       }
 
+      const NOTE_INSERT_COLUMNS = [
+        'user_id', 'title', 'content', 'category', 'is_pinned', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'notes') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!NOTE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
       const TASK_INSERT_COLUMNS = [
         'org_id', 'title', 'description', 'client_id', 'assigned_to', 'due_date',
         'priority', 'status', 'category', 'parent_task_id', 'depends_on', 'estimated_hours', 'tags',
@@ -903,11 +925,12 @@ class EntityManager {
         throw new Error(`Failed to set up organization: ${error.message}. Please contact support.`);
       }
 
-      if (!orgId) {
+      const isNotesEntity = this.entityName === 'Note';
+      if (!orgId && !isNotesEntity) {
         throw new Error('No organization found for user. Please contact support.');
       }
 
-      // Verify record exists and belongs to user's org
+      // Verify record exists and belongs to user's org (or user for notes)
       const existingRecord = this.data[idStr];
       if (!existingRecord) {
         // Try to fetch from Supabase
@@ -928,7 +951,8 @@ class EntityManager {
                            table === 'invoiceviews' ? 'invoice_views' : 
                            table === 'payrolls' ? 'payslips' :
                            table === 'expenses' ? 'expenses' :
-                           table === 'tasks' ? 'tasks' : null;
+                           table === 'tasks' ? 'tasks' :
+                           table === 'notes' ? 'notes' : null;
 
       // Prepare update data
       const updateData = {
@@ -1042,6 +1066,15 @@ class EntityManager {
           if (!EXPENSE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
       }
+      const NOTE_UPDATE_COLUMNS = [
+        'title', 'content', 'category', 'is_pinned', 'updated_at'
+      ];
+      if (supabaseTable === 'notes') {
+        Object.keys(updateData).forEach(key => {
+          if (!NOTE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+
       const TASK_UPDATE_COLUMNS = [
         'title', 'description', 'client_id', 'assigned_to', 'due_date',
         'priority', 'status', 'category', 'parent_task_id', 'depends_on', 'estimated_hours', 'tags', 'is_sample', 'updated_at'
@@ -1086,8 +1119,10 @@ class EntityManager {
       if (supabaseTable) {
         let query = supabase.from(supabaseTable).update(updateData).eq('id', id);
         
-        // Ensure we only update records belonging to user's org (packages: RLS enforces)
-        if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+        // Ensure we only update records belonging to user (notes: user_id; others: org_id)
+        if (supabaseTable === 'notes') {
+          query = query.eq('user_id', sessionData.session.user.id);
+        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
           query = query.eq('org_id', orgId);
         }
 
@@ -1191,11 +1226,14 @@ class EntityManager {
                                table === 'invoiceviews' ? 'invoice_views' :
                                table === 'payrolls' ? 'payslips' :
                                table === 'expenses' ? 'expenses' :
-                               table === 'tasks' ? 'tasks' : null;
+                               table === 'tasks' ? 'tasks' :
+                               table === 'notes' ? 'notes' : null;
 
           if (supabaseTable) {
             let deleteQuery = supabase.from(supabaseTable).delete().eq("id", id);
-            if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+            if (supabaseTable === 'notes') {
+              deleteQuery = deleteQuery.eq('user_id', sessionData.session.user.id);
+            } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
               const orgId = await this.ensureUserHasOrganization(sessionData.session.user.id);
               if (orgId) deleteQuery = deleteQuery.eq('org_id', orgId);
             }

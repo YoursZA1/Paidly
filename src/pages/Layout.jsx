@@ -26,7 +26,6 @@ import {
 import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
-import MobileFAB from "@/components/ui/MobileFAB";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl, createAdminPageUrl } from "@/utils";
@@ -1005,8 +1004,7 @@ export default function Layout({ children, currentPageName }) {
 
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
-        <MobileBottomNav />
-        <MobileFAB />
+        <MobileBottomNav onOpenMenu={() => setIsMobileMenuOpen(true)} />
         </div>
         </div>
       );

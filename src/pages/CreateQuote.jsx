@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Quote, Client, Service, QuoteTemplate } from "@/api/entities";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, Save, Send } from "lucide-react";
+import { Eye, EyeOff, Save, Send, Check, Copy } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -35,6 +35,10 @@ export default function CreateQuote() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(true);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const autoSaveRef = useRef(null);
+  const taxRateInputRef = useRef(null);
 
   const defaultValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const [quoteData, setQuoteData] = useState({
@@ -68,6 +72,28 @@ export default function CreateQuote() {
     }
   }, [quoteData.client_id, clients]);
 
+  // Auto-save draft to localStorage (debounced)
+  useEffect(() => {
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      try {
+        const stored = localStorage.getItem("quoteDraft");
+        const draft = stored ? JSON.parse(stored) : {};
+        const hasData = quoteData.items?.length > 0 || quoteData.client_id || quoteData.project_title;
+        if (hasData) {
+          localStorage.setItem("quoteDraft", JSON.stringify({ ...draft, quoteData, savedAt: Date.now() }));
+          setLastSavedAt(Date.now());
+        }
+      } catch (e) {
+        // ignore
+      }
+      autoSaveRef.current = null;
+    }, 1500);
+    return () => {
+      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    };
+  }, [quoteData]);
+
   const loadData = async () => {
     try {
       const [clientsData, servicesData, templatesData] = await Promise.all([
@@ -85,6 +111,66 @@ export default function CreateQuote() {
         description: "Failed to load data. Please refresh the page.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDuplicateLastQuote = async () => {
+    setIsDuplicating(true);
+    try {
+      const list = await Quote.list("-created_date");
+      const lastQuote = list?.[0];
+      if (!lastQuote) {
+        toast({
+          title: "No quotes yet",
+          description: "Create a quote first, then you can duplicate it.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const full = await Quote.get(lastQuote.id);
+      if (!full) {
+        toast({ title: "Could not load quote", variant: "destructive" });
+        return;
+      }
+      const items = (full.items || []).map((item) => ({
+        service_name: item.service_name || item.name || "",
+        description: item.description || "",
+        quantity: Number(item.quantity || item.qty || 1),
+        unit_price: Number(item.unit_price || item.rate || item.price || 0),
+        total_price: Number(item.total_price || item.total || 0),
+      }));
+      const defaultValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      setQuoteData({
+        client_id: "",
+        project_title: full.project_title || "",
+        project_description: full.project_description || "",
+        items: items.length > 0 ? items : [{ service_name: "", description: "", quantity: 1, unit_price: 0, total_price: 0 }],
+        subtotal: full.subtotal || 0,
+        tax_rate: full.tax_rate ?? 0,
+        tax_amount: full.tax_amount || 0,
+        total_amount: full.total_amount || 0,
+        valid_until: full.valid_until || defaultValidUntil,
+        notes: full.notes || "",
+        terms_conditions: full.terms_conditions || "",
+      });
+      try {
+        localStorage.removeItem("quoteDraft");
+      } catch (_) {}
+      setLastSavedAt(Date.now());
+      toast({
+        title: "Quote duplicated",
+        description: `Cloned "${full.project_title || full.quote_number || "Quote"}" for a new client. Select a client to continue.`,
+        variant: "success",
+      });
+    } catch (err) {
+      console.error("Error duplicating quote:", err);
+      toast({
+        title: "Could not duplicate quote",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDuplicating(false);
     }
   };
 
@@ -160,6 +246,7 @@ export default function CreateQuote() {
       };
 
       await Quote.create(quoteToCreate);
+      setLastSavedAt(Date.now());
 
       toast({
         title: "✓ Quote Created",
@@ -194,103 +281,124 @@ export default function CreateQuote() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Breadcrumbs */}
-        <nav className="text-sm text-muted-foreground">
-          <Link
-            to={createPageUrl("Quotes")}
-            className="hover:text-foreground transition-colors"
-          >
-            Quotes
-          </Link>
-          <span className="mx-2">/</span>
-          <span className="text-foreground font-medium">New Quote</span>
-        </nav>
+  const showSavedIndicator = lastSavedAt && Date.now() - lastSavedAt < 30000;
 
-        {/* Header: title, subtitle, actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight font-display">
-              New Quote
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Generate and send a professional quotation for your clients.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="default"
-              onClick={() => setShowPreview((p) => !p)}
-              className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
-            >
-              {showPreview ? (
-                <>
-                  <EyeOff className="w-4 h-4 mr-2" />
-                  Hide Preview
-                </>
-              ) : (
-                <>
-                  <Eye className="w-4 h-4 mr-2" />
-                  Show Preview
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="default"
-              onClick={handleCreateQuote}
-              disabled={isSaving}
-              className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save as Draft
-            </Button>
-            <Button
-              size="default"
-              onClick={handleCreateQuote}
-              disabled={isSaving}
-              className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-            >
-              {isSaving ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Sending...
+  return (
+    <div className="min-h-screen bg-slate-50/50">
+      {/* Sticky header */}
+      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-slate-100 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <nav className="text-sm text-muted-foreground flex items-center gap-3">
+                <Link
+                  to={createPageUrl("Quotes")}
+                  className="hover:text-foreground transition-colors"
+                >
+                  Quotes
+                </Link>
+                <span className="mx-2">/</span>
+                <span className="text-foreground font-medium">New Quote</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDuplicateLastQuote}
+                  disabled={isDuplicating}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                  title="Clone your most recent quote for a new client"
+                >
+                  {isDuplicating ? (
+                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 mr-1.5" />
+                      Duplicate Last Quote
+                    </>
+                  )}
+                </Button>
+              </nav>
+              {showSavedIndicator && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                  <Check className="w-3.5 h-3.5" />
+                  Saved just now
                 </span>
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-2" />
-                  Send Quote
-                </>
               )}
-            </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="default"
+                onClick={() => setShowPreview((p) => !p)}
+                className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
+              >
+                {showPreview ? (
+                  <>
+                    <EyeOff className="w-4 h-4 mr-2" />
+                    Hide Preview
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Show Preview
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="default"
+                onClick={handleCreateQuote}
+                disabled={isSaving}
+                className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Save as Draft
+              </Button>
+              <Button
+                size="default"
+                onClick={handleCreateQuote}
+                disabled={isSaving}
+                className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+              >
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Sending...
+                  </span>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Quote
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
+      </header>
 
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm">
+          <div className="mb-6 bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm">
             {error}
           </div>
         )}
 
-        {/* Two-column layout: form (left) + preview (right) */}
+        {/* Split-screen: editor (left) + sticky preview (right) */}
         <div
           className={
             showPreview
-              ? "grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
+              ? "grid grid-cols-1 lg:grid-cols-2 gap-10"
               : "max-w-3xl"
           }
         >
-          {/* Left: Quote form */}
-          <div className="space-y-6 overflow-auto">
+          {/* Left: Editor */}
+          <div className="space-y-8 overflow-auto">
             {templates.length > 0 && (
-              <Card className="bg-card border-border">
+              <Card className="bg-white border-slate-100 rounded-[32px] shadow-sm">
                 <CardContent className="p-4 flex items-center gap-4">
-                  <Label className="whitespace-nowrap">Start from Template:</Label>
+                  <Label className="whitespace-nowrap text-sm font-medium">Start from Template:</Label>
                   <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
-                    <SelectTrigger className="w-full sm:w-[300px] bg-background rounded-xl">
+                    <SelectTrigger className="w-full sm:w-[300px] bg-slate-50 border-none rounded-2xl">
                       <SelectValue placeholder="Select a template..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -310,20 +418,23 @@ export default function CreateQuote() {
               setQuoteData={setQuoteData}
               clients={clients}
               services={services}
+              setServices={setServices}
               showNextButton={false}
+              taxRateInputRef={taxRateInputRef}
             />
           </div>
 
-          {/* Right: Live preview */}
+          {/* Right: Sticky preview (stacks below editor on mobile) */}
           {showPreview && (
-            <div className="lg:sticky lg:top-6 lg:self-start">
-              <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="lg:sticky lg:top-24 lg:self-start">
+              <div className="rounded-[32px] shadow-2xl shadow-slate-200 border border-slate-100 overflow-hidden bg-white">
                 <QuotePreview
                   quoteData={quoteData}
                   clients={clients}
                   user={user}
                   previewOnly
                   loading={false}
+                  onTotalClick={() => taxRateInputRef.current?.focus?.()}
                 />
               </div>
             </div>

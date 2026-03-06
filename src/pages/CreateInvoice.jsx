@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, Save, Send } from "lucide-react";
+import { sendInvoiceToClient } from "@/services/InvoiceSendService";
 
 export default function CreateInvoice() {
   const navigate = useNavigate();
@@ -146,7 +147,9 @@ export default function CreateInvoice() {
     loadInitialData();
   }, [location.search, toast, user?.currency]);
 
-  async function handleCreateInvoice(status = "draft") {
+  async function handleCreateInvoice(options = {}) {
+    const sendNow = options && typeof options === "object" && options.sendNow === true;
+
     if (!invoiceData.client_id) {
       setError("Please select a client.");
       toast({
@@ -209,7 +212,7 @@ export default function CreateInvoice() {
       const invoiceToCreate = {
         ...invoiceData,
         invoice_number: invoiceNumber,
-        status,
+        status: "draft",
         items:
           Array.isArray(invoiceData.items) && invoiceData.items.length > 0
             ? invoiceData.items.map((item) => ({
@@ -222,13 +225,24 @@ export default function CreateInvoice() {
             : [],
       };
 
-      await Invoice.create(invoiceToCreate);
+      const created = await Invoice.create(invoiceToCreate);
+      const invoiceId = created?.id;
 
-      toast({
-        title: "✓ Invoice Created",
-        description: `Invoice ${invoiceNumber} has been created successfully.`,
-        variant: "success",
-      });
+      if (sendNow && invoiceId) {
+        await sendInvoiceToClient(invoiceId);
+        window.open(createPageUrl(`InvoicePDF?id=${invoiceId}&download=true`), "_blank", "noopener,noreferrer");
+        toast({
+          title: "✓ Invoice Sent",
+          description: `Invoice ${invoiceNumber} has been sent and PDF generated.`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "✓ Invoice Created",
+          description: `Invoice ${invoiceNumber} has been saved as draft.`,
+          variant: "success",
+        });
+      }
 
       setTimeout(() => {
         navigate(createPageUrl("Invoices"));
@@ -279,125 +293,122 @@ export default function CreateInvoice() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Breadcrumbs */}
+    <div className="flex flex-col lg:flex-row gap-8 p-6 bg-[#F9FAFB] min-h-screen">
+      {/* 1. Data Entry Column (Left) */}
+      <div className="flex-1 max-w-2xl space-y-6">
         <nav className="text-sm text-muted-foreground">
-          <Link
-            to={createPageUrl("Invoices")}
-            className="hover:text-foreground transition-colors"
-          >
+          <Link to={createPageUrl("Invoices")} className="hover:text-foreground transition-colors">
             Invoices
           </Link>
           <span className="mx-2">/</span>
           <span className="text-foreground font-medium">New Invoice</span>
         </nav>
 
-        {/* Header: title, subtitle, actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight font-display">
-              New Invoice
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Generate and send new invoice.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="default"
-              onClick={() => setShowPreview((p) => !p)}
-              className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
-            >
-              {showPreview ? (
-                <>
-                  <EyeOff className="w-4 h-4 mr-2" />
-                  Hide Preview
-                </>
-              ) : (
-                <>
-                  <Eye className="w-4 h-4 mr-2" />
-                  Show Preview
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="default"
-              onClick={() => handleCreateInvoice("draft")}
-              disabled={loading}
-              className="rounded-xl border-border bg-card text-foreground hover:bg-muted"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save as Draft
-            </Button>
-            <Button
-              size="default"
-              onClick={() => handleCreateInvoice("draft")}
-              disabled={loading}
-              className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Sending...
-                </span>
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-2" />
-                  Send Invoice
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm">
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-sm">
             {error}
           </div>
         )}
 
-        {/* Two-column layout: form (left) + preview (right) */}
-        <div
-          className={
-            showPreview
-              ? "grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
-              : "max-w-3xl"
-          }
-        >
-          {/* Left: Invoice form */}
-          <div className="space-y-6 overflow-auto">
-            <InvoiceDetails
-              invoiceData={invoiceData}
-              setInvoiceData={setInvoiceData}
-              clients={clients}
-              products={[]}
-              services={services}
-              setServices={setServices}
-              setProducts={() => {}}
-              onNext={() => {}}
-              showNextButton={false}
-            />
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">New Invoice</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">Generate and send new invoice.</p>
           </div>
-
-          {/* Right: Live preview */}
-          {showPreview && (
-            <div className="lg:sticky lg:top-6 lg:self-start">
-              <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                <InvoicePreview
-                  invoiceData={invoiceData}
-                  clients={clients}
-                  user={user}
-                  previewOnly
-                  loading={false}
-                />
-              </div>
-            </div>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPreview((p) => !p)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {showPreview ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+            {showPreview ? "Hide Preview" : "Show Preview"}
+          </Button>
         </div>
+
+        <InvoiceDetails
+          invoiceData={invoiceData}
+          setInvoiceData={setInvoiceData}
+          clients={clients}
+          products={[]}
+          services={services}
+          setServices={setServices}
+          setProducts={() => {}}
+          onNext={() => {}}
+          showNextButton={false}
+        />
+
+        {/* Actions when preview is hidden */}
+        {!showPreview && (
+          <div className="flex flex-wrap gap-3 pt-4">
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-2xl font-bold"
+              onClick={() => handleCreateInvoice({ sendNow: true })}
+              disabled={loading}
+            >
+              {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Send Invoice Now
+            </Button>
+            <Button
+              variant="outline"
+              className="border-slate-200 px-6 py-3 rounded-2xl font-bold"
+              onClick={() => handleCreateInvoice({ sendNow: false })}
+              disabled={loading}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save as Draft
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* 2. Preview Column (Right) - sticky with actions */}
+      {showPreview && (
+        <div className="lg:w-[450px] shrink-0">
+          <div className="sticky top-6">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-xs font-bold text-slate-400 uppercase">Live Preview</p>
+            </div>
+            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden transform scale-95 origin-top">
+              <InvoicePreview
+                invoiceData={invoiceData}
+                clients={clients}
+                user={user}
+                previewOnly
+                loading={false}
+              />
+            </div>
+            <div className="mt-6 space-y-3">
+              <Button
+                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold shadow-lg shadow-orange-200 transition-all"
+                onClick={() => handleCreateInvoice({ sendNow: true })}
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Sending...
+                  </span>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5 mr-2" />
+                    Send Invoice Now
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-all"
+                onClick={() => handleCreateInvoice({ sendNow: false })}
+                disabled={loading}
+              >
+                <Save className="w-5 h-5 mr-2" />
+                Save as Draft
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

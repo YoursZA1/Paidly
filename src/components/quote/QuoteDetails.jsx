@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Check, ChevronsUpDown, Save } from "lucide-react";
+import { ArrowRight, DollarSign, Calendar, Plus, Trash2, Check, ChevronsUpDown, Save, Calculator } from "lucide-react";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -109,7 +109,8 @@ export default function QuoteDetails({
     setServices, 
     onNext,
     isEditing = false,
-    showNextButton = true
+    showNextButton = true,
+    taxRateInputRef,
 }) {
     const [user, setUser] = useState(null);
     const [expandedItems, setExpandedItems] = useState([]); // Track which items show optional fields
@@ -118,7 +119,30 @@ export default function QuoteDetails({
     const [quickItemName, setQuickItemName] = useState('');
     const [quickItemQuantity, setQuickItemQuantity] = useState(1);
     const [quickItemRate, setQuickItemRate] = useState('');
+    const [quickAddLine, setQuickAddLine] = useState('');
     const quickItemInputRef = useRef(null);
+
+    /** Parse single-line input like "3x Graphic Design R500" or "Logo Design 100" */
+    const parseQuickAddLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+        let qty = 1;
+        let rest = trimmed;
+        const qtyMatch = trimmed.match(/^(\d+)\s*x\s*(.+)$/i);
+        if (qtyMatch) {
+            qty = Math.max(1, parseInt(qtyMatch[1], 10) || 1);
+            rest = qtyMatch[2].trim();
+        }
+        const priceMatch = rest.match(/(.+?)\s+(?:R|R\s*|\$|€)?\s*([\d,.]+)\s*$/i);
+        let name = rest;
+        let price = 0;
+        if (priceMatch) {
+            name = priceMatch[1].trim();
+            price = parseFloat(String(priceMatch[2]).replace(/,/g, "")) || 0;
+        }
+        if (!name) return null;
+        return { name, quantity: qty, unit_price: price };
+    };
     
     useEffect(() => {
         const loadUser = async () => {
@@ -252,7 +276,7 @@ export default function QuoteDetails({
         try {
             const newService = await Service.create(serviceData);
             const updatedServices = await Service.list("-created_date");
-            setServices(updatedServices);
+            if (setServices) setServices(updatedServices);
             if (currentServiceItemIndex !== null) {
                 handleServiceSelect(currentServiceItemIndex, newService);
             }
@@ -338,6 +362,35 @@ export default function QuoteDetails({
         }
     };
 
+    const addFromQuickAddLine = () => {
+        const parsed = parseQuickAddLine(quickAddLine);
+        if (!parsed) return;
+        const matchedService = services.find((s) => s.name?.toLowerCase() === parsed.name.toLowerCase());
+        let nextItem;
+        if (matchedService) {
+            const mapped = mapCatalogToLineItem(matchedService, parsed.quantity, {
+                existingTaxRate: 0,
+                userId: user?.id || null,
+            });
+            nextItem = mapped?.success ? { ...mapped.lineItem } : null;
+        }
+        if (!nextItem) {
+            nextItem = {
+                service_name: parsed.name,
+                description: "",
+                quantity: parsed.quantity,
+                unit_price: parsed.unit_price,
+                total_price: parsed.quantity * parsed.unit_price,
+            };
+        } else if (parsed.unit_price > 0) {
+            nextItem.unit_price = parsed.unit_price;
+            nextItem.total_price = parsed.quantity * parsed.unit_price;
+        }
+        const updatedItems = [...(quoteData.items || []), nextItem];
+        updateTotals(updatedItems);
+        setQuickAddLine("");
+    };
+
     useEffect(() => {
         if (!quoteData.items || quoteData.items.length === 0) {
             addItem();
@@ -378,337 +431,318 @@ export default function QuoteDetails({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            className="space-y-8"
         >
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="border-b border-slate-100 pb-6">
-                    <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
-                        Quote Details
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">Enter quote details.</p>
-                </CardHeader>
-                
-                <CardContent className="p-4 sm:p-8">
-                    <div className="space-y-6">
-                        {/* Basic Info */}
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="client" className="text-sm font-semibold text-slate-700">
-                                    Select Client *
-                                </Label>
-                                <Select 
-                                    value={quoteData.client_id} 
-                                    onValueChange={(value) => handleInputChange('client_id', value)}
-                                >
-                                    <SelectTrigger className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20">
-                                        <SelectValue placeholder="Choose a client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {clients.map(client => (
-                                            <SelectItem key={client.id} value={client.id}>
-                                                {client.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+            {/* Quote Details */}
+            <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                    <div className="w-2 h-6 bg-orange-500 rounded-full" />
+                    Quote Details
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Client</Label>
+                        <Select
+                            value={quoteData.client_id}
+                            onValueChange={(value) => handleInputChange('client_id', value)}
+                        >
+                            <SelectTrigger className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20 h-auto">
+                                <SelectValue placeholder="Select a client..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {clients.map((client) => (
+                                    <SelectItem key={client.id} value={client.id}>
+                                        {client.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Project Title</Label>
+                        <Input
+                            value={quoteData.project_title}
+                            onChange={(e) => handleInputChange('project_title', e.target.value)}
+                            placeholder="e.g. Logo Design"
+                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20 h-auto"
+                        />
+                    </div>
+                </div>
+            </section>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="project_title" className="text-sm font-semibold text-slate-700">
-                                    Project Title *
-                                </Label>
-                                <Input
-                                    id="project_title"
-                                    value={quoteData.project_title}
-                                    onChange={(e) => handleInputChange('project_title', e.target.value)}
-                                    placeholder="Enter project title"
-                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+            {/* Services & Items - Dynamic list */}
+            <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-900">Services & Items</h2>
+                    <Button
+                        type="button"
+                        onClick={addItem}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-xl text-xs font-bold hover:bg-orange-100 transition-all"
+                    >
+                        <Plus className="w-4 h-4" /> Add Item
+                    </Button>
+                </div>
+
+                {/* Quick Add - Single line parser */}
+                <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+                    <p className="text-xs font-bold uppercase text-slate-400 mb-3">Quick Add</p>
+                    <div className="flex gap-2 mb-3">
+                        <Input
+                            value={quickAddLine}
+                            onChange={(e) => setQuickAddLine(e.target.value)}
+                            placeholder="e.g. 3x Graphic Design R500 or Logo Design 100"
+                            className="h-10 rounded-xl bg-white border-slate-100 flex-1"
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addFromQuickAddLine();
+                                }
+                            }}
+                        />
+                        <Button
+                            type="button"
+                            onClick={addFromQuickAddLine}
+                            disabled={!quickAddLine.trim()}
+                            className="h-10 px-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shrink-0"
+                        >
+                            Add
+                        </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Input
+                            ref={quickItemInputRef}
+                            value={quickItemName}
+                            onChange={(e) => setQuickItemName(e.target.value)}
+                            placeholder="Item name"
+                            className="h-10 rounded-xl bg-white border-slate-100 flex-1 min-w-[120px]"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addQuickItem();
+                                }
+                            }}
+                        />
+                        <Input
+                            type="number"
+                            min="1"
+                            value={quickItemQuantity}
+                            onChange={(e) => setQuickItemQuantity(e.target.value)}
+                            className="h-10 w-16 rounded-xl bg-white border-slate-100 text-center"
+                        />
+                        <div className="relative flex-1 min-w-[100px]">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={quickItemRate}
+                                onChange={(e) => setQuickItemRate(e.target.value)}
+                                placeholder="Rate"
+                                className="h-10 pl-10 rounded-xl bg-white border-slate-100"
+                            />
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={addQuickItem}
+                            className="h-10 px-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold"
+                        >
+                            Add
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {items.length === 0 && (
+                        <div className="text-center py-8 bg-slate-50 rounded-2xl">
+                            <p className="text-slate-500 text-sm">No items yet. Add an item to get started.</p>
+                        </div>
+                    )}
+                    {items.map((item, index) => (
+                        <div
+                            key={index}
+                            className="group flex flex-wrap items-center gap-3 sm:gap-4 bg-slate-50 p-4 rounded-2xl transition-all hover:bg-white hover:ring-1 hover:ring-slate-200"
+                        >
+                            <span className="text-slate-300 font-bold text-xs w-6">#{index + 1}</span>
+                            <div className="flex-1 min-w-[140px]">
+                                <ServiceCombobox
+                                    services={services}
+                                    value={item.service_name}
+                                    onSelect={(service) => handleServiceSelect(index, service)}
+                                    onAddNew={() => {
+                                        setCurrentServiceItemIndex(index);
+                                        setIsAddingService(true);
+                                    }}
                                 />
                             </div>
-                        </div>
-
-                        {/* Services/Items Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-lg font-semibold text-foreground">Services & Items</Label>
-                                <Button
-                                    type="button"
-                                    onClick={addItem}
-                                    className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg"
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Add Item
-                                </Button>
+                            <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                className="w-16 h-10 bg-white border border-slate-100 rounded-xl p-2 text-center text-xs"
+                            />
+                            <div className="relative">
+                                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.unit_price}
+                                    onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-28 h-10 pl-8 bg-white border border-slate-100 rounded-xl text-right text-xs font-bold"
+                                />
                             </div>
-
-                            <div className="bg-white border border-border rounded-xl p-4">
-                                <p className="text-sm font-semibold text-slate-800 mb-3">Quick Add</p>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <span className="text-xs font-bold text-slate-600 w-16 text-right">
+                                {formatCurrency(item.total_price || 0, userCurrency)}
+                            </span>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeItem(index)}
+                                className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 transition-all h-10 w-10"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </Button>
+                            {expandedItems.includes(index) && (
+                                <div className="w-full mt-2 pl-10">
                                     <Input
-                                        ref={quickItemInputRef}
-                                        value={quickItemName}
-                                        onChange={(e) => setQuickItemName(e.target.value)}
-                                        placeholder="Item name"
-                                        className="h-10 rounded-lg md:col-span-2"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                addQuickItem();
-                                            }
-                                        }}
+                                        value={item.description}
+                                        onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                                        placeholder="Description (optional)"
+                                        className="h-9 rounded-xl bg-white border-slate-100 text-sm"
                                     />
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={quickItemQuantity}
-                                        onChange={(e) => setQuickItemQuantity(e.target.value)}
-                                        className="h-10 rounded-lg"
-                                    />
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                value={quickItemRate}
-                                                onChange={(e) => setQuickItemRate(e.target.value)}
-                                                placeholder="Rate"
-                                                className="h-10 pl-10 rounded-lg"
-                                            />
-                                        </div>
-                                        <Button
-                                            type="button"
-                                            onClick={addQuickItem}
-                                            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4"
-                                        >
-                                            Add
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {items.length === 0 && (
-                                <div className="text-center py-8 bg-slate-50 rounded-xl">
-                                    <p className="text-slate-600">No items added yet. Add an item to get started.</p>
                                 </div>
                             )}
-
-                            {items.map((item, index) => (
-                                <div key={index} className="bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <h4 className="font-semibold text-foreground">Item #{index + 1}</h4>
-                                        {items.length > 0 && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => removeItem(index)}
-                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        )}
-                                    </div>
-
-                                    <div className="grid md:grid-cols-2 gap-4">
-                                        <div className="space-y-2 md:col-span-2">
-                                            <Label className="text-sm font-semibold text-slate-700">Service Name *</Label>
-                                            <ServiceCombobox
-                                                services={services}
-                                                value={item.service_name}
-                                                onSelect={(service) => handleServiceSelect(index, service)}
-                                                onAddNew={() => {
-                                                    setCurrentServiceItemIndex(index);
-                                                    setIsAddingService(true);
-                                                }}
-                                            />
-                                        </div>
-
-                                        {/* Show Details Toggle */}
-                                        {!expandedItems.includes(index) && (
-                                            <div className="md:col-span-2">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    onClick={() => setExpandedItems([...expandedItems, index])}
-                                                    className="text-primary hover:text-primary/90 text-sm font-medium"
-                                                >
-                                                    + Add Description
-                                                </Button>
-                                            </div>
-                                        )}
-
-                                        {/* Description - Optional */}
-                                        {expandedItems.includes(index) && (
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Description (Optional)</Label>
-                                                <Input
-                                                    value={item.description}
-                                                    onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                                                    placeholder="Brief description of service"
-                                                    className="h-10 rounded-lg"
-                                                />
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-2">
-                                            <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
-                                            <Input
-                                                type="number"
-                                                min="1"
-                                                value={item.quantity}
-                                                onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                                                className="h-10 rounded-lg"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-sm font-semibold text-slate-700">Unit Price *</Label>
-                                            <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={item.unit_price}
-                                                    onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
-                                                    placeholder="0.00"
-                                                    className="h-10 pl-10 rounded-lg"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-end">
-                                        <div className="text-right">
-                                            <p className="text-sm text-slate-600">Total Price</p>
-                                            <p className="text-xl font-bold text-foreground">
-                                                {formatCurrency(item.total_price || 0, userCurrency)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Tax and Totals */}
-                        {(quoteData.items || []).length > 0 && (
-                            <div className="bg-primary/10 p-4 sm:p-6 rounded-xl space-y-4">
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold text-slate-700">Tax Rate (%)</Label>
-                                        <Input
-                                            type="number"
-                                            min="0"
-                                            step="0.1"
-                                            value={quoteData.tax_rate || 0}
-                                            onChange={(e) => handleTaxRateChange(e.target.value)}
-                                            placeholder="0"
-                                            className="h-10 rounded-lg"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold text-slate-700">Valid Until *</Label>
-                                        <div className="relative">
-                                            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <Input
-                                                type="date"
-                                                value={quoteData.valid_until}
-                                                onChange={(e) => handleInputChange('valid_until', e.target.value)}
-                                                className="h-10 pl-10 rounded-lg"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-border pt-4">
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-600">Subtotal:</span>
-                                            <span className="font-semibold">{formatCurrency(quoteData.subtotal || 0, userCurrency)}</span>
-                                        </div>
-                                        {(quoteData.tax_rate || 0) > 0 && (
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-600">Tax ({quoteData.tax_rate}%):</span>
-                                                <span className="font-semibold">{formatCurrency(quoteData.tax_amount || 0, userCurrency)}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
-                                            <span>Total:</span>
-                                            <span>{formatCurrency(quoteData.total_amount || 0, userCurrency)}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Additional Fields */}
-                        <div className="grid md:grid-cols-1 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="project_description" className="text-sm font-semibold text-slate-700">
-                                    Project Description
-                                </Label>
-                                <Textarea
-                                    id="project_description"
-                                    value={quoteData.project_description}
-                                    onChange={(e) => handleInputChange('project_description', e.target.value)}
-                                    placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="notes" className="text-sm font-semibold text-slate-700">
-                                    Additional Notes
-                                </Label>
-                                <Textarea
-                                    id="notes"
-                                    value={quoteData.notes}
-                                    onChange={(e) => handleInputChange('notes', e.target.value)}
-                                    placeholder="Any additional notes..."
-                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="terms_conditions" className="text-sm font-semibold text-slate-700">
-                                    Terms & Conditions
-                                </Label>
-                                <Textarea
-                                    id="terms_conditions"
-                                    value={quoteData.terms_conditions}
-                                    onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
-                                    placeholder="Enter terms and conditions..."
-                                    className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
-                                />
-                            </div>
-                        </div>
-
-                        {showNextButton && (
-                            <div className="flex justify-end">
+                            {!expandedItems.includes(index) && (
                                 <Button
-                                    onClick={onNext}
-                                    disabled={!isValid}
-                                    className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setExpandedItems([...expandedItems, index])}
+                                    className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 text-xs font-medium -ml-2"
                                 >
-                                    {isEditing ? (
-                                        <>
-                                            <Save className="w-4 h-4 mr-2" />
-                                            Save Changes
-                                        </>
-                                    ) : (
-                                         <>
-                                            Continue to Preview
-                                            <ArrowRight className="w-4 h-4 ml-2" />
-                                        </>
-                                    )}
+                                    + Add Description
                                 </Button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* Totals & Tax - Dark card */}
+            <section className="bg-slate-900 rounded-[32px] p-8 text-white">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Calculator className="w-5 h-5 text-orange-500" />
+                            <span className="text-sm font-bold text-slate-400">Total Calculation</span>
+                        </div>
+                        <p className="text-xs text-slate-500 max-w-[220px]">
+                            Tax rates are applied automatically to the grand total.
+                        </p>
+                        <div className="grid grid-cols-2 gap-4 sm:w-48">
+                            <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase text-slate-500">Tax Rate (%)</Label>
+                                <Input
+                                    ref={taxRateInputRef}
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={quoteData.tax_rate ?? 0}
+                                    onChange={(e) => handleTaxRateChange(e.target.value)}
+                                    className="h-10 bg-slate-800 border-slate-700 text-white rounded-xl text-sm font-bold"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase text-slate-500">Valid Until</Label>
+                                <Input
+                                    type="date"
+                                    value={quoteData.valid_until}
+                                    onChange={(e) => handleInputChange('valid_until', e.target.value)}
+                                    className="h-10 bg-slate-800 border-slate-700 text-white rounded-xl text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="text-right sm:text-right">
+                        <div className="space-y-1 mb-2">
+                            <p className="text-sm text-slate-400">Subtotal</p>
+                            <p className="text-lg font-bold">{formatCurrency(quoteData.subtotal || 0, userCurrency)}</p>
+                        </div>
+                        {(quoteData.tax_rate || 0) > 0 && (
+                            <div className="space-y-1 mb-2">
+                                <p className="text-sm text-slate-400">Tax ({quoteData.tax_rate}%)</p>
+                                <p className="text-lg font-bold">{formatCurrency(quoteData.tax_amount || 0, userCurrency)}</p>
                             </div>
                         )}
+                        <p className="text-sm text-slate-400 mt-4">Grand Total</p>
+                        <h2 className="text-4xl font-black text-white">
+                            {formatCurrency(quoteData.total_amount || 0, userCurrency)}
+                        </h2>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </section>
+
+            {/* Additional Fields */}
+            <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                    <div className="w-2 h-6 bg-slate-300 rounded-full" />
+                    Additional Details
+                </h2>
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Project Description</Label>
+                        <Textarea
+                            value={quoteData.project_description}
+                            onChange={(e) => handleInputChange('project_description', e.target.value)}
+                            placeholder="Describe the project in detail..."
+                            className="min-h-24 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-orange-500/20 resize-none"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Additional Notes</Label>
+                        <Textarea
+                            value={quoteData.notes}
+                            onChange={(e) => handleInputChange('notes', e.target.value)}
+                            placeholder="Any additional notes..."
+                            className="min-h-24 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-orange-500/20 resize-none"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Terms & Conditions</Label>
+                        <Textarea
+                            value={quoteData.terms_conditions}
+                            onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
+                            placeholder="Enter terms and conditions..."
+                            className="min-h-24 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-orange-500/20 resize-none"
+                        />
+                    </div>
+                </div>
+            </section>
+
+            {showNextButton && (
+                <div className="flex justify-end">
+                    <Button
+                        onClick={onNext}
+                        disabled={!isValid}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isEditing ? (
+                            <>
+                                <Save className="w-4 h-4 mr-2" />
+                                Save Changes
+                            </>
+                        ) : (
+                            <>
+                                Continue to Preview
+                                <ArrowRight className="w-4 h-4 ml-2" />
+                            </>
+                        )}
+                    </Button>
+                </div>
+            )}
         </motion.div>
         
         <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
@@ -757,8 +791,9 @@ QuoteDetails.propTypes = {
         description: PropTypes.string,
         rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     })).isRequired,
-    setServices: PropTypes.func.isRequired,
+    setServices: PropTypes.func,
     onNext: PropTypes.func,
     isEditing: PropTypes.bool,
-    showNextButton: PropTypes.bool
+    showNextButton: PropTypes.bool,
+    taxRateInputRef: PropTypes.oneOfType([PropTypes.func, PropTypes.shape({ current: PropTypes.any })]),
 };

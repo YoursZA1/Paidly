@@ -19,6 +19,7 @@ export default function QuotePreview({
     user, // Pass user/company object with logo_url, currency if available
     loading = false,
     previewOnly = false,
+    onTotalClick,
 }) {
     const clientList = Array.isArray(clients) ? clients : [];
     const client = clientList.find(c => c.id === quoteData?.client_id) ?? null;
@@ -182,7 +183,13 @@ export default function QuotePreview({
                                         <span className="tabular-nums">{formatCurrency(taxAmount, currency)}</span>
                                     </div>
                                 )}
-                                <div className="border-t border-border mt-2 pt-3 flex justify-between text-base font-bold text-foreground">
+                                <div
+                                    className={`border-t border-border mt-2 pt-3 flex justify-between text-base font-bold text-foreground ${onTotalClick ? "cursor-pointer hover:bg-primary/5 -mx-1 px-1 rounded transition-colors" : ""}`}
+                                    onClick={() => onTotalClick?.()}
+                                    onKeyDown={(e) => { if (onTotalClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onTotalClick(); } }}
+                                    role={onTotalClick ? "button" : undefined}
+                                    tabIndex={onTotalClick ? 0 : undefined}
+                                >
                                     <span>Grand Total</span>
                                     <span className="tabular-nums">{formatCurrency(totalAmount, currency)}</span>
                                 </div>
@@ -250,4 +257,5 @@ QuotePreview.propTypes = {
     user: PropTypes.object,
     loading: PropTypes.bool,
     previewOnly: PropTypes.bool,
+    onTotalClick: PropTypes.func,
 };

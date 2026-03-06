@@ -1,146 +1,169 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import PropTypes from "prop-types";
 import {
   HomeIcon,
   DocumentTextIcon,
-  UsersIcon,
-  EllipsisHorizontalIcon,
+  DocumentDuplicateIcon,
+  UserGroupIcon,
+  Bars3Icon,
+  PlusIcon,
 } from "@heroicons/react/24/outline";
 import { createPageUrl } from "@/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { ChartBarIcon, Cog6ToothIcon, ArrowTrendingUpIcon, DocumentDuplicateIcon } from "@heroicons/react/24/outline";
 
-const navItems = [
-  { name: "Home", icon: HomeIcon, url: createPageUrl("Dashboard") },
-  { name: "Invoices", icon: DocumentTextIcon, url: createPageUrl("Invoices") },
-  { name: "Clients", icon: UsersIcon, url: createPageUrl("Clients") },
+const speedDialActions = [
+  { name: "Invoice", url: createPageUrl("CreateInvoice"), icon: DocumentTextIcon },
+  { name: "Quote", url: createPageUrl("CreateQuote"), icon: DocumentDuplicateIcon },
 ];
 
-const moreLinks = [
-  { name: "Quotes", url: createPageUrl("Quotes"), icon: DocumentDuplicateIcon },
-  { name: "Cash Flow", url: createPageUrl("CashFlow"), icon: ArrowTrendingUpIcon },
-  { name: "Reports", url: createPageUrl("Reports"), icon: ChartBarIcon },
-  { name: "Settings", url: createPageUrl("Settings"), icon: Cog6ToothIcon },
-];
-
-function MobileBottomNav() {
+function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [speedDialOpen, setSpeedDialOpen] = useState(false);
 
-  const isMoreActive = moreLinks.some(
-    (link) => location.pathname === link.url.split("?")[0]
-  );
+  const isActive = (url) => location.pathname === url.split("?")[0];
 
   return (
-    <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 dark:bg-slate-900/90 backdrop-blur-sm border-t border-border dark:border-slate-700/50 pb-safe"
-      aria-label="Primary navigation"
-    >
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-4">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.url.split("?")[0];
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.name}
-              to={item.url}
-              className="relative flex flex-col items-center justify-center flex-1 h-full group touch-manipulation min-h-[48px]"
-              aria-current={isActive ? "page" : undefined}
-              aria-label={item.name}
-            >
-              {isActive && (
-                <motion.span
-                  layoutId="bottom-nav-bubble"
-                  className="absolute inset-x-2 inset-y-1.5 rounded-xl bg-primary/20"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-              <Icon
-                className={`relative w-6 h-6 mb-1 transition-colors duration-200 ${
-                  isActive
-                    ? "text-primary"
-                    : "text-muted-foreground group-hover:text-foreground"
-                }`}
-                aria-hidden="true"
-              />
-              <span
-                className={`relative text-[11px] font-medium transition-colors duration-200 ${
-                  isActive
-                    ? "text-primary"
-                    : "text-muted-foreground group-hover:text-foreground"
-                }`}
-              >
-                {item.name}
-              </span>
-            </Link>
-          );
-        })}
-
-        <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="relative flex flex-col items-center justify-center flex-1 h-full group touch-manipulation min-h-[48px]"
-              aria-label="More options"
-            >
-              {isMoreActive && (
-                <motion.span
-                  layoutId="bottom-nav-bubble"
-                  className="absolute inset-x-2 inset-y-1.5 rounded-xl bg-primary/20"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-              <EllipsisHorizontalIcon
-                className={`relative w-6 h-6 mb-1 transition-colors duration-200 ${
-                  isMoreActive
-                    ? "text-primary"
-                    : "text-muted-foreground group-hover:text-foreground"
-                }`}
-                aria-hidden="true"
-              />
-              <span
-                className={`relative text-[11px] font-medium transition-colors duration-200 ${
-                  isMoreActive
-                    ? "text-primary"
-                    : "text-muted-foreground group-hover:text-foreground"
-                }`}
-              >
-                More
-              </span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            side="top"
-            align="center"
-            className="mb-2 w-56 rounded-xl"
+    <div className="md:hidden fixed bottom-0 left-0 right-0 px-6 pb-8 z-50">
+      <nav
+        className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-[32px] h-20 flex items-center justify-between px-4"
+        aria-label="Primary navigation"
+      >
+        {/* Left: Home & Invoices */}
+        <div className="flex w-1/2 justify-around pr-4">
+          <Link
+            to={createPageUrl("Dashboard")}
+            className="flex flex-col items-center gap-1 touch-manipulation min-h-[48px] justify-center"
+            aria-label="Home"
           >
-            {moreLinks.map((link) => {
-              const Icon = link.icon;
-              return (
-                <DropdownMenuItem key={link.name} asChild>
-                  <Link
-                    to={link.url}
-                    onClick={() => setMoreOpen(false)}
-                    className="flex items-center gap-3 min-h-[48px] cursor-pointer"
+            <HomeIcon
+              className={`w-6 h-6 ${
+                isActive(createPageUrl("Dashboard"))
+                  ? "text-orange-600"
+                  : "text-slate-400"
+              }`}
+            />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Home
+            </span>
+          </Link>
+          <Link
+            to={createPageUrl("Invoices")}
+            className="flex flex-col items-center gap-1 touch-manipulation min-h-[48px] justify-center"
+            aria-label="Invoices"
+          >
+            <DocumentTextIcon
+              className={`w-6 h-6 ${
+                isActive(createPageUrl("Invoices"))
+                  ? "text-orange-600"
+                  : "text-slate-400"
+              }`}
+            />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Invoices
+            </span>
+          </Link>
+        </div>
+
+        {/* Center: Hero button + Speed dial */}
+        <div className="absolute left-1/2 -translate-x-1/2 -top-10 flex flex-col items-center">
+          {/* Speed dial actions - pop up above the main button */}
+          <AnimatePresence>
+            {speedDialOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute bottom-full mb-2 flex flex-col gap-2"
+              >
+                {speedDialActions.map((action, i) => (
+                  <motion.div
+                    key={action.name}
+                    initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                      transition: {
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 25,
+                        delay: i * 0.05,
+                      },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      y: 10,
+                      scale: 0.9,
+                      transition: { duration: 0.15 },
+                    }}
                   >
-                    <Icon className="size-5 text-muted-foreground" />
-                    {link.name}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </nav>
+                    <Link
+                      to={action.url}
+                      onClick={() => setSpeedDialOpen(false)}
+                      className="flex items-center gap-2 w-24 py-2.5 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 shadow-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-200 active:scale-95 transition-colors"
+                    >
+                      <action.icon className="w-5 h-5 text-orange-500" />
+                      {action.name}
+                    </Link>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <motion.button
+            type="button"
+            onClick={() => setSpeedDialOpen((o) => !o)}
+            className="w-20 h-20 bg-gradient-to-br from-orange-500 to-orange-700 rounded-full flex items-center justify-center border-[6px] border-[#F9FAFB] dark:border-slate-900 shadow-xl touch-manipulation"
+            whileTap={{ scale: 0.9 }}
+            animate={{
+              rotate: speedDialOpen ? 45 : 0,
+              transition: { type: "spring", stiffness: 400, damping: 25 },
+            }}
+            aria-label={speedDialOpen ? "Close create menu" : "Create new"}
+          >
+            <PlusIcon className="w-10 h-10 text-white stroke-[2.5]" />
+          </motion.button>
+        </div>
+
+        {/* Right: Clients & Menu */}
+        <div className="flex w-1/2 justify-around pl-4">
+          <Link
+            to={createPageUrl("Clients")}
+            className="flex flex-col items-center gap-1 touch-manipulation min-h-[48px] justify-center"
+            aria-label="Clients"
+          >
+            <UserGroupIcon
+              className={`w-6 h-6 ${
+                isActive(createPageUrl("Clients"))
+                  ? "text-orange-600"
+                  : "text-slate-400"
+              }`}
+            />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Clients
+            </span>
+          </Link>
+          <button
+            type="button"
+            onClick={() => onOpenMenu?.()}
+            className="flex flex-col items-center gap-1 touch-manipulation min-h-[48px] justify-center"
+            aria-label="Menu"
+          >
+            <Bars3Icon className="w-6 h-6 text-slate-400" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Menu
+            </span>
+          </button>
+        </div>
+      </nav>
+    </div>
   );
 }
+
+MobileBottomNav.propTypes = {
+  onOpenMenu: PropTypes.func,
+};
 
 export default MobileBottomNav;

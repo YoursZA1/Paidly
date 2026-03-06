@@ -2,20 +2,24 @@ import { useState, useEffect, useRef } from "react";
 import { User, BankingDetail } from "@/api/entities";
 import SupabaseStorageService from "@/services/SupabaseStorageService";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import LogoImage from "@/components/shared/LogoImage";
 
-import BankingCard from "@/components/banking/BankingCard";
 import HelpTooltip from "@/components/shared/HelpTooltip";
 import BankingForm from "@/components/banking/BankingForm";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import CurrencySelector from "@/components/CurrencySelector";
 import PaymentReminderSettings from "@/components/reminders/PaymentReminderSettings";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
@@ -621,7 +625,7 @@ function PaymentMethodsSettings() {
         setIsLoading(true);
         try {
             const detailsData = await BankingDetail.list("-created_date");
-            setBankingDetails(detailsData);
+            setBankingDetails(detailsData || []);
         } catch (error) {
             console.error("Error loading banking details:", error);
         }
@@ -632,29 +636,17 @@ function PaymentMethodsSettings() {
         try {
             if (editingDetail) {
                 await BankingDetail.update(editingDetail.id, detailData);
-                toast({
-                    title: "✓ Banking Details Updated",
-                    description: "Your banking information has been updated successfully.",
-                    variant: "success"
-                });
+                toast({ title: "✓ Banking Details Updated", description: "Your banking information has been updated.", variant: "success" });
             } else {
                 await BankingDetail.create(detailData);
-                toast({
-                    title: "✓ Banking Details Added",
-                    description: "New banking information has been added successfully.",
-                    variant: "success"
-                });
+                toast({ title: "✓ Banking Details Added", description: "New banking information has been added.", variant: "success" });
             }
             setShowForm(false);
             setEditingDetail(null);
             loadBankingDetails();
         } catch (error) {
             console.error("Error saving banking detail:", error);
-            toast({
-                title: "✗ Error",
-                description: "Failed to save banking details. Please try again.",
-                variant: "destructive"
-            });
+            toast({ title: "✗ Error", description: "Failed to save banking details.", variant: "destructive" });
         }
     };
 
@@ -665,27 +657,12 @@ function PaymentMethodsSettings() {
 
     const handleSetDefault = async (detailId) => {
         try {
-            const updatePromises = bankingDetails.map(detail => 
-                BankingDetail.update(detail.id, { ...detail, is_default: false })
-            );
-            await Promise.all(updatePromises);
-            
-            const detailToUpdate = bankingDetails.find(d => d.id === detailId);
-            await BankingDetail.update(detailId, { ...detailToUpdate, is_default: true });
-            
+            await Promise.all(bankingDetails.map((d) => BankingDetail.update(d.id, { ...d, is_default: d.id === detailId })));
             loadBankingDetails();
-            toast({
-                title: "✓ Default Updated",
-                description: "Default banking method has been updated.",
-                variant: "success"
-            });
+            toast({ title: "✓ Default Updated", description: "Default payment method updated.", variant: "success" });
         } catch (error) {
             console.error("Error setting default:", error);
-            toast({
-                title: "✗ Error",
-                description: "Failed to update default banking method.",
-                variant: "destructive"
-            });
+            toast({ title: "✗ Error", description: "Failed to update default.", variant: "destructive" });
         }
     };
 
@@ -703,7 +680,6 @@ function PaymentMethodsSettings() {
             URL.revokeObjectURL(url);
             toast({ title: "Export complete", description: `${bankingDetails.length} payment method(s) exported.`, variant: "default" });
         } catch (error) {
-            console.error("Export banking error:", error);
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
         }
     };
@@ -722,101 +698,164 @@ function PaymentMethodsSettings() {
             let skipped = 0;
             for (const row of rows) {
                 const payload = csvRowToBankingDetailPayload(headers, row);
-                if (!payload) {
-                    skipped++;
-                    continue;
-                }
+                if (!payload) continue;
                 try {
                     await BankingDetail.create(payload);
                     created++;
-                } catch (err) {
-                    console.warn("Import banking row failed:", payload.bank_name, err);
+                } catch {
                     skipped++;
                 }
             }
             await loadBankingDetails();
-            toast({
-                title: "Import complete",
-                description: `${created} payment method(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
-                variant: "default"
-            });
+            toast({ title: "Import complete", description: `${created} imported${skipped ? `, ${skipped} skipped.` : "."}`, variant: "default" });
         } catch (error) {
-            console.error("Import banking error:", error);
             toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
         }
         setIsImporting(false);
     };
 
+    const maskAccount = (num) => (num && num.length >= 4 ? `****${num.slice(-4)}` : "****");
+
+    const formatAddedDate = (d) => {
+        if (!d) return "";
+        const date = typeof d === "string" ? new Date(d) : d;
+        return date.toLocaleDateString("en-ZA", { day: "numeric", month: "numeric", year: "numeric" });
+    };
+
     return (
-        <div>
-            <input
-                type="file"
-                ref={bankingFileInputRef}
-                accept=".csv"
-                className="hidden"
-                onChange={handleImportBankingFile}
-            />
-            <div className="flex flex-wrap justify-end gap-2 mb-6">
-                <Button
-                    variant="outline"
-                    onClick={handleImportBanking}
-                    disabled={isImporting}
-                >
-                    <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
-                    {isImporting ? "Importing…" : "Import CSV"}
-                </Button>
-                <Button variant="outline" onClick={handleExportBanking} disabled={bankingDetails.length === 0}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export CSV
-                </Button>
-                <Button
-                    onClick={() => setShowForm(true)}
-                    className="bg-primary hover:bg-primary/90 text-white"
-                >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Payment Method
-                </Button>
+        <div className="max-w-6xl mx-auto">
+            <input type="file" ref={bankingFileInputRef} accept=".csv" className="hidden" onChange={handleImportBankingFile} />
+
+            {/* Header Actions */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100">Payment Methods</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage where clients deposit your hard-earned money.</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    <Button variant="outline" onClick={handleImportBanking} disabled={isImporting} className="flex items-center gap-2 px-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <Upload className="w-4 h-4" />
+                        {isImporting ? "Importing…" : "Import CSV"}
+                    </Button>
+                    <Button variant="outline" onClick={handleExportBanking} disabled={bankingDetails.length === 0} className="flex items-center gap-2 px-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <Download className="w-4 h-4" />
+                        Export CSV
+                    </Button>
+                    <Button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-lg shadow-orange-100 dark:shadow-orange-900/30">
+                        <Plus className="w-5 h-5" />
+                        Add Payment Method
+                    </Button>
+                </div>
             </div>
 
             {showForm && (
                 <BankingForm
                     detail={editingDetail}
                     onSave={handleSaveDetail}
-                    onCancel={() => {
-                        setShowForm(false);
-                        setEditingDetail(null);
-                    }}
+                    onCancel={() => { setShowForm(false); setEditingDetail(null); }}
                 />
             )}
-            
+
             {isLoading ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Array(3).fill(0).map((_, i) => (
-                        <Card key={i} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-                            <CardContent className="p-6"><div className="animate-pulse space-y-4"><div className="h-4 bg-muted rounded w-3/4"></div><div className="h-3 bg-muted rounded w-1/2"></div><div className="h-3 bg-muted rounded w-2/3"></div></div></CardContent>
-                        </Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-[280px] rounded-[32px] bg-slate-100 dark:bg-slate-800 animate-pulse" />
                     ))}
                 </div>
             ) : bankingDetails.length === 0 && !showForm ? (
-                 <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                    <CardContent className="p-8 md:p-12 text-center">
-                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><CreditCard className="w-8 h-8 text-muted-foreground" /></div>
-                        <h3 className="text-lg font-semibold text-foreground mb-2">No payment methods yet</h3>
-                        <p className="text-muted-foreground mb-6">Add your banking details to get paid.</p>
-                        <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 text-white"><Plus className="w-4 h-4 mr-2" />Add Your First Payment Method</Button>
-                    </CardContent>
-                </Card>
+                <div className="flex flex-col items-center justify-center py-16 px-4 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                        <CreditCard className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">No payment methods yet</h3>
+                    <p className="text-slate-500 dark:text-slate-400 mb-6 text-center">Add your banking details to get paid.</p>
+                    <Button onClick={() => setShowForm(true)} className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Your First Payment Method
+                    </Button>
+                </div>
             ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {bankingDetails.map((detail, index) => (
-                        <BankingCard
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {bankingDetails.map((detail) => (
+                        <div
                             key={detail.id}
-                            detail={detail}
-                            onEdit={handleEditDetail}
-                            onSetDefault={handleSetDefault}
-                            delay={index * 0.1}
-                        />
+                            className="group relative bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                        >
+                            {/* Top Row: Logo & Menu */}
+                            <div className="flex justify-between items-start mb-8">
+                                <div className="w-14 h-14 bg-orange-50 dark:bg-orange-950/50 rounded-2xl flex items-center justify-center border border-orange-100 dark:border-orange-900/50">
+                                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
+                                        <Landmark className="w-5 h-5 text-white" />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {detail.is_default && (
+                                        <div className="bg-amber-100 dark:bg-amber-900/50 p-1.5 rounded-full ring-4 ring-amber-50 dark:ring-amber-800/30">
+                                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                                        </div>
+                                    )}
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="p-2 text-slate-300 hover:text-slate-600 dark:hover:text-slate-400">
+                                                <MoreVertical className="w-5 h-5" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => handleEditDetail(detail)}>
+                                                <Edit className="w-4 h-4 mr-2" />
+                                                Edit
+                                            </DropdownMenuItem>
+                                            {!detail.is_default && (
+                                                <DropdownMenuItem onClick={() => handleSetDefault(detail.id)}>
+                                                    <Star className="w-4 h-4 mr-2" />
+                                                    Set as Default
+                                                </DropdownMenuItem>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+
+                            {/* Account Details */}
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Account Holder</p>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 truncate">{detail.account_name || "—"}</h3>
+                            </div>
+
+                            <div className="mt-6 flex justify-between items-end">
+                                <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Account Number</p>
+                                    <p className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tighter tabular-nums">{maskAccount(detail.account_number)}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bank</p>
+                                    <p className="text-sm font-bold text-slate-600 dark:text-slate-400">{detail.bank_name || "—"}</p>
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="mt-8 pt-6 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-slate-400">ADDED {formatAddedDate(detail.created_date || detail.created_at)}</span>
+                                <button
+                                    onClick={() => handleEditDetail(detail)}
+                                    className="text-[10px] font-bold text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    EDIT DETAILS <ChevronRight className="w-3 h-3 inline" />
+                                </button>
+                            </div>
+                        </div>
                     ))}
+
+                    {/* Add New Placeholder */}
+                    <button
+                        onClick={() => setShowForm(true)}
+                        className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-[32px] p-6 flex flex-col items-center justify-center gap-4 text-slate-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-500 transition-all min-h-[280px]"
+                    >
+                        <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center border border-slate-100 dark:border-slate-700 group-hover:bg-orange-50 dark:group-hover:bg-orange-950/30">
+                            <Plus className="w-6 h-6" />
+                        </div>
+                        <span className="font-bold text-sm">Add New Account</span>
+                    </button>
                 </div>
             )}
         </div>
