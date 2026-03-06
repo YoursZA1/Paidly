@@ -989,18 +989,19 @@ export default function Dashboard() {
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={revenueTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                      <YAxis stroke="#64748b" fontSize={10} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                      <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
+                      <YAxis stroke="var(--chart-axis)" fontSize={10} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px'
+                          backgroundColor: 'var(--bg-card)',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: 'var(--text-main)'
                         }}
                         formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                       />
-                      <Line type="monotone" dataKey="value" stroke="#0f172a" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="value" stroke="var(--chart-line)" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -1123,18 +1124,19 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={timeBreakdown.usersPerWeek}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                        <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                        <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
+                        <YAxis stroke="var(--chart-axis)" fontSize={10} allowDecimals={false} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: '#fff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px'
+                            backgroundColor: 'var(--bg-card)',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)'
                           }}
                         />
-                        <Line type="monotone" dataKey="users" stroke="#0f172a" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="invoices" stroke="#f24e00" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="users" stroke="var(--chart-line)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="invoices" stroke="var(--brand-primary)" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -1153,18 +1155,19 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
                       <LineChart data={timeBreakdown.revenuePerMonth}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                        <YAxis stroke="#64748b" fontSize={10} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                        <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} />
+                        <YAxis stroke="var(--chart-axis)" fontSize={10} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: '#fff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px'
+                            backgroundColor: 'var(--bg-card)',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)'
                           }}
                           formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                         />
-                        <Line type="monotone" dataKey="revenue" stroke="#f24e00" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="revenue" stroke="var(--brand-primary)" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -1605,13 +1608,13 @@ export default function Dashboard() {
                     >
                       <defs>
                         <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" style={{ stopColor: '#475569' }} stopOpacity={0.12} />
-                          <stop offset="100%" style={{ stopColor: '#475569' }} stopOpacity={0} />
+                          <stop offset="0%" style={{ stopColor: 'var(--chart-line)' }} stopOpacity={0.18} />
+                          <stop offset="100%" style={{ stopColor: 'var(--chart-line)' }} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-subtle)" vertical={false} />
+                      <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="var(--chart-axis)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
                         labelStyle={{ color: "var(--text-main)" }}
@@ -1620,12 +1623,12 @@ export default function Dashboard() {
                       <Area
                         type="monotone"
                         dataKey="value"
-                        stroke="#475569"
+                        stroke="var(--chart-line)"
                         strokeWidth={2}
                         fill="url(#fintechRevenueGrad)"
                         fillOpacity={1}
                         dot={false}
-                        activeDot={{ r: 4, fill: "#475569", stroke: "#fff", strokeWidth: 1 }}
+                        activeDot={{ r: 4, fill: "var(--chart-line)", stroke: "hsl(var(--card))", strokeWidth: 1 }}
                         isAnimationActive
                         animationDuration={1200}
                         animationEasing="ease-in-out"

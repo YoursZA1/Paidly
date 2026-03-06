@@ -2,6 +2,7 @@ import PropTypes from "prop-types";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "next-themes";
 
 import Button from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
@@ -41,6 +45,7 @@ import {
   X,
   Sun,
   Moon,
+  Monitor,
   TrendingUp,
   Activity,
   History,
@@ -488,7 +493,7 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
+const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setTheme, resolvedTheme }) => (
   <motion.div
     initial={{ x: "-100%" }}
     animate={{ x: 0 }}
@@ -537,6 +542,27 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
           </div>
         </div>
         <div className="flex flex-col gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full min-h-11 justify-start gap-2 border-border text-foreground hover:bg-muted hover:text-foreground rounded-xl touch-manipulation">
+                {resolvedTheme === "dark" ? <Moon className="size-4" /> : resolvedTheme === "light" ? <Sun className="size-4" /> : <Monitor className="size-4" />}
+                <span>Appearance: {theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48 rounded-xl">
+              <DropdownMenuRadioGroup value={theme || "system"} onValueChange={(v) => { setTheme(v); onClose?.(); }}>
+                <DropdownMenuRadioItem value="light" className="cursor-pointer">
+                  <Sun className="mr-2 size-4" /> Light
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="dark" className="cursor-pointer">
+                  <Moon className="mr-2 size-4" /> Dark
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="system" className="cursor-pointer">
+                  <Monitor className="mr-2 size-4" /> System
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
             <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-xl touch-manipulation shadow-md shadow-primary/20">
               <Plus className="size-5 mr-2" /> Create Invoice
@@ -557,7 +583,10 @@ MobileNav.propTypes = {
   onClose: PropTypes.func,
   user: PropTypes.object,
   navigate: PropTypes.func,
-  handleLogout: PropTypes.func
+  handleLogout: PropTypes.func,
+  theme: PropTypes.string,
+  setTheme: PropTypes.func,
+  resolvedTheme: PropTypes.string
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -567,28 +596,12 @@ export default function Layout({ children, currentPageName }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   // Premium SaaS feel: start collapsed to keep focus on data
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
-  const [theme, setTheme] = useState("system"); // 'light' | 'dark' | 'system'
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const mainContentRef = useRef(null);
   const { user, logout } = useAuth();
   const { toast } = useToast();
-
-  // Theme: persisted, respects system
-  useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    const next = stored || "system";
-    setTheme(next);
-  }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-    const effective = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
-    if (effective === "dark") root.classList.add("dark");
-    else root.classList.remove("dark");
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+  const { theme, setTheme, resolvedTheme } = useTheme();
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
   useEffect(() => {
@@ -844,6 +857,9 @@ export default function Layout({ children, currentPageName }) {
             user={user}
             navigate={navigate}
             handleLogout={handleLogout}
+            theme={theme}
+            setTheme={setTheme}
+            resolvedTheme={resolvedTheme}
           />
         )}
       </AnimatePresence>
@@ -876,17 +892,44 @@ export default function Layout({ children, currentPageName }) {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden sm:inline-flex rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-10 min-w-10"
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
-            >
-              {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
-            </Button>
-             <NotificationBell />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-10 min-w-10"
+                  aria-label="Theme"
+                  title="Appearance"
+                >
+                  {resolvedTheme === "dark" ? (
+                    <Moon className="size-5" />
+                  ) : resolvedTheme === "light" ? (
+                    <Sun className="size-5" />
+                  ) : (
+                    <Monitor className="size-5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-xl">
+                <DropdownMenuLabel className="text-muted-foreground font-normal">Appearance</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={theme || "system"} onValueChange={setTheme}>
+                  <DropdownMenuRadioItem value="light" className="cursor-pointer">
+                    <Sun className="mr-2 size-4" />
+                    Light
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark" className="cursor-pointer">
+                    <Moon className="mr-2 size-4" />
+                    Dark
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system" className="cursor-pointer">
+                    <Monitor className="mr-2 size-4" />
+                    System
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <NotificationBell />
             
             {user && (
               <DropdownMenu>

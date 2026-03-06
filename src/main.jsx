@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { ThemeProvider } from 'next-themes'
 import App from '@/App.jsx'
 import '@/index.css'
 
@@ -38,6 +39,8 @@ class AppErrorBoundary extends React.Component {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <AppErrorBoundary>
-        <App />
+        <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
+            <App />
+        </ThemeProvider>
     </AppErrorBoundary>
 )

@@ -47,6 +47,9 @@ body {
 .scrollbar-dark::-webkit-scrollbar-track { background: #1a1a1a; }
 .scrollbar-dark::-webkit-scrollbar-thumb { background: #333; }
 .scrollbar-dark::-webkit-scrollbar-thumb:hover { background: #444; }
+.dark ::-webkit-scrollbar-track { background: #161b22; }
+.dark ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
 /* Paidly light theme: soft off-white page, white cards, orange/coral brand (matches logo).
  * Use semantic tokens app-wide:
@@ -128,10 +131,18 @@ body {
     --text-h2-size: 18px;
     --text-body-size: 14px;
     --text-caption-size: 12px;
+    /* Chart axes, grids, lines (light mode) */
+    --chart-axis: #64748b;
+    --chart-grid: #e2e8f0;
+    --chart-grid-subtle: rgba(0,0,0,0.06);
+    --chart-line: #0f172a;
   }
   /* Auth pages: warm gradient matching logo (coral/orange/cream) */
   .auth-page-bg {
     background: linear-gradient(160deg, #fff9f5 0%, #fff5ee 25%, #fef3eb 50%, #fff7f0 75%, #fff9f5 100%);
+  }
+  .dark .auth-page-bg {
+    background: linear-gradient(160deg, #0f1419 0%, #161b22 25%, #1c2128 50%, #161b22 75%, #0f1419 100%);
   }
 
   /* Optional: soft dark gradient — add class "content-dark" to main to use */
@@ -140,33 +151,52 @@ body {
     background: linear-gradient(160deg, hsl(222 47% 11%) 0%, hsl(220 40% 16%) 50%, hsl(222 47% 11%) 100%);
   }
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 98%;
+    --background: 222 20% 9%;
+    --foreground: 210 20% 98%;
+    --card: 222 18% 12%;
+    --card-foreground: 210 20% 98%;
+    --popover: 222 18% 12%;
+    --popover-foreground: 210 20% 98%;
     --primary: 17 100% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 65%;
+    --secondary: 222 18% 16%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 222 18% 16%;
+    --muted-foreground: 215 15% 65%;
     --accent: 29 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
+    --border: 222 18% 18%;
+    --input: 222 18% 16%;
     --ring: 17 100% 52%;
-    --sidebar-background: 0 0% 7%;
-    --sidebar-foreground: 0 0% 98%;
+    --sidebar-background: 222 20% 8%;
+    --sidebar-foreground: 210 20% 98%;
     --sidebar-primary: 17 100% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 14%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 14%;
+    --sidebar-accent: 222 18% 16%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 222 18% 18%;
     --sidebar-ring: 17 100% 52%;
+    /* Custom tokens used by content areas, cards, typography */
+    --bg-main: #0f1419;
+    --bg-card: #161b22;
+    --text-main: #e6edf3;
+    --text-muted: #8b949e;
+    --content-bg: #0f1419;
+    --panel-bg: #161b22;
+    --sidebar-border-color: #21262d;
+    /* Numbers & currency: high-contrast for readability */
+    --text-numeric: #f0f6fc;
+    --text-numeric-muted: #8b949e;
+    --text-numeric-positive: #3fb950;
+    --text-numeric-negative: #f85149;
+    --text-numeric-warning: #d29922;
+    /* Chart axes, grids, lines for dark mode */
+    --chart-axis: #8b949e;
+    --chart-grid: #21262d;
+    --chart-grid-subtle: rgba(255,255,255,0.08);
+    --chart-line: #e6edf3;
   }
 
   /* Base reset & body */
@@ -188,6 +218,52 @@ body {
     font-feature-settings: "tnum" 1;
     font-family: var(--font-mono);
   }
+  .dark .currency-nums {
+    color: var(--text-numeric);
+  }
+
+  /* Dark mode: override hardcoded slate/gray text so numbers and labels are readable */
+  .dark .text-slate-900,
+  .dark .text-slate-800,
+  .dark .text-gray-900,
+  .dark .text-gray-800 { color: var(--text-main) !important; }
+  .dark .text-slate-700,
+  .dark .text-gray-700 { color: hsl(var(--foreground)) !important; }
+  .dark .text-slate-600,
+  .dark .text-slate-500,
+  .dark .text-gray-600,
+  .dark .text-gray-500 { color: var(--text-muted) !important; }
+  .dark .text-slate-400,
+  .dark .text-gray-400 { color: var(--text-muted) !important; }
+  .dark .text-neutral-700,
+  .dark .text-neutral-600 { color: var(--text-muted) !important; }
+  .dark .text-neutral-300 { color: hsl(var(--foreground)) !important; }
+  /* Dark mode: numeric emphasis (bold numbers in tables, stats) */
+  .dark .font-bold.text-slate-900,
+  .dark .font-semibold.text-slate-900,
+  .dark .font-bold.text-gray-900,
+  .dark .font-semibold.text-gray-900 { color: var(--text-numeric) !important; }
+  /* Dark mode: status colors keep semantic meaning, adjust for dark bg */
+  .dark .text-emerald-700 { color: #3fb950 !important; }
+  .dark .text-rose-700,
+  .dark .text-red-600 { color: #f85149 !important; }
+  .dark .text-amber-700,
+  .dark .text-yellow-600 { color: #d29922 !important; }
+  .dark .text-green-600 { color: #3fb950 !important; }
+  .dark .text-purple-600 { color: #a371f7 !important; }
+  /* Dark mode: backgrounds for badges/chips */
+  .dark .bg-slate-100,
+  .dark .bg-slate-50,
+  .dark .bg-gray-100,
+  .dark .bg-gray-50 { background-color: hsl(var(--muted)) !important; }
+  .dark .bg-slate-200,
+  .dark .bg-gray-200 { background-color: hsl(var(--border)) !important; }
+  .dark .bg-white { background-color: hsl(var(--card)) !important; }
+  .dark .border-slate-200,
+  .dark .border-gray-200,
+  .dark .border-gray-300 { border-color: hsl(var(--border)) !important; }
+  .dark .text-slate-700.bg-slate-100,
+  .dark .text-slate-800.bg-slate-100 { color: var(--text-muted) !important; background-color: hsl(var(--muted)) !important; }
   /* Inputs: consistent focus for product feel */
   input:focus-visible,
   select:focus-visible,
@@ -302,8 +378,14 @@ body {
     /* Subtle depth (premium SaaS feel): rely on contrast + border first */
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.03);
   }
+  .dark .glass-card {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(0, 0, 0, 0.15);
+  }
   .glass-card-hover:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+  .dark .glass-card-hover:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   }
 
   /* Floating cards on light: white, subtle shadow */
@@ -313,10 +395,16 @@ body {
     border-radius: 20px;
     box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
   }
+  .dark .card-float {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
 
   /* Shadow & depth (FinBank "look") */
   .card-shadow {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  }
+  .dark .card-shadow {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
   }
   .card-hover {
     transition: all 0.3s ease;
@@ -324,6 +412,9 @@ body {
   .card-hover:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
   }
 
   /* Sidebar: use theme tokens so light/dark stay consistent */
