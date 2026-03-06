@@ -8,6 +8,7 @@ import { Client } from "@/api/entities";
 import { User } from "@/api/entities";
 import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
+import { Payment } from "@/api/entities";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,55 +33,41 @@ import {
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
+import { NumberTicker } from "@/components/dashboard/NumberTicker";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import WelcomeGuide from '@/components/shared/WelcomeGuide';
 import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
 import GoalProgress from '@/components/dashboard/GoalProgress';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
+import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-const QUICK_ACTION_ACCENT = {
-  green: { bg: 'bg-emerald-500/25', icon: 'text-emerald-400', hoverBg: 'group-hover:bg-emerald-500/35', border: 'hover:border-emerald-400/30' },
-  red: { bg: 'bg-red-500/25', icon: 'text-red-400', hoverBg: 'group-hover:bg-red-500/35', border: 'hover:border-red-400/30' },
-  blue: { bg: 'bg-primary/25', icon: 'text-primary', hoverBg: 'group-hover:bg-primary/35', border: 'hover:border-primary/30' },
-  violet: { bg: 'bg-violet-500/25', icon: 'text-violet-400', hoverBg: 'group-hover:bg-violet-500/35', border: 'hover:border-violet-400/30' }
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
 };
 
-const QuickActionCard = ({ title, icon: Icon, href, fintech, accent = 'blue' }) => {
-  const style = QUICK_ACTION_ACCENT[accent] || QUICK_ACTION_ACCENT.blue;
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { type: 'spring', stiffness: 100, damping: 30 },
+  },
+};
+
+const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, sparklineData, sparklineColor = "hsl(var(--foreground))", animateFromZero, numericValue, currencyForAnimation }) => {
+  const sparkId = `spark-${String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const useTicker = animateFromZero && currencyForAnimation != null && !isLoading && typeof numericValue === 'number';
+  const displayValue = useTicker ? null : value;
   return (
-    <Link to={href} className="block min-w-0">
-      <Card className={`group cursor-pointer h-full overflow-hidden relative transition-all duration-300 min-w-0 ${
-        fintech
-          ? `glass-card glass-card-hover rounded-fintech border border-border hover:border-primary/40 ${style.border}`
-          : "bg-card hover:shadow-md rounded-xl border border-border"
-      }`}>
-        <CardContent className={`p-3 sm:p-4 md:p-6 relative flex items-center gap-3 sm:gap-4 min-w-0`}>
-          <div className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-xl transition-colors duration-300 shrink-0 ${
-            fintech ? `${style.bg} ${style.hoverBg}` : "bg-primary/10 group-hover:bg-primary"
-          }`}>
-            <Icon className={`w-7 h-7 ${fintech ? `${style.icon} group-hover:text-primary-foreground` : "text-primary group-hover:text-primary-foreground"}`} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className={`text-sm font-semibold truncate ${fintech ? "text-foreground" : "text-foreground"}`}>{title}</h3>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-};
-
-QuickActionCard.propTypes = {
-  title: PropTypes.string.isRequired,
-  icon: PropTypes.elementType.isRequired,
-  href: PropTypes.string.isRequired,
-  fintech: PropTypes.bool,
-  accent: PropTypes.oneOf(['green', 'red', 'blue', 'violet'])
-};
-
-const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle }) => (
   <Card className={`transition-all duration-300 overflow-hidden relative ${
     fintech
       ? "glass-card rounded-fintech border border-border"
@@ -94,7 +81,9 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
             <Skeleton className={`h-8 sm:h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
           ) : (
             <>
-              <p className={`tabular-nums font-bold truncate min-w-0 ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>{value}</p>
+              <p className={`currency-nums tabular-nums font-bold truncate min-w-0 ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>
+                {useTicker ? <NumberTicker value={numericValue} currency={currencyForAnimation} enabled /> : displayValue}
+              </p>
               {subtitle && (
                 <div className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{subtitle}</div>
               )}
@@ -108,12 +97,37 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
         </div>
         <div className={`rounded-xl flex items-center justify-center shrink-0 ${
           fintech
-            ? `w-10 h-10 sm:w-12 sm:h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-primary/20"}`
+            ? `w-10 h-10 sm:w-12 sm:h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-muted"}`
             : "w-12 h-12 sm:w-14 sm:h-14 bg-muted"
         }`}>
-          <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-primary") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
+          <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
         </div>
       </div>
+      {fintech && Array.isArray(sparklineData) && sparklineData.length > 1 && (
+        <div className="mt-3 h-10">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={sparklineData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={sparklineColor} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={sparklineColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke={sparklineColor}
+                strokeWidth={1.5}
+                fill={`url(#${sparkId})`}
+                dot={false}
+                activeDot={false}
+                isAnimationActive
+                animationDuration={700}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
       {fintech && (
         <div
           className="absolute bottom-0 left-4 right-4 h-px rounded-full bg-border"
@@ -121,7 +135,8 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
       )}
     </CardContent>
   </Card>
-);
+  );
+};
 
 StatCard.propTypes = {
   title: PropTypes.string.isRequired,
@@ -133,7 +148,12 @@ StatCard.propTypes = {
   fintech: PropTypes.bool,
   accent: PropTypes.oneOf(['blue', 'purple', 'amber']),
   growth: PropTypes.number,
-  subtitle: PropTypes.node
+  subtitle: PropTypes.node,
+  sparklineData: PropTypes.array,
+  sparklineColor: PropTypes.string,
+  animateFromZero: PropTypes.bool,
+  numericValue: PropTypes.number,
+  currencyForAnimation: PropTypes.string,
 };
 
 export default function Dashboard() {
@@ -178,6 +198,7 @@ export default function Dashboard() {
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [user, setUser] = useState(null);
   const [userCurrencyPreference, setUserCurrencyPreference] = useState('ZAR');
   const [hasBankingDetails, setHasBankingDetails] = useState(false);
@@ -370,8 +391,12 @@ export default function Dashboard() {
 
       // Use Excel user service instead of broken User entity
       const allUsers = userService.getAllUsers();
-      const allInvoices = await Invoice.list();
+      const [allInvoices, allPayments] = await Promise.all([
+        Invoice.list(),
+        Payment.list().catch(() => []),
+      ]);
       setInvoices(allInvoices);
+      setPayments(Array.isArray(allPayments) ? allPayments : []);
       // Removed allQuotes (unused)
 
       // Calculate invoice status breakdown
@@ -560,17 +585,19 @@ export default function Dashboard() {
         setUserCurrencyPreference(currencyPref.currency);
       }
 
-      const [invoicesData, clientsData, userData, expensesData, bankingDetailsData] = await Promise.all([
+      const [invoicesData, clientsData, userData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
         Invoice.list("-created_date"),
         Client.list("-created_date"),
         User.me(),
         Expense.list("-date", 100),
+        Payment.list().catch(() => []),
         BankingDetail.list()
       ]);
       setInvoices(invoicesData);
       setClients(clientsData);
       setUser(userData);
       setExpenses(expensesData);
+      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetailsData.length > 0);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -620,6 +647,123 @@ export default function Dashboard() {
       value
     }));
   }, [invoices, revenueRange]);
+
+  // Sparkline source for KPI cards (lightweight + consistent)
+  const kpiSparkline = useMemo(() => {
+    return Array.isArray(revenueTrendData) ? revenueTrendData.slice(-14) : [];
+  }, [revenueTrendData]);
+
+  const kpiSparklines = useMemo(() => {
+    const now = new Date();
+    const days = 14;
+    const start = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+
+    const toLabel = (d) => formatDate(d, 'MMM d');
+    const series = {
+      revenue: [],
+      outstanding: [],
+      vat: [],
+      cashFlow: [],
+    };
+
+    for (let i = 0; i < days; i += 1) {
+      const day = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      const label = toLabel(day);
+      series.revenue.push({ label, value: 0 });
+      series.outstanding.push({ label, value: 0 });
+      series.vat.push({ label, value: 0 });
+      series.cashFlow.push({ label, value: 0 });
+    }
+
+    const idxByLabel = new Map(series.revenue.map((p, idx) => [p.label, idx]));
+
+    // Revenue & VAT: based on invoices created on each day that are paid/partial_paid
+    invoices.forEach((inv) => {
+      const createdAt = new Date(inv.created_date || inv.created_at || 0);
+      if (createdAt < start || createdAt > now) return;
+      const label = toLabel(createdAt);
+      const idx = idxByLabel.get(label);
+      if (idx == null) return;
+
+      const isPaidLike = inv.status === 'paid' || inv.status === 'partial_paid';
+      if (isPaidLike) {
+        series.revenue[idx].value += Number(inv.total_amount || inv.total || 0);
+        series.vat[idx].value += Number(inv.tax_amount || 0);
+      }
+    });
+
+    // Outstanding: exact snapshot each day (accounts for partial payments)
+    const paymentDateMs = (p) => {
+      const d = p?.payment_date || p?.date || p?.created_date || p?.created_at;
+      const ms = d ? new Date(d).getTime() : NaN;
+      return Number.isFinite(ms) ? ms : 0;
+    };
+    const paymentsByInvoice = new Map();
+    (Array.isArray(payments) ? payments : []).forEach((p) => {
+      const invoiceId = p?.invoice_id;
+      if (!invoiceId) return;
+      const arr = paymentsByInvoice.get(invoiceId) || [];
+      arr.push({ ms: paymentDateMs(p), amount: Number(p?.amount || 0) });
+      paymentsByInvoice.set(invoiceId, arr);
+    });
+    for (const [invoiceId, arr] of paymentsByInvoice.entries()) {
+      arr.sort((a, b) => a.ms - b.ms);
+      paymentsByInvoice.set(invoiceId, arr);
+    }
+
+    const outstandingStatuses = new Set(['sent', 'viewed', 'overdue', 'partial_paid', 'unpaid']);
+    const dayEnds = Array.from({ length: days }, (_, i) => {
+      const day = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999).getTime();
+    });
+
+    const invoicesInWindow = invoices
+      .map((inv) => ({
+        inv,
+        createdMs: new Date(inv.created_date || inv.created_at || 0).getTime(),
+        total: Number(inv.total_amount || inv.total || 0),
+        status: (inv.status || '').toLowerCase(),
+      }))
+      .filter(({ createdMs }) => Number.isFinite(createdMs));
+
+    // For each invoice, walk forward through days and payments once (O(invoices * days + payments))
+    for (const { inv, createdMs, total, status } of invoicesInWindow) {
+      if (!outstandingStatuses.has(status)) continue;
+      const payArr = paymentsByInvoice.get(inv.id) || [];
+      let paidSum = 0;
+      let payIdx = 0;
+
+      for (let di = 0; di < days; di += 1) {
+        const dayEndMs = dayEnds[di];
+        if (createdMs > dayEndMs) continue;
+
+        while (payIdx < payArr.length && payArr[payIdx].ms <= dayEndMs) {
+          paidSum += payArr[payIdx].amount;
+          payIdx += 1;
+        }
+
+        const balance = OutstandingBalanceService.calculateInvoiceBalance(inv, [{ amount: paidSum }]);
+        if (balance?.outstanding > 0) {
+          series.outstanding[di].value += Number(balance.outstanding || 0);
+        }
+      }
+    }
+
+    // Cash flow: daily revenue - daily expenses (expense date if present)
+    expenses.forEach((exp) => {
+      const d = new Date(exp.date || exp.created_date || exp.created_at || 0);
+      if (d < start || d > now) return;
+      const label = toLabel(d);
+      const idx = idxByLabel.get(label);
+      if (idx == null) return;
+      series.cashFlow[idx].value -= Number(exp.amount || 0);
+    });
+    for (let i = 0; i < days; i += 1) {
+      series.cashFlow[i].value += series.revenue[i].value;
+    }
+
+    return series;
+  }, [invoices, expenses, payments]);
 
   // Fintech KPIs: Revenue, Awaiting payment (consolidated), VAT/Tax liability (SARS), Cash Flow + growth %
   const fintechKpis = useMemo(() => {
@@ -1157,10 +1301,11 @@ export default function Dashboard() {
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
       <div className="max-w-7xl mx-auto w-full min-w-0 px-3 py-2 sm:p-6 md:p-8">
-        {/* Welcome Header */}
+        {/* Welcome Header — subtle fade, leads into staggered content */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
           className="mb-4 sm:mb-6"
         >
           <h1 className="text-xl sm:text-2xl md:text-[28px] font-bold text-foreground mb-1 sm:mb-2 font-display leading-tight">
@@ -1169,15 +1314,16 @@ export default function Dashboard() {
           <p className="finbank-body text-sm text-foreground">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
 
-        {/* KPI Summary — Revenue, Awaiting payment (consolidated), VAT/Tax (SARS), Cash Flow */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="mb-6"
-        >
+        {/* KPI Summary — staggered entrance with spring physics */}
+        <div className="mb-6">
           <div className="glass-card rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+            >
+          <motion.div variants={itemVariants}>
           <StatCard
             title="Revenue"
             value={formatCurrency(fintechKpis.revenue, userCurrency)}
@@ -1186,7 +1332,14 @@ export default function Dashboard() {
             fintech
             accent="blue"
             growth={fintechKpis.revenueGrowth}
+            sparklineData={kpiSparklines.revenue}
+            sparklineColor="#475569"
+            animateFromZero
+            numericValue={fintechKpis.revenue}
+            currencyForAnimation={userCurrency}
           />
+          </motion.div>
+          <motion.div variants={itemVariants}>
           <StatCard
             title="Awaiting payment"
             value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)}
@@ -1214,7 +1367,11 @@ export default function Dashboard() {
             isLoading={isLoading}
             fintech
             accent="purple"
+            sparklineData={kpiSparklines.outstanding}
+            sparklineColor="#6366f1"
           />
+          </motion.div>
+          <motion.div variants={itemVariants}>
           <StatCard
             title="VAT / Tax liability"
             value={formatCurrency(fintechKpis.vatLiability, userCurrency)}
@@ -1223,7 +1380,11 @@ export default function Dashboard() {
             isLoading={isLoading}
             fintech
             accent="amber"
+            sparklineData={kpiSparklines.vat}
+            sparklineColor="#f59e0b"
           />
+          </motion.div>
+          <motion.div variants={itemVariants}>
           <StatCard
             title="Cash flow"
             value={formatCurrency(fintechKpis.cashFlow, userCurrency)}
@@ -1232,10 +1393,13 @@ export default function Dashboard() {
             fintech
             accent="blue"
             growth={fintechKpis.cashFlowGrowth}
+            sparklineData={kpiSparklines.cashFlow}
+            sparklineColor="#10b981"
           />
-            </div>
+          </motion.div>
+          </motion.div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Empty-state tip when Revenue (and Cash Flow) are zero */}
         {!isLoading && fintechKpis.revenue === 0 && (
@@ -1388,63 +1552,157 @@ export default function Dashboard() {
           </div>
         )}
 
-        {user && !isLoading && !showWelcomeBanner && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
-          >
-            <div className="glass-card rounded-fintech border border-border p-6 flex flex-wrap items-center justify-between gap-4">
-              <h3 className="text-lg font-semibold text-foreground font-display">Quick insights</h3>
-              <div className="flex flex-wrap items-center gap-6 text-sm">
-                {overdueCount > 0 ? (
-                  <Link to={createPageUrl("Invoices")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-                    <FileText className="w-4 h-4 shrink-0" />
-                    <span>{overdueCount} invoice{overdueCount !== 1 ? 's' : ''} overdue — send reminders</span>
-                  </Link>
-                ) : fintechKpis.vatLiability > 0 ? (
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <Landmark className="w-4 h-4 shrink-0" />
-                    Set aside {formatCurrency(fintechKpis.vatLiability, userCurrency)} for VAT / SARS
-                  </span>
-                ) : null}
-                {overdueCount === 0 && fintechKpis.vatLiability <= 0 && (
-                  <span className="text-muted-foreground">You&apos;re all set. Create an invoice or track expenses below.</span>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-6"
-        >
-          <div className="glass-card rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <QuickActionCard title="Create Invoice" icon={FileText} href={createPageUrl("CreateInvoice")} fintech accent="green" />
-          <QuickActionCard title="Add Expense" icon={Receipt} href={createPageUrl("CashFlow")} fintech accent="red" />
-          <QuickActionCard title="Add Customer" icon={UsersIcon} href={createPageUrl("Clients")} fintech accent="blue" />
-          <QuickActionCard title="Add Service" icon={Headset} href={createPageUrl("Services")} fintech accent="violet" />
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Main Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
-          {/* Left Column - Card & Recent Transactions */}
+        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Transactions), 30% right (Setup, Pending, Quick Actions) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
+          {/* Left Column (70%) — Large Revenue Graph + Recent Transactions */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} />
+            {/* Top row: Total Income + Pending Payments */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
+              <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} />
+              <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
+            </div>
 
-            {/* Transaction List — clean list, 16px padding per row, circular avatar with 10% status color */}
+            {/* Revenue trend — large chart; line draws in after KPIs (staggered sequence end) */}
+            <div className="glass-card rounded-fintech border border-border p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <h3 className="text-lg font-semibold text-foreground font-display">Revenue trend</h3>
+                <div className="flex gap-2">
+                  {[30, 60, 90].map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => setRevenueRange(range)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                        revenueRange === range
+                          ? "bg-primary text-primary-foreground border border-primary"
+                          : "bg-muted text-muted-foreground border border-border hover:border-primary/40"
+                      }`}
+                    >
+                      {range}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isLoading ? (
+                <Skeleton className="h-64 w-full rounded-xl bg-white/10" />
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="w-full h-[260px]"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      key={`revenue-${revenueRange}`}
+                      data={revenueTrendData}
+                      margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" style={{ stopColor: '#475569' }} stopOpacity={0.12} />
+                          <stop offset="100%" style={{ stopColor: '#475569' }} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
+                        labelStyle={{ color: "var(--text-main)" }}
+                        formatter={(value) => [formatCurrency(Number(value || 0), userCurrency), "Revenue"]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#475569"
+                        strokeWidth={2}
+                        fill="url(#fintechRevenueGrad)"
+                        fillOpacity={1}
+                        dot={false}
+                        activeDot={{ r: 4, fill: "#475569", stroke: "#fff", strokeWidth: 1 }}
+                        isAnimationActive
+                        animationDuration={1200}
+                        animationEasing="ease-in-out"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </motion.div>
+              )}
+            </div>
+
+          </motion.div>
+
+          {/* Right Column (30%) — Setup Progress, Quick Creator, Plan for 2026, Transactions */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+            className="space-y-6"
+          >
+            {user && !isAdmin && (
+              <SetupProgressStepper user={user} hasBankingDetails={hasBankingDetails} invoices={invoices} />
+            )}
+
+            {/* Quick Creator — streamlined horizontal bar with hover lift + shadow + icon emphasis */}
+            <div className="glass-card rounded-fintech border border-border p-4 sm:p-5">
+              <h3 className="text-sm font-semibold text-foreground font-display mb-3 tracking-tight">Quick Creator</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  className="group bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg h-9 px-4 gap-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md hover:shadow-primary/20 active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
+                  onClick={() => navigate(createPageUrl("CreateInvoice"))}
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  Invoice
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  onClick={() => navigate(createPageUrl("CashFlow"))}
+                >
+                  <Receipt className="w-4 h-4 shrink-0" />
+                  Expense
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  onClick={() => navigate(createPageUrl("Clients"))}
+                >
+                  <UsersIcon className="w-4 h-4 shrink-0" />
+                  Customer
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110 hover:[&_svg]:opacity-100 [&_svg]:opacity-90"
+                  onClick={() => navigate(createPageUrl("Services"))}
+                >
+                  <Headset className="w-4 h-4 shrink-0" />
+                  Service
+                </Button>
+                <Link to={createPageUrl("Invoices")} className="inline-flex ml-auto">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="group rounded-lg h-9 text-muted-foreground hover:text-foreground text-sm font-medium transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-sm active:translate-y-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-105"
+                  >
+                    View all
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            <GoalProgress year={new Date().getFullYear()} progress={goalProgress} />
+
+            {/* Transaction List — below Plan for 2026 */}
             <div className="glass-card rounded-fintech border border-border overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
@@ -1520,84 +1778,6 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
-          </motion.div>
-
-          {/* Right Column - Revenue chart + Upcoming + Goal */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="lg:col-span-2 space-y-6"
-          >
-            {/* Revenue line chart with electric blue / purple gradient */}
-            <div className="glass-card rounded-fintech border border-border p-6">
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <h3 className="text-lg font-semibold text-foreground font-display">Revenue trend</h3>
-                <div className="flex gap-2">
-                  {[30, 60, 90].map((range) => (
-                    <button
-                      key={range}
-                      type="button"
-                      onClick={() => setRevenueRange(range)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                        revenueRange === range
-                          ? "bg-primary text-primary-foreground border border-primary"
-                          : "bg-muted text-muted-foreground border border-border hover:border-primary/40"
-                      }`}
-                    >
-                      {range}d
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {isLoading ? (
-                <Skeleton className="h-64 w-full rounded-xl bg-white/10" />
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  className="w-full h-[260px]"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={revenueTrendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" style={{ stopColor: 'var(--brand-primary)' }} stopOpacity={0.35} />
-                          <stop offset="50%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0.2} />
-                          <stop offset="100%" style={{ stopColor: 'var(--brand-secondary)' }} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-                      <XAxis dataKey="label" stroke="#7E9294" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#7E9294" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
-                        labelStyle={{ color: "var(--text-main)" }}
-                        formatter={(value) => [formatCurrency(Number(value || 0), userCurrency), "Revenue"]}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="var(--brand-primary)"
-                        strokeWidth={3}
-                        fill="url(#fintechRevenueGrad)"
-                        fillOpacity={1}
-                        dot={false}
-                        activeDot={{ r: 4, fill: "var(--brand-primary)", stroke: "#fff", strokeWidth: 1 }}
-                        isAnimationActive
-                        animationDuration={1200}
-                        animationEasing="ease-out"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </motion.div>
-              )}
-            </div>
-
-            <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
-
-            <GoalProgress year={new Date().getFullYear()} progress={goalProgress} />
           </motion.div>
         </div>
 

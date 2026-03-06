@@ -8,58 +8,58 @@ import { FileText, Send, CheckCircle, Clock, AlertCircle, XCircle, Eye } from 'l
  */
 export default function InvoiceStatusBadge({ status, size = 'default' }) {
   const sizeClasses = {
-    small: 'text-xs px-2 py-0.5',
-    default: 'text-sm px-3 py-1',
-    large: 'text-base px-4 py-1.5',
+    small: 'text-[11px] px-2 py-0.5',
+    default: 'text-xs px-2.5 py-1',
+    large: 'text-sm px-3 py-1.5',
   };
 
   const statusConfig = {
     draft: {
       icon: FileText,
       label: 'Draft',
-      className: 'bg-muted text-muted-foreground border-border',
+      className: 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-300',
       description: 'Not sent to client',
     },
     sent: {
       icon: Send,
       label: 'Sent',
-      className: 'bg-primary/15 text-primary border-primary/30',
+      className: 'bg-primary/10 text-primary border-primary/20',
       description: 'Sent to client',
     },
     viewed: {
       icon: Eye,
       label: 'Viewed',
-      className: 'bg-purple-100 text-purple-700 border-purple-200',
+      className: 'bg-violet-500/10 text-violet-700 border-violet-500/20 dark:text-violet-300',
       description: 'Viewed by client',
     },
     pending: {
       icon: Clock,
       label: 'Pending',
-      className: 'bg-amber-100 text-amber-700 border-amber-200',
+      className: 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-300',
       description: 'Awaiting payment',
     },
     paid: {
       icon: CheckCircle,
       label: 'Paid',
-      className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300',
       description: 'Payment received',
     },
     partial_paid: {
       icon: AlertCircle,
       label: 'Partially Paid',
-      className: 'bg-orange-100 text-orange-700 border-orange-200',
+      className: 'bg-orange-500/10 text-orange-700 border-orange-500/20 dark:text-orange-300',
       description: 'Partial payment received',
     },
     overdue: {
       icon: AlertCircle,
       label: 'Overdue',
-      className: 'bg-red-100 text-red-700 border-red-200',
+      className: 'bg-red-500/10 text-red-700 border-red-500/20 dark:text-red-300',
       description: 'Payment overdue',
     },
     cancelled: {
       icon: XCircle,
       label: 'Cancelled',
-      className: 'bg-muted text-muted-foreground border-border',
+      className: 'bg-muted/60 text-muted-foreground border-border',
       description: 'Invoice cancelled',
     },
   };
@@ -70,7 +70,7 @@ export default function InvoiceStatusBadge({ status, size = 'default' }) {
   return (
     <Badge
       variant="outline"
-      className={`${config.className} ${sizeClasses[size]} flex items-center gap-1 font-medium border rounded-lg`}
+      className={`${config.className} ${sizeClasses[size]} flex items-center gap-1 font-medium border rounded-full`}
       title={config.description}
     >
       <Icon className="w-3 h-3" />

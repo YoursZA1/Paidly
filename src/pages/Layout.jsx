@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import Button from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import {
   DropdownMenu,
@@ -33,6 +39,8 @@ import {
   Bell,
   Menu,
   X,
+  Sun,
+  Moon,
   TrendingUp,
   Activity,
   History,
@@ -336,15 +344,16 @@ const QuoteReminderService = {
 const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const isCollapsedRail = collapsed && !mobile;
 
   if (!item) return null;
 
   if (item.type === "section") {
     if (collapsed && !mobile) {
-      return <div className="my-2 h-px bg-border" />;
+      return <div className="my-2 h-px bg-sidebar-border" />;
     }
     return (
-      <div className={`px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-foreground ${mobile ? "mt-2" : ""}`}>
+      <div className={`px-3 py-2 text-[12px] font-semibold uppercase tracking-wide ${mobile ? "text-muted-foreground" : "text-sidebar-foreground/80"} ${mobile ? "mt-2" : ""}`}>
         {item.title}
       </div>
     );
@@ -352,29 +361,44 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
 
   // If the item has children, render a parent nav item with dropdown
   if (item.children && Array.isArray(item.children)) {
+    const isCollapsedRailParent = collapsed && !mobile;
+    const buttonEl = (
+      <button
+        type="button"
+        className={`group flex items-center w-full transition-all font-mono ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl" : mobile ? "rounded-full" : "rounded-full hover:bg-sidebar-accent"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : (!collapsed ? "py-2 gap-3 px-4" : "")}`}
+        style={{ cursor: 'pointer' }}
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-controls={`nav-children-${item.id}`}
+      >
+        <span className={`sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-xl transition-all bg-transparent [&_svg]:size-5 ${collapsed && !mobile ? "text-sidebar-foreground/80 group-hover:text-sidebar-foreground group-hover:bg-white/5" : mobile ? "text-foreground" : "text-sidebar-foreground"}`}>
+          <item.icon className="size-5" strokeWidth={2.5} />
+        </span>
+        {!collapsed && (
+          <span className={`text-[13px] font-normal transition-colors ${mobile ? "text-foreground" : "text-sidebar-foreground"}`}>{item.title}</span>
+        )}
+        {!collapsed && (
+          <span className={`ml-auto transition-transform ${mobile ? "text-foreground" : "text-sidebar-foreground/80"} ${open ? "rotate-90" : "rotate-0"}`}>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </span>
+        )}
+      </button>
+    );
     return (
       <div className="mb-1">
         <motion.div whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}>
-          <button
-            type="button"
-            className={`group flex items-center w-full transition-all font-mono rounded-full ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : `py-2 ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setOpen((prev) => !prev)}
-            aria-expanded={open}
-            aria-controls={`nav-children-${item.id}`}
-          >
-            <span className="sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-lg transition-all bg-transparent text-foreground [&_svg]:size-5">
-              <item.icon className="size-5" strokeWidth={2.5} />
-            </span>
-            {!collapsed && (
-              <span className="text-[13px] font-normal transition-colors text-foreground">{item.title}</span>
-            )}
-            {!collapsed && (
-              <span className={`ml-auto transition-transform text-foreground ${open ? "rotate-90" : "rotate-0"}`}>
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </span>
-            )}
-          </button>
+          {isCollapsedRailParent ? (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                {buttonEl}
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={10} className="font-medium">
+                {item.title}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            buttonEl
+          )}
         </motion.div>
         {/* Render children as indented sub-nav, only if open */}
         {!collapsed && open && (
@@ -402,27 +426,57 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
     <motion.div
       whileHover={{ x: 2 }}
       whileTap={{ scale: 0.98 }}
-      className={`rounded-full ${isActive ? "sidebar-nav-item-active" : ""}`}
+      className={`relative ${isCollapsedRail ? "rounded-xl" : "rounded-full"} ${mobile && isActive ? "sidebar-nav-item-active" : ""}`}
     >
-      <Link
-        id={item.id}
-        to={item.url}
-        onClick={onClick}
-        title={collapsed && !mobile ? item.title : undefined}
-        aria-label={collapsed && !mobile ? item.title : undefined}
-        className={`group flex items-center transition-all rounded-full ${mobile ? "min-h-[44px] py-3 gap-3 px-3" : `py-2.5 ${collapsed ? "justify-center px-2" : "gap-3 px-3"}`}`}
-      >
-        <span
-          className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
-            ${isActive ? "text-primary-foreground" : "text-foreground group-hover:bg-muted/80"}
-          `}
+      {/* Desktop sidebar: sliding pill for active state (Layout ID transition) */}
+      {!mobile && isActive && (
+        <motion.div
+          layoutId="active-sidebar-pill"
+          className={`absolute inset-0 z-0 ${isCollapsedRail ? "rounded-xl bg-white/10" : "rounded-full bg-[hsl(var(--sidebar-primary))]"}`}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          aria-hidden
+        />
+      )}
+      {isCollapsedRail ? (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Link
+              id={item.id}
+              to={item.url}
+              onClick={onClick}
+              aria-label={item.title}
+              className={`relative z-10 group flex items-center transition-all justify-center px-2 py-2 rounded-xl`}
+            >
+              <span
+                className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-5
+                  ${isActive ? (isCollapsedRail ? "text-sidebar-foreground" : "text-sidebar-primary-foreground") : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground group-hover:bg-white/5"}
+                `}
+              >
+                <item.icon className="size-5" strokeWidth={2.5} />
+              </span>
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="font-medium">
+            {item.title}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <Link
+          id={item.id}
+          to={item.url}
+          onClick={onClick}
+          className={`relative z-10 group flex items-center transition-all ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : "rounded-full py-2.5 gap-3 px-3"}`}
         >
-          <item.icon className="size-5" strokeWidth={2.5} />
-        </span>
-        {(!collapsed || mobile) && (
-          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : "text-foreground font-normal"}`}>{item.title}</span>
-        )}
-      </Link>
+          <span
+            className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-5
+              ${mobile ? (isActive ? "text-primary-foreground" : "text-foreground group-hover:bg-muted/80") : (isActive ? "text-primary-foreground" : "text-sidebar-foreground group-hover:bg-sidebar-accent")}
+            `}
+          >
+            <item.icon className="size-5" strokeWidth={2.5} />
+          </span>
+          <span className={`text-[13px] transition-colors ${isActive ? "text-primary-foreground font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
+        </Link>
+      )}
     </motion.div>
   );
 };
@@ -488,7 +542,7 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout }) => (
               <Plus className="size-5 mr-2" /> Create Invoice
             </Button>
           </Link>
-          <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
+          <Button variant="outline" className="w-full min-h-12 border-border text-foreground hover:bg-muted hover:text-foreground py-3 rounded-xl touch-manipulation" onClick={() => { onClose(); handleLogout(); }}>
             <LogOut className="size-5 mr-2" /> Logout
           </Button>
         </div>
@@ -511,12 +565,30 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Premium SaaS feel: start collapsed to keep focus on data
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [theme, setTheme] = useState("system"); // 'light' | 'dark' | 'system'
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const mainContentRef = useRef(null);
   const { user, logout } = useAuth();
   const { toast } = useToast();
+
+  // Theme: persisted, respects system
+  useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    const next = stored || "system";
+    setTheme(next);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
+    const effective = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
+    if (effective === "dark") root.classList.add("dark");
+    else root.classList.remove("dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
   useEffect(() => {
@@ -634,21 +706,46 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
-    <div className={`overflow-x-hidden min-h-screen w-full grid grid-cols-1 min-w-0 ${isSidebarCollapsed ? "md:grid-cols-[72px_1fr]" : "md:grid-cols-[240px_1fr]"}`}>
-      {/* Sidebar: hidden on mobile */}
+    <div className={`overflow-x-hidden h-[100dvh] md:h-screen w-full grid grid-cols-1 min-w-0 ${isSidebarCollapsed ? "md:grid-cols-[88px_1fr]" : "md:grid-cols-[240px_1fr]"}`}>
+      {/* Sidebar: hidden on mobile — slides in first (staggered sequence start) */}
       <motion.div
-        initial={{ x: -280 }}
-        animate={{ x: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className={`sidebar sidebar-panel hidden md:block text-foreground sticky top-0 h-screen py-6 ${
-          isSidebarCollapsed ? "px-2" : "px-4"
+        initial={{ opacity: 0, x: -16 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+        className={`sidebar sidebar-panel hidden md:block text-sidebar-foreground sticky top-0 h-screen py-6 ${
+          isSidebarCollapsed ? "pl-4 pr-1" : "px-4"
         }`}
       >
-        <div className="flex h-full flex-col">
+        <div className="relative flex h-full flex-col">
+          <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+          {/* Collapse button — right edge of sidebar, tied to minimize function */}
+          <div className="absolute top-6 right-0 z-20 flex flex-col items-center">
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+                  className="shrink-0 h-9 w-9 rounded-l-xl rounded-r-none border border-transparent border-r-0 bg-white/10 text-sidebar-foreground/90 hover:bg-white/15 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:ring-offset-transparent active:scale-95 transition-all duration-200 ease-out"
+                  title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {isSidebarCollapsed ? (
+                    <ChevronsRight className="size-5" aria-hidden />
+                  ) : (
+                    <ChevronsLeft className="size-5" aria-hidden />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left" sideOffset={8} className="font-medium">
+                {isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
-          {/* Logo */}
-          <div className={`flex flex-col ${isSidebarCollapsed ? "px-0" : ""}`}>
-            <div className={`flex items-center ${isSidebarCollapsed ? "justify-center h-16" : "h-16 gap-3"}`}>
+          {/* Logo — top, always visible when collapsed */}
+          <div className={`flex flex-col shrink-0 ${isSidebarCollapsed ? "px-0 items-center pr-9" : "pr-12"}`}>
+            <div className={isSidebarCollapsed ? "flex flex-col items-center gap-2" : "flex flex-col gap-2"}>
               <Link
                 to={createPageUrl("Dashboard")}
                 className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}
@@ -663,25 +760,11 @@ export default function Layout({ children, currentPageName }) {
                   />
                 </div>
                 {!isSidebarCollapsed && (
-                  <span className="text-[15px] font-semibold text-foreground tracking-tight">
+                  <span className="text-[15px] font-semibold text-sidebar-foreground tracking-tight">
                     Paidly
                   </span>
                 )}
               </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                className="ml-auto shrink-0 h-10 w-10 rounded-xl border border-transparent bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 active:scale-95 transition-all duration-200 ease-out"
-                title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                {isSidebarCollapsed ? (
-                  <ChevronsRight className="size-5" aria-hidden />
-                ) : (
-                  <ChevronsLeft className="size-5" aria-hidden />
-                )}
-              </Button>
             </div>
             <div className="mt-3" data-tour="dashboard-summary">
               <NavLink
@@ -692,8 +775,8 @@ export default function Layout({ children, currentPageName }) {
           </div>
 
           {/* Navigation */}
-          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-1" : "px-3"}`}> 
-            <nav className={isSidebarCollapsed ? "space-y-2" : "space-y-1"}>
+          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "px-3 pr-12"}`}>
+            <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-1"}>
               {getNavigationItems(user?.subscription_plan || 'Individual', user?.role)
                 .filter(item => item.title && item.id && item.title !== "Dashboard")
                 .map(item => {
@@ -715,7 +798,7 @@ export default function Layout({ children, currentPageName }) {
           </div>
 
           {/* Create Invoice CTA */}
-          <div className={`mt-auto ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
+          <div className={`mt-auto ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
             <Link
               to={createPageUrl("CreateInvoice")}
               title={isSidebarCollapsed ? "Create Invoice" : undefined}
@@ -738,19 +821,20 @@ export default function Layout({ children, currentPageName }) {
           </div>
 
           {/* Logout */}
-          <div className={`border-t border-[var(--sidebar-border-color)] ${isSidebarCollapsed ? "p-2" : "p-4"}`}>
+          <div className={`border-t border-sidebar-border ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
             <button
               onClick={handleLogout}
               title={isSidebarCollapsed ? "Log out" : undefined}
               aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-muted ${
+              className={`flex items-center text-sidebar-foreground transition-colors w-full py-2.5 text-[13px] rounded-xl hover:bg-sidebar-accent hover:text-sidebar-foreground ${
                 isSidebarCollapsed ? "justify-center" : "gap-3"
               }`}
             >
-              <LogOut className="size-5" />
+              <LogOut className="size-5 shrink-0" />
               {!isSidebarCollapsed && "Log out"}
             </button>
           </div>
+          </TooltipProvider>
         </div>
       </motion.div>
 
@@ -767,7 +851,7 @@ export default function Layout({ children, currentPageName }) {
       </AnimatePresence>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col min-h-screen ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+      <div className={`flex flex-col h-[100dvh] md:h-screen ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
         {/* Header: touch targets 44px on mobile, no horizontal overflow */}
         <motion.header
           initial={{ y: -100 }}
@@ -793,7 +877,17 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden sm:inline-flex rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-10 min-w-10"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+              {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+            </Button>
              <NotificationBell />
             
             {user && (
@@ -825,7 +919,7 @@ export default function Layout({ children, currentPageName }) {
                     Subscription
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onClick={handleLogout} className="text-foreground focus:bg-muted focus:text-foreground cursor-pointer">
                     <LogOut className="size-4 mr-2" />
                     Logout
                   </DropdownMenuItem>
@@ -844,10 +938,10 @@ export default function Layout({ children, currentPageName }) {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
               className="min-h-full w-full min-w-0"
             >
               {children}

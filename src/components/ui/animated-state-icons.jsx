@@ -261,7 +261,7 @@ export function ToggleIcon({ size = 40, color = "currentColor", className, durat
         opacity={on ? 1 : 0.4} />
       <motion.circle cy="20" r="5" fill={color}
         animate={on ? { cx: 28 } : { cx: 12 }}
-        transition={{ type: "spring", stiffness: 500, damping: 25 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
       />
     </svg>
   );

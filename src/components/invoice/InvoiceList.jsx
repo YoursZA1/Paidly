@@ -78,7 +78,7 @@ export default function InvoiceList({ invoices, clients, isLoading, userCurrency
                                         <TableCell className="font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">{invoice.invoice_number}</TableCell>
                                         <TableCell className="text-muted-foreground text-xs sm:text-sm max-w-[120px] sm:max-w-none mobile-break-words">{getClientName(invoice.client_id)}</TableCell>
                                         <TableCell className="text-muted-foreground text-xs sm:text-sm max-w-[140px] sm:max-w-none mobile-break-words">{invoice.project_title}</TableCell>
-                                        <TableCell className="font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</TableCell>
+                                        <TableCell className="font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap currency-nums">{formatCurrency(invoice.total_amount, userCurrency)}</TableCell>
                                         <TableCell className="whitespace-nowrap">
                                             {totalPaid > 0 ? (
                                                 <PartialPaymentIndicator
