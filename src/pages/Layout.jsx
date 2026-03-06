@@ -513,8 +513,8 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
     aria-modal="true"
     aria-label="Main menu"
   >
-    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly, fits narrow screens */}
-    <div className="w-full max-w-[min(300px,90vw)] flex flex-col bg-white dark:bg-card border-r border-slate-100 dark:border-border text-foreground shadow-elevation-lg p-4 sm:p-6 mobile-nav-panel">
+    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly, max height so footer stays visible */}
+    <div className="w-full max-w-[min(300px,90vw)] flex flex-col max-h-[100dvh] bg-white dark:bg-card border-r border-slate-100 dark:border-border text-foreground shadow-elevation-lg p-4 sm:p-6 mobile-nav-panel">
       {/* 1. BRANDING — extra bottom padding for premium spacing */}
       <div className="mb-10 sm:mb-12 shrink-0">
         <div className="flex min-h-[52px] items-center justify-between gap-2">
@@ -530,8 +530,8 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
         </div>
       </div>
 
-      {/* 2. NAVIGATION — grouped into Main & Management with muted headers */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 -mx-1 space-y-8" aria-label="App navigation">
+      {/* 2. NAVIGATION — grouped into Main & Management with muted headers; scrolls so footer stays visible */}
+      <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden -mx-1 space-y-8" aria-label="App navigation">
         {mainItems.length > 0 && (
           <div>
             <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
@@ -593,6 +593,11 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
             <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings") + "?tab=subscription"); onClose?.(); }} className="cursor-pointer">
               <Bell className="mr-2 size-4" />
               Subscription
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => { onClose(); handleLogout(); }} className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/30">
+              <LogOut className="mr-2 size-4" />
+              Logout
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-muted-foreground font-normal">Appearance</DropdownMenuLabel>
