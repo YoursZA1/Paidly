@@ -50,6 +50,31 @@ import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay }
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
 
+const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || 'anon'}`;
+const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes - still refresh in background
+
+function getCachedDashboard(userId) {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.ts && Date.now() - parsed.ts > CACHE_MAX_AGE_MS) return null; // optional: skip stale cache for "instant" anyway
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedDashboard(userId, data) {
+  if (!userId || !data) return;
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY(userId), JSON.stringify({ ...data, ts: Date.now() }));
+  } catch {
+    // ignore quota or parse errors
+  }
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -268,7 +293,22 @@ export default function Dashboard() {
     if (isAdmin) {
       loadAdminData();
     } else {
-      loadUserData();
+      // Hydrate from cache first for instant UI, then fetch fresh data in background
+      const cached = getCachedDashboard(authUser.id);
+      if (cached) {
+        setInvoices(Array.isArray(cached.invoices) ? cached.invoices : []);
+        setClients(Array.isArray(cached.clients) ? cached.clients : []);
+        setExpenses(Array.isArray(cached.expenses) ? cached.expenses : []);
+        setPayments(Array.isArray(cached.payments) ? cached.payments : []);
+        setUser(cached.user || null);
+        setUserCurrencyPreference(cached.userCurrencyPreference || 'ZAR');
+        setHasBankingDetails(Boolean(cached.hasBankingDetails));
+        setBusinessGoal2026(cached.businessGoal2026 ?? null);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+      loadUserData(!!cached);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, authUser?.id]);
@@ -586,41 +626,56 @@ export default function Dashboard() {
     }
   }, [toast]); // useCallback
 
-  const loadUserData = useCallback(async () => {
-    setIsLoading(true);
+  const loadUserData = useCallback(async (hasCachedData = false) => {
+    if (!hasCachedData) setIsLoading(true);
     try {
-      // Load currency preference
-      const currencyPref = await getUserCurrency();
-      if (currencyPref?.currency) {
-        setUserCurrencyPreference(currencyPref.currency);
-      }
-
-      // Fetch user from profiles: User.me() requires this.user; fallback to restoreFromSupabaseSession when not yet set
-      let userData;
-      try {
-        userData = await User.me();
-      } catch {
-        userData = await User.restoreFromSupabaseSession();
-      }
-      if (!userData) {
-        throw new Error("Not authenticated");
-      }
-
-      const [invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
+      // Fetch profile, invoices, clients, expenses, payments, banking details in parallel
+      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
+        (async () => {
+          try {
+            return await User.me();
+          } catch {
+            return await User.restoreFromSupabaseSession();
+          }
+        })(),
         Invoice.list("-created_date"),
         Client.list("-created_date"),
         Expense.list("-date", 100),
         Payment.list().catch(() => []),
         BankingDetail.list()
       ]);
+
+      if (!userResult) {
+        throw new Error("Not authenticated");
+      }
+
+      const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
+      const currencyFromProfile = userResult?.currency || 'ZAR';
+
       setInvoices(invoicesData);
       setClients(clientsData);
-      setUser(userData);
+      setUser(userResult);
       setExpenses(expensesData);
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-      setHasBankingDetails(bankingDetailsData.length > 0);
-      const goal2026 = await getBusinessGoal(userData.id, 2026).catch(() => null);
+      setHasBankingDetails(bankingDetails.length > 0);
+      setUserCurrencyPreference(currencyFromProfile);
+
+      // Currency was previously from getUserCurrency() which calls User.me(); we use profile.currency above
+      const goal2026 = await getBusinessGoal(userResult.id, 2026).catch(() => null);
       setBusinessGoal2026(goal2026 || null);
+
+      // Use userResult.id (the user we just fetched) for the cache key, not authUser from closure.
+      // Otherwise a slow fetch could complete after logout/login and write the old user's data under the new user's key.
+      setCachedDashboard(userResult.id, {
+        invoices: invoicesData,
+        clients: clientsData,
+        expenses: expensesData,
+        payments: Array.isArray(paymentsData) ? paymentsData : [],
+        user: userResult,
+        userCurrencyPreference: currencyFromProfile,
+        hasBankingDetails: bankingDetails.length > 0,
+        businessGoal2026: goal2026 || null
+      });
     } catch (error) {
       console.error("Error loading dashboard data:", error);
       toast({
@@ -628,9 +683,10 @@ export default function Dashboard() {
         description: error?.message || "Please check your connection and try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [toast]); // useCallback
+  }, [toast]);
 
   const refreshGoal2026 = useCallback(async () => {
     if (!user?.id) return;
@@ -645,7 +701,7 @@ export default function Dashboard() {
       if (isAdmin) {
         loadAdminData();
       } else {
-        loadUserData();
+        loadUserData(true); // refresh in background without clearing current UI
       }
     },
     { channelName: "dashboard-kpis" }
@@ -1709,15 +1765,31 @@ export default function Dashboard() {
               </div>
               <div className="px-6 pb-6 overflow-x-auto">
                 {isLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="flex items-center justify-between py-3 px-0">
-                        <Skeleton className="h-5 w-28" />
-                        <Skeleton className="h-6 w-16 rounded-full" />
-                        <Skeleton className="h-5 w-20" />
-                      </div>
-                    ))}
-                  </div>
+                  <table className="w-full min-w-[320px] text-left">
+                    <thead>
+                      <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                        <th className="py-3 pr-4">Client</th>
+                        <th className="py-3 pr-4">Status</th>
+                        <th className="py-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <tr key={i} className="py-3">
+                          <td className="py-3 pr-4">
+                            <Skeleton className="h-4 w-28 mb-1" />
+                            <Skeleton className="h-3 w-20" />
+                          </td>
+                          <td className="py-3 pr-4">
+                            <Skeleton className="h-5 w-16 rounded-full" />
+                          </td>
+                          <td className="py-3 text-right">
+                            <Skeleton className="h-4 w-20 ml-auto" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 ) : invoices.length === 0 ? (
                   <div className="text-center py-8 px-4">
                     <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
