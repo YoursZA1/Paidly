@@ -10,6 +10,7 @@ import {
   signPayfastPayload,
   verifyPayfastSignature
 } from "./payfast.js";
+import { sendInvoiceEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { getUserFromRequest } from "./supabaseAuth.js";
 
@@ -83,6 +84,39 @@ app.use(express.urlencoded({
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+app.post("/api/send-invoice", async (req, res) => {
+  try {
+    const { user, error: authError } = await getUserFromRequest(req);
+    if (authError || !user) {
+      return res.status(401).json({ error: authError || "Authentication required" });
+    }
+
+    const { base64PDF, clientEmail, invoiceNum, fromName } = req.body || {};
+    if (!base64PDF || !clientEmail || !invoiceNum) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        fields: ["base64PDF", "clientEmail", "invoiceNum"],
+      });
+    }
+
+    const result = await sendInvoiceEmail(
+      base64PDF,
+      clientEmail.trim(),
+      String(invoiceNum).trim(),
+      fromName ? String(fromName).trim() : "Paidly"
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, data: result.data });
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: err?.message || "Send failed" });
+    }
+  }
 });
 
 app.post("/api/payfast/subscription", (req, res) => {

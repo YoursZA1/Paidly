@@ -413,7 +413,12 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                                         )}
                                         <div className="border-t border-gray-300 mt-2 pt-3 flex justify-between text-base font-bold text-gray-900">
                                             <span>Grand Total</span>
-                                            <span className="tabular-nums">{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                                            <span
+                                                className="tabular-nums tracking-tighter whitespace-nowrap min-w-0"
+                                                style={{ fontSize: 'clamp(1.125rem, 3vw + 0.75rem, 2rem)' }}
+                                            >
+                                                {formatCurrency(invoice.total_amount, userCurrency)}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>

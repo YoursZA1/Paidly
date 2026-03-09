@@ -26,6 +26,7 @@ import {
 import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl, createAdminPageUrl } from "@/utils";
@@ -502,19 +503,9 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
     managementItems = [...managementItems, ...adminItems];
   }
 
+  /* Panel only — used inside Sheet drawer on mobile */
   return (
-  <motion.div
-    initial={{ x: "-100%" }}
-    animate={{ x: 0 }}
-    exit={{ x: "-100%" }}
-    transition={{ duration: 0.3, ease: "easeInOut" }}
-    className="fixed inset-0 z-50 flex md:hidden"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Main menu"
-  >
-    {/* Panel: theme-aligned (card, border), full safe areas, touch-friendly, max height so footer stays visible */}
-    <div className="w-full max-w-[min(300px,90vw)] flex flex-col max-h-[100dvh] bg-white dark:bg-card border-r border-slate-100 dark:border-border text-foreground shadow-elevation-lg p-4 sm:p-6 mobile-nav-panel">
+    <div className="w-full flex flex-col h-full max-h-[100dvh] bg-white dark:bg-card text-foreground p-4 sm:p-6 mobile-nav-panel">
       {/* 1. BRANDING — extra bottom padding for premium spacing */}
       <div className="mb-10 sm:mb-12 shrink-0">
         <div className="flex min-h-[52px] items-center justify-between gap-2">
@@ -623,8 +614,6 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
         </Button>
       </div>
     </div>
-    <div className="flex-1 bg-black/50 min-h-screen" onClick={onClose} aria-hidden="true" />
-  </motion.div>
   );
 };
 
@@ -767,13 +756,13 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
-    <div className={`overflow-x-hidden h-[100dvh] md:h-screen w-full grid grid-cols-1 min-w-0 transition-[grid-template-columns] duration-300 ease-in-out ${isSidebarCollapsed ? "md:grid-cols-[5rem_1fr]" : "md:grid-cols-[16rem_1fr]"}`}>
-      {/* Sidebar: hidden on mobile — slides in first (staggered sequence start) */}
+    <div className={`overflow-x-hidden h-[100dvh] lg:h-screen w-full grid grid-cols-1 min-w-0 transition-[grid-template-columns] duration-300 ease-in-out ${isSidebarCollapsed ? "lg:grid-cols-[5rem_1fr]" : "lg:grid-cols-[16rem_1fr]"}`}>
+      {/* Sidebar: hidden below lg (1024px); visible from lg up */}
       <motion.div
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-        className={`sidebar sidebar-panel hidden md:block text-sidebar-foreground sticky top-0 h-screen py-6 ${
+        className={`sidebar sidebar-panel hidden lg:block text-sidebar-foreground sticky top-0 h-screen py-6 ${
           isSidebarCollapsed ? "pl-4 pr-1" : "px-4"
         }`}
       >
@@ -899,10 +888,14 @@ export default function Layout({ children, currentPageName }) {
         </div>
       </motion.div>
 
-       <AnimatePresence>
-        {isMobileMenuOpen && (
+      <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+        <SheetContent
+          side="left"
+          className="w-full max-w-[min(300px,90vw)] p-0 h-full flex flex-col border-r border-slate-100 dark:border-border rounded-r-xl"
+          aria-describedby={undefined}
+        >
           <MobileNav
-            items={getNavigationItems(user?.subscription_plan || 'Individual', user?.role)}
+            items={getNavigationItems(user?.subscription_plan || "Individual", user?.role)}
             onClose={() => setIsMobileMenuOpen(false)}
             user={user}
             navigate={navigate}
@@ -911,28 +904,70 @@ export default function Layout({ children, currentPageName }) {
             setTheme={setTheme}
             resolvedTheme={resolvedTheme}
           />
-        )}
-      </AnimatePresence>
+        </SheetContent>
+      </Sheet>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col h-[100dvh] md:h-screen min-h-0 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
-        {/* Header: touch targets 44px on mobile, no horizontal overflow */}
+      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+        {/* Top header: fixed on mobile (hamburger + Paidly + avatar); standard header on lg+ */}
         <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="relative z-20 h-14 sm:h-16 safe-top bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 shadow-sm min-h-[56px]"
+          className="relative z-20 safe-top bg-card/95 backdrop-blur-sm border-b border-border shadow-sm min-h-[56px]
+            fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8"
         >
-          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+          {/* Mobile (< lg): Hamburger | Paidly | Avatar */}
+          <div className="flex items-center justify-between w-full lg:hidden">
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
               aria-label="Open menu"
-              className="md:hidden flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation shrink-0 cursor-pointer select-none w-12 h-12 min-w-[48px] min-h-[48px] p-0 border-0 bg-transparent"
+              className="flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation shrink-0 cursor-pointer select-none w-12 h-12 min-w-[48px] min-h-[48px] p-0 border-0 bg-transparent -ml-1"
             >
               <Menu className="size-6 pointer-events-none" aria-hidden />
             </button>
-            <div className="relative hidden sm:block max-w-md flex-1 min-w-0">
+            <span className="font-black text-foreground tracking-tight text-lg">Paidly</span>
+            {user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="rounded-xl p-0 min-h-[44px] min-w-[44px] touch-manipulation shrink-0" aria-label="Account menu">
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden border border-border">
+                      {user.logo_url ? (
+                        <img src={user.logo_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        user.full_name ? user.full_name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : "U")
+                      )}
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border bg-card shadow-elevation-lg">
+                  <div className="px-2 py-2">
+                    <p className="text-sm font-semibold text-foreground">{user.company_name || "My Company"}</p>
+                    <p className="text-xs text-muted-foreground">{user.full_name || user.email}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings")); setIsMobileMenuOpen(false); }} data-tour="settings-btn">
+                    <Settings className="size-4 mr-2" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings") + "?tab=subscription")}>
+                    <Bell className="size-4 mr-2" />
+                    Subscription
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-foreground focus:bg-muted focus:text-foreground cursor-pointer">
+                    <LogOut className="size-4 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {/* Desktop (lg+): Search, theme, notifications, profile */}
+          <div className="hidden lg:flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+            <div className="relative max-w-md flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
                 placeholder="Search invoices, clients…"
@@ -941,7 +976,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="hidden lg:flex items-center gap-1.5 sm:gap-3 shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -1020,10 +1055,10 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </motion.header>
 
-        {/* Main Content Area — scrollable, no horizontal overflow, safe areas */}
+        {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth py-4 sm:py-6 md:py-8 px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col pt-14 pb-4 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1">
           <AnimatePresence mode="wait">

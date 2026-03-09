@@ -59,7 +59,7 @@ function getCachedDashboard(userId) {
     const raw = localStorage.getItem(DASHBOARD_CACHE_KEY(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed?.ts && Date.now() - parsed.ts > CACHE_MAX_AGE_MS) return null; // optional: skip stale cache for "instant" anyway
+    // Return cache regardless of age so refresh shows last data immediately while fresh data loads
     return parsed;
   } catch {
     return null;
@@ -308,7 +308,7 @@ export default function Dashboard() {
       } else {
         setIsLoading(true);
       }
-      loadUserData(!!cached);
+      loadUserData(!!cached, authUser.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, authUser?.id]);
@@ -626,11 +626,11 @@ export default function Dashboard() {
     }
   }, [toast]); // useCallback
 
-  const loadUserData = useCallback(async (hasCachedData = false) => {
+  const loadUserData = useCallback(async (hasCachedData = false, authUserId = null) => {
     if (!hasCachedData) setIsLoading(true);
     try {
-      // Fetch profile, invoices, clients, expenses, payments, banking details in parallel
-      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await Promise.all([
+      // Fetch profile, invoices, clients, expenses, payments, banking details, and business goal in parallel
+      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goal2026] = await Promise.all([
         (async () => {
           try {
             return await User.me();
@@ -642,7 +642,8 @@ export default function Dashboard() {
         Client.list("-created_date"),
         Expense.list("-date", 100),
         Payment.list().catch(() => []),
-        BankingDetail.list()
+        BankingDetail.list(),
+        authUserId ? getBusinessGoal(authUserId, 2026).catch(() => null) : Promise.resolve(null)
       ]);
 
       if (!userResult) {
@@ -659,13 +660,9 @@ export default function Dashboard() {
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetails.length > 0);
       setUserCurrencyPreference(currencyFromProfile);
-
-      // Currency was previously from getUserCurrency() which calls User.me(); we use profile.currency above
-      const goal2026 = await getBusinessGoal(userResult.id, 2026).catch(() => null);
       setBusinessGoal2026(goal2026 || null);
 
-      // Use userResult.id (the user we just fetched) for the cache key, not authUser from closure.
-      // Otherwise a slow fetch could complete after logout/login and write the old user's data under the new user's key.
+      // Use userResult.id for the cache key (not authUserId from closure)
       setCachedDashboard(userResult.id, {
         invoices: invoicesData,
         clients: clientsData,
@@ -701,7 +698,7 @@ export default function Dashboard() {
       if (isAdmin) {
         loadAdminData();
       } else {
-        loadUserData(true); // refresh in background without clearing current UI
+        loadUserData(true, authUser?.id); // refresh in background without clearing current UI
       }
     },
     { channelName: "dashboard-kpis" }
@@ -1777,14 +1774,14 @@ export default function Dashboard() {
                       {[1, 2, 3, 4, 5, 6].map((i) => (
                         <tr key={i} className="py-3">
                           <td className="py-3 pr-4">
-                            <Skeleton className="h-4 w-28 mb-1" />
-                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-4 w-28 mb-1 animate-pulse" />
+                            <Skeleton className="h-3 w-20 animate-pulse" />
                           </td>
                           <td className="py-3 pr-4">
-                            <Skeleton className="h-5 w-16 rounded-full" />
+                            <Skeleton className="h-5 w-16 rounded-full animate-pulse" />
                           </td>
                           <td className="py-3 text-right">
-                            <Skeleton className="h-4 w-20 ml-auto" />
+                            <Skeleton className="h-4 w-20 ml-auto animate-pulse" />
                           </td>
                         </tr>
                       ))}

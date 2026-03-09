@@ -23,8 +23,43 @@ import InvoiceFilters, { applyInvoiceFilters } from "../components/filters/Invoi
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
+import { useAuth } from "@/components/auth/AuthContext";
+
+const INVOICES_CACHE_KEY = (userId) => `paidly_invoices_cache_${userId || 'anon'}`;
+const INVOICES_CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCachedInvoices(userId) {
+    if (!userId) return null;
+    try {
+        const raw = localStorage.getItem(INVOICES_CACHE_KEY(userId));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Return cache regardless of age so refresh shows last data immediately while fresh data loads
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function setCachedInvoices(userId, data) {
+    if (!userId || !data) return;
+    try {
+        const payload = {
+            invoices: data.invoices || [],
+            clients: data.clients || [],
+            user: data.user || null,
+            payments: data.payments || [],
+            invoiceViews: data.invoiceViews || [],
+            ts: Date.now()
+        };
+        localStorage.setItem(INVOICES_CACHE_KEY(userId), JSON.stringify(payload));
+    } catch {
+        // ignore
+    }
+}
 
 export default function InvoicesPage() {
+    const { user: authUser } = useAuth();
     const [invoices, setInvoices] = useState([]);
     const [clients, setClients] = useState([]);
     const [user, setUser] = useState(null);
@@ -42,8 +77,8 @@ export default function InvoicesPage() {
     const invoiceViewsFileInputRef = useRef(null);
     const { toast } = useToast();
 
-    const loadData = useCallback(async () => {
-        setIsLoading(true);
+    const loadData = useCallback(async (background = false) => {
+        if (!background) setIsLoading(true);
         try {
             const [invoicesData, clientsData, userData, paymentsData, viewsData] = await Promise.all([
                 Invoice.list("-created_date"),
@@ -56,14 +91,14 @@ export default function InvoicesPage() {
                 .map((inv) => ({ inv, update: getAutoStatusUpdate(inv) }))
                 .filter(({ update }) => update);
 
+            let resolvedInvoices = invoicesData;
             if (updates.length > 0) {
                 await Promise.all(
                     updates.map(({ inv, update }) => Invoice.update(inv.id, update))
                 );
                 const updatedMap = new Map(updates.map(({ inv, update }) => [inv.id, update]));
-                setInvoices(
-                    invoicesData.map((inv) => ({ ...inv, ...(updatedMap.get(inv.id) || {}) }))
-                );
+                resolvedInvoices = invoicesData.map((inv) => ({ ...inv, ...(updatedMap.get(inv.id) || {}) }));
+                setInvoices(resolvedInvoices);
             } else {
                 setInvoices(invoicesData);
             }
@@ -81,25 +116,61 @@ export default function InvoicesPage() {
             setClients(clientsData);
             setUser(userData);
             setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
+
+            // Cache for next load (use fetched user id so cache key matches current user)
+            const cacheUserId = userData?.id || authUser?.id;
+            if (cacheUserId) {
+                setCachedInvoices(cacheUserId, {
+                    invoices: resolvedInvoices,
+                    clients: clientsData,
+                    user: userData,
+                    payments: paymentsData,
+                    invoiceViews: Array.isArray(viewsData) ? viewsData : []
+                });
+            }
         } catch (error) {
             console.error("Error loading data:", error);
-            toast({
-                title: "Could not load invoices",
-                description: error?.message || "Please check your connection and try again.",
-                variant: "destructive",
-            });
+            if (!background) {
+                toast({
+                    title: "Could not load invoices",
+                    description: error?.message || "Please check your connection and try again.",
+                    variant: "destructive",
+                });
+            }
         }
         setIsLoading(false);
-    }, [toast]);
+    }, [toast, authUser?.id]);
 
     useEffect(() => {
-        loadData();
-    }, [loadData]);
+        const userId = authUser?.id;
+        const cached = userId ? getCachedInvoices(userId) : null;
+        if (cached) {
+            setInvoices(Array.isArray(cached.invoices) ? cached.invoices : []);
+            setClients(Array.isArray(cached.clients) ? cached.clients : []);
+            setUser(cached.user || null);
+            setInvoiceViews(Array.isArray(cached.invoiceViews) ? cached.invoiceViews : []);
+            const paymentsByInvoice = new Map();
+            (cached.payments || []).forEach(payment => {
+                if (!payment.invoice_id) return;
+                if (!paymentsByInvoice.has(payment.invoice_id)) {
+                    paymentsByInvoice.set(payment.invoice_id, []);
+                }
+                paymentsByInvoice.get(payment.invoice_id).push(payment);
+            });
+            setPaymentsMap(paymentsByInvoice);
+            setIsLoading(false);
+            loadData(true); // refresh in background
+        } else {
+            loadData(false);
+        }
+    // Run when auth user becomes available or on mount; loadData is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authUser?.id]);
 
     useSupabaseRealtime(
         ["invoices", "payments"],
         () => {
-            loadData();
+            loadData(true); // refresh in background so UI doesn't flash
         },
         { channelName: "invoices-page" }
     );

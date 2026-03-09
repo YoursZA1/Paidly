@@ -58,16 +58,16 @@ export default function InvoiceList({ invoices, clients, isLoading, userCurrency
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            Array(5).fill(0).map((_, i) => (
+                            Array(8).fill(0).map((_, i) => (
                                 <TableRow key={i} className="border-border">
-                                    <TableCell><Skeleton className="h-4 w-16 sm:w-20 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-24 sm:w-32 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-32 sm:w-48 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded" /></TableCell>
-                                    <TableCell><Skeleton className="h-6 w-16 sm:w-20 rounded-full" /></TableCell>
-                                    <TableCell><div className="flex justify-end"><Skeleton className="h-8 w-8 rounded-lg" /></div></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-16 sm:w-20 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-24 sm:w-32 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-32 sm:w-48 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-4 w-20 sm:w-24 rounded animate-pulse" /></TableCell>
+                                    <TableCell><Skeleton className="h-6 w-16 sm:w-20 rounded-full animate-pulse" /></TableCell>
+                                    <TableCell><div className="flex justify-end"><Skeleton className="h-8 w-8 rounded-lg animate-pulse" /></div></TableCell>
                                 </TableRow>
                             ))
                         ) : (

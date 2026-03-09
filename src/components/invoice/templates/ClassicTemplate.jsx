@@ -113,31 +113,36 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                 <div className="w-full max-w-sm">
                     <div className="flex justify-between py-2 border-b border-border">
                         <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-medium">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                        <span className="font-medium tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                     </div>
                     {invoice.discount_amount && invoice.discount_amount > 0 && (
                         <div className="flex justify-between py-2 border-b border-border">
                             <span className="text-destructive">
                                 Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
                             </span>
-                            <span className="font-medium text-destructive">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
+                            <span className="font-medium text-destructive tabular-nums">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
                     {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
                         <div className="flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Item Taxes</span>
-                            <span className="font-medium text-primary">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="font-medium text-primary tabular-nums">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
                         </div>
                     )}
                     {invoice.tax_rate > 0 && (
                         <div className="flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Invoice Tax ({invoice.tax_rate}%)</span>
-                            <span className="font-medium">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="font-medium tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
                     <div className="flex justify-between py-3 text-lg bg-primary/10 px-3 rounded-md mt-2 border border-primary/20">
                         <span className="font-bold text-foreground">Total</span>
-                        <span className="font-bold text-primary">{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                        <span
+                            className="font-black text-primary tabular-nums tracking-tighter whitespace-nowrap min-w-0"
+                            style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
+                        >
+                            {formatCurrency(invoice.total_amount, userCurrency)}
+                        </span>
                     </div>
                 </div>
             </section>

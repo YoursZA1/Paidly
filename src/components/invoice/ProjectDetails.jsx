@@ -1663,19 +1663,19 @@ export default function ProjectDetails({
                                             <div className="space-y-1">
                                                 <div className="flex justify-between text-sm">
                                                     <span className="text-slate-600">Subtotal:</span>
-                                                    <span className="font-medium">{formatCurrency(item.total_price || 0, userCurrency)}</span>
+                                                    <span className="font-medium tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</span>
                                                 </div>
                                                 {item.item_tax_rate > 0 && (
                                                     <div className="flex justify-between text-sm">
                                                         <span className="text-slate-600">Tax ({item.item_tax_rate}%):</span>
-                                                        <span className="font-medium text-orange-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</span>
+                                                        <span className="font-medium text-orange-600 tabular-nums">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                         <div className="text-right">
                                             <p className="text-sm text-slate-600">Line Total</p>
-                                            <p className="text-xl font-bold text-slate-900">
+                                            <p className="text-xl font-bold text-slate-900 tabular-nums">
                                                 {formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}
                                             </p>
                                         </div>
@@ -1733,7 +1733,7 @@ export default function ProjectDetails({
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-sm text-slate-600">Line Total</p>
-                                                        <p className="text-xl font-bold text-slate-900">
+                                                        <p className="text-xl font-bold text-slate-900 tabular-nums">
                                                             {formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}
                                                         </p>
                                                     </div>
@@ -1747,7 +1747,7 @@ export default function ProjectDetails({
                                             <div key={`group-subtotal-${group.id}`} className="bg-primary/15 border border-primary/30 px-6 py-3 rounded-lg ml-4 mb-4">
                                                 <div className="flex items-center justify-between">
                                                     <span className="font-semibold text-foreground">{group.name} Subtotal:</span>
-                                                    <span className="text-xl font-bold text-foreground">{formatCurrency(groupSubtotal, userCurrency)}</span>
+                                                    <span className="text-xl font-bold text-foreground tabular-nums">{formatCurrency(groupSubtotal, userCurrency)}</span>
                                                 </div>
                                             </div>
                                         );
@@ -1787,7 +1787,7 @@ export default function ProjectDetails({
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-sm text-slate-600">Line Total</p>
-                                                        <p className="text-xl font-bold text-slate-900">
+                                                        <p className="text-xl font-bold text-slate-900 tabular-nums">
                                                             {formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}
                                                         </p>
                                                     </div>
@@ -1868,7 +1868,7 @@ export default function ProjectDetails({
                                     {/* Subtotal */}
                                     <div className="flex justify-between items-center py-2">
                                         <span className="text-slate-700 font-medium">Subtotal</span>
-                                        <span className="text-lg font-bold text-slate-900">{formatCurrency(invoiceData.subtotal || 0, userCurrency)}</span>
+                                        <span className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(invoiceData.subtotal || 0, userCurrency)}</span>
                                     </div>
 
                                     {/* Discount */}
@@ -1878,7 +1878,7 @@ export default function ProjectDetails({
                                                 <span>🏷️</span>
                                                 Discount {invoiceData.discount_type === 'percentage' ? `(${invoiceData.discount_value}%)` : ''}
                                             </span>
-                                            <span className="text-lg font-bold text-red-600">-{formatCurrency(invoiceData.discount_amount || 0, userCurrency)}</span>
+                                            <span className="text-lg font-bold text-red-600 tabular-nums">-{formatCurrency(invoiceData.discount_amount || 0, userCurrency)}</span>
                                         </div>
                                     )}
 
@@ -1890,7 +1890,7 @@ export default function ProjectDetails({
                                                     <span className="text-sm text-orange-700 flex items-center gap-2">
                                                         <span>📊</span> Item-Level Taxes
                                                     </span>
-                                                    <span className="font-semibold text-orange-600">{formatCurrency(invoiceData.item_taxes || 0, userCurrency)}</span>
+                                                    <span className="font-semibold text-orange-600 tabular-nums">{formatCurrency(invoiceData.item_taxes || 0, userCurrency)}</span>
                                                 </div>
                                             )}
                                             {(invoiceData.tax_rate || 0) > 0 && (
@@ -1898,21 +1898,26 @@ export default function ProjectDetails({
                                                     <span className="text-sm text-orange-700 flex items-center gap-2">
                                                         <span>💰</span> Global Tax ({invoiceData.tax_rate}%)
                                                     </span>
-                                                    <span className="font-semibold text-orange-600">{formatCurrency((invoiceData.tax_amount || 0) - (invoiceData.item_taxes || 0), userCurrency)}</span>
+                                                    <span className="font-semibold text-orange-600 tabular-nums">{formatCurrency((invoiceData.tax_amount || 0) - (invoiceData.item_taxes || 0), userCurrency)}</span>
                                                 </div>
                                             )}
                                             <div className="flex justify-between items-center py-2 bg-orange-50 -mx-2 px-2 rounded-lg">
                                                 <span className="font-bold text-orange-800">Total Tax</span>
-                                                <span className="text-lg font-bold text-orange-700">{formatCurrency(invoiceData.tax_amount || 0, userCurrency)}</span>
+                                                <span className="text-lg font-bold text-orange-700 tabular-nums">{formatCurrency(invoiceData.tax_amount || 0, userCurrency)}</span>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Grand Total */}
+                                    {/* Grand Total: tabular-nums, fluid scale, symbol + amount on one line */}
                                     <div className="border-t-2 border-slate-300 pt-4 mt-3">
                                         <div className="flex justify-between items-center bg-gradient-to-r from-primary to-[#ff7c00] text-white rounded-xl py-4 px-5 shadow-md">
                                             <span className="text-xl font-bold">Grand Total</span>
-                                            <span className="text-3xl font-black">{formatCurrency(invoiceData.total_amount || 0, userCurrency)}</span>
+                                            <span
+                                                className="font-black tabular-nums tracking-tighter whitespace-nowrap min-w-0"
+                                                style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
+                                            >
+                                                {formatCurrency(invoiceData.total_amount || 0, userCurrency)}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>

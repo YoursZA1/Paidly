@@ -60,6 +60,34 @@ export const formatCurrency = (amount, currencyCode = 'ZAR', decimals = 2) => {
     }
 };
 
+/** Invoice display: R 0,000.00 style using Intl.NumberFormat (ZAR = space after R, comma thousands, 2 decimals). */
+export const formatCurrencyInvoice = (amount, currencyCode = 'ZAR', decimals = 2) => {
+    const n = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+    if (currencyCode === 'ZAR') {
+        return 'R ' + new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        }).format(n);
+    }
+    const currency = currencyData[currencyCode];
+    if (!currency) {
+        return (currencyData.ZAR?.symbol || 'R') + ' ' + new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        }).format(n);
+    }
+    try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currencyCode,
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        }).format(n);
+    } catch {
+        return `${currency.symbol} ${n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    }
+};
+
 export const getCurrencySymbol = (currencyCode = 'ZAR') => {
     const currency = currencyData[currencyCode];
     return currency ? currency.symbol : 'R';
