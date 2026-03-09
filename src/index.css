@@ -7,6 +7,28 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Viewport-based scale for mobile: fluid base font so rem units scale with screen size */
+@media (max-width: 1023px) {
+  html {
+    font-size: clamp(14px, 2.2vw + 12px, 16px);
+  }
+}
+
+/* CSS custom property for viewport scale factor (0.85–1) for use in components */
+@media (max-width: 1023px) {
+  :root {
+    /* Reference width 390px; scale down on smaller devices */
+    --viewport-scale: min(1, max(0.82, (100vw / 390)));
+    --text-h1-size: clamp(20px, 5vw + 14px, 28px);
+    --text-h2-size: clamp(16px, 2.5vw + 12px, 18px);
+    --text-body-size: clamp(13px, 1.5vw + 11px, 14px);
+    --text-caption-size: clamp(11px, 1vw + 10px, 12px);
+    --spacing-page-mobile: clamp(12px, 3vw, 20px);
+    --card-padding: clamp(16px, 4vw, 24px);
+    --gap-cards: clamp(16px, 3vw, 24px);
+  }
+}
+
 /* Safe area insets for notched devices and home indicator */
 @supports (padding: env(safe-area-inset-top)) {
   .safe-top { padding-top: env(safe-area-inset-top); }
@@ -303,6 +325,18 @@ body {
       -webkit-overflow-scrolling: touch;
       overflow-x: auto;
     }
+    /* Use viewport-scaled spacing for padded sections */
+    .mobile-scale-padding {
+      padding-left: var(--spacing-page-mobile);
+      padding-right: var(--spacing-page-mobile);
+    }
+  }
+  /* Tablet and below: apply viewport-scaled typography */
+  @media (max-width: 1023px) {
+    .mobile-scale-typography h1 { font-size: var(--text-h1-size); }
+    .mobile-scale-typography h2 { font-size: var(--text-h2-size); }
+    .mobile-scale-typography .finbank-body { font-size: var(--text-body-size); }
+    .mobile-scale-typography .finbank-caption { font-size: var(--text-caption-size); }
   }
   /* Prevent inputs from zooming on iOS (16px minimum) */
   @media (max-width: 767px) {

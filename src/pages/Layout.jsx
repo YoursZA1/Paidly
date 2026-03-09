@@ -549,13 +549,8 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
         )}
       </nav>
 
-      {/* 3. FOOTER — user profile at bottom, separated by thin line */}
+      {/* 3. FOOTER — account (profile dropdown) then logout */}
       <div className="shrink-0 pt-6 border-t border-slate-100 dark:border-border space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <Link to={createPageUrl("CreateInvoice")} onClick={onClose} className="block">
-          <Button className="w-full min-h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-3 rounded-2xl touch-manipulation shadow-md shadow-primary/20">
-            <Plus className="size-5 mr-2" /> Create Invoice
-          </Button>
-        </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -584,11 +579,6 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
             <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings") + "?tab=subscription"); onClose?.(); }} className="cursor-pointer">
               <Bell className="mr-2 size-4" />
               Subscription
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => { onClose(); handleLogout(); }} className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/30">
-              <LogOut className="mr-2 size-4" />
-              Logout
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-muted-foreground font-normal">Appearance</DropdownMenuLabel>
@@ -891,6 +881,7 @@ export default function Layout({ children, currentPageName }) {
       <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
         <SheetContent
           side="left"
+          hideClose
           className="w-full max-w-[min(300px,90vw)] p-0 h-full flex flex-col border-r border-slate-100 dark:border-border rounded-r-xl"
           aria-describedby={undefined}
         >
@@ -1058,7 +1049,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col pt-14 pb-4 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area mobile-page mobile-scale-padding mobile-scale-typography flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col pt-14 pb-4 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1">
           <AnimatePresence mode="wait">
