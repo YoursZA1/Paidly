@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Message, Client, Invoice, Quote, User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,20 +23,25 @@ export default function MessagesPage() {
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('all');
+    const mountedRef = useRef(true);
 
     useEffect(() => {
+        mountedRef.current = true;
         loadData();
         const interval = setInterval(() => {
             loadMessagesOnly();
         }, 10000); // Poll every 10 seconds
 
-        return () => clearInterval(interval);
+        return () => {
+            mountedRef.current = false;
+            clearInterval(interval);
+        };
     }, []);
 
     const loadMessagesOnly = async () => {
         try {
             const messagesData = await Message.list('-created_date');
-            setMessages(messagesData || []);
+            if (mountedRef.current) setMessages(messagesData || []);
         } catch (error) {
             console.error('Error polling messages:', error);
         }
@@ -52,6 +57,7 @@ export default function MessagesPage() {
                 Quote.list('-created_date'),
                 User.me()
             ]);
+            if (!mountedRef.current) return;
             setMessages(messagesData || []);
             setClients(clientsData || []);
             setInvoices(invoicesData || []);
@@ -59,8 +65,9 @@ export default function MessagesPage() {
             setUser(userData);
         } catch (error) {
             console.error('Error loading messages:', error);
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     // Group messages into conversations by client and optionally invoice

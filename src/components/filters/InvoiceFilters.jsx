@@ -80,54 +80,57 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
                 {/* Search */}
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <div className="relative flex-1 w-full min-w-0">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     <Input
                         value={filters.search}
                         onChange={(e) => updateFilter('search', e.target.value)}
                         placeholder="Search by invoice number, client name, or project..."
-                        className="pl-10 h-10 rounded-xl"
+                        className="pl-10 h-10 rounded-xl w-full"
                     />
                 </div>
 
-                {/* Sort By */}
-                <Select value={filters.sortBy} onValueChange={(v) => updateFilter('sortBy', v)}>
-                    <SelectTrigger className="w-[180px] h-10">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="date_newest">Newest First</SelectItem>
-                        <SelectItem value="date_oldest">Oldest First</SelectItem>
-                        <SelectItem value="amount_highest">Highest Amount</SelectItem>
-                        <SelectItem value="amount_lowest">Lowest Amount</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-initial min-w-0">
+                    {/* Sort By — full width on mobile for easy tap */}
+                    <Select value={filters.sortBy} onValueChange={(v) => updateFilter('sortBy', v)}>
+                        <SelectTrigger className="w-full sm:w-[180px] h-10 rounded-xl">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="date_newest">Newest First</SelectItem>
+                            <SelectItem value="date_oldest">Oldest First</SelectItem>
+                            <SelectItem value="amount_highest">Highest Amount</SelectItem>
+                            <SelectItem value="amount_lowest">Lowest Amount</SelectItem>
+                        </SelectContent>
+                    </Select>
 
-                {/* Filter Toggle Button */}
-                <Button
-                    variant="outline"
-                    onClick={() => setShowFilters(!showFilters)}
-                    className="gap-2 h-10"
-                >
-                    <Filter className="w-4 h-4" />
-                    Filters
-                    {activeFilterCount > 0 && (
-                        <Badge className="bg-primary text-white ml-1">{activeFilterCount}</Badge>
-                    )}
-                    <ChevronDown className={cn("w-4 h-4 transition-transform", showFilters && "rotate-180")} />
-                </Button>
-
-                {activeFilterCount > 0 && (
-                    <Button variant="ghost" onClick={clearFilters} className="gap-2 h-10 text-slate-600">
-                        <X className="w-4 h-4" />
-                        Clear
-                    </Button>
-                )}
+                    {/* Filter Toggle + Clear — full width on mobile */}
+                    <div className="flex gap-2 flex-wrap">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="gap-2 h-10 flex-1 sm:flex-initial min-w-0 rounded-xl"
+                        >
+                            <Filter className="w-4 h-4 shrink-0" />
+                            Filters
+                            {activeFilterCount > 0 && (
+                                <Badge className="bg-primary text-white ml-1 shrink-0">{activeFilterCount}</Badge>
+                            )}
+                            <ChevronDown className={cn("w-4 h-4 shrink-0 transition-transform", showFilters && "rotate-180")} />
+                        </Button>
+                        {activeFilterCount > 0 && (
+                            <Button variant="ghost" onClick={clearFilters} className="gap-2 h-10 text-slate-600 shrink-0 rounded-xl">
+                                <X className="w-4 h-4" />
+                                Clear
+                            </Button>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Filter Options */}
             {showFilters && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-xl border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-xl border border-border">
                     {/* Status Filter */}
                     <div className="space-y-1">
                         <label className="text-xs font-medium text-slate-600">Status</label>

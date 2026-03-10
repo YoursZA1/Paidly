@@ -1,7 +1,7 @@
 import { OutstandingBalanceService } from "@/services/OutstandingBalanceService";
 import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
 import { Client } from "@/api/entities";
@@ -280,6 +280,7 @@ export default function Dashboard() {
     highVolumeLowPlan: []
   });
   const navigate = useNavigate();
+  const mountedRef = useRef(true);
 
   const openAccount = (user) => {
     const params = new URLSearchParams();
@@ -289,6 +290,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!authUser?.id) return;
     if (isAdmin) {
       loadAdminData();
@@ -310,6 +312,7 @@ export default function Dashboard() {
       }
       loadUserData(!!cached, authUser.id);
     }
+    return () => { mountedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, authUser?.id]);
 
@@ -435,6 +438,7 @@ export default function Dashboard() {
     setIsLoading(true);
     try {
       const currencyPref = await getUserCurrency();
+      if (!mountedRef.current) return;
       if (currencyPref?.currency) {
         setUserCurrencyPreference(currencyPref.currency);
       }
@@ -445,6 +449,7 @@ export default function Dashboard() {
         Invoice.list(),
         Payment.list().catch(() => []),
       ]);
+      if (!mountedRef.current) return;
       setInvoices(allInvoices);
       setPayments(Array.isArray(allPayments) ? allPayments : []);
       // Removed allQuotes (unused)
@@ -615,6 +620,7 @@ export default function Dashboard() {
       // Calculate activity logs
       calculateActivityLogs(allUsers, now);
     } catch (error) {
+      if (!mountedRef.current) return;
       console.error("Error loading admin dashboard data:", error);
       toast({
         title: "Could not load dashboard",
@@ -622,7 +628,7 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [toast]); // useCallback
 
@@ -650,6 +656,8 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
+      if (!mountedRef.current) return;
+
       const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
       const currencyFromProfile = userResult?.currency || 'ZAR';
 
@@ -674,6 +682,7 @@ export default function Dashboard() {
         businessGoal2026: goal2026 || null
       });
     } catch (error) {
+      if (!mountedRef.current) return;
       console.error("Error loading dashboard data:", error);
       toast({
         title: "Could not load dashboard",
@@ -681,7 +690,7 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [toast]);
 

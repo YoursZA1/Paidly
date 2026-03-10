@@ -230,15 +230,15 @@ export default function InvoicePreview({
           )}
         </CardHeader>
         <CardContent className="p-0 overflow-x-hidden">
-          {/* Document container: responsive padding, A4-style, brand bar + status stamp (ref for PDF capture) */}
+          {/* Document container: 48px padding, A4-style, brand bar + status stamp (ref for PDF capture) */}
           <div
             ref={previewRef}
             className="relative w-full max-w-[800px] mx-auto bg-white border border-slate-100 shadow-2xl min-h-[600px] sm:min-h-[1000px] flex flex-col rounded-sm overflow-hidden"
           >
-            {/* Vertical brand bar (left edge stationery feel) */}
+            {/* Vertical brand bar (left edge — custom stationery feel) */}
             <div className="absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 bg-primary rounded-r" aria-hidden />
 
-            {/* Status watermark: smaller on mobile */}
+            {/* Status overlay: diagonal low-opacity stamp behind content */}
             <div
               className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden"
               aria-hidden
@@ -252,9 +252,9 @@ export default function InvoicePreview({
               </span>
             </div>
 
-            {/* Inner content: responsive padding */}
-            <div className="relative z-10 p-4 sm:p-6 md:p-12 flex flex-col flex-1">
-              {/* 1. BRANDING HEADER — stacks on mobile, side-by-side from sm */}
+            {/* Inner content: 48px padding for A4 page feel */}
+            <div className="relative z-10 flex flex-col flex-1 p-[48px]">
+              {/* 1. BRANDING HEADER — Logo left, INVOICE + metadata right (Z-pattern) */}
               <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 sm:gap-8 pb-6 sm:pb-10 border-b border-slate-100">
                 <div className="space-y-2 sm:space-y-3 min-w-0">
                   {user?.logo_url ? (
@@ -332,15 +332,15 @@ export default function InvoicePreview({
                 </div>
               )}
 
-              {/* 3. ITEMS TABLE — QTY 64px centered; Price/Total tabular-nums; format R 0,000.00 */}
-              <div className="flex-1 overflow-x-auto rounded-lg border border-slate-200 mb-4 sm:mb-8 -mx-1 sm:mx-0">
+              {/* 3. ITEMS TABLE — tabular-nums, right-aligned Price & Total */}
+              <div className="flex-1 overflow-x-auto rounded-lg border border-slate-200 mb-4 sm:mb-8">
                 <table className="w-full text-sm text-left min-w-[320px]">
                   <thead>
                     <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-900">
                       <th className="px-2 py-2 sm:px-4 sm:py-4 text-left">Description</th>
-                      <th className="py-2 sm:py-4 text-center w-16">Qty</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-4 text-right w-28">Price</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-4 text-right w-32">Total</th>
+                      <th className="py-2 sm:py-4 text-center w-16 tabular-nums">Qty</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-4 text-right w-28 tabular-nums">Price</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-4 text-right w-32 tabular-nums">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -361,10 +361,10 @@ export default function InvoicePreview({
                               <p className="font-bold text-slate-900 text-xs sm:text-sm">{name}</p>
                               {description && <p className="text-[10px] text-slate-400 mt-1 uppercase">{description}</p>}
                             </td>
-                            <td className="py-4 sm:py-6 text-center w-16 tabular-nums text-slate-400 text-xs font-medium">
+                            <td className="py-4 sm:py-6 text-center w-16 tabular-nums text-slate-600 font-medium">
                               {qty}
                             </td>
-                            <td className="px-2 py-4 sm:px-4 sm:py-6 text-right tabular-nums text-slate-500 whitespace-nowrap">
+                            <td className="px-2 py-4 sm:px-4 sm:py-6 text-right tabular-nums text-slate-600 whitespace-nowrap">
                               {formatCurrencyInvoice(unitPrice, currency)}
                             </td>
                             <td className="px-2 py-4 sm:px-4 sm:py-6 text-right tabular-nums font-black text-slate-900 whitespace-nowrap">
@@ -379,7 +379,6 @@ export default function InvoicePreview({
               </div>
 
               {/* Notes */}
-              {/* Notes — general notes only (terms shown in Payment Terms below) */}
               {invoiceData?.notes?.trim() && (
                 <div className="mb-4 sm:mb-8">
                   <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 sm:mb-2">Notes</h3>
@@ -388,52 +387,75 @@ export default function InvoicePreview({
                   </p>
                 </div>
               )}
+            </div>
 
-              {/* 4. TOTALS — bg-slate-50 container, 48px padding, Amount Due + text-4xl Grand Total */}
-              <div className="mt-auto border-t border-slate-100 bg-slate-50/50 p-4 sm:p-6 md:p-12 -mx-4 sm:-mx-6 md:-mx-12 px-4 sm:px-6 md:px-12">
-                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-end gap-6 sm:gap-8">
-                  {/* Left: Payment Terms (and optional bank hint) */}
+            {/* 4. TOTALS FOOTER — Master-Detail: Bank Details left, Grand Total right; Slate-900 theme */}
+            <div className="relative z-10 p-[48px] bg-slate-900 text-white">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-end gap-6 sm:gap-8">
+                {/* Left: Bank Details (Payment Info) */}
+                <div className="space-y-3">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment Terms</p>
-                    <p className="text-[11px] text-slate-500 max-w-[280px] leading-relaxed">
-                      {invoiceData?.terms_conditions?.trim()
-                        ? invoiceData.terms_conditions.trim()
-                        : "Due within 15 days upon acceptance. Late payments may incur interest."}
-                    </p>
-                    {bankingDetail && (
-                      <p className="text-[10px] text-slate-400 mt-2">
-                        Pay to: {bankingDetail.bank_name || bankingDetail.account_name}
-                        {bankingDetail.account_number && ` · Acc: ${bankingDetail.account_number}`}
-                      </p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Payment Info</p>
+                    {bankingDetail ? (
+                      <>
+                        <p className="text-sm font-bold text-white">
+                          {bankingDetail.bank_name || bankingDetail.account_name || "Bank"}
+                        </p>
+                        {bankingDetail.account_number && (
+                          <p className="text-xs text-slate-400 tabular-nums">Acc: {bankingDetail.account_number}</p>
+                        )}
+                        {(bankingDetail.routing_number || bankingDetail.swift_code) && (
+                          <p className="text-[10px] text-slate-500 tabular-nums">
+                            {[bankingDetail.routing_number, bankingDetail.swift_code].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-500">Bank details not specified</p>
                     )}
                   </div>
+                  {invoiceData?.terms_conditions?.trim() ? (
+                    <div className="pt-2 border-t border-slate-700">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Payment Terms</p>
+                      <p className="text-[11px] text-slate-400 max-w-[280px] leading-relaxed">
+                        {invoiceData.terms_conditions.trim()}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-slate-700">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Payment Terms</p>
+                      <p className="text-[11px] text-slate-400 max-w-[280px] leading-relaxed">
+                        Due within 15 days upon acceptance. Late payments may incur interest.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-                  {/* Right: Subtotal / Discount / Tax + Amount Due (text-4xl font-black) */}
-                  <div className="text-left sm:text-right space-y-1 min-w-0">
-                    <div className="space-y-0.5">
+                {/* Right: Subtotal / Discount / Tax + Amount Due (Grand Total) */}
+                <div className="text-left sm:text-right space-y-2 min-w-0">
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between sm:justify-end gap-4 items-center text-sm">
+                      <span className="text-slate-400">Sub Total</span>
+                      <span className="tabular-nums text-right">{formatCurrencyInvoice(subtotal, currency)}</span>
+                    </div>
+                    {showDiscount && (
                       <div className="flex justify-between sm:justify-end gap-4 items-center text-sm">
-                        <span className="text-slate-500">Sub Total</span>
-                        <span className="tabular-nums">{formatCurrencyInvoice(subtotal, currency)}</span>
+                        <span className="text-slate-400">Discount</span>
+                        <span className="tabular-nums text-right">-{formatCurrencyInvoice(discountAmount, currency)}</span>
                       </div>
-                      {showDiscount && (
-                        <div className="flex justify-between sm:justify-end gap-4 items-center text-sm">
-                          <span className="text-slate-500">Discount</span>
-                          <span className="tabular-nums">-{formatCurrencyInvoice(discountAmount, currency)}</span>
-                        </div>
-                      )}
-                      {showTax && (
-                        <div className="flex justify-between sm:justify-end gap-4 items-center text-sm">
-                          <span className="text-slate-500">Tax ({taxRate}%)</span>
-                          <span className="tabular-nums">{formatCurrencyInvoice(taxAmount, currency)}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="pt-3 border-t border-slate-200 mt-3">
-                      <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-1">Amount Due</p>
-                      <h2 className="text-4xl font-black text-slate-900 tabular-nums tracking-tighter">
-                        {formatCurrencyInvoice(totalAmount, currency)}
-                      </h2>
-                    </div>
+                    )}
+                    {showTax && (
+                      <div className="flex justify-between sm:justify-end gap-4 items-center text-sm">
+                        <span className="text-slate-400">Tax ({taxRate}%)</span>
+                        <span className="tabular-nums text-right">{formatCurrencyInvoice(taxAmount, currency)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-3 border-t border-slate-600 mt-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">Amount Due</p>
+                    <h2 className="text-4xl sm:text-5xl font-black tabular-nums tracking-tighter text-white">
+                      {formatCurrencyInvoice(totalAmount, currency)}
+                    </h2>
                   </div>
                 </div>
               </div>

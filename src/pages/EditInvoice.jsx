@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Invoice, Client, BankingDetail, Service, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, AlertCircle } from "lucide-react";
@@ -17,6 +17,7 @@ import DraftInvoiceInfo from "../components/invoice/DraftInvoiceInfo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sendInvoiceToClient } from "@/services/InvoiceSendService";
 import InvoiceStatusBadge from "../components/invoice/InvoiceStatusBadge";
+import { canEditInvoice } from "@/logic";
 
 export default function EditInvoice() {
     const navigate = useNavigate();
@@ -33,8 +34,10 @@ export default function EditInvoice() {
     const [originalInvoiceData, setOriginalInvoiceData] = useState(null);
     const [user, setUser] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const mountedRef = useRef(true);
 
     useEffect(() => {
+        mountedRef.current = true;
         const params = new URLSearchParams(location.search);
         const id = params.get('id');
         if (id) {
@@ -43,6 +46,7 @@ export default function EditInvoice() {
         } else {
             navigate(createPageUrl("Invoices"));
         }
+        return () => { mountedRef.current = false; };
     }, [location]);
     
     const loadInitialData = async (id) => {
@@ -55,6 +59,8 @@ export default function EditInvoice() {
                 Service.list("-created_date"),
                 User.me().catch(() => null)
             ]);
+            if (!mountedRef.current) return;
+
             // Ensure invoice_date is set from created_date if not present
             const invoiceWithDate = {
                 ...invoice,
@@ -62,7 +68,7 @@ export default function EditInvoice() {
             };
             
             // Restrict editing for paid, partially paid, or cancelled invoices
-            if (invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled') {
+            if (!canEditInvoice(invoice)) {
                 toast({
                     title: "⚠️ Cannot Edit Invoice",
                     description: `This invoice is ${invoice.status?.replace('_', ' ')} and cannot be edited. View the invoice instead.`,
@@ -81,10 +87,12 @@ export default function EditInvoice() {
             setServices(servicesData);
             setUser(userData || null);
         } catch (error) {
+            if (!mountedRef.current) return;
             console.error("Error loading data:", error);
             navigate(createPageUrl("Invoices"));
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const calculatePayments = (totalAmount) => {

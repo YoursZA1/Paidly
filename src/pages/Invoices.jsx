@@ -75,6 +75,7 @@ export default function InvoicesPage() {
     const [isImportingViews, setIsImportingViews] = useState(false);
     const invoiceFileInputRef = useRef(null);
     const invoiceViewsFileInputRef = useRef(null);
+    const mountedRef = useRef(true);
     const { toast } = useToast();
 
     const loadData = useCallback(async (background = false) => {
@@ -87,6 +88,8 @@ export default function InvoicesPage() {
                 Payment.list(),
                 InvoiceView.list().catch(() => [])
             ]);
+            if (!mountedRef.current) return;
+
             const updates = invoicesData
                 .map((inv) => ({ inv, update: getAutoStatusUpdate(inv) }))
                 .filter(({ update }) => update);
@@ -96,6 +99,7 @@ export default function InvoicesPage() {
                 await Promise.all(
                     updates.map(({ inv, update }) => Invoice.update(inv.id, update))
                 );
+                if (!mountedRef.current) return;
                 const updatedMap = new Map(updates.map(({ inv, update }) => [inv.id, update]));
                 resolvedInvoices = invoicesData.map((inv) => ({ ...inv, ...(updatedMap.get(inv.id) || {}) }));
                 setInvoices(resolvedInvoices);
@@ -129,6 +133,7 @@ export default function InvoicesPage() {
                 });
             }
         } catch (error) {
+            if (!mountedRef.current) return;
             console.error("Error loading data:", error);
             if (!background) {
                 toast({
@@ -137,11 +142,13 @@ export default function InvoicesPage() {
                     variant: "destructive",
                 });
             }
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     }, [toast, authUser?.id]);
 
     useEffect(() => {
+        mountedRef.current = true;
         const userId = authUser?.id;
         const cached = userId ? getCachedInvoices(userId) : null;
         if (cached) {
@@ -163,6 +170,7 @@ export default function InvoicesPage() {
         } else {
             loadData(false);
         }
+        return () => { mountedRef.current = false; };
     // Run when auth user becomes available or on mount; loadData is stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authUser?.id]);
@@ -360,7 +368,7 @@ export default function InvoicesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background w-full min-w-0 mobile-page">
+        <div className="min-h-screen bg-background w-full min-w-0 mobile-page px-4 sm:px-6">
             <div className="max-w-7xl mx-auto w-full min-w-0">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}

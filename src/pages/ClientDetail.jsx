@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Client, Invoice, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,11 +60,14 @@ export default function ClientDetail() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [statusFilter, setStatusFilter] = useState('all');
     const { toast } = useToast();
+    const mountedRef = useRef(true);
 
     useEffect(() => {
+        mountedRef.current = true;
         if (clientId) {
             loadData();
         }
+        return () => { mountedRef.current = false; };
     }, [clientId]);
 
     const loadData = async () => {
@@ -73,7 +76,7 @@ export default function ClientDetail() {
             setClient(null);
             setInvoices([]);
             try { setUser(await User.me()); } catch { /* ignore */ }
-            setIsLoading(false);
+            if (mountedRef.current) setIsLoading(false);
             return;
         }
         try {
@@ -82,15 +85,18 @@ export default function ClientDetail() {
                 Invoice.filter({ client_id: clientId }, '-created_date'),
                 User.me()
             ]);
+            if (!mountedRef.current) return;
             setClient(clientData?.[0] || null);
             setInvoices(invoicesData || []);
             setUser(userData);
         } catch (error) {
+            if (!mountedRef.current) return;
             console.error("Error loading client data:", error);
             setClient(null);
             setInvoices([]);
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSaveClient = async (clientData) => {

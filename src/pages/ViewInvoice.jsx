@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail, Payment } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import LogoImage from '@/components/shared/LogoImage';
+import { canEditInvoice, canRecordPayment } from '@/logic';
 
 export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClose }) {
     const [invoice, setInvoice] = useState(null);
@@ -36,21 +37,28 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
     const location = useLocation();
     const navigate = useNavigate();
     const invoiceId = invoiceIdProp ?? new URLSearchParams(location.search).get('id');
+    const mountedRef = useRef(true);
+    const loadIdRef = useRef(0);
 
     useEffect(() => {
+        mountedRef.current = true;
         if (invoiceId) {
             loadInvoiceData(invoiceId);
         } else {
             setError("Invoice ID not found");
             setIsLoading(false);
         }
+        return () => { mountedRef.current = false; };
     }, [invoiceId]);
 
     const loadInvoiceData = async (invoiceId) => {
+        const thisLoadId = loadIdRef.current + 1;
+        loadIdRef.current = thisLoadId;
         setIsLoading(true);
         setError(null);
         try {
             const invoiceData = await Invoice.get(invoiceId);
+            if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
             if (!invoiceData) throw new Error("Invoice not found");
 
             // Ensure invoice has items array (default to empty array if undefined)
@@ -67,6 +75,8 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                     invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
                     Payment.list('-payment_date').catch(() => [])
                 ]);
+
+                if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
 
                 const clientData = results[0].status === 'fulfilled' ? results[0].value : null;
                 const companyData = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -86,15 +96,18 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 setPaymentSchedule(invoiceData.payment_schedule || []);
             } catch (relatedErr) {
                 // If related data fails to load, still set the invoice
+                if (!mountedRef.current) return;
                 console.warn("Some related data failed to load:", relatedErr);
                 setInvoice(invoiceWithItems);
             }
         } catch (err) {
+            if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
             console.error("Error loading invoice:", err);
             setError(err.message || "Failed to load invoice");
             setInvoice(null);
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     };
     
     const handleSendEmail = async () => {
@@ -233,73 +246,85 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 </Breadcrumb>
             </div>
             )}
-            {/* Action Bar - No Print */}
-            <div className="no-print bg-card border-b border-border p-4 sticky top-0 z-10 shadow-sm">
-                <div className="max-w-5xl mx-auto flex justify-between items-center">
-                    <Button
-                        variant="outline"
-                        onClick={embedded && onClose ? onClose : () => navigate(createPageUrl('Invoices'))}
-                        className="flex items-center gap-2 rounded-xl"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Back
-                    </Button>
-                    
-                    <div className="flex items-center gap-3">
+            {/* Action Bar — white rounded bar, fits + mobile-friendly */}
+            <div className="no-print px-4 sm:px-6 pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div className="max-w-5xl mx-auto bg-white rounded-xl border border-slate-100 shadow-sm p-3 sm:p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                         <Button
-                            onClick={() => setShowPaymentDialog(true)}
-                            disabled={invoice.status === 'paid' || invoice.status === 'cancelled'}
-                            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                            variant="outline"
+                            size="sm"
+                            onClick={embedded && onClose ? onClose : () => navigate(createPageUrl('Invoices'))}
+                            className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
                         >
-                            <DollarSign className="w-4 h-4" />
-                            Record Payment
+                            <ArrowLeft className="w-4 h-4 shrink-0" />
+                            Back
                         </Button>
 
-                        <Button
-                            variant="outline"
-                            onClick={handlePreviewPDF}
-                            className="flex items-center gap-2"
-                        >
-                            <Eye className="w-4 h-4" />
-                            Preview
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <Button
+                                size="sm"
+                                onClick={() => setShowPaymentDialog(true)}
+                                disabled={!canRecordPayment(invoice)}
+                                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
+                            >
+                                <DollarSign className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Record Payment</span>
+                                <span className="sm:hidden">Payment</span>
+                            </Button>
 
-                        <Button
-                            variant="outline"
-                            onClick={handlePrint}
-                            className="flex items-center gap-2"
-                        >
-                            <Printer className="w-4 h-4" />
-                            Print
-                        </Button>
-                        
-                        <Button
-                            variant="outline"
-                            onClick={handleDownloadPDF}
-                            className="flex items-center gap-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            Download PDF
-                        </Button>
-                        
-                        <Button
-                            onClick={handleSendEmail}
-                            disabled={isSending}
-                            className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
-                        >
-                            <Mail className="w-4 h-4" />
-                            {isSending ? 'Sending...' : 'Email Client'}
-                        </Button>
-                        
-                        <Button
-                            variant="outline"
-                            onClick={() => navigate(createPageUrl(`EditInvoice?id=${invoice.id}`))}
-                            className="flex items-center gap-2"
-                            disabled={['paid', 'partial_paid', 'cancelled'].includes(invoice.status)}
-                        >
-                            <Edit className="w-4 h-4" />
-                            Edit
-                        </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePreviewPDF}
+                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            >
+                                <Eye className="w-4 h-4 shrink-0" />
+                                Preview
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePrint}
+                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            >
+                                <Printer className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Print</span>
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDownloadPDF}
+                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            >
+                                <Download className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Download PDF</span>
+                                <span className="sm:hidden">PDF</span>
+                            </Button>
+
+                            <Button
+                                size="sm"
+                                onClick={handleSendEmail}
+                                disabled={isSending}
+                                className="bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
+                            >
+                                <Mail className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Email Client'}</span>
+                                <span className="sm:hidden">{isSending ? '…' : 'Email'}</span>
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(createPageUrl(`EditInvoice?id=${invoice.id}`))}
+                                disabled={!canEditInvoice(invoice)}
+                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            >
+                                <Edit className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Edit</span>
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

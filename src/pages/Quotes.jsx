@@ -27,6 +27,7 @@ export default function QuotesPage() {
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isImporting, setIsImporting] = useState(false);
     const quoteFileInputRef = useRef(null);
+    const mountedRef = useRef(true);
     const { toast } = useToast();
 
     const loadData = useCallback(async () => {
@@ -37,22 +38,27 @@ export default function QuotesPage() {
                 Client.list(),
                 User.me()
             ]);
+            if (!mountedRef.current) return;
             setQuotes(quotesData);
             setClients(clientsData);
             setUser(userData);
         } catch (error) {
+            if (!mountedRef.current) return;
             console.error("Error loading data:", error);
             toast({
                 title: "Could not load quotes",
                 description: error?.message || "Please check your connection and try again.",
                 variant: "destructive",
             });
+        } finally {
+            if (mountedRef.current) setIsLoading(false);
         }
-        setIsLoading(false);
     }, [toast]);
 
     useEffect(() => {
+        mountedRef.current = true;
         loadData();
+        return () => { mountedRef.current = false; };
     }, [loadData]);
 
     useSupabaseRealtime(
