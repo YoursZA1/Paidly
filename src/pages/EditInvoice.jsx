@@ -31,6 +31,8 @@ export default function EditInvoice() {
     const [invoiceData, setInvoiceData] = useState(null);
     const [originalStatus, setOriginalStatus] = useState(null);
     const [originalInvoiceData, setOriginalInvoiceData] = useState(null);
+    const [user, setUser] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -46,11 +48,12 @@ export default function EditInvoice() {
     const loadInitialData = async (id) => {
         setIsLoading(true);
         try {
-            const [invoice, clientsData, bankingData, servicesData] = await Promise.all([
+            const [invoice, clientsData, bankingData, servicesData, userData] = await Promise.all([
                 Invoice.get(id),
                 Client.list("-created_date"),
                 BankingDetail.list("-created_date"),
-                Service.list("-created_date")
+                Service.list("-created_date"),
+                User.me().catch(() => null)
             ]);
             // Ensure invoice_date is set from created_date if not present
             const invoiceWithDate = {
@@ -76,6 +79,7 @@ export default function EditInvoice() {
             setClients(clientsData);
             setBankingDetails(bankingData);
             setServices(servicesData);
+            setUser(userData || null);
         } catch (error) {
             console.error("Error loading data:", error);
             navigate(createPageUrl("Invoices"));
@@ -101,6 +105,7 @@ export default function EditInvoice() {
     };
 
     const handleUpdateInvoice = async (saveAsDraft = null) => {
+        setIsSaving(true);
         try {
             const payments = calculatePayments(invoiceData.total_amount);
             const invoiceDate = new Date(invoiceData.invoice_date || invoiceData.created_date);
@@ -218,6 +223,8 @@ export default function EditInvoice() {
                 description: "Failed to update invoice. Please try again.",
                 variant: "destructive"
             });
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -326,9 +333,11 @@ export default function EditInvoice() {
                         <InvoicePreview
                             invoiceData={invoiceData}
                             clients={clients}
+                            user={user}
                             bankingDetail={bankingDetails?.find(b => b.id === invoiceData?.banking_detail_id) ?? null}
                             onPrevious={handlePrevious}
                             onCreate={handleUpdateInvoice}
+                            loading={isSaving}
                         />
                     )}
                 </motion.div>

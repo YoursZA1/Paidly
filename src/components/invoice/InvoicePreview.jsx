@@ -42,12 +42,12 @@ export default function InvoicePreview({
   const clientList = Array.isArray(clients) ? clients : [];
   const clientResolved = clientList.find(c => c.id === invoiceData?.client_id) ?? null;
   const client = clientProp ?? clientResolved;
+  const currency = (invoiceData?.currency || user?.currency || "ZAR").toString().trim() || "ZAR";
   const items = Array.isArray(invoiceData?.items) ? invoiceData.items : [];
   const projectTitle = invoiceData?.project_title ?? "";
   const projectDescription = invoiceData?.project_description ?? "";
   const deliveryDate = invoiceData?.delivery_date ? new Date(invoiceData.delivery_date) : null;
   const invoiceDate = invoiceData?.invoice_date ? new Date(invoiceData.invoice_date) : null;
-  const currency = invoiceData?.currency || user?.currency || "USD";
   const subtotal = Number(invoiceData?.subtotal ?? 0);
   const taxRate = Number(invoiceData?.tax_rate ?? 0);
   const taxAmount = Number(invoiceData?.tax_amount ?? 0);
@@ -311,7 +311,9 @@ export default function InvoicePreview({
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bill To</p>
                   <h4 className="text-base font-black text-slate-900">{client?.name || "—"}</h4>
                   {client?.contact_person && <p className="text-xs text-slate-500">Attn: {client.contact_person}</p>}
-                  {client?.address && <p className="text-xs text-slate-500 leading-relaxed">{client.address}</p>}
+                  {(client?.address || client?.billing_address) && (
+                    <p className="text-xs text-slate-500 leading-relaxed">{client?.address || client?.billing_address}</p>
+                  )}
                   {client?.email && <p className="text-xs text-slate-500">{client.email}</p>}
                   {client?.phone && <p className="text-xs text-slate-500 tabular-nums">{client.phone}</p>}
                 </div>

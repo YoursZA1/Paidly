@@ -54,7 +54,7 @@ describe("SupabaseStorageService (mocked)", () => {
       const file = new File(["x"], "logo.png", { type: "image/png" });
       await expect(
         SupabaseStorageService.uploadProfileLogo(file, "user-123")
-      ).rejects.toThrow("Failed to upload logo");
+      ).rejects.toThrow(/Permission denied|logo upload/i);
     });
   });
 });

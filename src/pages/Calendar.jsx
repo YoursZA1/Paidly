@@ -1,12 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Invoice, Quote, Client, Task, User } from '@/api/entities';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format, parseISO, isSameDay } from 'date-fns';
-import { CalendarIcon, FileText, DollarSign, Plus, CheckSquare, ListTodo, BarChart2, Settings, Download, Upload } from 'lucide-react';
+import {
+    format,
+    parseISO,
+    isSameDay,
+    startOfMonth,
+    endOfMonth,
+    addMonths,
+    subMonths,
+    eachDayOfInterval,
+    getDay,
+    isToday,
+    addDays,
+    startOfDay,
+} from 'date-fns';
+import {
+    CalendarIcon,
+    FileText,
+    DollarSign,
+    Plus,
+    CheckSquare,
+    ListTodo,
+    BarChart2,
+    Settings,
+    Download,
+    Upload,
+    ChevronLeft,
+    ChevronRight,
+} from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { tasksToCsv, parseTaskCsv, csvRowToTaskPayload } from '@/utils/taskCsvMapping';
 import { formatCurrency } from '../components/CurrencySelector';
@@ -18,6 +43,77 @@ import TeamPerformance from '../components/calendar/TeamPerformance';
 import TaskNotificationService from '../components/calendar/TaskNotificationService';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { supabase } from '@/lib/supabaseClient';
+
+const DAYS_HEADER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getEventPillVariant(event) {
+    if (event.type === 'invoice' || event.type === 'quote') {
+        const s = (event.status || '').toLowerCase();
+        if (s === 'paid') return 'emerald';
+        return 'orange'; // Pending, Overdue, Sent, etc.
+    }
+    if (event.status === 'completed') return 'emerald';
+    if (event.category === 'meeting' || event.category === 'follow_up') return 'blue';
+    if (
+        event.priority === 'high' ||
+        event.priority === 'urgent' ||
+        event.category === 'deadline' ||
+        event.category === 'payment'
+    )
+        return 'orange';
+    return 'blue';
+}
+
+function EventPill({ event, variant, index = 0 }) {
+    const v = variant || getEventPillVariant(event);
+    const styles = {
+        orange: 'bg-orange-50 border-l-4 border-orange-500 text-orange-800',
+        blue: 'bg-blue-50 border-l-4 border-blue-500 text-blue-800',
+        emerald: 'bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800',
+    };
+    const label =
+        event.type === 'invoice'
+            ? (event.client_name || `Invoice #${event.invoice_number || event.data?.invoice_number}`)
+            : event.type === 'quote'
+              ? `Quote #${event.quote_number || event.data?.quote_number}`
+              : event.title;
+    const sub =
+        event.type === 'invoice' || event.type === 'quote'
+            ? event.amount != null && formatCurrency(event.amount, 'ZAR', 0)
+            : event.status === 'completed'
+              ? 'Done'
+              : null;
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: index * 0.03 }}
+            className={`mt-1.5 p-1.5 rounded-lg text-[10px] font-semibold truncate shadow-sm ${styles[v]}`}
+            title={label}
+        >
+            <p className="truncate">{label}</p>
+            {sub && <p className="text-[9px] font-medium opacity-90 truncate">{sub}</p>}
+        </motion.div>
+    );
+}
+
+function AgendaItem({ day, month, title, time, type, color = 'text-slate-900' }) {
+    return (
+        <div className="flex gap-3 items-center">
+            <div className="flex flex-col items-center justify-center w-11 h-11 bg-white rounded-xl shadow-sm border border-slate-100 shrink-0">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{month}</span>
+                <span className="text-sm font-bold text-slate-900 leading-tight">{day}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className={`text-sm font-semibold truncate ${color}`}>{title}</p>
+                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                    {time} • {type}
+                </p>
+            </div>
+        </div>
+    );
+}
 
 export default function CalendarPage() {
     const [invoices, setInvoices] = useState([]);
@@ -26,6 +122,8 @@ export default function CalendarPage() {
     const [clients, setClients] = useState([]);
     const [user, setUser] = useState(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [viewMonth, setViewMonth] = useState(new Date());
+    const [monthInvoices, setMonthInvoices] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showTaskForm, setShowTaskForm] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
@@ -39,6 +137,24 @@ export default function CalendarPage() {
     useEffect(() => {
         loadData();
     }, []);
+
+    /** Fetch invoices for the visible month from Supabase (due_date/delivery_date in range) */
+    useEffect(() => {
+        let cancelled = false;
+        setMonthInvoices(null);
+        const start = startOfMonth(viewMonth).toISOString();
+        const end = endOfMonth(viewMonth).toISOString();
+        const dateCol = 'delivery_date';
+        supabase
+            .from('invoices')
+            .select('id, client_id, delivery_date, total_amount, status, invoice_number')
+            .gte(dateCol, start)
+            .lte(dateCol, end)
+            .then(({ data, error }) => {
+                if (!cancelled && !error) setMonthInvoices(data ?? []);
+            });
+        return () => { cancelled = true; };
+    }, [viewMonth]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -197,25 +313,43 @@ export default function CalendarPage() {
     // Filter to show parent tasks and standalone tasks (not sub-tasks)
     const topLevelTasks = tasks.filter(t => !t.parent_task_id);
 
-    const getEventsForDate = (date) => {
+    /** Invoices whose delivery_date falls in the visible calendar month (from Supabase fetch or filtered full list) */
+    const invoicesForViewMonth = useMemo(() => {
+        const filtered = invoices.filter(i => {
+            const dateField = i.due_date || i.delivery_date;
+            if (!dateField) return false;
+            try {
+                const d = parseISO(dateField);
+                return d >= startOfMonth(viewMonth) && d <= endOfMonth(viewMonth);
+            } catch (e) {
+                return false;
+            }
+        });
+        return monthInvoices !== null ? monthInvoices : filtered;
+    }, [invoices, viewMonth, monthInvoices]);
+
+    /** Map invoice due dates to calendar day cells: get events for a date, optionally scoped to an invoice list (e.g. visible month). */
+    const getEventsForDate = (date, invoiceSource = invoices) => {
         const events = [];
 
-        invoices.forEach(invoice => {
-            if (invoice.delivery_date) {
-                try {
-                    const dueDate = parseISO(invoice.delivery_date);
-                    if (isSameDay(dueDate, date)) {
-                        events.push({
-                            type: 'invoice',
-                            title: `Invoice #${invoice.invoice_number}`,
-                            amount: invoice.total_amount,
-                            status: invoice.status,
-                            data: invoice
-                        });
-                    }
-                } catch (e) {
-                    // Skip invalid dates
+        invoiceSource.forEach(invoice => {
+            const dueDateRaw = invoice.due_date || invoice.delivery_date;
+            if (!dueDateRaw) return;
+            try {
+                const dueDate = parseISO(dueDateRaw);
+                if (isSameDay(dueDate, date)) {
+                    events.push({
+                        type: 'invoice',
+                        invoice_number: invoice.invoice_number,
+                        client_name: getClientById(invoice.client_id)?.name ?? 'Client',
+                        title: `Invoice #${invoice.invoice_number}`,
+                        amount: invoice.total_amount ?? invoice.grand_total,
+                        status: invoice.status,
+                        data: invoice
+                    });
                 }
+            } catch (e) {
+                // Skip invalid dates
             }
         });
 
@@ -226,6 +360,7 @@ export default function CalendarPage() {
                     if (isSameDay(validDate, date)) {
                         events.push({
                             type: 'quote',
+                            quote_number: quote.quote_number,
                             title: `Quote #${quote.quote_number}`,
                             amount: quote.total_amount,
                             status: quote.status,
@@ -252,6 +387,76 @@ export default function CalendarPage() {
         });
     };
 
+    function getCellEventsForDate(date) {
+        const list = [];
+        getEventsForDate(date, invoicesForViewMonth).forEach(ev => list.push(ev));
+        getTasksForDate(date).forEach(task =>
+            list.push({
+                type: 'task',
+                title: task.title,
+                status: task.status,
+                priority: task.priority,
+                category: task.category,
+                invoice_number: null,
+                quote_number: null,
+            })
+        );
+        return list.slice(0, 4);
+    }
+
+    function getUpcomingAgendaItems() {
+        const today = startOfDay(new Date());
+        const end = addDays(today, 14);
+        const items = [];
+        invoices.forEach(inv => {
+            if (!inv.delivery_date) return;
+            try {
+                const d = parseISO(inv.delivery_date);
+                if (d >= today && d <= end) {
+                    items.push({
+                        date: d,
+                        title: `Invoice #${inv.invoice_number}`,
+                        time: 'Due',
+                        type: 'Finance',
+                        color: inv.status === 'overdue' ? 'text-orange-600' : 'text-slate-900',
+                    });
+                }
+            } catch (e) {}
+        });
+        quotes.forEach(q => {
+            if (!q.valid_until) return;
+            try {
+                const d = parseISO(q.valid_until);
+                if (d >= today && d <= end) {
+                    items.push({
+                        date: d,
+                        title: `Quote #${q.quote_number}`,
+                        time: 'Expires',
+                        type: 'Quote',
+                        color: 'text-slate-900',
+                    });
+                }
+            } catch (e) {}
+        });
+        tasks.forEach(task => {
+            if (!task.due_date || task.status === 'completed') return;
+            try {
+                const d = parseISO(task.due_date);
+                if (d >= today && d <= end) {
+                    items.push({
+                        date: d,
+                        title: task.title,
+                        time: 'All Day',
+                        type: task.category === 'meeting' ? 'Meeting' : 'Task',
+                        color: task.priority === 'high' || task.priority === 'urgent' ? 'text-orange-600' : 'text-slate-900',
+                    });
+                }
+            } catch (e) {}
+        });
+        items.sort((a, b) => a.date - b.date);
+        return items.slice(0, 12);
+    }
+
     const filteredTasks = topLevelTasks.filter(task => {
         if (activeTab === 'all') return true;
         if (activeTab === 'pending') return task.status === 'pending' || task.status === 'in_progress';
@@ -260,52 +465,16 @@ export default function CalendarPage() {
         return true;
     });
 
-    const getModifiers = () => {
-        const modifiers = {};
-        const invoiceDates = [];
-        const quoteDates = [];
-        const taskDates = [];
-
-        invoices.forEach(invoice => {
-            if (invoice.delivery_date && (invoice.status === 'sent' || invoice.status === 'overdue')) {
-                try {
-                    invoiceDates.push(parseISO(invoice.delivery_date));
-                } catch (e) {
-                    // Skip invalid dates
-                }
-            }
-        });
-
-        quotes.forEach(quote => {
-            if (quote.valid_until && (quote.status === 'sent' || quote.status === 'viewed')) {
-                try {
-                    quoteDates.push(parseISO(quote.valid_until));
-                } catch (e) {
-                    // Skip invalid dates
-                }
-            }
-        });
-
-        tasks.forEach(task => {
-            if (task.due_date && task.status !== 'completed') {
-                try {
-                    taskDates.push(parseISO(task.due_date));
-                } catch (e) {
-                    // Skip invalid dates
-                }
-            }
-        });
-
-        modifiers.invoice = invoiceDates;
-        modifiers.quote = quoteDates;
-        modifiers.task = taskDates;
-
-        return modifiers;
-    };
-
     const selectedEvents = getEventsForDate(selectedDate);
     const selectedTasks = getTasksForDate(selectedDate);
-    const modifiers = getModifiers();
+    const invoiceCountThisMonth = invoices.filter(i => {
+        try {
+            const d = parseISO(i.delivery_date);
+            return d >= startOfMonth(viewMonth) && d <= endOfMonth(viewMonth);
+        } catch (e) {
+            return false;
+        }
+    }).length;
 
     if (isLoading) {
         return (
@@ -365,54 +534,99 @@ export default function CalendarPage() {
                     </div>
                 </motion.div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Calendar */}
+                <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Calendar + Side Agenda */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="lg:col-span-2"
+                        className="flex-1 flex flex-col lg:flex-row bg-white rounded-2xl lg:rounded-3xl shadow-2xl shadow-slate-200/80 overflow-hidden border border-slate-100 min-w-0"
                     >
-                        <Card className="bg-white shadow-xl border-0">
-                            <CardContent className="p-6">
-                                <style>{`
-                                    .rdp-day_invoice {
-                                        background-color: #dbeafe;
-                                        border-radius: 4px;
-                                    }
-                                    .rdp-day_quote {
-                                        background-color: #fef3c7;
-                                        border-radius: 4px;
-                                    }
-                                    .rdp-day_task {
-                                        background-color: #d1fae5;
-                                        border-radius: 4px;
-                                    }
-                                `}</style>
-                                <CalendarComponent
-                                    mode="single"
-                                    selected={selectedDate}
-                                    onSelect={setSelectedDate}
-                                    modifiers={modifiers}
-                                    className="w-full"
-                                />
-                                
-                                <div className="mt-6 flex flex-wrap gap-4 justify-center">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-primary/20 rounded"></div>
-                                        <span className="text-sm text-slate-600">Invoice Due</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-yellow-200 rounded"></div>
-                                        <span className="text-sm text-slate-600">Quote Expires</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-emerald-200 rounded"></div>
-                                        <span className="text-sm text-slate-600">Task Due</span>
-                                    </div>
+                        <div className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 lg:mb-8">
+                                <div>
+                                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                                        {format(viewMonth, 'MMMM yyyy')}
+                                    </h2>
+                                    <p className="text-sm text-slate-400 font-medium mt-0.5">
+                                        {invoiceCountThisMonth} invoices due this month
+                                    </p>
                                 </div>
-                            </CardContent>
-                        </Card>
+                                <div className="flex items-center gap-2 sm:gap-4">
+                                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                                        <button type="button" onClick={() => setViewMonth(m => subMonths(m, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600" aria-label="Previous month">
+                                            <ChevronLeft className="w-5 h-5" />
+                                        </button>
+                                        <button type="button" onClick={() => setViewMonth(m => addMonths(m, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600" aria-label="Next month">
+                                            <ChevronRight className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                    <Button onClick={() => { setEditingTask(null); setShowTaskForm(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 sm:px-6 py-2.5 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-orange-200">
+                                        <Plus className="w-5 h-5" /> Add Event
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+                                {DAYS_HEADER.map(day => (
+                                    <div key={day} className="bg-slate-50 py-2 sm:py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                        {day}
+                                    </div>
+                                ))}
+                                {(() => {
+                                    const start = startOfMonth(viewMonth);
+                                    const end = endOfMonth(viewMonth);
+                                    const days = eachDayOfInterval({ start, end });
+                                    const pad = getDay(start);
+                                    const total = pad + days.length;
+                                    const rows = Math.ceil(total / 7);
+                                    let cells = [];
+                                    for (let i = 0; i < pad; i++) cells.push(null);
+                                    days.forEach(d => cells.push(d));
+                                    const remainder = rows * 7 - cells.length;
+                                    for (let i = 0; i < remainder; i++) cells.push(null);
+                                    return cells.map((date, idx) => {
+                                        if (!date) {
+                                            return <div key={`e-${idx}`} className="bg-slate-50/50 min-h-[80px] sm:min-h-[100px]" />;
+                                        }
+                                        const dayEvents = getCellEventsForDate(date);
+                                        const today = isToday(date);
+                                        const isSelected = isSameDay(date, selectedDate);
+                                        return (
+                                            <button
+                                                key={date.toISOString()}
+                                                type="button"
+                                                onClick={() => setSelectedDate(date)}
+                                                className={`bg-white min-h-[80px] sm:min-h-[120px] p-2 sm:p-3 text-left hover:bg-slate-50 active:scale-95 transition-all rounded-sm ${isSelected ? 'ring-2 ring-inset ring-primary' : ''}`}
+                                            >
+                                                <span className={`inline-flex items-center justify-center text-sm font-bold w-7 h-7 rounded-full shrink-0 ${today ? 'bg-orange-600 text-white ring-2 ring-orange-400 ring-offset-2' : 'text-slate-600'}`}>
+                                                    {format(date, 'd')}
+                                                </span>
+                                                <div className="mt-1 space-y-0.5">
+                                                    {dayEvents.map((ev, i) => <EventPill key={i} event={ev} index={i} />)}
+                                                </div>
+                                            </button>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs">
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-200 border-l-4 border-orange-500" /> Finance</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-200 border-l-4 border-blue-500" /> Meeting</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-200 border-l-4 border-emerald-500" /> Done</span>
+                            </div>
+                        </div>
+                        <div className="w-full lg:w-80 shrink-0 bg-slate-50/80 border-t lg:border-t-0 lg:border-l border-slate-100 p-4 sm:p-6 lg:p-8">
+                            <h3 className="text-lg font-black text-slate-900 mb-4">Upcoming</h3>
+                            <div className="space-y-4">
+                                {getUpcomingAgendaItems().length === 0 ? (
+                                    <p className="text-sm text-slate-400">No upcoming events this week.</p>
+                                ) : (
+                                    getUpcomingAgendaItems().map((item, i) => (
+                                        <AgendaItem key={i} day={format(item.date, 'd')} month={format(item.date, 'MMM')} title={item.title} time={item.time} type={item.type} color={item.color} />
+                                    ))
+                                )}
+                            </div>
+                        </div>
                     </motion.div>
 
                     {/* Events for Selected Date */}
@@ -420,6 +634,7 @@ export default function CalendarPage() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
+                        className="w-full lg:w-96 shrink-0"
                     >
                         <Card className="bg-white shadow-xl border-0">
                             <CardHeader className="border-b border-slate-100">
@@ -488,64 +703,6 @@ export default function CalendarPage() {
                                         ))}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Upcoming Events */}
-                        <Card className="bg-white shadow-xl border-0 mt-6">
-                            <CardHeader className="border-b border-slate-100">
-                                <CardTitle className="text-base">Upcoming Due Dates</CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-4">
-                                <div className="space-y-3">
-                                    {[...invoices, ...quotes]
-                                        .filter(item => {
-                                            const date = item.delivery_date || item.valid_until;
-                                            if (!date) return false;
-                                            try {
-                                                return parseISO(date) > new Date();
-                                            } catch (e) {
-                                                return false;
-                                            }
-                                        })
-                                        .sort((a, b) => {
-                                            try {
-                                                const dateA = parseISO(a.delivery_date || a.valid_until);
-                                                const dateB = parseISO(b.delivery_date || b.valid_until);
-                                                return dateA - dateB;
-                                            } catch (e) {
-                                                return 0;
-                                            }
-                                        })
-                                        .slice(0, 5)
-                                        .map((item, index) => {
-                                            const isInvoice = !!item.invoice_number;
-                                            try {
-                                                const dueDate = parseISO(item.delivery_date || item.valid_until);
-                                                return (
-                                                <div
-                                                    key={index}
-                                                    className="flex items-center justify-between text-sm"
-                                                >
-                                                    <div>
-                                                        <span className="font-medium text-slate-900">
-                                                            {format(dueDate, 'MMM d')}
-                                                        </span>
-                                                        <span className="text-slate-500 ml-2">
-                                                            {isInvoice ? 'Invoice' : 'Quote'} #{item.invoice_number || item.quote_number}
-                                                        </span>
-                                                    </div>
-                                                    <span className="font-semibold text-slate-700">
-                                                        {formatCurrency(item.total_amount, 'ZAR', 0)}
-                                                    </span>
-                                                </div>
-                                            );
-                                            } catch (e) {
-                                                return null;
-                                            }
-                                        })
-                                        .filter(Boolean)}
-                                </div>
                             </CardContent>
                         </Card>
                     </motion.div>
