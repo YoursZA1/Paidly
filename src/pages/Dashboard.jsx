@@ -1485,7 +1485,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-2 border-border text-foreground font-semibold hover:bg-muted text-base transition-all active:scale-[0.98] touch-manipulation"
+                className="rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-2 border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/20 hover:border-primary/60 text-base transition-all active:scale-[0.98] touch-manipulation"
                 onClick={() => navigate(createPageUrl("CashFlow"))}
               >
                 <Receipt className="w-5 h-5 shrink-0" />
@@ -1899,7 +1899,7 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-2 border-border text-foreground font-semibold hover:bg-muted text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
+                  className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-2 border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/20 hover:border-primary/60 text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
                   onClick={() => navigate(createPageUrl("CashFlow"))}
                 >
                   <Receipt className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
@@ -1977,8 +1977,8 @@ export default function Dashboard() {
                         </Button>
                       </Link>
                       <Link to={createPageUrl("CashFlow")}>
-                        <Button size="sm" variant="outline" className="rounded-lg">
-                          Add expense
+                        <Button size="sm" className="rounded-lg bg-primary/10 text-primary border-2 border-primary/40 hover:bg-primary/20 hover:border-primary/60 font-semibold">
+                          Add Expense
                         </Button>
                       </Link>
                     </div>

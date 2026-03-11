@@ -77,14 +77,8 @@ function InvoicePreview({
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgProps = pdf.getImageProperties(imgData);
-    let width = pdfWidth;
-    let height = (imgProps.height * pdfWidth) / imgProps.width;
-    if (height > pdfHeight) {
-      height = pdfHeight;
-      width = (imgProps.width * pdfHeight) / imgProps.height;
-    }
-    pdf.addImage(imgData, "PNG", 0, 0, width, height);
+    // Document is fixed A4 size so image fits one page
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
     return pdf;
   };
 
@@ -230,11 +224,13 @@ function InvoicePreview({
           )}
         </CardHeader>
         <CardContent className="p-0 overflow-x-hidden">
-          {/* Document container: 48px padding, A4-style, brand bar + status stamp (ref for PDF capture) */}
-          <div
-            ref={previewRef}
-            className="relative w-full max-w-[800px] mx-auto bg-white border border-slate-100 shadow-2xl min-h-[600px] sm:min-h-[1000px] flex flex-col rounded-sm overflow-hidden"
-          >
+          {/* Document container: fixed A4 size so mobile and web match and PDF fits one page */}
+          <div className="w-full overflow-x-auto overflow-y-hidden" style={{ minHeight: "320px" }}>
+            <div
+              ref={previewRef}
+              className="invoice-document relative mx-auto bg-white border border-slate-100 shadow-2xl flex flex-col rounded-sm overflow-hidden shrink-0"
+              style={{ width: "210mm", minHeight: "297mm" }}
+            >
             {/* Vertical brand bar (left edge — custom stationery feel) */}
             <div className="absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 bg-primary rounded-r" aria-hidden />
 
@@ -462,7 +458,7 @@ function InvoicePreview({
             </div>
           </div>
 
-          {/* Action buttons below document — stack on mobile, full-width tap targets */}
+          {/* Action buttons below document */}
           <div
             className={`flex flex-col-reverse sm:flex-row mt-4 sm:mt-8 gap-3 px-4 pb-4 sm:pb-4 ${
               showBack && !previewOnly ? "sm:justify-between" : "sm:justify-end"

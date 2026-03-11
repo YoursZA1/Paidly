@@ -206,7 +206,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b shrink-0">
-                    <h2 className="text-xl font-semibold">
+                    <h2 className="text-xl font-semibold text-primary">
                         {expense ? 'Edit Expense' : 'Add New Expense'}
                     </h2>
                     <Button variant="ghost" size="icon" onClick={onCancel}>

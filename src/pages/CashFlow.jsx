@@ -330,7 +330,7 @@ export default function CashFlowPage() {
                                 setEditingExpense(null);
                                 setShowExpenseForm(true);
                             }}
-                            className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] gap-2"
+                            className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white border-0 gap-2 font-semibold"
                         >
                             <Plus className="w-4 h-4" />
                             <span className="hidden sm:inline">Add Expense</span>
