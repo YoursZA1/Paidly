@@ -9,13 +9,14 @@ import RecordPaymentModal from '@/components/invoice/RecordPaymentModal';
 import PaymentHistory from '@/components/payments/PaymentHistory';
 import PaymentSchedule from '@/components/payments/PaymentSchedule';
 import PaymentScheduleDialog from '@/components/payments/PaymentScheduleDialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import InvoicePreviewSkeleton from '@/components/invoice/InvoicePreviewSkeleton';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
+import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import LogoImage from '@/components/shared/LogoImage';
@@ -57,7 +58,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         setIsLoading(true);
         setError(null);
         try {
-            const invoiceData = await Invoice.get(invoiceId);
+            const invoiceData = await withTimeoutRetry(() => Invoice.get(invoiceId), 5000, 1);
             if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
             if (!invoiceData) throw new Error("Invoice not found");
 
@@ -67,14 +68,14 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 items: Array.isArray(invoiceData.items) ? invoiceData.items : []
             };
 
-            // Load related data with error handling for each
+            // Load related data with error handling for each (parallel)
             try {
-                const results = await Promise.allSettled([
+                const results = await withTimeoutRetry(() => Promise.allSettled([
                     Client.get(invoiceData.client_id).catch(() => null),
                     User.me().catch(() => null),
                     invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
                     Payment.list('-payment_date').catch(() => [])
-                ]);
+                ]), 5000, 1);
 
                 if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
 
@@ -210,9 +211,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
     if (isLoading) {
         return (
             <div className="bg-slate-100 p-8 animate-fade-in min-h-[60vh]" role="status" aria-label="Loading invoice">
-                <Skeleton className="h-12 w-1/3 mb-4 animate-fade-in-up" style={{ animationDelay: "0.05s", animationFillMode: "backwards" }} />
-                <Skeleton className="h-16 w-full mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s", animationFillMode: "backwards" }} />
-                <Skeleton className="h-[600px] w-full animate-fade-in-up" style={{ animationDelay: "0.15s", animationFillMode: "backwards" }} />
+                <InvoicePreviewSkeleton />
             </div>
         )
     }

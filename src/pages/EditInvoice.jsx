@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { appendHistory, createHistoryEntry, diffInvoiceFields } from "@/utils/invoiceHistory";
 import { logInvoiceUpdated, logStatusChanged } from "@/utils/auditLogger";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import PaymentBreakdown from "../components/invoice/PaymentBreakdown";
@@ -52,13 +53,13 @@ export default function EditInvoice() {
     const loadInitialData = async (id) => {
         setIsLoading(true);
         try {
-            const [invoice, clientsData, bankingData, servicesData, userData] = await Promise.all([
+            const [invoice, clientsData, bankingData, servicesData, userData] = await withTimeoutRetry(() => Promise.all([
                 Invoice.get(id),
                 Client.list("-created_date"),
                 BankingDetail.list("-created_date"),
                 Service.list("-created_date"),
                 User.me().catch(() => null)
-            ]);
+            ]), 5000, 1);
             if (!mountedRef.current) return;
 
             // Ensure invoice_date is set from created_date if not present

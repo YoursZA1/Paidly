@@ -10,6 +10,8 @@ import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { useAppStore } from "@/stores/useAppStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link, useNavigate } from "react-router-dom";
@@ -226,14 +228,14 @@ export default function Dashboard() {
     }
   }, [isAdmin, toast]);
 
-  const [invoices, setInvoices] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [user, setUser] = useState(null);
+  const [invoicesState, setInvoicesState] = useState([]);
+  const [clientsState, setClientsState] = useState([]);
+  const [expensesState, setExpensesState] = useState([]);
+  const [paymentsState, setPaymentsState] = useState([]);
+  const [userState, setUserState] = useState(null);
   const [userCurrencyPreference, setUserCurrencyPreference] = useState('ZAR');
   const [hasBankingDetails, setHasBankingDetails] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingState, setIsLoadingState] = useState(true);
   const [adminStats, setAdminStats] = useState({
     totalUsers: 0,
     activeSubscribers: 0,
@@ -282,6 +284,22 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const mountedRef = useRef(true);
 
+  // Non-admin: read from global store (filled by Layout fetchAll). Admin: use local state from loadAdminData.
+  const storeInvoices = useAppStore((s) => s.invoices);
+  const storeClients = useAppStore((s) => s.clients);
+  const storeExpenses = useAppStore((s) => s.expenses);
+  const storePayments = useAppStore((s) => s.payments);
+  const storeUser = useAppStore((s) => s.userProfile);
+  const storeIsLoading = useAppStore((s) => s.isLoading);
+  const fetchAll = useAppStore((s) => s.fetchAll);
+
+  const invoices = isAdmin ? invoicesState : storeInvoices;
+  const clients = isAdmin ? clientsState : storeClients;
+  const expenses = isAdmin ? expensesState : storeExpenses;
+  const payments = isAdmin ? paymentsState : storePayments;
+  const user = isAdmin ? userState : storeUser;
+  const isLoading = isAdmin ? isLoadingState : storeIsLoading;
+
   const openAccount = (user) => {
     const params = new URLSearchParams();
     if (user?.id) params.set('userId', user.id);
@@ -291,29 +309,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!authUser?.id) return;
+    if (!authUser?.id) return () => { mountedRef.current = false; };
     if (isAdmin) {
       loadAdminData();
-    } else {
-      // Hydrate from cache first for instant UI, then fetch fresh data in background
-      const cached = getCachedDashboard(authUser.id);
-      if (cached) {
-        setInvoices(Array.isArray(cached.invoices) ? cached.invoices : []);
-        setClients(Array.isArray(cached.clients) ? cached.clients : []);
-        setExpenses(Array.isArray(cached.expenses) ? cached.expenses : []);
-        setPayments(Array.isArray(cached.payments) ? cached.payments : []);
-        setUser(cached.user || null);
-        setUserCurrencyPreference(cached.userCurrencyPreference || 'ZAR');
-        setHasBankingDetails(Boolean(cached.hasBankingDetails));
-        setBusinessGoal2026(cached.businessGoal2026 ?? null);
-        setIsLoading(false);
-      } else {
-        setIsLoading(true);
-      }
-      loadUserData(!!cached, authUser.id);
+      return () => { mountedRef.current = false; };
     }
-    return () => { mountedRef.current = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setIsLoadingState(false);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [bankingDetailsData, goal2026] = await Promise.all([
+          BankingDetail.list(),
+          getBusinessGoal(authUser.id, 2026).catch(() => null),
+        ]);
+        if (cancelled || !mountedRef.current) return;
+        const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
+        setHasBankingDetails(bankingDetails.length > 0);
+        setBusinessGoal2026(goal2026 ?? null);
+        const profile = useAppStore.getState().userProfile;
+        if (profile?.currency) setUserCurrencyPreference(profile.currency);
+      } catch (err) {
+        if (!cancelled && mountedRef.current) console.warn("Dashboard banking/goal fetch failed:", err);
+      }
+    })();
+    return () => { cancelled = true; mountedRef.current = false; };
   }, [isAdmin, authUser?.id]);
 
   // Removed calculateFinancialMetrics (no longer used)
@@ -435,7 +454,7 @@ export default function Dashboard() {
   };
 
   const loadAdminData = useCallback(async () => {
-    setIsLoading(true);
+    setIsLoadingState(true);
     try {
       const currencyPref = await getUserCurrency();
       if (!mountedRef.current) return;
@@ -445,13 +464,13 @@ export default function Dashboard() {
 
       // Use Excel user service instead of broken User entity
       const allUsers = userService.getAllUsers();
-      const [allInvoices, allPayments] = await Promise.all([
+      const [allInvoices, allPayments] = await withTimeoutRetry(() => Promise.all([
         Invoice.list(),
         Payment.list().catch(() => []),
-      ]);
+      ]), 5000, 1);
       if (!mountedRef.current) return;
-      setInvoices(allInvoices);
-      setPayments(Array.isArray(allPayments) ? allPayments : []);
+      setInvoicesState(allInvoices);
+      setPaymentsState(Array.isArray(allPayments) ? allPayments : []);
       // Removed allQuotes (unused)
 
       // Calculate invoice status breakdown
@@ -628,15 +647,15 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (mountedRef.current) setIsLoadingState(false);
     }
   }, [toast]); // useCallback
 
   const loadUserData = useCallback(async (hasCachedData = false, authUserId = null) => {
-    if (!hasCachedData) setIsLoading(true);
+    if (!hasCachedData) setIsLoadingState(true);
     try {
       // Fetch profile, invoices, clients, expenses, payments, banking details, and business goal in parallel
-      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goal2026] = await Promise.all([
+      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goal2026] = await withTimeoutRetry(() => Promise.all([
         (async () => {
           try {
             return await User.me();
@@ -650,7 +669,7 @@ export default function Dashboard() {
         Payment.list().catch(() => []),
         BankingDetail.list(),
         authUserId ? getBusinessGoal(authUserId, 2026).catch(() => null) : Promise.resolve(null)
-      ]);
+      ]), 5000, 1);
 
       if (!userResult) {
         throw new Error("Not authenticated");
@@ -661,11 +680,11 @@ export default function Dashboard() {
       const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
       const currencyFromProfile = userResult?.currency || 'ZAR';
 
-      setInvoices(invoicesData);
-      setClients(clientsData);
-      setUser(userResult);
-      setExpenses(expensesData);
-      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setInvoicesState(invoicesData);
+      setClientsState(clientsData);
+      setUserState(userResult);
+      setExpensesState(expensesData);
+      setPaymentsState(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetails.length > 0);
       setUserCurrencyPreference(currencyFromProfile);
       setBusinessGoal2026(goal2026 || null);
@@ -690,7 +709,7 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (mountedRef.current) setIsLoadingState(false);
     }
   }, [toast]);
 
@@ -707,7 +726,7 @@ export default function Dashboard() {
       if (isAdmin) {
         loadAdminData();
       } else {
-        loadUserData(true, authUser?.id); // refresh in background without clearing current UI
+        fetchAll(); // refresh store in background
       }
     },
     { channelName: "dashboard-kpis" }

@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Invoice, Client, Service, Quote } from "@/api/entities";
+import { Invoice, Client, Service, Quote, BankingDetail } from "@/api/entities";
 import InvoiceDetails from "@/components/invoice/InvoiceDetails";
 import InvoicePreview from "@/components/invoice/InvoicePreview";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
 import { createPageUrl } from "@/utils";
-import { Skeleton } from "@/components/ui/skeleton";
+import InvoicePreviewSkeleton from "@/components/invoice/InvoicePreviewSkeleton";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export default function CreateInvoice() {
 
   const [clients, setClients] = useState([]);
   const [services, setServices] = useState([]);
+  const [bankingDetails, setBankingDetails] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(true);
@@ -55,16 +57,18 @@ export default function CreateInvoice() {
         const quoteId = urlParams.get("quoteId");
         const clientId = urlParams.get("client_id");
 
-        const [clientsList, servicesList] = await Promise.all([
+        const [clientsList, servicesList, bankingList, quoteData] = await withTimeoutRetry(() => Promise.all([
           Client.list("-created_date"),
           Service.list("-created_date"),
-        ]);
+          BankingDetail.list().catch(() => []),
+          quoteId ? Quote.get(quoteId).catch(() => null) : Promise.resolve(null),
+        ]), 5000, 1);
         setClients(clientsList || []);
         setServices(servicesList || []);
+        setBankingDetails(Array.isArray(bankingList) ? bankingList : []);
 
-        if (quoteId) {
-          try {
-            const quote = await Quote.get(quoteId);
+        if (quoteData && quoteId) {
+          const quote = quoteData;
             const items = Array.isArray(quote?.items) ? quote.items : [];
             const dueDate = quote?.valid_until
               ? new Date(quote.valid_until).toISOString().split("T")[0]
@@ -120,15 +124,12 @@ export default function CreateInvoice() {
                 "Client, items, and totals have been filled from the quote. You can edit and create the invoice.",
               variant: "default",
             });
-          } catch (quoteErr) {
-            console.error("Error loading quote for conversion:", quoteErr);
-            toast({
-              title: "✗ Quote not found",
-              description:
-                "The quote could not be loaded. You can still create an invoice from scratch.",
-              variant: "destructive",
-            });
-          }
+        } else if (quoteId && !quoteData) {
+          toast({
+            title: "✗ Quote not found",
+            description: "The quote could not be loaded. You can still create an invoice from scratch.",
+            variant: "destructive",
+          });
         } else if (clientId && clientsList.find((c) => c.id === clientId)) {
           setInvoiceData((prev) => ({ ...prev, client_id: clientId }));
         }
@@ -286,7 +287,7 @@ export default function CreateInvoice() {
     return (
       <div className="min-h-screen bg-background p-4 sm:p-6">
         <div className="max-w-7xl mx-auto">
-          <Skeleton className="h-96 w-full rounded-xl" />
+          <InvoicePreviewSkeleton />
         </div>
       </div>
     );
@@ -376,6 +377,7 @@ export default function CreateInvoice() {
                 user={user}
                 previewOnly
                 loading={false}
+                bankingDetail={invoiceData.banking_detail_id ? (bankingDetails.find(b => b.id === invoiceData.banking_detail_id) || null) : null}
               />
             </div>
             <div className="mt-6 space-y-3">

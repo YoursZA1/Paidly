@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 /* Executive Canvas: A4-style document with 48px padding, logo left / INVOICE right header,
    left-edge brand bar, status watermark, slate-900 footer with Bank Details left / Grand Total right. */
 
-export default function InvoicePreview({
+function InvoicePreview({
   invoiceData,
   clients,
   client: clientProp,
@@ -530,3 +530,5 @@ InvoicePreview.propTypes = {
   previewOnly: PropTypes.bool,
   bankingDetail: PropTypes.object,
 };
+
+export default memo(InvoicePreview);

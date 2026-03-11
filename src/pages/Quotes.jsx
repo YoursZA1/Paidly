@@ -14,6 +14,7 @@ import { motion } from "framer-motion";
 import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
 export default function QuotesPage() {
     const [quotes, setQuotes] = useState([]);
@@ -33,11 +34,11 @@ export default function QuotesPage() {
     const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [quotesData, clientsData, userData] = await Promise.all([
+            const [quotesData, clientsData, userData] = await withTimeoutRetry(() => Promise.all([
                 Quote.list("-created_date"),
                 Client.list(),
                 User.me()
-            ]);
+            ]), 5000, 1);
             if (!mountedRef.current) return;
             setQuotes(quotesData);
             setClients(clientsData);

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Client, Invoice, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   UserPlusIcon,
+  PlusIcon,
   EnvelopeIcon,
   PhoneIcon,
   PencilSquareIcon,
@@ -69,6 +71,66 @@ function clientOutstandingMap(invoices) {
   return out;
 }
 
+/** Mobile swipe-to-bill card: drag right to reveal orange "Bill" action; >100px triggers create invoice. */
+function QuickBillCard({ client, balance, userCurrency, onSelectClient, onCreateInvoice }) {
+  const x = useMotionValue(0);
+  const iconOpacity = useTransform(x, [0, 100], [0, 1]);
+  const iconScale = useTransform(x, [0, 100], [0.5, 1.2]);
+  const triggeredBillRef = React.useRef(false);
+
+  const handleDragEnd = (_, info) => {
+    if (info.offset.x > 100) {
+      triggeredBillRef.current = true;
+      onCreateInvoice(client);
+    }
+    animate(x, 0, { type: "spring", stiffness: 400, damping: 30 });
+  };
+
+  const handleTap = () => {
+    if (triggeredBillRef.current) {
+      triggeredBillRef.current = false;
+      return;
+    }
+    onSelectClient(client);
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-[28px] bg-orange-500">
+      <motion.div
+        style={{ opacity: iconOpacity, scale: iconScale }}
+        className="absolute inset-y-0 left-0 w-20 flex items-center justify-center text-white pointer-events-none"
+        aria-hidden
+      >
+        <PlusIcon className="w-6 h-6 stroke-[3]" />
+      </motion.div>
+      <motion.button
+        type="button"
+        drag="x"
+        dragConstraints={{ left: 0, right: 120 }}
+        dragElastic={0.1}
+        style={{ x }}
+        onDragEnd={handleDragEnd}
+        onTap={handleTap}
+        className="relative w-full cursor-grab active:cursor-grabbing text-left bg-white p-5 rounded-[28px] border border-slate-100 flex justify-between items-center active:scale-[0.97] transition-transform shadow-sm min-w-0"
+        whileTap={{ scale: 1 }}
+      >
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="font-bold text-slate-900 truncate">{client.name}</span>
+          <span className="text-[11px] text-slate-400 truncate">{client.email || client.company || "—"}</span>
+        </div>
+        <div className="text-right ml-4 shrink-0">
+          <p className={`font-black text-xs tabular-nums ${balance > 0 ? "text-orange-500" : "text-emerald-500"}`}>
+            {formatCurrency(balance, userCurrency)}
+          </p>
+          <span className="text-[9px] font-black uppercase tracking-widest opacity-40">
+            {balance > 0 ? "Overdue" : "Settled"}
+          </span>
+        </div>
+      </motion.button>
+    </div>
+  );
+}
+
 export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -105,22 +167,6 @@ export default function Clients() {
     );
   }, [clients, searchTerm]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (searchFilteredClients.length > 0 && !activeClient) {
-      setActiveClient(searchFilteredClients[0]);
-    }
-    if (
-      activeClient &&
-      !searchFilteredClients.find((c) => c.id === activeClient.id)
-    ) {
-      setActiveClient(searchFilteredClients[0] || null);
-    }
-  }, [searchFilteredClients, activeClient]);
-
   const loadData = async (showRefreshingState = false) => {
     if (showRefreshingState) {
       setIsRefreshing(true);
@@ -155,6 +201,24 @@ export default function Clients() {
       setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    loadData();
+    // Intentionally run only on mount; loadData is stable for initial load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (searchFilteredClients.length > 0 && !activeClient) {
+      setActiveClient(searchFilteredClients[0]);
+    }
+    if (
+      activeClient &&
+      !searchFilteredClients.find((c) => c.id === activeClient.id)
+    ) {
+      setActiveClient(searchFilteredClients[0] || null);
+    }
+  }, [searchFilteredClients, activeClient]);
 
   const handleSaveClient = async (clientData) => {
     if (!clientData.name?.trim()) {
@@ -308,9 +372,79 @@ export default function Clients() {
   }, [activeInvoices]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-slate-50/50 min-h-0">
-      {/* 1. CLIENT LIST SIDEBAR */}
-      <aside className="w-72 sm:w-80 md:w-96 shrink-0 bg-white border-r border-slate-200 flex flex-col min-h-0">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] bg-slate-50/50 min-h-0 w-full min-w-0 overflow-x-hidden">
+      {/* Mobile: vertical card list (< 1024px) */}
+      <div className="lg:hidden flex flex-col w-full min-w-0 flex-1 overflow-hidden">
+        <div className="flex flex-col w-full px-4 pt-4 space-y-3 flex-1 min-h-0 overflow-hidden">
+          <div className="flex justify-between items-center mb-2 shrink-0">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Clients</h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => loadData(true)}
+                disabled={isRefreshing || isLoading}
+                className="p-2 bg-slate-50 rounded-xl active:scale-95 transition-all disabled:opacity-50"
+                aria-label="Refresh clients"
+              >
+                <ArrowPathIcon
+                  className={`w-5 h-5 text-slate-400 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditingClient(null); setShowForm(true); }}
+                className="p-2 bg-orange-500 rounded-xl active:scale-95 shadow-lg shadow-orange-100 transition-all text-white"
+                aria-label="Add client"
+              >
+                <UserPlusIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <input
+            type="text"
+            placeholder="Search clients..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-base focus:ring-2 focus:ring-orange-500/20 placeholder:text-slate-300 outline-none min-w-0"
+            style={{ fontSize: "16px" }}
+          />
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pb-24 min-h-0">
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="h-20 rounded-[28px] bg-slate-100 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : searchFilteredClients.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-sm">
+                {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
+              </div>
+            ) : (
+              searchFilteredClients.map((client) => {
+                const balance = outstandingByClient[client.id] ?? 0;
+                return (
+                  <QuickBillCard
+                    key={client.id}
+                    client={client}
+                    balance={balance}
+                    userCurrency={userCurrency}
+                    onSelectClient={setActiveClient}
+                    onCreateInvoice={(c) => navigate(createPageUrl("CreateInvoice") + "?client_id=" + encodeURIComponent(c.id))}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: sidebar list (≥ 1024px) */}
+      <aside className="hidden lg:flex w-72 sm:w-80 md:w-96 shrink-0 bg-white border-r border-slate-200 flex-col min-h-0 min-w-0">
         <div className="p-6 border-b border-slate-100 shrink-0">
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-2xl font-black text-slate-900">Clients</h1>
@@ -344,11 +478,12 @@ export default function Clients() {
             placeholder="Search clients..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 border-none rounded-2xl p-3 text-sm focus:ring-2 focus:ring-orange-200 outline-none"
+            className="w-full bg-slate-50 border-none rounded-2xl p-3 text-base focus:ring-2 focus:ring-orange-200 outline-none min-w-0"
+            style={{ fontSize: "16px" }}
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-2 min-h-0">
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
@@ -372,7 +507,7 @@ export default function Clients() {
                   key={client.id}
                   type="button"
                   onClick={() => setActiveClient(client)}
-                  className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left ${
+                  className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
                     isActive
                       ? "bg-orange-50 ring-1 ring-orange-100"
                       : "hover:bg-slate-50"
@@ -406,7 +541,7 @@ export default function Clients() {
       </aside>
 
       {/* 2. CLIENT DETAIL VIEW */}
-      <main className="flex-1 overflow-y-auto min-h-0 p-6 md:p-10">
+      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6 md:p-10">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500">
             <p className="text-lg font-medium">

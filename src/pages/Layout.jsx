@@ -29,6 +29,7 @@ import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
+import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, createAdminPageUrl } from "@/utils";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import {
@@ -631,6 +632,15 @@ export default function Layout({ children, currentPageName }) {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const fetchAll = useAppStore((s) => s.fetchAll);
+  const resetStore = useAppStore((s) => s.reset);
+
+  // Fetch shared app data once when user is present (non-admin). Dashboard and Invoices read from store.
+  useEffect(() => {
+    if (!user?.id) return;
+    if ((user?.role || "").toLowerCase() === "admin") return;
+    fetchAll();
+  }, [user?.id, user?.role, fetchAll]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
   useEffect(() => {
@@ -704,6 +714,7 @@ export default function Layout({ children, currentPageName }) {
 
   const handleLogout = async () => {
     try {
+      resetStore();
       await logout();
       navigate(createPageUrl("Login"));
     } catch (error) {

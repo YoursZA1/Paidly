@@ -19,6 +19,7 @@ import ClientSegmentBadge from "../components/clients/ClientSegmentBadge";
 import IndustryBadge from "../components/clients/IndustryBadge";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
 const INVOICES_PER_PAGE = 5;
 
@@ -80,11 +81,11 @@ export default function ClientDetail() {
             return;
         }
         try {
-            const [clientData, invoicesData, userData] = await Promise.all([
+            const [clientData, invoicesData, userData] = await withTimeoutRetry(() => Promise.all([
                 Client.filter({ id: clientId }),
                 Invoice.filter({ client_id: clientId }, '-created_date'),
                 User.me()
-            ]);
+            ]), 5000, 1);
             if (!mountedRef.current) return;
             setClient(clientData?.[0] || null);
             setInvoices(invoicesData || []);
