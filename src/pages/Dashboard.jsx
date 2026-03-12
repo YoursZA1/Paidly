@@ -1,7 +1,7 @@
 import { OutstandingBalanceService } from "@/services/OutstandingBalanceService";
 import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
 import { Client } from "@/api/entities";
@@ -51,6 +51,8 @@ import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
+
+const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
 const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || 'anon'}`;
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes - still refresh in background
@@ -1699,13 +1701,13 @@ export default function Dashboard() {
           >
             {/* Top row: Total Income (desktop) + Pending Payments */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
-              <div className="hidden md:block">
+              <div className="hidden md:block min-h-[220px]">
                 <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} />
               </div>
               <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
             </div>
 
-            {/* Revenue trend — large chart; line draws in after KPIs (staggered sequence end) */}
+            {/* Revenue trend — large chart; lazy-loaded Recharts to avoid blocking initial paint */}
             <div className="glass-card rounded-fintech border border-border p-6">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                 <h3 className="text-lg font-semibold text-foreground font-display">Revenue trend</h3>
@@ -1727,50 +1729,29 @@ export default function Dashboard() {
                 </div>
               </div>
               {isLoading ? (
-                <Skeleton className="h-64 w-full rounded-xl bg-white/10" />
+                <div className="h-[300px] w-full rounded-xl" aria-hidden>
+                  <Skeleton className="h-full w-full rounded-xl bg-white/10 animate-pulse" />
+                </div>
               ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                  className="w-full h-[260px]"
+                <Suspense
+                  fallback={
+                    <div className="h-[300px] w-full rounded-xl" aria-hidden>
+                      <Skeleton className="h-full w-full rounded-xl bg-white/10 animate-pulse" />
+                    </div>
+                  }
                 >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      key={`revenue-${revenueRange}`}
-                      data={revenueTrendData}
-                      margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="fintechRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" style={{ stopColor: '#475569' }} stopOpacity={0.12} />
-                          <stop offset="100%" style={{ stopColor: '#475569' }} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
-                        labelStyle={{ color: "var(--text-main)" }}
-                        formatter={(value) => [formatCurrency(Number(value || 0), userCurrency), "Revenue"]}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#475569"
-                        strokeWidth={2}
-                        fill="url(#fintechRevenueGrad)"
-                        fillOpacity={1}
-                        dot={false}
-                        activeDot={{ r: 4, fill: "#475569", stroke: "#fff", strokeWidth: 1 }}
-                        isAnimationActive
-                        animationDuration={1200}
-                        animationEasing="ease-in-out"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+                    className="w-full"
+                  >
+                    <DashboardRevenueChart
+                      revenueTrendData={revenueTrendData}
+                      userCurrency={userCurrency}
+                    />
+                  </motion.div>
+                </Suspense>
               )}
             </div>
 

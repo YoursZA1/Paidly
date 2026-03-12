@@ -112,6 +112,8 @@ body {
     --text-main: #0f172a; /* slate-900 */
     --text-muted: #475569; /* slate-600 */
 
+    /* Custom fonts: use font-display: swap to avoid FOIT (Flash of Invisible Text).
+     * Google Fonts link in index.html already includes display=swap for Inter, JetBrains Mono, Plus Jakarta Sans. */
     --font-sans: 'Inter', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
     --font-display: 'Plus Jakarta Sans', Inter, system-ui, sans-serif;

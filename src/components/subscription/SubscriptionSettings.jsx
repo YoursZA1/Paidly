@@ -57,7 +57,7 @@ const TIERS = [
             "Payroll management",
             "Multi-currency support",
         ],
-        buttonText: "Contact Sales",
+        buttonText: "Update to Plan",
     },
 ];
 
@@ -210,9 +210,9 @@ export default function SubscriptionSettings() {
                                 {tier.id === "corporate" ? (
                                     <Button
                                         onClick={() => handleContactSales()}
-                                        className="w-full py-4 rounded-2xl font-bold bg-slate-700 hover:bg-slate-800 text-white"
+                                        className="w-full py-4 rounded-2xl font-bold bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 active:scale-[0.98]"
                                     >
-                                        {tier.buttonText}
+                                        {isCurrent ? "Current Plan" : tier.buttonText}
                                     </Button>
                                 ) : tier.id === "individual" && !isCurrent ? (
                                     <PayFastSubscriptionForm

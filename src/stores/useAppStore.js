@@ -7,6 +7,13 @@ import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
  * Fetched in parallel once when the app loads (Layout). Dashboard and Invoices read from here
  * so navigation feels instant and we avoid redundant requests.
+ *
+ * Performance: Use selective selectors to avoid re-renders when unrelated state changes.
+ * @example
+ * // Prefer: only re-render when invoices change
+ * const invoices = useAppStore((s) => s.invoices);
+ * // Avoid: re-renders on any store change
+ * const state = useAppStore();
  */
 
 export const useAppStore = create((set, get) => ({
