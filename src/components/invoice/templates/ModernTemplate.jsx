@@ -10,36 +10,36 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
 
     return (
         <div className="bg-card">
-            {/* Header with gradient */}
-            <header className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white p-8 -mx-8 -mt-8 mb-8 rounded-t-lg">
-                <div className="flex justify-between items-start">
-                    <div className="max-w-md">
+            {/* Header with gradient — same structure: logo/company left, INVOICE + number right */}
+            <header className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-6 sm:mb-8 rounded-t-lg">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                    <div className="max-w-md min-w-0">
                         {user?.logo_url ? (
-                            <div className="mb-3">
+                            <div className="mb-2 sm:mb-3">
                                 <LogoImage 
                                     src={user.logo_url} 
                                     alt="Company Logo" 
-                                    className="h-14 w-auto max-w-xs object-contain bg-white p-2 rounded shadow-sm" 
-                                    style={{ maxHeight: '56px' }}
+                                    className="h-10 sm:h-14 w-auto max-w-[120px] sm:max-w-xs object-contain bg-white p-1.5 sm:p-2 rounded shadow-sm" 
+                                    style={{ maxHeight: '40px' }}
                                 />
                                 {user?.company_name && (
-                                    <p className="text-white/90 text-sm font-semibold mt-2">{user.company_name}</p>
+                                    <p className="text-white/90 text-xs sm:text-sm font-semibold mt-2">{user.company_name}</p>
                                 )}
                             </div>
                         ) : (
-                            <h1 className="text-2xl font-bold mb-2">
+                            <h1 className="text-xl sm:text-2xl font-bold mb-2">
                                 {user?.company_name || 'Your Company'}
                             </h1>
                         )}
                         {user?.company_address && (
-                            <p className="text-white/90 text-sm whitespace-pre-line leading-relaxed">{user.company_address}</p>
+                            <p className="text-white/90 text-xs sm:text-sm whitespace-pre-line leading-relaxed line-clamp-2">{user.company_address}</p>
                         )}
                     </div>
-                    <div className="text-right">
-                        <h2 className="text-4xl font-light tracking-wide mb-2">{resolvedTitle}</h2>
-                        <p className="text-white/80">#{invoice.invoice_number}</p>
-                        <p className="text-white/80">Issued: {issueDate}</p>
-                        <p className="text-white/80">{dueLabel}: {deliveryDate}</p>
+                    <div className="text-left sm:text-right shrink-0">
+                        <h2 className="text-2xl sm:text-4xl font-light tracking-wide mb-1 sm:mb-2">{resolvedTitle}</h2>
+                        <p className="text-white/80 text-sm">#{invoice.invoice_number}</p>
+                        <p className="text-white/80 text-xs sm:text-sm">Issued: {issueDate}</p>
+                        <p className="text-white/80 text-xs sm:text-sm">{dueLabel}: {deliveryDate}</p>
                     </div>
                 </div>
             </header>
@@ -51,58 +51,58 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 </div>
             )}
 
-            {/* Client Info */}
-            <section className="grid grid-cols-2 gap-8 mb-8">
-                <div className="bg-muted p-5 rounded-xl">
-                    <h3 className="text-xs font-bold text-primary uppercase tracking-wide mb-3">Bill To</h3>
-                    <p className="font-semibold text-foreground text-lg">{client.name}</p>
-                    {client.contact_person && <p className="text-muted-foreground text-sm">Attn: {client.contact_person}</p>}
-                    {client.address && <p className="text-muted-foreground mt-1">{client.address}</p>}
-                    {client.tax_id && <p className="text-muted-foreground text-sm">Tax ID: {client.tax_id}</p>}
+            {/* Client Info — same structure as web: Bill To left, Payment Due right */}
+            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+                <div className="bg-muted p-4 sm:p-5 rounded-xl">
+                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Bill To</h3>
+                    <p className="font-semibold text-foreground text-base sm:text-lg">{client.name}</p>
+                    {client.contact_person && <p className="text-muted-foreground text-xs sm:text-sm">Attn: {client.contact_person}</p>}
+                    {client.address && <p className="text-muted-foreground text-xs sm:text-sm mt-1">{client.address}</p>}
+                    {client.tax_id && <p className="text-muted-foreground text-xs sm:text-sm">Tax ID: {client.tax_id}</p>}
                     
                     {/* Contact Details */}
                     {(client.email || client.phone || client.website) && (
-                        <div className="mt-3 pt-3 border-t border-border space-y-1">
-                            {client.email && <p className="text-muted-foreground text-sm"><span className="font-medium">Email:</span> {client.email}</p>}
-                            {client.phone && <p className="text-muted-foreground text-sm"><span className="font-medium">Phone:</span> {client.phone}</p>}
-                            {client.website && <p className="text-muted-foreground text-sm"><span className="font-medium">Web:</span> {client.website}</p>}
+                        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border space-y-0.5 text-xs sm:text-sm">
+                            {client.email && <p className="text-muted-foreground"><span className="font-medium">Email:</span> {client.email}</p>}
+                            {client.phone && <p className="text-muted-foreground"><span className="font-medium">Phone:</span> {client.phone}</p>}
+                            {client.website && <p className="text-muted-foreground"><span className="font-medium">Web:</span> {client.website}</p>}
                         </div>
                     )}
                 </div>
-                <div className="bg-muted p-5 rounded-xl text-right">
-                    <h3 className="text-xs font-bold text-primary uppercase tracking-wide mb-3">Payment Due</h3>
-                    <p className="font-semibold text-foreground text-lg">{deliveryDate}</p>
-                    <p className="text-2xl font-bold text-primary mt-2 tabular-nums whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</p>
+                <div className="bg-muted p-4 sm:p-5 rounded-xl text-left sm:text-right">
+                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Payment Due</h3>
+                    <p className="font-semibold text-foreground text-base sm:text-lg">{deliveryDate}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-primary mt-2 tabular-nums whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                 </div>
             </section>
             
-            {/* Items Table */}
-            <section className="mb-8">
-                <table className="w-full text-sm border border-border rounded-xl overflow-hidden">
+            {/* Items Table — same columns: Project Title, Qty, Price, Total */}
+            <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <table className="w-full text-sm border border-border rounded-xl overflow-hidden min-w-[320px]">
                     <thead>
                         <tr className="bg-primary/10 border-b-2 border-primary/20">
-                            <th className="px-5 py-3.5 text-left text-xs font-bold text-primary uppercase tracking-wider">Project Title</th>
-                            <th className="px-5 py-3.5 text-center text-xs font-bold text-primary uppercase tracking-wider w-16">Qty</th>
-                            <th className="px-5 py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-24">Price</th>
-                            <th className="px-5 py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-24">Total</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-left text-xs font-bold text-primary uppercase tracking-wider">Project Title</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-xs font-bold text-primary uppercase tracking-wider w-14 sm:w-16">Qty</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-20 sm:w-24">Price</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-20 sm:w-24">Total</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index}>
-                                    <td className="px-5 py-3.5">
-                                        <p className="font-medium text-foreground">{item.service_name || item.name || 'Item'}</p>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5">
+                                        <p className="font-medium text-foreground text-xs sm:text-sm">{item.service_name || item.name || 'Item'}</p>
                                         {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
                                     </td>
-                                    <td className="px-5 py-3.5 text-center text-foreground tabular-nums">{item.quantity}</td>
-                                    <td className="px-5 py-3.5 text-right text-foreground tabular-nums">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="px-5 py-3.5 text-right font-medium text-foreground tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-foreground tabular-nums">{item.quantity}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">No items found</td>
+                                <td colSpan={4} className="px-3 sm:px-5 py-6 sm:py-8 text-center text-muted-foreground text-sm">No items found</td>
                             </tr>
                         )}
                     </tbody>
@@ -110,8 +110,8 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
             </section>
 
             {/* Totals */}
-            <section className="flex justify-end mb-8">
-                <div className="w-72">
+            <section className="flex justify-end mb-6 sm:mb-8">
+                <div className="w-full sm:w-72">
                     <div className="flex justify-between py-2 text-muted-foreground">
                         <span>Subtotal</span>
                         <span className="tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>

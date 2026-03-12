@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthContext";
+import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import { createPageUrl } from "@/utils";
 
 export default function Login() {
@@ -133,6 +134,8 @@ export default function Login() {
                   "Sign In"
                 )}
               </Button>
+
+              <AuthSocialButtons mode="signin" />
 
               <div className="text-center">
                 <button

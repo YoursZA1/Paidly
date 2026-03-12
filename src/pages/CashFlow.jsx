@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
+import { useAppStore } from "@/stores/useAppStore";
 import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,11 @@ const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'
 export default function CashFlowPage() {
     const navigate = useNavigate();
     const { toast } = useToast();
-    const [expenses, setExpenses] = useState([]);
+    const storeExpenses = useAppStore((s) => s.expenses);
+    const addExpenseToStore = useAppStore((s) => s.addExpense);
+    const updateExpenseInStore = useAppStore((s) => s.updateExpense);
+    const deleteExpenseFromStore = useAppStore((s) => s.deleteExpense);
+    const setExpensesInStore = useAppStore((s) => s.setExpenses);
     const [payments, setPayments] = useState([]);
     const [invoices, setInvoices] = useState([]);
     const [user, setUser] = useState(null);
@@ -64,7 +69,7 @@ export default function CashFlowPage() {
                 Payment.list("-payment_date"),
                 User.me()
             ]);
-            setExpenses(expensesData);
+            setExpensesInStore(expensesData || []);
             setPayments(paymentsData || []);
             setInvoices(invoicesData);
             setUser(userData);
@@ -147,7 +152,7 @@ export default function CashFlowPage() {
             .reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
         // Current month expenses
-        const currentMonthExpenses = expenses
+        const currentMonthExpenses = (storeExpenses || [])
             .filter(exp => {
                 if (!exp.date) return false;
                 const expDate = parseISO(exp.date);
@@ -162,7 +167,7 @@ export default function CashFlowPage() {
         const totalIncome = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
         // Total expenses (all time)
-        const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+        const totalExpenses = (storeExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
         return {
             currentMonthIncome,
@@ -189,7 +194,7 @@ export default function CashFlowPage() {
                 })
                 .reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
-            const expensesAmount = expenses
+            const expensesAmount = (storeExpenses || [])
                 .filter(exp => {
                     if (!exp.date) return false;
                     const expDate = parseISO(exp.date);
@@ -209,7 +214,7 @@ export default function CashFlowPage() {
 
     const getCategoryBreakdown = () => {
         const breakdown = {};
-        expenses.forEach(exp => {
+        (storeExpenses || []).forEach(exp => {
             const category = exp.category || 'other';
             breakdown[category] = (breakdown[category] || 0) + exp.amount;
         });
@@ -245,15 +250,23 @@ export default function CashFlowPage() {
     const handleSaveExpense = async (expenseData) => {
         try {
             if (editingExpense && editingExpense.id) {
-                await Expense.update(editingExpense.id, expenseData);
+                await updateExpenseInStore(editingExpense.id, expenseData);
             } else {
-                await Expense.create(expenseData);
+                await addExpenseToStore(expenseData);
             }
-            loadData();
             setShowExpenseForm(false);
             setEditingExpense(null);
+            toast({
+                title: editingExpense ? "Expense updated" : "Expense added",
+                variant: "default",
+            });
         } catch (error) {
             console.error("Error saving expense:", error);
+            toast({
+                title: "Could not save expense",
+                description: error?.message || "Please try again.",
+                variant: "destructive",
+            });
         }
     };
 
@@ -264,10 +277,15 @@ export default function CashFlowPage() {
 
     const handleDeleteExpense = async (expenseId) => {
         try {
-            await Expense.delete(expenseId);
-            loadData();
+            await deleteExpenseFromStore(expenseId);
+            toast({ title: "Expense deleted", variant: "default" });
         } catch (error) {
             console.error("Error deleting expense:", error);
+            toast({
+                title: "Could not delete expense",
+                description: error?.message || "Please try again.",
+                variant: "destructive",
+            });
         }
     };
 
@@ -565,10 +583,10 @@ export default function CashFlowPage() {
                                     [...Array(6)].map((_, i) => (
                                         <Card key={i} className="rounded-xl"><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
                                     ))
-                                ) : applyExpenseFilters(expenses, expenseFilters).length === 0 ? (
+                                ) : applyExpenseFilters(storeExpenses || [], expenseFilters).length === 0 ? (
                                     <div className="col-span-full text-center py-12 text-muted-foreground">No expenses match the filters.</div>
                                 ) : (
-                                    applyExpenseFilters(expenses, expenseFilters).map((exp) => (
+                                    applyExpenseFilters(storeExpenses || [], expenseFilters).map((exp) => (
                                         <Card key={exp.id} className="rounded-xl border border-border shadow-sm">
                                             <CardContent className="p-4">
                                                 <div className="flex justify-between items-start mb-2">
@@ -588,7 +606,7 @@ export default function CashFlowPage() {
                             </div>
                         ) : (
                             <ExpenseList 
-                                expenses={applyExpenseFilters(expenses, expenseFilters)}
+                                expenses={applyExpenseFilters(storeExpenses || [], expenseFilters)}
                                 isLoading={isLoading}
                                 onEdit={handleEditExpense}
                                 onDelete={handleDeleteExpense}
@@ -608,7 +626,7 @@ export default function CashFlowPage() {
                         {/* Cash Flow Accuracy & Summary */}
                         <CashFlowAccuracy 
                             payments={payments}
-                            expenses={expenses}
+                            expenses={storeExpenses || []}
                             currency={userCurrency}
                         />
 

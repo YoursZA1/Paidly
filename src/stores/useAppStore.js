@@ -40,8 +40,8 @@ export const useAppStore = create((set, get) => ({
             InvoiceView.list().catch(() => []),
             Expense.list("-date", 100).catch(() => []),
           ]),
-        5000,
-        1
+        20000,
+        2
       );
 
       if (!userData) {
@@ -110,6 +110,52 @@ export const useAppStore = create((set, get) => ({
 
   /** Append or replace invoices (e.g. after create). */
   setInvoices: (invoices) => set({ invoices: Array.isArray(invoices) ? invoices : get().invoices }),
+
+  /**
+   * Create an expense and prepend it to the store.
+   */
+  addExpense: async (expenseData) => {
+    const created = await Expense.create(expenseData);
+    set((state) => ({
+      expenses: [created, ...(state.expenses || [])],
+    }));
+    return created;
+  },
+
+  /**
+   * Optimistically update an expense in the store, then persist.
+   */
+  updateExpense: async (expenseId, patch) => {
+    const prev = get().expenses;
+    const index = prev.findIndex((e) => e.id === expenseId);
+    if (index === -1) return;
+    const next = [...prev];
+    next[index] = { ...next[index], ...patch };
+    set({ expenses: next });
+    try {
+      await Expense.update(expenseId, patch);
+    } catch (err) {
+      console.error("updateExpense failed, reverting:", err);
+      set({ expenses: prev });
+      throw err;
+    }
+  },
+
+  /** Remove an expense from the store and delete on the server. */
+  deleteExpense: async (expenseId) => {
+    const prev = get().expenses;
+    set({ expenses: prev.filter((e) => e.id !== expenseId) });
+    try {
+      await Expense.delete(expenseId);
+    } catch (err) {
+      console.error("deleteExpense failed, reverting:", err);
+      set({ expenses: prev });
+      throw err;
+    }
+  },
+
+  /** Replace expenses list (e.g. after fetch). */
+  setExpenses: (expenses) => set({ expenses: Array.isArray(expenses) ? expenses : get().expenses }),
 
   /** Clear store on logout. */
   reset: () =>

@@ -10,43 +10,43 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
 
     return (
         <div className="bg-white">
-            {/* Bold Header */}
-            <header className="bg-[#f24e00] text-white p-8 -mx-8 -mt-8 mb-0">
-                <div className="flex justify-between items-center">
-                    <div className="max-w-md">
+            {/* Bold Header — same structure: logo/company left, INVOICE right */}
+            <header className="bg-[#f24e00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div>
                                 <LogoImage 
                                     src={user.logo_url} 
                                     alt="Logo" 
-                                    className="h-16 w-auto max-w-xs object-contain bg-white p-3 rounded-lg shadow-lg" 
-                                    style={{ maxHeight: '64px' }}
+                                    className="h-12 sm:h-16 w-auto max-w-[140px] sm:max-w-xs object-contain bg-white p-2 sm:p-3 rounded-lg shadow-lg" 
+                                    style={{ maxHeight: '48px' }}
                                 />
                                 {user?.company_name && (
-                                    <p className="text-white text-sm font-bold mt-2">{user.company_name}</p>
+                                    <p className="text-white text-xs sm:text-sm font-bold mt-2">{user.company_name}</p>
                                 )}
                             </div>
                         ) : (
-                            <h1 className="text-3xl font-black">
+                            <h1 className="text-xl sm:text-3xl font-black">
                                 {user?.company_name || 'COMPANY'}
                             </h1>
                         )}
                     </div>
-                    <div className="text-right">
-                        <h2 className="text-5xl font-black">{resolvedTitle}</h2>
+                    <div className="text-left sm:text-right shrink-0">
+                        <h2 className="text-3xl sm:text-5xl font-black">{resolvedTitle}</h2>
                     </div>
                 </div>
             </header>
 
             {/* Invoice Info Bar */}
-            <div className="bg-[#ff7c00] text-white px-8 py-4 -mx-8 mb-8 flex justify-between text-sm flex-wrap gap-3">
+            <div className="bg-[#ff7c00] text-white px-4 sm:px-8 py-3 sm:py-4 -mx-4 sm:-mx-8 mb-6 sm:mb-8 flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 text-sm flex-wrap">
                 <div>
                     <span className="opacity-70">Invoice #:</span>
                     <span className="font-bold ml-2">{invoice.invoice_number}</span>
                 </div>
                 {user?.company_address && (
-                    <div className="flex-1 min-w-[200px]">
-                        <span className="opacity-70 text-xs whitespace-pre-line">{user.company_address}</span>
+                    <div className="flex-1 min-w-0 max-w-full sm:min-w-[200px]">
+                        <span className="opacity-70 text-xs whitespace-pre-line line-clamp-2">{user.company_address}</span>
                     </div>
                 )}
                 <div>
@@ -66,19 +66,19 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                 </div>
             )}
 
-            {/* Client Info */}
-            <section className="grid grid-cols-2 gap-8 mb-8">
+            {/* Client Info — same structure as web: Bill To left, From right */}
+            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
                 <div>
-                    <h3 className="text-[#f24e00] font-black text-sm uppercase mb-3">Bill To</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                        <p className="font-bold text-gray-900 text-lg">{client.name}</p>
-                        {client.contact_person && <p className="text-gray-600 text-sm">Attn: {client.contact_person}</p>}
-                        {client.address && <p className="text-gray-600 mt-1">{client.address}</p>}
-                        {client.tax_id && <p className="text-gray-600 text-sm">Tax ID: {client.tax_id}</p>}
+                    <h3 className="text-[#f24e00] font-black text-xs sm:text-sm uppercase mb-2 sm:mb-3">Bill To</h3>
+                    <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                        <p className="font-bold text-gray-900 text-base sm:text-lg">{client.name}</p>
+                        {client.contact_person && <p className="text-gray-600 text-xs sm:text-sm">Attn: {client.contact_person}</p>}
+                        {client.address && <p className="text-gray-600 text-xs sm:text-sm mt-1">{client.address}</p>}
+                        {client.tax_id && <p className="text-gray-600 text-xs sm:text-sm">Tax ID: {client.tax_id}</p>}
                         
                         {/* Contact Details */}
                         {(client.email || client.phone || client.website) && (
-                            <div className="mt-3 pt-3 border-t border-gray-200 space-y-1 text-sm">
+                            <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-200 space-y-0.5 sm:space-y-1 text-xs sm:text-sm">
                                 {client.email && <p className="text-gray-600"><span className="font-semibold">Email:</span> {client.email}</p>}
                                 {client.phone && <p className="text-gray-600"><span className="font-semibold">Phone:</span> {client.phone}</p>}
                                 {client.website && <p className="text-gray-600"><span className="font-semibold">Web:</span> {client.website}</p>}
@@ -87,41 +87,41 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     </div>
                 </div>
                 <div>
-                    <h3 className="text-[#f24e00] font-black text-sm uppercase mb-3">From</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                        <p className="font-bold text-gray-900 text-lg">{user?.company_name}</p>
-                        <p className="text-gray-600 mt-1 whitespace-pre-line">{user?.company_address}</p>
+                    <h3 className="text-[#f24e00] font-black text-xs sm:text-sm uppercase mb-2 sm:mb-3">From</h3>
+                    <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                        <p className="font-bold text-gray-900 text-base sm:text-lg">{user?.company_name}</p>
+                        <p className="text-gray-600 text-xs sm:text-sm mt-1 whitespace-pre-line">{user?.company_address}</p>
                     </div>
                 </div>
             </section>
             
-            {/* Items Table */}
-            <section className="mb-8">
-                <table className="w-full text-sm">
+            {/* Items Table — same columns: Project Title, Qty, Price, Total */}
+            <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <table className="w-full text-sm min-w-[320px]">
                     <thead>
                         <tr className="bg-[#f24e00] text-white">
-                            <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider">Project Title</th>
-                            <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider w-16">Qty</th>
-                            <th className="px-5 py-3.5 text-right text-xs font-bold uppercase tracking-wider w-24">Price</th>
-                            <th className="px-5 py-3.5 text-right text-xs font-bold uppercase tracking-wider w-24">Total</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-left text-xs font-bold uppercase tracking-wider">Project Title</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-xs font-bold uppercase tracking-wider w-12 sm:w-16">Qty</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase tracking-wider w-20 sm:w-24">Price</th>
+                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase tracking-wider w-20 sm:w-24">Total</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                    <td className="px-5 py-3.5">
-                                        <p className="font-semibold text-gray-900">{item.service_name || item.name || 'Item'}</p>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5">
+                                        <p className="font-semibold text-gray-900 text-xs sm:text-sm">{item.service_name || item.name || 'Item'}</p>
                                         {item.description && <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>}
                                     </td>
-                                    <td className="px-5 py-3.5 text-center text-gray-700 tabular-nums">{item.quantity}</td>
-                                    <td className="px-5 py-3.5 text-right text-gray-700 tabular-nums">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-gray-700 tabular-nums">{item.quantity}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums text-xs sm:text-sm">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right font-semibold text-gray-900 tabular-nums text-xs sm:text-sm">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={4} className="px-5 py-8 text-center text-gray-500">No items found</td>
+                                <td colSpan={4} className="px-3 sm:px-5 py-6 sm:py-8 text-center text-gray-500 text-sm">No items found</td>
                             </tr>
                         )}
                     </tbody>
@@ -129,8 +129,8 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             </section>
 
             {/* Totals */}
-            <section className="flex justify-end mb-8">
-                <div className="w-80">
+            <section className="flex justify-end mb-6 sm:mb-8">
+                <div className="w-full sm:w-80">
                     <div className="flex justify-between py-3 px-4 border-b border-gray-200">
                         <span className="text-gray-600">Subtotal</span>
                         <span className="font-medium tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>

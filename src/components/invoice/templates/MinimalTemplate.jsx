@@ -14,36 +14,36 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
 
     return (
         <div className="bg-card text-foreground font-normal">
-            {/* Header: Title left, Company logo-aligned accent box right + Invoice No, Date */}
-            <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground uppercase tracking-tight">{resolvedTitle}</h1>
-                <div className="text-right">
-                    <div className={`inline-block rounded-lg px-4 py-3 ${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
+            {/* Header: Title left, Company logo-aligned accent box right + Invoice No, Date — same structure as web */}
+            <div className="flex flex-col sm:flex-row flex-wrap justify-between items-start gap-4 sm:gap-6 mb-6 sm:mb-8">
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground uppercase tracking-tight order-2 sm:order-1">{resolvedTitle}</h1>
+                <div className="text-left sm:text-right order-1 sm:order-2 shrink-0">
+                    <div className={`inline-block rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 ${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
                         {user?.logo_url ? (
-                            <div className="flex items-center gap-3">
-                                <LogoImage src={user.logo_url} alt="" className="h-10 w-auto" style={{ maxHeight: '40px' }} />
-                                <span className="font-semibold text-foreground">{user?.company_name || 'Company'}</span>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                                <LogoImage src={user.logo_url} alt="" className="h-8 sm:h-10 w-auto" style={{ maxHeight: '36px' }} />
+                                <span className="font-semibold text-foreground text-sm sm:text-base">{user?.company_name || 'Company'}</span>
                             </div>
                         ) : (
-                            <span className="font-semibold text-foreground">{user?.company_name || 'Company'}</span>
+                            <span className="font-semibold text-foreground text-sm sm:text-base">{user?.company_name || 'Company'}</span>
                         )}
                     </div>
-                    <div className="mt-3 text-sm text-muted-foreground">
+                    <div className="mt-2 sm:mt-3 text-xs sm:text-sm text-muted-foreground">
                         <p>Invoice No: {invoice.invoice_number}</p>
                         <p>Date: {issueDate}</p>
                     </div>
                 </div>
             </div>
 
-            {/* Payable To | Bank Details */}
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            {/* Payable To | Bank Details — same structure as web, stack on mobile */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
                 <div>
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payable To</h3>
                     <p className="font-medium text-foreground">{client?.name || '—'}</p>
                     {client?.address && <p className="text-sm text-muted-foreground mt-0.5">{client.address}</p>}
                     {client?.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Bank Details</h3>
                     {bankingDetail ? (
                         <>
@@ -57,30 +57,30 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                 </div>
             </div>
 
-            {/* Itemized table: logo-aligned accent header, 4 columns */}
-            <div className="overflow-x-auto rounded-t-lg overflow-hidden mb-8">
-                <table className="w-full text-sm">
+            {/* Itemized table: same columns as web — Item Description, Qty, Price, Total */}
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 rounded-t-lg overflow-hidden mb-6 sm:mb-8">
+                <table className="w-full text-sm min-w-[300px]">
                     <thead>
                         <tr className={`${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
-                            <th className="px-4 py-3.5 text-left text-xs font-bold text-foreground uppercase tracking-wider">Item Description</th>
-                            <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-20">Qty</th>
-                            <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Price</th>
-                            <th className="px-4 py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-28">Total</th>
+                            <th className="px-3 sm:px-4 py-2.5 sm:py-3.5 text-left text-xs font-bold text-foreground uppercase tracking-wider">Item Description</th>
+                            <th className="px-3 sm:px-4 py-2.5 sm:py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-14 sm:w-20">Qty</th>
+                            <th className="px-3 sm:px-4 py-2.5 sm:py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-20 sm:w-28">Price</th>
+                            <th className="px-3 sm:px-4 py-2.5 sm:py-3.5 text-right text-xs font-bold text-foreground uppercase tracking-wider w-20 sm:w-28">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className="border-b border-border">
-                                    <td className="px-4 py-4 text-foreground">{item.service_name || item.name || 'Item'}</td>
-                                    <td className="px-4 py-4 text-right text-foreground tabular-nums">{item.quantity}</td>
-                                    <td className="px-4 py-4 text-right text-foreground tabular-nums">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="px-4 py-4 text-right font-medium text-foreground tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="px-3 sm:px-4 py-3 sm:py-4 text-foreground text-xs sm:text-sm">{item.service_name || item.name || 'Item'}</td>
+                                    <td className="px-3 sm:px-4 py-3 sm:py-4 text-right text-foreground tabular-nums">{item.quantity}</td>
+                                    <td className="px-3 sm:px-4 py-3 sm:py-4 text-right text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="px-3 sm:px-4 py-3 sm:py-4 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">No items found</td>
+                                <td colSpan={4} className="px-3 sm:px-4 py-8 sm:py-10 text-center text-muted-foreground text-sm">No items found</td>
                             </tr>
                         )}
                     </tbody>
@@ -95,9 +95,9 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                 </div>
             )}
 
-            {/* Totals: right-aligned logo-aligned accent box */}
-            <div className="flex justify-end mb-8">
-                <div className={`w-full max-w-xs rounded-lg border ${CARD_ACCENT_BORDER} ${CARD_ACCENT_BG} px-5 py-4`}>
+            {/* Totals: right-aligned logo-aligned accent box — full width on mobile */}
+            <div className="flex justify-end mb-6 sm:mb-8">
+                <div className={`w-full max-w-full sm:max-w-xs rounded-lg border ${CARD_ACCENT_BORDER} ${CARD_ACCENT_BG} px-4 sm:px-5 py-3 sm:py-4`}>
                     <div className="flex justify-between py-2 text-sm text-foreground">
                         <span>Sub Total</span>
                         <span className="tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>

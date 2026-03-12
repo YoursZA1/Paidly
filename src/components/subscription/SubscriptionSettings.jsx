@@ -4,6 +4,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
+import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 
 const BILLING_PORTAL_URL = import.meta.env.VITE_STRIPE_BILLING_PORTAL || "https://paidly.com";
 const CONTACT_SALES_URL = "https://paidly.com/contact";
@@ -168,17 +169,25 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                <Button
-                                    onClick={() => handleTierAction(tier)}
-                                    disabled={isCurrent}
-                                    className={`w-full py-4 rounded-2xl font-bold transition-all ${
-                                        isCurrent
-                                            ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-default"
-                                            : "bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 active:scale-[0.98]"
-                                    }`}
-                                >
-                                    {tier.buttonText}
-                                </Button>
+                                {tier.id === "starter" && !isCurrent ? (
+                                    <PayFastSubscriptionForm
+                                        amountZar="199.00"
+                                        planName="Paidly Pro Monthly"
+                                        className="mt-0"
+                                    />
+                                ) : (
+                                    <Button
+                                        onClick={() => handleTierAction(tier)}
+                                        disabled={isCurrent}
+                                        className={`w-full py-4 rounded-2xl font-bold transition-all ${
+                                            isCurrent
+                                                ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-default"
+                                                : "bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 active:scale-[0.98]"
+                                        }`}
+                                    >
+                                        {tier.buttonText}
+                                    </Button>
+                                )}
                             </div>
                         );
                     })}

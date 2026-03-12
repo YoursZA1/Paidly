@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { memo, useRef, useState } from "react";
+import React, { memo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,12 +153,10 @@ function InvoicePreview({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+    <div
+      style={{ opacity: 1 }}
     >
-      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-hidden rounded-fintech text-card-foreground">
         <CardHeader className="border-b border-border pb-4 sm:pb-6 px-4 sm:px-6">
           {user?.logo_url && (
             <div className="mb-3 sm:mb-4 flex justify-center">
@@ -223,15 +221,13 @@ function InvoicePreview({
             </div>
           )}
         </CardHeader>
-        <CardContent className="p-0 overflow-x-hidden">
-          {/* Document container: fixed A4 size so mobile and web match and PDF fits one page */}
+        <div className="p-0 overflow-x-hidden">
           <div className="w-full overflow-x-auto overflow-y-hidden" style={{ minHeight: "320px" }}>
-            <div
-              ref={previewRef}
-              className="invoice-document relative mx-auto bg-white border border-slate-100 shadow-2xl flex flex-col rounded-sm overflow-hidden shrink-0"
-              style={{ width: "210mm", minHeight: "297mm" }}
-            >
-            {/* Vertical brand bar (left edge — custom stationery feel) */}
+          <div
+            ref={previewRef}
+            className="invoice-document relative mx-auto bg-white border border-slate-100 shadow-2xl flex flex-col rounded-sm overflow-hidden shrink-0"
+            style={{ width: "210mm", minHeight: "297mm" }}
+          >
             <div className="absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 bg-primary rounded-r" aria-hidden />
 
             {/* Status overlay: diagonal low-opacity stamp behind content */}
@@ -454,12 +450,12 @@ function InvoicePreview({
                     </h2>
                   </div>
                 </div>
-              </div>
             </div>
+          </div>
           </div>
 
           {/* Action buttons below document */}
-          <div
+          <section
             className={`flex flex-col-reverse sm:flex-row mt-4 sm:mt-8 gap-3 px-4 pb-4 sm:pb-4 ${
               showBack && !previewOnly ? "sm:justify-between" : "sm:justify-end"
             }`}
@@ -506,10 +502,11 @@ function InvoicePreview({
                 )}
               </Button>
             )}
+          </section>
           </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+        </div>
+      </div>
+    </div>
   );
 }
 

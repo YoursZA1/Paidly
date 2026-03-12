@@ -15,6 +15,7 @@ import { Building2, Loader2, Lock, Mail, Phone, User, Eye, EyeOff, CheckCircle }
 import { createPageUrl } from "@/utils";
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
+import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const PLAN_OPTIONS = [
@@ -424,6 +425,8 @@ className="pl-10 rounded-xl border-border"
                   "Create account"
                 )}
               </Button>
+
+              <AuthSocialButtons mode="signup" />
 
               <div className="text-center">
                 <button
