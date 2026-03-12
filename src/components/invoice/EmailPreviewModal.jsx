@@ -18,7 +18,7 @@ export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail
 
     return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; color: white; text-align: center;">
+        <div style="background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); padding: 30px; border-radius: 10px 10px 0 0; color: white; text-align: center;">
             <h1 style="margin: 0; fontSize: 28px;">Invoice from ${companyName}</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9;">Invoice #${invoice.invoice_number}</p>
         </div>
@@ -52,15 +52,15 @@ export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail
                 </div>
             </div>
 
-            <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; margin: 20px 0;">
-                <p style="margin: 0; color: #2e7d32; font-size: 14px;">
+            <div style="background: #fff7ed; padding: 15px; border-radius: 8px; border-left: 4px solid #f24e00; margin: 20px 0;">
+                <p style="margin: 0; color: #9a3412; font-size: 14px;">
                     <strong>📎 Clean PDF Invoice:</strong> A professional PDF version of your invoice is available for download.
                 </p>
             </div>
 
             <div style="text-align: center; margin: 30px 0;">
                 <a href="${publicViewUrl}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                   style="display: inline-block; background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(242, 78, 0, 0.3);">
                     🔍 View & Download Invoice
                 </a>
             </div>

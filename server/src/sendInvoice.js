@@ -71,3 +71,38 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
     return { success: false, error: error?.message || String(error) };
   }
 }
+
+/**
+ * Send HTML email (e.g. invoice/quote with download link) via Resend.
+ * Same env as sendInvoiceEmail: RESEND_API_KEY, RESEND_FROM.
+ */
+export async function sendHtmlEmail(to, subject, html, fromName = "Paidly") {
+  if (!process.env.RESEND_API_KEY) {
+    return { success: false, error: "RESEND_API_KEY is not configured" };
+  }
+
+  const resend = getResend();
+  if (!resend) {
+    return { success: false, error: "RESEND_API_KEY is not configured" };
+  }
+
+  const fromAddress = process.env.RESEND_FROM || "Paidly <billing@yourdomain.com>";
+
+  if (!to || !subject) {
+    return { success: false, error: "Missing to or subject" };
+  }
+
+  try {
+    const data = await resend.emails.send({
+      from: fromAddress,
+      to: [to.trim()],
+      subject: subject.trim(),
+      html: html || "<p>No content.</p>",
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Resend send-html-email error:", error);
+    return { success: false, error: error?.message || String(error) };
+  }
+}

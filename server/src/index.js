@@ -10,7 +10,7 @@ import {
   signPayfastPayload,
   verifyPayfastSignature
 } from "./payfast.js";
-import { sendInvoiceEmail } from "./sendInvoice.js";
+import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { getUserFromRequest } from "./supabaseAuth.js";
 
@@ -106,6 +106,39 @@ app.post("/api/send-invoice", async (req, res) => {
       clientEmail.trim(),
       String(invoiceNum).trim(),
       fromName ? String(fromName).trim() : "Paidly"
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, data: result.data });
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: err?.message || "Send failed" });
+    }
+  }
+});
+
+app.post("/api/send-email", async (req, res) => {
+  try {
+    const { user, error: authError } = await getUserFromRequest(req);
+    if (authError || !user) {
+      return res.status(401).json({ error: authError || "Authentication required" });
+    }
+
+    const { to, subject, body } = req.body || {};
+    if (!to || !subject) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        fields: ["to", "subject"],
+      });
+    }
+
+    const result = await sendHtmlEmail(
+      to.trim(),
+      String(subject).trim(),
+      typeof body === "string" ? body : "",
+      user?.user_metadata?.company_name || "Paidly"
     );
 
     if (!result.success) {

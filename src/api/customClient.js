@@ -5,6 +5,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getBackendBaseUrl } from "@/api/backendClient";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -1771,9 +1772,34 @@ class IntegrationManager {
         return null;
       },
       SendEmail: async (emailConfig) => {
-        void emailConfig; // Acknowledge parameter
-        console.warn('SendEmail not implemented in custom client');
-        return { success: true };
+        const { to, subject, body } = emailConfig || {};
+        if (!to || !subject) {
+          throw new Error("Missing to or subject");
+        }
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          if (!token) {
+            throw new Error("Not signed in");
+          }
+          const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+          const res = await fetch(`${apiBase}/api/send-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ to, subject, body: body || "" }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(json?.error || res.statusText || "Send failed");
+          }
+          if (json.success === false) {
+            throw new Error(json?.error || "Send failed");
+          }
+          return { success: true, data: json.data };
+        } catch (err) {
+          console.error("SendEmail error:", err);
+          throw err instanceof Error ? err : new Error(err?.message || String(err));
+        }
       },
       UploadFile: async ({ file }) => {
         return uploadToStorage({ file, folder: "branding" });
