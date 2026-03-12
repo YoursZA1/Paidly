@@ -8,7 +8,6 @@ import { Mail, FileText, X, Send } from 'lucide-react';
 import { User, BankingDetail } from '@/api/entities';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { format } from 'date-fns';
-import { createPageUrl } from '@/utils';
 
 export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail, publicViewUrl) => {
     const companyName = company?.company_name || 'Your Company';
@@ -154,7 +153,9 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
 
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
-    const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicInvoice?token=${invoice.public_share_token || invoice.id}`)}`;
+    const publicViewUrl = invoice.public_share_token
+        ? `${window.location.origin}/view/${invoice.public_share_token}`
+        : '';
     
     const emailHtml = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, publicViewUrl);
 

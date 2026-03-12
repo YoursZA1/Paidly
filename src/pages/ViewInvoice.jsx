@@ -34,6 +34,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
     const [showScheduleDialog, setShowScheduleDialog] = useState(false);
     const [paymentSchedule, setPaymentSchedule] = useState([]);
     const [paymentPreset, setPaymentPreset] = useState(null);
+    const [isSharing, setIsSharing] = useState(false);
     const [error, setError] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
@@ -174,6 +175,31 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         }
     };
 
+    const handleShareViaWhatsApp = async () => {
+        setIsSharing(true);
+        try {
+            let token = invoice.public_share_token;
+            if (!token) {
+                token = crypto.randomUUID();
+                await retryOnAbort(() => Invoice.update(invoice.id, { public_share_token: token }));
+                setInvoice((prev) => ({ ...prev, public_share_token: token }));
+            }
+            const publicViewUrl = `${window.location.origin}/view/${token}`;
+            const brandName = company?.company_name || invoice.owner_company_name || 'Paidly';
+            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView it here: ${publicViewUrl}`;
+            const phone = client?.phone?.replace(/\D/g, '') || '';
+            const whatsappUrl = phone
+                ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+                : `https://wa.me/?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+        } catch (err) {
+            console.error('Failed to share via WhatsApp:', err);
+            alert(err?.message || 'Failed to open WhatsApp. Please try again.');
+        } finally {
+            setIsSharing(false);
+        }
+    };
+
     const { recordPayment } = usePaymentActions(
         invoice ? { ...invoice, payments } : null,
         {
@@ -311,6 +337,18 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                                 <Mail className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Email Client'}</span>
                                 <span className="sm:hidden">{isSending ? '…' : 'Email'}</span>
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleShareViaWhatsApp}
+                                disabled={isSharing}
+                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            >
+                                <Share2 className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">{isSharing ? 'Opening…' : 'Share'}</span>
+                                <span className="sm:hidden">{isSharing ? '…' : 'Share'}</span>
                             </Button>
 
                             <Button

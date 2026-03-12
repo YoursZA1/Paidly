@@ -166,7 +166,7 @@ export default function InvoiceActions({ invoice, client, onActionSuccess, onOpt
         setIsGeneratingShareLink(true);
         try {
             const token = await ensureToken();
-            const publicInvoiceUrl = `${window.location.origin}${createPageUrl(`PublicInvoice?token=${token}`)}`;
+            const publicInvoiceUrl = `${window.location.origin}/view/${token}`;
             setShareUrl(publicInvoiceUrl);
             setShowManualShare(true);
             toast({
@@ -189,9 +189,13 @@ export default function InvoiceActions({ invoice, client, onActionSuccess, onOpt
     const handleSendViaWhatsApp = async () => {
         try {
             const token = await ensureToken();
-            const publicInvoiceUrl = `${window.location.origin}${createPageUrl(`PublicInvoice?token=${token}`)}`;
-            const message = `Hi, here's your invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'us'}: ${publicInvoiceUrl}`;
-            const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+            const publicInvoiceUrl = `${window.location.origin}/view/${token}`;
+            const brandName = invoice.owner_company_name || 'Paidly';
+            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView it here: ${publicInvoiceUrl}`;
+            const phone = client?.phone?.replace(/\D/g, '') || '';
+            const whatsappUrl = phone
+                ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+                : `https://wa.me/?text=${encodeURIComponent(message)}`;
             window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
             toast({
                 title: "WhatsApp opened",

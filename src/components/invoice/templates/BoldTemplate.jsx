@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import LogoImage from '@/components/shared/LogoImage';
 
@@ -106,23 +105,23 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     </colgroup>
                     <thead>
                         <tr className="bg-[#f24e00] text-white">
-                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-left text-xs font-bold uppercase tracking-wider">Project Title</th>
+                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-left text-xs font-bold uppercase tracking-wider">Description</th>
                             <th className="px-1 py-2.5 sm:py-3.5 text-center text-xs font-bold uppercase whitespace-nowrap" style={{ minWidth: '2.25rem' }}>Qty</th>
-                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase whitespace-nowrap">Price</th>
-                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase whitespace-nowrap">Total</th>
+                            <th className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase whitespace-nowrap">Price</th>
+                            <th className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase whitespace-nowrap">Total</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
-                                <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                <tr key={index} className="border-b border-slate-50">
                                     <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 min-w-0">
                                         <p className="font-semibold text-gray-900 text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
                                         {item.description && <p className="text-xs text-gray-500 mt-0.5 truncate">{item.description}</p>}
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3.5 text-center text-gray-700 tabular-nums whitespace-nowrap">{item.quantity}</td>
-                                    <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right font-semibold text-gray-900 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right font-semibold text-gray-900 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
@@ -164,7 +163,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     <div className="flex justify-between py-4 px-4 bg-[#f24e00] text-white rounded-lg mt-2">
                         <span className="font-black uppercase">Total Due</span>
                         <span
-                            className="font-black tabular-nums tracking-tighter whitespace-nowrap min-w-0"
+                            className="font-black tabular-nums tracking-tighter whitespace-nowrap min-w-0 pr-1"
                             style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
                         >
                             {formatCurrency(invoice.total_amount, userCurrency)}

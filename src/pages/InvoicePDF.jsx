@@ -169,11 +169,36 @@ export default function InvoicePDF() {
     return (
         <>
             <style>{`
+                .invoice-pdf-export {
+                    width: 210mm !important;
+                    max-width: 210mm !important;
+                    box-sizing: border-box !important;
+                }
                 @media print {
                     .no-print { display: none !important; }
                     body { margin: 0; background-color: white; }
                     .print-container { box-shadow: none !important; margin: 0 !important; border: none !important; }
                     .pdf-page { padding: 0 !important; }
+                    .invoice-container {
+                        width: 210mm !important;
+                        height: 297mm !important;
+                        padding: 20mm !important;
+                        background: white !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    .invoice-container tr,
+                    .invoice-container td,
+                    .invoice-container th {
+                        page-break-inside: avoid !important;
+                        white-space: normal !important;
+                        word-wrap: break-word !important;
+                    }
+                    .invoice-container * {
+                        text-rendering: optimizeLegibility !important;
+                        -webkit-font-smoothing: antialiased !important;
+                        -moz-osx-font-smoothing: grayscale !important;
+                    }
                 }
                 @page {
                     margin: 0.5in;
@@ -184,6 +209,11 @@ export default function InvoicePDF() {
                     .pdf-content table { width: 100%; border-collapse: collapse; }
                     .pdf-content th,
                     .pdf-content td { word-break: break-word; }
+                    .invoice-container * {
+                        text-rendering: optimizeLegibility !important;
+                        -webkit-font-smoothing: antialiased !important;
+                        -moz-osx-font-smoothing: grayscale !important;
+                    }
                 }
                 /* Mobile: same structure as web, responsive spacing and stacking */
                 @media (max-width: 640px) {
@@ -235,7 +265,7 @@ export default function InvoicePDF() {
                     </div>
 
                     <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content min-w-0" ref={pdfRef}>
+                        <div className="pdf-content invoice-container min-w-0 w-full" style={{ maxWidth: '210mm' }} ref={pdfRef}>
                             <TemplateComponent
                                 invoice={invoice}
                                 client={client}

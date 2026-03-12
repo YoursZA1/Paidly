@@ -13,6 +13,7 @@ import Notes from "./Notes";
 import Services from "./Services";
 import ViewInvoice from "./ViewInvoice";
 import PublicInvoice from "./PublicInvoice";
+import InvoiceView from "./InvoiceView";
 import EditInvoice from "./EditInvoice";
 import Quotes from "./Quotes";
 import CreateQuote from "./CreateQuote";
@@ -89,6 +90,7 @@ const AUTH_ROUTES = [
     { path: "/ResetPassword", element: <ResetPassword /> },
     { path: "/AcceptInvite", element: <AcceptInvite /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },
+    { path: "/view/:token", element: <InvoiceView /> },
     { path: "/PublicQuote", element: <PublicQuote /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
     { path: "/ClientPortal", element: <ClientPortal /> },

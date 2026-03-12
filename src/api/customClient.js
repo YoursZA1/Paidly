@@ -715,7 +715,7 @@ class EntityManager {
         if (typeof supabaseData.features === 'string') {
           try {
             supabaseData.features = JSON.parse(supabaseData.features);
-          } catch (_) {
+          } catch {
             supabaseData.features = [];
           }
         }
@@ -745,10 +745,10 @@ class EntityManager {
       ];
       if (supabaseTable === 'payslips') {
         if (typeof supabaseData.allowances === 'string') {
-          try { supabaseData.allowances = JSON.parse(supabaseData.allowances); } catch (_) { supabaseData.allowances = []; }
+          try { supabaseData.allowances = JSON.parse(supabaseData.allowances); } catch { supabaseData.allowances = []; }
         }
         if (typeof supabaseData.other_deductions === 'string') {
-          try { supabaseData.other_deductions = JSON.parse(supabaseData.other_deductions); } catch (_) { supabaseData.other_deductions = []; }
+          try { supabaseData.other_deductions = JSON.parse(supabaseData.other_deductions); } catch { supabaseData.other_deductions = []; }
         }
         Object.keys(supabaseData).forEach(key => {
           if (!PAYSLIP_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
@@ -784,11 +784,11 @@ class EntityManager {
       ];
       if (supabaseTable === 'tasks') {
         if (typeof supabaseData.depends_on === 'string') {
-          try { supabaseData.depends_on = JSON.parse(supabaseData.depends_on); } catch (_) { supabaseData.depends_on = []; }
+          try { supabaseData.depends_on = JSON.parse(supabaseData.depends_on); } catch { supabaseData.depends_on = []; }
         }
         if (!Array.isArray(supabaseData.depends_on)) supabaseData.depends_on = [];
         if (typeof supabaseData.tags === 'string') {
-          try { supabaseData.tags = JSON.parse(supabaseData.tags); } catch (_) { supabaseData.tags = []; }
+          try { supabaseData.tags = JSON.parse(supabaseData.tags); } catch { supabaseData.tags = []; }
         }
         if (!Array.isArray(supabaseData.tags)) supabaseData.tags = [];
         Object.keys(supabaseData).forEach(key => {
@@ -1022,7 +1022,7 @@ class EntityManager {
         if (typeof updateData.features === 'string') {
           try {
             updateData.features = JSON.parse(updateData.features);
-          } catch (_) {
+          } catch {
             updateData.features = [];
           }
         }
@@ -1047,10 +1047,10 @@ class EntityManager {
       ];
       if (supabaseTable === 'payslips') {
         if (typeof updateData.allowances === 'string') {
-          try { updateData.allowances = JSON.parse(updateData.allowances); } catch (_) { updateData.allowances = []; }
+          try { updateData.allowances = JSON.parse(updateData.allowances); } catch { updateData.allowances = []; }
         }
         if (typeof updateData.other_deductions === 'string') {
-          try { updateData.other_deductions = JSON.parse(updateData.other_deductions); } catch (_) { updateData.other_deductions = []; }
+          try { updateData.other_deductions = JSON.parse(updateData.other_deductions); } catch { updateData.other_deductions = []; }
         }
         Object.keys(updateData).forEach(key => {
           if (!PAYSLIP_UPDATE_COLUMNS.includes(key)) delete updateData[key];
@@ -1082,11 +1082,11 @@ class EntityManager {
       ];
       if (supabaseTable === 'tasks') {
         if (typeof updateData.depends_on === 'string') {
-          try { updateData.depends_on = JSON.parse(updateData.depends_on); } catch (_) { updateData.depends_on = []; }
+          try { updateData.depends_on = JSON.parse(updateData.depends_on); } catch { updateData.depends_on = []; }
         }
         if (updateData.depends_on !== undefined && !Array.isArray(updateData.depends_on)) updateData.depends_on = [];
         if (typeof updateData.tags === 'string') {
-          try { updateData.tags = JSON.parse(updateData.tags); } catch (_) { updateData.tags = []; }
+          try { updateData.tags = JSON.parse(updateData.tags); } catch { updateData.tags = []; }
         }
         if (updateData.tags !== undefined && !Array.isArray(updateData.tags)) updateData.tags = [];
         Object.keys(updateData).forEach(key => {
