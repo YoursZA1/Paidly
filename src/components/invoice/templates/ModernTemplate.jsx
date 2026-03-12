@@ -76,28 +76,34 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 </div>
             </section>
             
-            {/* Items Table — same columns: Project Title, Qty, Price, Total */}
+            {/* Items Table — Project Title left, Qty one line, Price/Total no wrap; fixed layout for space */}
             <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="w-full text-sm border border-border rounded-xl overflow-hidden min-w-[320px]">
+                <table className="w-full text-sm border border-border rounded-xl overflow-hidden min-w-[320px] table-fixed">
+                    <colgroup>
+                        <col className="w-auto min-w-0" />
+                        <col style={{ width: '2.5rem' }} />
+                        <col style={{ width: '6rem', minWidth: '5.5rem' }} />
+                        <col style={{ width: '6rem', minWidth: '5.5rem' }} />
+                    </colgroup>
                     <thead>
                         <tr className="bg-primary/10 border-b-2 border-primary/20">
-                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-left text-xs font-bold text-primary uppercase tracking-wider">Project Title</th>
-                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-xs font-bold text-primary uppercase tracking-wider w-14 sm:w-16">Qty</th>
-                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-20 sm:w-24">Price</th>
-                            <th className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase tracking-wider w-20 sm:w-24">Total</th>
+                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-left text-xs font-bold text-primary uppercase tracking-wider">Project Title</th>
+                            <th className="px-1 py-2.5 sm:py-3.5 text-center text-xs font-bold text-primary uppercase whitespace-nowrap" style={{ minWidth: '2.25rem' }}>Qty</th>
+                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase whitespace-nowrap">Price</th>
+                            <th className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase whitespace-nowrap">Total</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index}>
-                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5">
-                                        <p className="font-medium text-foreground text-xs sm:text-sm">{item.service_name || item.name || 'Item'}</p>
-                                        {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
+                                    <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 min-w-0">
+                                        <p className="font-medium text-foreground text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
+                                        {item.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.description}</p>}
                                     </td>
-                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-center text-foreground tabular-nums">{item.quantity}</td>
-                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="px-1 py-2.5 sm:py-3.5 text-center text-foreground tabular-nums whitespace-nowrap">{item.quantity}</td>
+                                    <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (

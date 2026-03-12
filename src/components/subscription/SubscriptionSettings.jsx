@@ -13,15 +13,19 @@ const TIERS = [
     {
         id: "free",
         name: "Free",
-        price: "R 0",
+        price: "15 Days",
+        priceSubtext: "Free trial",
         description: "Perfect for freelancers just starting out.",
         features: ["1 User", "Unlimited Invoices", "Standard Templates"],
         buttonText: "Downgrade",
+        isTrial: true,
     },
     {
         id: "starter",
         name: "Starter",
-        price: "R 199",
+        price: "R 25",
+        normalPrice: "R 199",
+        savingsLabel: "You save R 174/mo",
         description: "For small teams needing more power.",
         features: ["3 Users", "Custom Branding", "CSV Exports", "Basic Analytics"],
         buttonText: "Current Plan",
@@ -29,7 +33,9 @@ const TIERS = [
     {
         id: "professional",
         name: "Professional",
-        price: "R 499",
+        price: "R 50",
+        normalPrice: "R 499",
+        savingsLabel: "You save R 449/mo",
         description: "Automate your business workflows.",
         features: ["10 Users", "Recurring Invoices", "Payment Reminders", "Multi-currency"],
         buttonText: "Upgrade",
@@ -155,8 +161,16 @@ export default function SubscriptionSettings() {
                                     <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">{tier.name}</h4>
                                     <p className="text-2xl font-black text-slate-900 dark:text-slate-100">
                                         {tier.price}
-                                        {tier.price !== "Custom" && <span className="text-sm font-normal text-slate-400 ml-1">/mo</span>}
+                                        {!tier.isTrial && tier.price !== "Custom" && <span className="text-sm font-normal text-slate-400 ml-1">/mo</span>}
                                     </p>
+                                    {tier.normalPrice && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            Normally {tier.normalPrice}/mo — {tier.savingsLabel}
+                                        </p>
+                                    )}
+                                    {tier.priceSubtext && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{tier.priceSubtext}</p>
+                                    )}
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{tier.description}</p>
                                 </div>
 
@@ -171,7 +185,7 @@ export default function SubscriptionSettings() {
 
                                 {tier.id === "starter" && !isCurrent ? (
                                     <PayFastSubscriptionForm
-                                        amountZar="199.00"
+                                        amountZar="25.00"
                                         planName="Paidly Pro Monthly"
                                         className="mt-0"
                                     />

@@ -17,7 +17,7 @@ export const formatCurrency = (
   currencyCode = 'ZAR',
   options = {}
 ) => {
-  const currency = getCurrencyByCode(currencyCode);
+  const currency = getCurrencyByCode(currencyCode) || getCurrencyByCode('ZAR');
   const {
     includeSymbol = true,
     decimals = currency.decimals,
@@ -36,11 +36,17 @@ export const formatCurrency = (
     return `${currency.symbol} 0${'.' + '0'.repeat(decimals)}`;
   }
 
-  // Format with proper decimal places
-  let formatted = num.toFixed(decimals);
-
-  // Split into integer and decimal parts
-  const [integerPart, decimalPart] = formatted.split('.');
+  // Format with proper decimal places (ensure we get a string; toFixed can be missing in some envs)
+  let formatted =
+    typeof num.toFixed === 'function'
+      ? num.toFixed(decimals)
+      : String(num);
+  if (formatted == null || typeof formatted !== 'string') {
+    formatted = String(num);
+  }
+  const parts = formatted.split('.');
+  const integerPart = parts[0] ?? '0';
+  const decimalPart = parts[1] ?? '0'.repeat(decimals);
 
   // Apply thousands separator to integer part
   const formattedInteger = integerPart.replace(
