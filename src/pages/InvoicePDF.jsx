@@ -151,7 +151,7 @@ export default function InvoicePDF() {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
     }
 
-    if (!invoice || !client || !user) {
+    if (!invoice || !client) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
                 <p className="text-gray-600">
@@ -161,10 +161,18 @@ export default function InvoicePDF() {
             </div>
         );
     }
-    
-    const userCurrency = user?.currency || 'ZAR';
-    const templateKey = user?.invoice_template || 'classic';
+
+    // Fallback user so template always has logo/company/currency (e.g. when User.me() failed or for public view)
+    const resolvedUser = user || {
+        company_name: invoice.owner_company_name || 'Company',
+        logo_url: invoice.owner_logo_url || null,
+        company_address: invoice.owner_company_address || '',
+        currency: invoice.owner_currency || 'ZAR',
+        invoice_template: 'classic',
+    };
+    const templateKey = resolvedUser?.invoice_template || 'classic';
     const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
+    const userCurrency = resolvedUser?.currency || invoice.owner_currency || 'ZAR';
 
     return (
         <>
@@ -265,11 +273,11 @@ export default function InvoicePDF() {
                     </div>
 
                     <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content invoice-container min-w-0 w-full" style={{ maxWidth: '210mm' }} ref={pdfRef}>
+                        <div className="pdf-content invoice-container min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }} ref={pdfRef}>
                             <TemplateComponent
                                 invoice={invoice}
                                 client={client}
-                                user={user}
+                                user={resolvedUser}
                                 bankingDetail={bankingDetail}
                                 userCurrency={userCurrency}
                                 safeFormatDate={safeFormatDate}

@@ -203,7 +203,6 @@ export default function InvoiceView() {
         invoice={invoice}
         client={client}
         baseUrl={publicViewUrl}
-        previewImageUrl={invoice.preview_image_url}
       />
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
