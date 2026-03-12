@@ -17,6 +17,8 @@ export default function CurrencyInput({
   required = false,
   min = 0,
   step = 0.01,
+  id,
+  name = 'amount',
 }) {
   const currencySymbol = getCurrencySymbol(currency);
 
@@ -52,6 +54,8 @@ export default function CurrencyInput({
         </span>
 
         <input
+          id={id || 'currency-amount'}
+          name={name}
           type="number"
           value={value}
           onChange={handleChange}
@@ -87,4 +91,6 @@ CurrencyInput.propTypes = {
   required: PropTypes.bool,
   min: PropTypes.number,
   step: PropTypes.number,
+  id: PropTypes.string,
+  name: PropTypes.string,
 };

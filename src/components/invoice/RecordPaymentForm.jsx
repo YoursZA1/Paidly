@@ -116,6 +116,8 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xl font-bold text-foreground tabular-nums">{symbol}</span>
           <input
+            id="record-payment-amount"
+            name="amount"
             type="number"
             value={amount}
             onChange={(e) => {

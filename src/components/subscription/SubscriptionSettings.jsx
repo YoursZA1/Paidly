@@ -11,49 +11,63 @@ const CONTACT_SALES_URL = "https://paidly.com/contact";
 
 const TIERS = [
     {
-        id: "free",
-        name: "Free",
-        price: "15 Days",
-        priceSubtext: "Free trial",
-        description: "Perfect for freelancers just starting out.",
-        features: ["1 User", "Unlimited Invoices", "Standard Templates"],
-        buttonText: "Downgrade",
-        isTrial: true,
-    },
-    {
-        id: "starter",
-        name: "Starter",
+        id: "individual",
+        name: "Individual",
         price: "R 25",
-        normalPrice: "R 199",
-        savingsLabel: "You save R 174/mo",
-        description: "For small teams needing more power.",
-        features: ["3 Users", "Custom Branding", "CSV Exports", "Basic Analytics"],
-        buttonText: "Current Plan",
+        normalPrice: "R 99",
+        savingsLabel: "You save R 74/mo",
+        description: "Ideal for freelancers and solo operators getting started.",
+        features: ["Unlimited invoices", "Up to 10 clients", "Basic reports", "Email support", "1 user"],
+        buttonText: "Choose Plan",
+        recommended: false,
     },
     {
-        id: "professional",
-        name: "Professional",
+        id: "sme",
+        name: "SME",
         price: "R 50",
-        normalPrice: "R 499",
-        savingsLabel: "You save R 449/mo",
-        description: "Automate your business workflows.",
-        features: ["10 Users", "Recurring Invoices", "Payment Reminders", "Multi-currency"],
-        buttonText: "Upgrade",
+        normalPrice: "R 199",
+        savingsLabel: "You save R 149/mo",
+        description: "Built for growing businesses that need more control and flexibility.",
+        features: [
+            "Unlimited invoices",
+            "Unlimited clients",
+            "Advanced reports",
+            "Recurring invoices",
+            "Expense tracking",
+            "Priority email support",
+            "Up to 5 users",
+        ],
+        buttonText: "Choose Plan",
+        recommended: true,
     },
     {
-        id: "enterprise",
-        name: "Enterprise",
-        price: "Custom",
-        description: "Scale without limits.",
-        features: ["Unlimited Users", "API Access", "White-labeling", "24/7 Priority Support"],
+        id: "corporate",
+        name: "Corporate",
+        price: "R 110",
+        normalPrice: "R 299",
+        savingsLabel: "You save R 189/mo",
+        description: "For established businesses with advanced operational needs.",
+        features: [
+            "Unlimited everything",
+            "Unlimited users",
+            "Custom branding",
+            "API access",
+            "Dedicated support",
+            "Advanced analytics",
+            "Payroll management",
+            "Multi-currency support",
+        ],
         buttonText: "Contact Sales",
     },
 ];
 
 function getTierFromPlan(plan) {
-    const normalized = (plan || "free").toLowerCase();
-    if (["starter", "professional", "enterprise"].includes(normalized)) return normalized;
-    return "free";
+    const normalized = (plan || "individual").toLowerCase();
+    // Map legacy plan names to new tiers
+    if (["individual", "starter", "free", "basic"].includes(normalized)) return "individual";
+    if (["sme", "professional", "business"].includes(normalized)) return "sme";
+    if (["corporate", "enterprise"].includes(normalized)) return "corporate";
+    return "individual";
 }
 
 export default function SubscriptionSettings() {
@@ -88,7 +102,7 @@ export default function SubscriptionSettings() {
     };
 
     const handleTierAction = (tier) => {
-        if (tier.id === "enterprise") {
+        if (tier.id === "corporate") {
             handleContactSales();
         } else if (tier.id !== currentPlanId) {
             handleManageBilling();
@@ -99,8 +113,8 @@ export default function SubscriptionSettings() {
         return (
             <div className="space-y-10">
                 <Skeleton className="h-32 rounded-3xl" />
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {[1, 2, 3, 4].map((i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
                         <Skeleton key={i} className="h-80 rounded-[32px]" />
                     ))}
                 </div>
@@ -137,21 +151,34 @@ export default function SubscriptionSettings() {
                 <div className="mb-8">
                     <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Change your plan</h3>
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Select the plan that best fits your current team size.</p>
+                    <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
+                        <p className="text-sm font-semibold text-primary">
+                            Start with a <strong>7-day free trial</strong>. No credit card required to try Paidly.
+                        </p>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {TIERS.map((tier) => {
                         const isCurrent = tier.id === currentPlanId;
                         return (
                             <div
                                 key={tier.id}
                                 className={`relative p-6 rounded-[32px] border-2 flex flex-col transition-all ${
-                                    isCurrent
+                                    tier.recommended
+                                        ? "border-primary shadow-xl shadow-primary/10 ring-2 ring-primary/20"
+                                        : isCurrent
                                         ? "border-orange-500 bg-white dark:bg-slate-900 shadow-xl shadow-orange-100 dark:shadow-orange-900/20 ring-4 ring-orange-50 dark:ring-orange-900/30"
                                         : "border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:border-slate-200 dark:hover:border-slate-700"
                                 }`}
                             >
-                                {isCurrent && (
+                                {tier.recommended && (
+                                    <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest flex items-center gap-1">
+                                        <Star className="w-3 h-3" />
+                                        Recommended
+                                    </span>
+                                )}
+                                {isCurrent && !tier.recommended && (
                                     <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest">
                                         Current
                                     </span>
@@ -161,15 +188,12 @@ export default function SubscriptionSettings() {
                                     <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">{tier.name}</h4>
                                     <p className="text-2xl font-black text-slate-900 dark:text-slate-100">
                                         {tier.price}
-                                        {!tier.isTrial && tier.price !== "Custom" && <span className="text-sm font-normal text-slate-400 ml-1">/mo</span>}
+                                        <span className="text-sm font-normal text-slate-400 ml-1">/ month</span>
                                     </p>
-                                    {tier.normalPrice && (
+                                    {tier.normalPrice && tier.savingsLabel && (
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                             Normally {tier.normalPrice}/mo — {tier.savingsLabel}
                                         </p>
-                                    )}
-                                    {tier.priceSubtext && (
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{tier.priceSubtext}</p>
                                     )}
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{tier.description}</p>
                                 </div>
@@ -183,10 +207,23 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                {tier.id === "starter" && !isCurrent ? (
+                                {tier.id === "corporate" ? (
+                                    <Button
+                                        onClick={() => handleContactSales()}
+                                        className="w-full py-4 rounded-2xl font-bold bg-slate-700 hover:bg-slate-800 text-white"
+                                    >
+                                        {tier.buttonText}
+                                    </Button>
+                                ) : tier.id === "individual" && !isCurrent ? (
                                     <PayFastSubscriptionForm
                                         amountZar="25.00"
-                                        planName="Paidly Pro Monthly"
+                                        planName="Paidly Individual Monthly"
+                                        className="mt-0"
+                                    />
+                                ) : tier.id === "sme" && !isCurrent ? (
+                                    <PayFastSubscriptionForm
+                                        amountZar="50.00"
+                                        planName="Paidly SME Monthly"
                                         className="mt-0"
                                     />
                                 ) : (
@@ -199,7 +236,7 @@ export default function SubscriptionSettings() {
                                                 : "bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 active:scale-[0.98]"
                                         }`}
                                     >
-                                        {tier.buttonText}
+                                        {isCurrent ? "Current Plan" : tier.buttonText}
                                     </Button>
                                 )}
                             </div>
@@ -208,14 +245,14 @@ export default function SubscriptionSettings() {
                 </div>
             </div>
 
-            {/* 3. Enterprise Contact Card */}
+            {/* 3. Corporate / Contact Card */}
             <div className="bg-slate-900 dark:bg-slate-950 rounded-[32px] p-8 md:p-10 text-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-10 opacity-10">
                     <Globe className="w-40 h-40 text-white" />
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">Need a custom solution?</h3>
                 <p className="text-slate-400 mb-8 max-w-md mx-auto">
-                    Enterprise plans offer unlimited users and custom features. Contact sales for a personalized quote.
+                    Corporate plans offer unlimited users and custom features. Contact sales for a personalized quote.
                 </p>
                 <Button
                     onClick={handleContactSales}
