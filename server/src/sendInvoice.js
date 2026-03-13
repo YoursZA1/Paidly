@@ -25,7 +25,7 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const fromAddress = process.env.RESEND_FROM || "Paidly <billing@yourdomain.com>";
+  const fromAddress = process.env.RESEND_FROM || "Paidly <sales@paidly.co.za>";
 
   // Resend requires raw base64 only; never send data URI prefix.
   let cleanBase64;
@@ -86,7 +86,7 @@ export async function sendHtmlEmail(to, subject, html, fromName = "Paidly") {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const fromAddress = process.env.RESEND_FROM || "Paidly <billing@yourdomain.com>";
+  const fromAddress = process.env.RESEND_FROM || "Paidly <sales@paidly.co.za>";
 
   if (!to || !subject) {
     return { success: false, error: "Missing to or subject" };

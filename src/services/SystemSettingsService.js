@@ -9,10 +9,10 @@ const STORAGE_KEY = 'breakapi_system_settings';
 const DEFAULT_SETTINGS = {
   // General System Settings
   system: {
-    siteName: 'Invoice Breek',
+    siteName: 'Paidly',
     siteDescription: 'Professional Invoice Management Platform',
-    adminEmail: 'admin@paidly.com',
-    supportEmail: 'support@paidly.com',
+    adminEmail: 'Accounts@paidly.co.za',
+    supportEmail: 'support@paidly.co.za',
     maintenanceMode: false,
     maintenanceMessage: 'We are currently performing scheduled maintenance. We\'ll be back shortly.',
     allowUserRegistration: true,
