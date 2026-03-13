@@ -276,14 +276,14 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
             transition={{ duration: 0.3 }}
             className="mb-8"
         >
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="border-b border-slate-100 pb-6">
+            <Card className="bg-white/80 dark:bg-slate-800/90 backdrop-blur-sm border-0 dark:border dark:border-slate-700 shadow-xl">
+                <CardHeader className="border-b border-slate-100 dark:border-slate-700 pb-6">
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                             <Headset className="w-5 h-5" />
                             {service ? "Edit Catalog Item" : "Add New Catalog Item"}
                         </CardTitle>
-                        <Button variant="ghost" size="icon" onClick={onCancel} className="hover:bg-slate-100">
+                        <Button variant="ghost" size="icon" onClick={onCancel} className="hover:bg-slate-100 dark:hover:bg-slate-700">
                             <X className="w-4 h-4" />
                         </Button>
                     </div>
@@ -299,7 +299,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                             {/* 1. Catalog Item Type - MANDATORY */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="item_type" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="item_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Catalog Item Type <span className="text-red-500 font-bold">*</span>
                                 </Label>
                                 <Select value={formData.item_type} onValueChange={(value) => handleInputChange('item_type', value)}>
@@ -317,12 +317,12 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-slate-500">Required - determines how this item appears in invoices</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Required - determines how this item appears in invoices</p>
                             </div>
 
                             {/* 2. Item Name - MANDATORY */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="name" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="name" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Item Name <span className="text-red-500 font-bold">*</span>
                                 </Label>
                                 <Input
@@ -336,7 +336,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                             {/* 3. Description - BASE FIELD */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="description" className="text-sm font-semibold text-slate-700">Description</Label>
+                                <Label htmlFor="description" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Description</Label>
                                 <Textarea
                                     id="description"
                                     value={formData.description}
@@ -348,7 +348,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                             {/* 4. Default Unit - MANDATORY */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="default_unit" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="default_unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Default Unit <span className="text-red-500 font-bold">*</span>
                                 </Label>
                                 <Input
@@ -364,16 +364,16 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         }
                                     }}
                                 />
-                                <p className="text-xs text-slate-500">How quantities are measured (hour, piece, kg, etc.)</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">How quantities are measured (hour, piece, kg, etc.)</p>
                             </div>
 
                             {/* 5. Default Rate/Price - MANDATORY */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="default_rate" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="default_rate" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Default Rate / Price <span className="text-red-500 font-bold">*</span>
                                 </Label>
                                 <div className="relative">
-                                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                     <Input
                                         id="default_rate"
                                         type="number"
@@ -388,12 +388,12 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         className={`h-12 pl-10 rounded-xl ${!hasValidRate ? 'border-red-300 border-2' : ''}`}
                                     />
                                 </div>
-                                <p className="text-xs text-slate-500">Price per unit (synced to all invoices)</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Price per unit (synced to all invoices)</p>
                             </div>
 
                             {/* 6. Tax Category - BASE FIELD */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="tax_category" className="text-sm font-semibold text-slate-700">Tax Category</Label>
+                                <Label htmlFor="tax_category" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tax Category</Label>
                                 <Select value={formData.tax_category} onValueChange={(value) => handleInputChange('tax_category', value)}>
                                     <SelectTrigger className="h-12 rounded-xl">
                                         <SelectValue />
@@ -404,7 +404,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-slate-500">Tax treatment for this item</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Tax treatment for this item</p>
                             </div>
 
                             {/* 7. Active/Inactive Status - BASE FIELD */}
@@ -414,7 +414,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                     checked={formData.is_active}
                                     onCheckedChange={(checked) => handleInputChange('is_active', checked)}
                                 />
-                                <Label htmlFor="is_active" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="is_active" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Active / Available for Use
                                 </Label>
                             </div>
@@ -431,7 +431,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 {formData.item_type === 'product' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <Label htmlFor="sku" className="text-sm font-semibold text-slate-700">SKU / Product Code</Label>
+                                            <Label htmlFor="sku" className="text-sm font-semibold text-slate-700 dark:text-slate-300">SKU / Product Code</Label>
                                             <Input
                                                 id="sku"
                                                 value={formData.sku}
@@ -441,7 +441,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="unit" className="text-sm font-semibold text-slate-700">Unit</Label>
+                                            <Label htmlFor="unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unit</Label>
                                             <Select value={formData.unit} onValueChange={(value) => handleInputChange('unit', value)}>
                                                 <SelectTrigger className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select unit" />
@@ -454,9 +454,9 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="price" className="text-sm font-semibold text-slate-700">Default Price</Label>
+                                            <Label htmlFor="price" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Default Price</Label>
                                             <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                 <Input
                                                     id="price"
                                                     type="number"
@@ -476,7 +476,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 {formData.item_type === 'service' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <Label htmlFor="billing_unit" className="text-sm font-semibold text-slate-700">Billing Unit</Label>
+                                            <Label htmlFor="billing_unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Billing Unit</Label>
                                             <Select value={formData.billing_unit} onValueChange={(value) => handleInputChange('billing_unit', value)}>
                                                 <SelectTrigger className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select billing unit" />
@@ -489,9 +489,9 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="rate" className="text-sm font-semibold text-slate-700">Default Rate</Label>
+                                            <Label htmlFor="rate" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Default Rate</Label>
                                             <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                 <Input
                                                     id="rate"
                                                     type="number"
@@ -511,7 +511,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 {formData.item_type === 'labor' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <Label htmlFor="role" className="text-sm font-semibold text-slate-700">Role / Skill Type</Label>
+                                            <Label htmlFor="role" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Role / Skill Type</Label>
                                             <Input
                                                 id="role"
                                                 value={formData.role}
@@ -521,9 +521,9 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="hourly_rate" className="text-sm font-semibold text-slate-700">Hourly Rate</Label>
+                                            <Label htmlFor="hourly_rate" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hourly Rate</Label>
                                             <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                 <Input
                                                     id="hourly_rate"
                                                     type="number"
@@ -543,7 +543,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 {formData.item_type === 'material' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <Label htmlFor="unit_type" className="text-sm font-semibold text-slate-700">Unit Type</Label>
+                                            <Label htmlFor="unit_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unit Type</Label>
                                             <Select value={formData.unit_type} onValueChange={(value) => handleInputChange('unit_type', value)}>
                                                 <SelectTrigger className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select unit type" />
@@ -556,9 +556,9 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="cost_rate" className="text-sm font-semibold text-slate-700">Cost Rate</Label>
+                                            <Label htmlFor="cost_rate" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Cost Rate</Label>
                                             <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                 <Input
                                                     id="cost_rate"
                                                     type="number"
@@ -578,7 +578,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 {formData.item_type === 'expense' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <Label htmlFor="cost_type" className="text-sm font-semibold text-slate-700">Cost Type</Label>
+                                            <Label htmlFor="cost_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Cost Type</Label>
                                             <Select value={formData.cost_type} onValueChange={(value) => handleInputChange('cost_type', value)}>
                                                 <SelectTrigger className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select cost type" />
@@ -590,9 +590,9 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="default_cost" className="text-sm font-semibold text-slate-700">Default Cost</Label>
+                                            <Label htmlFor="default_cost" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Default Cost</Label>
                                             <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                 <Input
                                                     id="default_cost"
                                                     type="number"
@@ -619,7 +619,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                             {/* Pricing Type - Optional */}
                             <div className="grid md:grid-cols-2 gap-6 mb-6">
                                 <div className="space-y-2">
-                                    <Label htmlFor="pricing_type" className="text-sm font-semibold text-slate-700">
+                                    <Label htmlFor="pricing_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                         Pricing Type (Optional)
                                     </Label>
                                     <Select value={formData.pricing_type} onValueChange={(value) => handleInputChange('pricing_type', value)}>
@@ -634,11 +634,11 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <p className="text-xs text-slate-500">{pricingTypes.find(t => t.value === formData.pricing_type)?.unit}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{pricingTypes.find(t => t.value === formData.pricing_type)?.unit}</p>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="min_quantity" className="text-sm font-semibold text-slate-700">Minimum Quantity</Label>
+                                    <Label htmlFor="min_quantity" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Minimum Quantity</Label>
                                     <Input
                                         id="min_quantity"
                                         type="number"
@@ -647,13 +647,13 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         onChange={(e) => handleInputChange('min_quantity', parseInt(e.target.value) || 1)}
                                         className="h-12 rounded-xl"
                                     />
-                                    <p className="text-xs text-slate-500">Smallest quantity allowed per invoice</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Smallest quantity allowed per invoice</p>
                                 </div>
                             </div>
 
                             {/* Category - Optional */}
                             <div className="space-y-2 mb-6">
-                                <Label htmlFor="category" className="text-sm font-semibold text-slate-700">Category (Optional)</Label>
+                                <Label htmlFor="category" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Category (Optional)</Label>
                                 {!showCustomCategory ? (
                                     <Select value={formData.category} onValueChange={handleCategoryChange}>
                                         <SelectTrigger className="h-12 rounded-xl">
@@ -689,7 +689,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                             {/* Estimated Duration & Requirements */}
                             <div className="grid md:grid-cols-2 gap-6 mb-6">
                                 <div className="space-y-2">
-                                    <Label htmlFor="estimated_duration" className="text-sm font-semibold text-slate-700">Estimated Duration</Label>
+                                    <Label htmlFor="estimated_duration" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Estimated Duration</Label>
                                     <Input
                                         id="estimated_duration"
                                         value={formData.estimated_duration}
@@ -700,7 +700,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="requirements" className="text-sm font-semibold text-slate-700">Requirements/Prerequisites</Label>
+                                    <Label htmlFor="requirements" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Requirements/Prerequisites</Label>
                                     <Textarea
                                         id="requirements"
                                         value={formData.requirements}
@@ -713,7 +713,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                             {/* Tags - Optional */}
                             <div className="space-y-2 mb-6">
-                                <Label className="text-sm font-semibold text-slate-700">Tags</Label>
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tags</Label>
                                 <div className="flex gap-2 mb-2">
                                     <Input
                                         value={newTag}
@@ -753,17 +753,17 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         onCheckedChange={(checked) => handleInputChange('price_locked', checked)}
                                     />
                                     <div className="flex-1">
-                                        <Label htmlFor="price_locked" className="text-sm font-semibold text-slate-700 flex items-center gap-1">
+                                        <Label htmlFor="price_locked" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                                             <Lock className="w-4 h-4" />
                                             Lock Pricing
                                         </Label>
-                                        <p className="text-xs text-slate-500 mt-1">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                             When enabled, the default rate cannot be changed globally. Users can override on individual invoices only.
                                         </p>
                                     </div>
                                 </div>
                                 {formData.price_locked && (
-                                    <div className="text-xs text-orange-700 bg-white rounded p-2 border-l-2 border-orange-400">
+                                    <div className="text-xs text-orange-700 dark:text-orange-300 bg-white dark:bg-orange-950/40 rounded p-2 border-l-2 border-orange-400 dark:border-orange-600">
                                         🔒 Pricing is locked. Current rate: <span className="font-semibold">${formData.default_rate.toFixed(2)}</span>
                                     </div>
                                 )}
@@ -771,7 +771,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                         </div>
 
                         {/* Submit Buttons */}
-                        <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200">
+                        <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200 dark:border-slate-700">
                             <Button type="button" variant="outline" onClick={onCancel} className="px-6 py-3 rounded-xl">
                                 Cancel
                             </Button>

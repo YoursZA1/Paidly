@@ -146,7 +146,11 @@ function InvoicePreview({
       toast({ title: "Invoice sent", description: `Invoice ${invoiceNum} was sent to ${clientEmail}.` });
     } catch (error) {
       console.error("Send invoice error:", error);
-      toast({ title: "Send failed", description: error?.message || "Could not send email", variant: "destructive" });
+      const isNetworkError = error?.message === "Failed to fetch" || error?.name === "TypeError";
+      const description = isNetworkError
+        ? "Could not reach the server. If you use app.paidly.co.za, ensure VITE_SERVER_URL points to your backend (e.g. https://api.paidly.co.za)."
+        : (error?.message || "Could not send email");
+      toast({ title: "Send failed", description, variant: "destructive" });
     } finally {
       setIsSending(false);
     }

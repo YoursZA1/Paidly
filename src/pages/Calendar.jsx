@@ -68,9 +68,9 @@ function getEventPillVariant(event) {
 function EventPill({ event, variant, index = 0 }) {
     const v = variant || getEventPillVariant(event);
     const styles = {
-        orange: 'bg-orange-50 border-l-4 border-orange-500 text-orange-800',
-        blue: 'bg-blue-50 border-l-4 border-blue-500 text-blue-800',
-        emerald: 'bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800',
+        orange: 'bg-orange-50 dark:bg-orange-950/50 border-l-4 border-orange-500 dark:border-orange-600 text-orange-800 dark:text-orange-200',
+        blue: 'bg-blue-50 dark:bg-blue-950/50 border-l-4 border-blue-500 dark:border-blue-600 text-blue-800 dark:text-blue-200',
+        emerald: 'bg-emerald-50 dark:bg-emerald-950/50 border-l-4 border-emerald-500 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200',
     };
     const label =
         event.type === 'invoice'
@@ -418,7 +418,7 @@ export default function CalendarPage() {
                         title: `Invoice #${inv.invoice_number}`,
                         time: 'Due',
                         type: 'Finance',
-                        color: inv.status === 'overdue' ? 'text-orange-600' : 'text-slate-900',
+                        color: inv.status === 'overdue' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-900 dark:text-slate-100',
                     });
                 }
             } catch (e) {}
@@ -433,7 +433,7 @@ export default function CalendarPage() {
                         title: `Quote #${q.quote_number}`,
                         time: 'Expires',
                         type: 'Quote',
-                        color: 'text-slate-900',
+                        color: 'text-slate-900 dark:text-slate-100',
                     });
                 }
             } catch (e) {}
@@ -448,7 +448,7 @@ export default function CalendarPage() {
                         title: task.title,
                         time: 'All Day',
                         type: task.category === 'meeting' ? 'Meeting' : 'Task',
-                        color: task.priority === 'high' || task.priority === 'urgent' ? 'text-orange-600' : 'text-slate-900',
+                        color: task.priority === 'high' || task.priority === 'urgent' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-900 dark:text-slate-100',
                     });
                 }
             } catch (e) {}
@@ -478,7 +478,7 @@ export default function CalendarPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-6">
                 <div className="max-w-7xl mx-auto">
                     <Skeleton className="h-12 w-64 mb-8" />
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -491,7 +491,7 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -499,8 +499,8 @@ export default function CalendarPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Calendar & Tasks</h1>
-                        <p className="text-slate-600">Track due dates and manage team tasks</p>
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Calendar & Tasks</h1>
+                        <p className="text-slate-600 dark:text-slate-400">Track due dates and manage team tasks</p>
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -540,35 +540,35 @@ export default function CalendarPage() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="flex-1 flex flex-col lg:flex-row bg-white rounded-2xl lg:rounded-3xl shadow-2xl shadow-slate-200/80 overflow-hidden border border-slate-100 min-w-0"
+                        className="flex-1 flex flex-col lg:flex-row bg-white dark:bg-slate-800 rounded-2xl lg:rounded-3xl shadow-2xl shadow-slate-200/80 dark:shadow-slate-900/80 overflow-hidden border border-slate-100 dark:border-slate-700 min-w-0"
                     >
                         <div className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 lg:mb-8">
                                 <div>
-                                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
                                         {format(viewMonth, 'MMMM yyyy')}
                                     </h2>
-                                    <p className="text-sm text-slate-400 font-medium mt-0.5">
+                                    <p className="text-sm text-slate-400 dark:text-slate-500 font-medium mt-0.5">
                                         {invoiceCountThisMonth} invoices due this month
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 sm:gap-4">
-                                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                                        <button type="button" onClick={() => setViewMonth(m => subMonths(m, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600" aria-label="Previous month">
+                                    <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
+                                        <button type="button" onClick={() => setViewMonth(m => subMonths(m, 1))} className="p-2 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm rounded-lg transition-all text-slate-600 dark:text-slate-300" aria-label="Previous month">
                                             <ChevronLeft className="w-5 h-5" />
                                         </button>
-                                        <button type="button" onClick={() => setViewMonth(m => addMonths(m, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600" aria-label="Next month">
+                                        <button type="button" onClick={() => setViewMonth(m => addMonths(m, 1))} className="p-2 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm rounded-lg transition-all text-slate-600 dark:text-slate-300" aria-label="Next month">
                                             <ChevronRight className="w-5 h-5" />
                                         </button>
                                     </div>
-                                    <Button onClick={() => { setEditingTask(null); setShowTaskForm(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 sm:px-6 py-2.5 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-orange-200">
+                                    <Button onClick={() => { setEditingTask(null); setShowTaskForm(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 sm:px-6 py-2.5 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-orange-200 dark:shadow-orange-900/30">
                                         <Plus className="w-5 h-5" /> Add Event
                                     </Button>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+                            <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden">
                                 {DAYS_HEADER.map(day => (
-                                    <div key={day} className="bg-slate-50 py-2 sm:py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                    <div key={day} className="bg-slate-50 dark:bg-slate-800 py-2 sm:py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                                         {day}
                                     </div>
                                 ))}
@@ -586,7 +586,7 @@ export default function CalendarPage() {
                                     for (let i = 0; i < remainder; i++) cells.push(null);
                                     return cells.map((date, idx) => {
                                         if (!date) {
-                                            return <div key={`e-${idx}`} className="bg-slate-50/50 min-h-[80px] sm:min-h-[100px]" />;
+                                            return <div key={`e-${idx}`} className="bg-slate-50/50 dark:bg-slate-800/50 min-h-[80px] sm:min-h-[100px]" />;
                                         }
                                         const dayEvents = getCellEventsForDate(date);
                                         const today = isToday(date);
@@ -596,9 +596,9 @@ export default function CalendarPage() {
                                                 key={date.toISOString()}
                                                 type="button"
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`bg-white min-h-[80px] sm:min-h-[120px] p-2 sm:p-3 text-left hover:bg-slate-50 active:scale-95 transition-all rounded-sm ${isSelected ? 'ring-2 ring-inset ring-primary' : ''}`}
+                                                className={`bg-white dark:bg-slate-800 min-h-[80px] sm:min-h-[120px] p-2 sm:p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/80 active:scale-95 transition-all rounded-sm ${isSelected ? 'ring-2 ring-inset ring-primary' : ''}`}
                                             >
-                                                <span className={`inline-flex items-center justify-center text-sm font-bold w-7 h-7 rounded-full shrink-0 ${today ? 'bg-orange-600 text-white ring-2 ring-orange-400 ring-offset-2' : 'text-slate-600'}`}>
+                                                <span className={`inline-flex items-center justify-center text-sm font-bold w-7 h-7 rounded-full shrink-0 ${today ? 'bg-orange-600 text-white ring-2 ring-orange-400 dark:ring-orange-500 ring-offset-2 dark:ring-offset-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
                                                     {format(date, 'd')}
                                                 </span>
                                                 <div className="mt-1 space-y-0.5">
@@ -609,17 +609,17 @@ export default function CalendarPage() {
                                     });
                                 })()}
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs">
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-200 border-l-4 border-orange-500" /> Finance</span>
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-200 border-l-4 border-blue-500" /> Meeting</span>
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-200 border-l-4 border-emerald-500" /> Done</span>
+                            <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs text-slate-600 dark:text-slate-400">
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-200 dark:bg-orange-800 border-l-4 border-orange-500" /> Finance</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border-l-4 border-blue-500" /> Meeting</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-200 dark:bg-emerald-800 border-l-4 border-emerald-500" /> Done</span>
                             </div>
                         </div>
-                        <div className="w-full lg:w-80 shrink-0 bg-slate-50/80 border-t lg:border-t-0 lg:border-l border-slate-100 p-4 sm:p-6 lg:p-8">
-                            <h3 className="text-lg font-black text-slate-900 mb-4">Upcoming</h3>
+                        <div className="w-full lg:w-80 shrink-0 bg-slate-50/80 dark:bg-slate-800/80 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-700 p-4 sm:p-6 lg:p-8">
+                            <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 mb-4">Upcoming</h3>
                             <div className="space-y-4">
                                 {getUpcomingAgendaItems().length === 0 ? (
-                                    <p className="text-sm text-slate-400">No upcoming events this week.</p>
+                                    <p className="text-sm text-slate-400 dark:text-slate-500">No upcoming events this week.</p>
                                 ) : (
                                     getUpcomingAgendaItems().map((item, i) => (
                                         <AgendaItem key={i} day={format(item.date, 'd')} month={format(item.date, 'MMM')} title={item.title} time={item.time} type={item.type} color={item.color} />
@@ -636,16 +636,16 @@ export default function CalendarPage() {
                         transition={{ delay: 0.2 }}
                         className="w-full lg:w-96 shrink-0"
                     >
-                        <Card className="bg-white shadow-xl border-0">
-                            <CardHeader className="border-b border-slate-100">
-                                <CardTitle className="flex items-center gap-2">
+                        <Card className="bg-white dark:bg-slate-800 shadow-xl border-0 dark:border dark:border-slate-700">
+                            <CardHeader className="border-b border-slate-100 dark:border-slate-700">
+                                <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                                     <CalendarIcon className="w-5 h-5" />
                                     {format(selectedDate, 'MMMM d, yyyy')}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-6">
                                 {selectedEvents.length === 0 && selectedTasks.length === 0 ? (
-                                    <div className="text-center text-slate-500 py-8">
+                                    <div className="text-center text-slate-500 dark:text-slate-400 py-8">
                                         <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
                                         <p>No events on this date</p>
                                     </div>
@@ -667,16 +667,16 @@ export default function CalendarPage() {
                                         {selectedEvents.map((event, index) => (
                                             <div
                                                 key={index}
-                                                className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                                                className="border border-slate-200 dark:border-slate-600 rounded-lg p-4 hover:shadow-md dark:bg-slate-700/30 transition-shadow"
                                             >
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2">
                                                         {event.type === 'invoice' ? (
                                                             <FileText className="w-5 h-5 text-primary" />
                                                         ) : (
-                                                            <FileText className="w-5 h-5 text-yellow-600" />
+                                                            <FileText className="w-5 h-5 text-yellow-600 dark:text-yellow-500" />
                                                         )}
-                                                        <span className="font-semibold text-slate-900">
+                                                        <span className="font-semibold text-slate-900 dark:text-slate-100">
                                                             {event.title}
                                                         </span>
                                                     </div>
@@ -690,13 +690,13 @@ export default function CalendarPage() {
                                                         {event.status}
                                                     </Badge>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-slate-600">
+                                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                                                     <DollarSign className="w-4 h-4" />
                                                     <span className="font-medium">
                                                         {formatCurrency(event.amount, 'ZAR')}
                                                     </span>
                                                 </div>
-                                                <div className="mt-2 text-xs text-slate-500">
+                                                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                                     {event.type === 'invoice' ? 'Payment Due' : 'Quote Expires'}
                                                 </div>
                                             </div>
@@ -716,10 +716,10 @@ export default function CalendarPage() {
                         transition={{ delay: 0.3 }}
                         className="mt-8"
                     >
-                        <Card className="bg-white shadow-xl border-0">
-                            <CardHeader className="border-b border-slate-100">
+                        <Card className="bg-white dark:bg-slate-800 shadow-xl border-0 dark:border dark:border-slate-700">
+                            <CardHeader className="border-b border-slate-100 dark:border-slate-700">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                    <CardTitle className="flex items-center gap-2">
+                                    <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                                         <ListTodo className="w-5 h-5" />
                                         Task Management
                                     </CardTitle>
@@ -752,7 +752,7 @@ export default function CalendarPage() {
                             </CardHeader>
                             <CardContent className="p-6">
                                 {filteredTasks.length === 0 ? (
-                                    <div className="text-center text-slate-500 py-12">
+                                    <div className="text-center text-slate-500 dark:text-slate-400 py-12">
                                         <CheckSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
                                         <p className="mb-4">No tasks found</p>
                                         <Button 

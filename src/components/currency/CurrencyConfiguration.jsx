@@ -75,10 +75,10 @@ export default function CurrencyConfiguration() {
   return (
     <div className="space-y-6">
       {/* Current Currency Selection */}
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle>Primary Currency</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-slate-900 dark:text-slate-100">Primary Currency</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">
             Set your default currency for invoices and financial reports
           </CardDescription>
         </CardHeader>
@@ -91,35 +91,35 @@ export default function CurrencyConfiguration() {
             />
 
             {currentCurrency && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-semibold mb-2">Currency Details</h4>
+              <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-800/70 rounded-lg border border-slate-100 dark:border-slate-700">
+                <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">Currency Details</h4>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-gray-600">Code:</span>
-                    <p className="font-semibold">{currentCurrency.code}</p>
+                    <span className="text-gray-600 dark:text-slate-400">Code:</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency.code}</p>
                   </div>
                   <div>
-                    <span className="text-gray-600">Symbol:</span>
-                    <p className="font-semibold">{currentCurrency.symbol}</p>
+                    <span className="text-gray-600 dark:text-slate-400">Symbol:</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency.symbol}</p>
                   </div>
                   <div>
-                    <span className="text-gray-600">Region:</span>
-                    <p className="font-semibold">{currentCurrency.region}</p>
+                    <span className="text-gray-600 dark:text-slate-400">Region:</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency.region}</p>
                   </div>
                   <div>
-                    <span className="text-gray-600">Decimal Places:</span>
-                    <p className="font-semibold">{currentCurrency.decimals}</p>
+                    <span className="text-gray-600 dark:text-slate-400">Decimal Places:</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency.decimals}</p>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-gray-600">Name:</span>
-                    <p className="font-semibold">{currentCurrency.name}</p>
+                    <span className="text-gray-600 dark:text-slate-400">Name:</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency.name}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {saveSuccess && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-md text-green-800 text-sm">
+              <div className="p-3 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md text-green-800 dark:text-green-200 text-sm">
                 ✓ Currency preference updated successfully
               </div>
             )}
@@ -155,10 +155,10 @@ export default function CurrencyConfiguration() {
       </Card>
 
       {/* Available Currencies */}
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle>Available Currencies</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-slate-900 dark:text-slate-100">Available Currencies</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">
             View all supported currencies and their formatting options
           </CardDescription>
           <div className="flex gap-2 mt-4">
@@ -185,33 +185,33 @@ export default function CurrencyConfiguration() {
                 key={currency.code}
                 className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
                   selectedCurrency === currency.code
-                    ? 'border-primary bg-primary/10'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
+                    ? 'border-primary bg-primary/10 dark:bg-primary/20'
+                    : 'border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800/80 hover:border-gray-300 dark:hover:border-slate-500'
                 }`}
                 onClick={() => handleCurrencyChange(currency.code)}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold">
+                    <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
                       {currency.symbol}
                     </span>
                     <div>
-                      <p className="font-semibold text-sm">{currency.code}</p>
-                      <p className="text-xs text-gray-600">
+                      <p className="font-semibold text-sm text-slate-900 dark:text-slate-100">{currency.code}</p>
+                      <p className="text-xs text-gray-600 dark:text-slate-400">
                         {currency.decimals} decimals
                       </p>
                     </div>
                   </div>
                   {selectedCurrency === currency.code && (
-                    <span className="bg-primary/100 text-white px-2 py-1 rounded text-xs font-semibold">
+                    <span className="bg-primary text-primary-foreground px-2 py-1 rounded text-xs font-semibold">
                       Current
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mb-2">
+                <p className="text-xs text-gray-500 dark:text-slate-400 mb-2">
                   {currency.name}
                 </p>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-gray-600 dark:text-slate-400">
                   {currency.region}
                 </p>
               </div>
@@ -222,10 +222,10 @@ export default function CurrencyConfiguration() {
 
       {/* Exchange Rates Info */}
       {Object.keys(exchangeRates).length > 0 && (
-        <Card>
+        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
-            <CardTitle>Exchange Rates</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-slate-900 dark:text-slate-100">Exchange Rates</CardTitle>
+            <CardDescription className="text-slate-600 dark:text-slate-400">
               Current exchange rates relative to {selectedCurrency}
             </CardDescription>
           </CardHeader>
@@ -236,19 +236,19 @@ export default function CurrencyConfiguration() {
                 .map(([pair, rate]) => (
                   <div
                     key={pair}
-                    className="p-2 bg-gray-50 rounded border border-gray-200"
+                    className="p-2 bg-gray-50 dark:bg-slate-800/70 rounded border border-gray-200 dark:border-slate-600"
                   >
-                    <p className="text-xs font-semibold text-gray-700">
+                    <p className="text-xs font-semibold text-gray-700 dark:text-slate-400">
                       {pair}
                     </p>
-                    <p className="text-sm font-semibold text-gray-900">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
                       {parseFloat(rate).toFixed(4)}
                     </p>
                   </div>
                 ))}
             </div>
             {Object.keys(exchangeRates).length === 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-slate-400">
                 Exchange rates not available at this time
               </p>
             )}
@@ -257,38 +257,38 @@ export default function CurrencyConfiguration() {
       )}
 
       {/* Currency Formatting Guide */}
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle>Formatting Information</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-slate-900 dark:text-slate-100">Formatting Information</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">
             How {currentCurrency?.code} formats numbers and currency
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex justify-between p-3 bg-gray-50 rounded">
-              <span className="text-gray-700">Symbol Position:</span>
-              <span className="font-semibold">
+            <div className="flex justify-between p-3 bg-gray-50 dark:bg-slate-800/70 rounded border border-transparent dark:border-slate-700">
+              <span className="text-gray-700 dark:text-slate-300">Symbol Position:</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
                 {currentCurrency?.symbolPosition === 'prefix'
                   ? 'Before Amount'
                   : 'After Amount'}
               </span>
             </div>
-            <div className="flex justify-between p-3 bg-gray-50 rounded">
-              <span className="text-gray-700">Thousands Separator:</span>
-              <span className="font-semibold">
+            <div className="flex justify-between p-3 bg-gray-50 dark:bg-slate-800/70 rounded border border-transparent dark:border-slate-700">
+              <span className="text-gray-700 dark:text-slate-300">Thousands Separator:</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
                 &quot;{currentCurrency?.thousandsSeparator}&quot;
               </span>
             </div>
-            <div className="flex justify-between p-3 bg-gray-50 rounded">
-              <span className="text-gray-700">Decimal Separator:</span>
-              <span className="font-semibold">
+            <div className="flex justify-between p-3 bg-gray-50 dark:bg-slate-800/70 rounded border border-transparent dark:border-slate-700">
+              <span className="text-gray-700 dark:text-slate-300">Decimal Separator:</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
                 &quot;{currentCurrency?.decimalSeparator}&quot;
               </span>
             </div>
-            <div className="flex justify-between p-3 bg-gray-50 rounded">
-              <span className="text-gray-700">Decimal Places:</span>
-              <span className="font-semibold">{currentCurrency?.decimals}</span>
+            <div className="flex justify-between p-3 bg-gray-50 dark:bg-slate-800/70 rounded border border-transparent dark:border-slate-700">
+              <span className="text-gray-700 dark:text-slate-300">Decimal Places:</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">{currentCurrency?.decimals}</span>
             </div>
           </div>
         </CardContent>

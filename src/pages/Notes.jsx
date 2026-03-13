@@ -191,42 +191,42 @@ export default function Notes() {
       .trim() || "No additional text";
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
+    <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-900">
       {/* 1. Notes List Sidebar */}
       <aside
-        className={`w-full lg:w-80 border-r border-slate-200 bg-white flex flex-col shrink-0 ${
+        className={`w-full lg:w-80 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col shrink-0 ${
           showEditorOverlay ? "hidden lg:flex" : "flex"
         }`}
       >
-        <div className="p-6 border-b border-slate-100">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-black text-slate-900">Notes</h1>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">Notes</h1>
             <button
               onClick={handleNewNote}
-              className="p-2 bg-orange-500 rounded-xl text-white hover:bg-orange-600 transition-all shadow-lg shadow-orange-200"
+              className="p-2 bg-orange-500 rounded-xl text-white hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 dark:shadow-orange-900/30"
             >
               <Plus className="w-5 h-5" />
             </button>
           </div>
           <div className="relative">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
               placeholder="Search notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20"
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-orange-500/20 dark:focus:ring-orange-500/30"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {isLoading ? (
-            <div className="py-8 text-center text-slate-400 text-sm">
+            <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
               Loading...
             </div>
           ) : filteredNotes.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 text-sm">
+            <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
               {searchQuery ? "No notes found" : "No notes yet. Tap + to create one."}
             </div>
           ) : (
@@ -236,21 +236,21 @@ export default function Notes() {
                 onClick={() => handleSelectNote(note)}
                 className={`w-full text-left p-4 rounded-2xl transition-all ${
                   selectedNote?.id === note.id
-                    ? "bg-orange-50 ring-1 ring-orange-100"
-                    : "hover:bg-slate-50"
+                    ? "bg-orange-50 dark:bg-orange-950/50 ring-1 ring-orange-100 dark:ring-orange-800"
+                    : "hover:bg-slate-50 dark:hover:bg-slate-700/50"
                 }`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <span
                     className={`text-[10px] font-bold uppercase tracking-wider ${
                       selectedNote?.id === note.id
-                        ? "text-orange-500"
-                        : "text-slate-400"
+                        ? "text-orange-500 dark:text-orange-400"
+                        : "text-slate-400 dark:text-slate-500"
                     }`}
                   >
                     {note.category || "General"}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
                     {format(
                       new Date(note.updated_date || note.updated_at || note.created_at),
                       "MMM d"
@@ -260,13 +260,13 @@ export default function Notes() {
                 <h3
                   className={`font-bold text-sm mb-1 ${
                     selectedNote?.id === note.id
-                      ? "text-slate-900"
-                      : "text-slate-700"
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   {note.title || "Untitled"}
                 </h3>
-                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
                   {preview(note.content)}
                 </p>
               </button>
@@ -284,51 +284,51 @@ export default function Notes() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: "100%" }}
             transition={{ type: "tween", duration: 0.25 }}
-            className={`flex-1 bg-slate-50/50 flex flex-col ${
+            className={`flex-1 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col ${
               showEditorOverlay
                 ? "fixed inset-0 z-50 lg:relative lg:z-auto"
                 : "hidden lg:flex"
             }`}
           >
             {/* Mobile: Back button */}
-            <div className="lg:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-white">
+            <div className="lg:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <button
                 onClick={handleBack}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-400"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <span className="text-sm font-medium text-slate-700">Back</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Back</span>
             </div>
 
             {/* Toolbar */}
-            <div className="flex justify-between items-center px-6 lg:px-8 py-4 border-b border-slate-200 bg-white/50 backdrop-blur-sm">
+            <div className="flex justify-between items-center px-6 lg:px-8 py-4 border-b border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
               <div className="flex gap-2">
                 <button
                   onClick={() => handlePinNote(selectedNote)}
-                  className="p-2 hover:bg-slate-100 rounded-lg text-slate-400"
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-500"
                   title={selectedNote.is_pinned ? "Unpin" : "Pin"}
                 >
                   <Star
                     className={`w-5 h-5 ${
-                      selectedNote.is_pinned ? "fill-amber-400 text-amber-500" : ""
+                      selectedNote.is_pinned ? "fill-amber-400 text-amber-500 dark:fill-amber-500 dark:text-amber-400" : ""
                     }`}
                   />
                 </button>
                 <button
-                  className="p-2 hover:bg-slate-100 rounded-lg text-slate-400"
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-500"
                   title="Archive (coming soon)"
                 >
                   <Archive className="w-5 h-5" />
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 min-w-[4rem] text-right">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 min-w-[4rem] text-right">
                   {saveStatus}
                 </span>
                 <button
                   onClick={handleDeleteNote}
-                  className="flex items-center gap-2 text-red-500 text-sm font-bold px-4 py-2 hover:bg-red-50 rounded-xl transition-colors"
+                  className="flex items-center gap-2 text-red-500 dark:text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
@@ -341,13 +341,13 @@ export default function Notes() {
               <input
                 value={editTitle}
                 onChange={handleTitleChange}
-                className="w-full text-4xl font-black text-slate-900 border-none bg-transparent focus:ring-0 mb-6 placeholder-slate-300"
+                className="w-full text-4xl font-black text-slate-900 dark:text-slate-100 border-none bg-transparent focus:ring-0 mb-6 placeholder-slate-300 dark:placeholder-slate-500"
                 placeholder="Title"
               />
               <textarea
                 value={editContent}
                 onChange={handleContentChange}
-                className="w-full min-h-[70vh] text-lg text-slate-600 border-none bg-transparent focus:ring-0 leading-relaxed resize-none placeholder-slate-400"
+                className="w-full min-h-[70vh] text-lg text-slate-600 dark:text-slate-300 border-none bg-transparent focus:ring-0 leading-relaxed resize-none placeholder-slate-400 dark:placeholder-slate-500"
                 placeholder="Start typing your brilliant business ideas here..."
               />
             </div>
@@ -356,7 +356,7 @@ export default function Notes() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="hidden lg:flex flex-1 flex-col items-center justify-center text-slate-400"
+            className="hidden lg:flex flex-1 flex-col items-center justify-center text-slate-400 dark:text-slate-500"
           >
             <FileEdit className="w-16 h-16 mb-4 opacity-20" />
             <p className="font-medium">Select a note or create a new one to begin.</p>

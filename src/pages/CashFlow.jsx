@@ -227,17 +227,17 @@ export default function CashFlowPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
         >
-            <Card className="hover:shadow-lg transition-shadow">
+            <Card className="hover:shadow-lg transition-shadow bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
+                    <CardTitle className="text-sm font-medium text-gray-600 dark:text-slate-400">{title}</CardTitle>
                     <div className={`p-2 rounded-lg ${color}`}>
                         <Icon className="h-4 w-4 text-white" />
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{formatCurrency(value, userCurrency)}</div>
+                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{formatCurrency(value, userCurrency)}</div>
                     {trend && (
-                        <div className={`text-xs flex items-center gap-1 mt-2 ${trendValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <div className={`text-xs flex items-center gap-1 mt-2 ${trendValue >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {trendValue >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
                             {Math.abs(trendValue)}% from last month
                         </div>
@@ -305,7 +305,7 @@ export default function CashFlowPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="w-full h-full p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-gray-100"
+            className="w-full h-full p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-900/95"
         >
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Header */}
@@ -316,7 +316,7 @@ export default function CashFlowPage() {
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash flow</h1>
-                        <p className="text-gray-600 mt-1">Monitor your income and expenses</p>
+                        <p className="text-gray-600 dark:text-slate-400 mt-1">Monitor your income and expenses</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                         <Button 
@@ -360,7 +360,7 @@ export default function CashFlowPage() {
                 {isLoading ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {[...Array(4)].map((_, i) => (
-                            <Card key={i}>
+                            <Card key={i} className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <CardHeader className="pb-2">
                                     <Skeleton className="h-4 w-1/2" />
                                 </CardHeader>
@@ -401,15 +401,15 @@ export default function CashFlowPage() {
                 )}
 
                 {/* Charts Tabs */}
-                <div className="flex gap-2 border-b border-gray-200">
+                <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
                     {['overview', 'expenses', 'analysis'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 font-medium transition-colors capitalize ${
                                 activeTab === tab 
-                                    ? 'text-emerald-600 border-b-2 border-emerald-600' 
-                                    : 'text-gray-600 hover:text-gray-900'
+                                    ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-600 dark:border-emerald-400' 
+                                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100'
                             }`}
                         >
                             {tab}
@@ -424,9 +424,9 @@ export default function CashFlowPage() {
                         animate={{ opacity: 1 }}
                         className="space-y-6"
                     >
-                        <Card>
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <CardHeader>
-                                <CardTitle>Income vs Expenses ({monthsToShow} months)</CardTitle>
+                                <CardTitle className="text-slate-900 dark:text-slate-100">Income vs Expenses ({monthsToShow} months)</CardTitle>
                                 <div className="flex gap-2 mt-2">
                                     {[3, 6, 12].map(months => (
                                         <Button
@@ -455,9 +455,9 @@ export default function CashFlowPage() {
                             </CardContent>
                         </Card>
 
-                        <Card>
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <CardHeader>
-                                <CardTitle>Net Cash Flow Trend</CardTitle>
+                                <CardTitle className="text-slate-900 dark:text-slate-100">Net Cash Flow Trend</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={300}>
@@ -482,9 +482,9 @@ export default function CashFlowPage() {
                         className="space-y-6"
                     >
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card>
+                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <CardHeader>
-                                    <CardTitle>Expense Breakdown</CardTitle>
+                                    <CardTitle className="text-slate-900 dark:text-slate-100">Expense Breakdown</CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     {categoryData.length > 0 ? (
@@ -508,16 +508,16 @@ export default function CashFlowPage() {
                                             </PieChart>
                                         </ResponsiveContainer>
                                     ) : (
-                                        <div className="h-48 flex items-center justify-center text-gray-500">
+                                        <div className="h-48 flex items-center justify-center text-gray-500 dark:text-slate-400">
                                             No expense data available
                                         </div>
                                     )}
                                 </CardContent>
                             </Card>
 
-                            <Card>
+                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <CardHeader>
-                                    <CardTitle>Category Summary</CardTitle>
+                                    <CardTitle className="text-slate-900 dark:text-slate-100">Category Summary</CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3">
@@ -528,9 +528,9 @@ export default function CashFlowPage() {
                                                         className="w-3 h-3 rounded-full" 
                                                         style={{ backgroundColor: COLORS[idx % COLORS.length] }}
                                                     />
-                                                    <span className="text-sm font-medium capitalize">{category.name}</span>
+                                                    <span className="text-sm font-medium capitalize text-slate-900 dark:text-slate-100">{category.name}</span>
                                                 </div>
-                                                <span className="text-sm font-bold">{formatCurrency(category.value, userCurrency)}</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatCurrency(category.value, userCurrency)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -581,13 +581,13 @@ export default function CashFlowPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {isLoading ? (
                                     [...Array(6)].map((_, i) => (
-                                        <Card key={i} className="rounded-xl"><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+                                        <Card key={i} className="rounded-xl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
                                     ))
                                 ) : applyExpenseFilters(storeExpenses || [], expenseFilters).length === 0 ? (
-                                    <div className="col-span-full text-center py-12 text-muted-foreground">No expenses match the filters.</div>
+                                    <div className="col-span-full text-center py-12 text-muted-foreground dark:text-slate-400">No expenses match the filters.</div>
                                 ) : (
                                     applyExpenseFilters(storeExpenses || [], expenseFilters).map((exp) => (
-                                        <Card key={exp.id} className="rounded-xl border border-border shadow-sm">
+                                        <Card key={exp.id} className="rounded-xl border border-border dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800">
                                             <CardContent className="p-4">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <span className="font-semibold text-foreground">{formatCurrency(exp.amount, userCurrency)}</span>
@@ -657,21 +657,21 @@ export default function CashFlowPage() {
                         />
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <Card>
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <CardHeader>
-                                <CardTitle>Monthly Summary</CardTitle>
+                                <CardTitle className="text-slate-900 dark:text-slate-100">Monthly Summary</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
                                     {chartData.slice(-3).reverse().map((month, idx) => (
-                                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                                        <div key={idx} className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className="font-medium">{month.month}</span>
-                                                <span className={`text-lg font-bold ${month.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                <span className="font-medium text-slate-900 dark:text-slate-100">{month.month}</span>
+                                                <span className={`text-lg font-bold ${month.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                                     {formatCurrency(month.net, userCurrency)}
                                                 </span>
                                             </div>
-                                            <div className="text-sm text-gray-600 space-y-1">
+                                            <div className="text-sm text-gray-600 dark:text-slate-400 space-y-1">
                                                 <div>Income: {formatCurrency(month.income, userCurrency)}</div>
                                                 <div>Expenses: {formatCurrency(month.expenses, userCurrency)}</div>
                                             </div>
@@ -681,26 +681,26 @@ export default function CashFlowPage() {
                             </CardContent>
                         </Card>
 
-                        <Card>
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <CardHeader>
-                                <CardTitle>Statistics</CardTitle>
+                                <CardTitle className="text-slate-900 dark:text-slate-100">Statistics</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-                                    <p className="text-sm text-gray-600">Average Monthly Income</p>
+                                <div className="p-4 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30">
+                                    <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Income</p>
                                     <p className="text-2xl font-bold text-primary">
                                         {formatCurrency(metrics.totalIncome / Math.max(chartData.length, 1), userCurrency)}
                                     </p>
                                 </div>
-                                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                                    <p className="text-sm text-gray-600">Average Monthly Expenses</p>
-                                    <p className="text-2xl font-bold text-red-600">
+                                <div className="p-4 bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-800">
+                                    <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Expenses</p>
+                                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                                         {formatCurrency(metrics.totalExpenses / Math.max(chartData.length, 1), userCurrency)}
                                     </p>
                                 </div>
-                                <div className={`p-4 rounded-lg border ${metrics.totalIncome > metrics.totalExpenses ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
-                                    <p className="text-sm text-gray-600">Overall Balance</p>
-                                    <p className={`text-2xl font-bold ${metrics.totalIncome > metrics.totalExpenses ? 'text-green-600' : 'text-orange-600'}`}>
+                                <div className={`p-4 rounded-lg border ${metrics.totalIncome > metrics.totalExpenses ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800'}`}>
+                                    <p className="text-sm text-gray-600 dark:text-slate-400">Overall Balance</p>
+                                    <p className={`text-2xl font-bold ${metrics.totalIncome > metrics.totalExpenses ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
                                         {formatCurrency(metrics.totalIncome - metrics.totalExpenses, userCurrency)}
                                     </p>
                                 </div>

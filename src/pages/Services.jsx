@@ -270,27 +270,27 @@ export default function Services() {
         ["service", "labor"].includes(itemType || "service");
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-6 md:p-8">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* 1. HEADER & SEARCH */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900">
+                        <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">
                             Products & Services
                         </h1>
-                        <p className="text-slate-500 mt-1 font-medium">
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
                             Manage your offerings and pricing strategy.
                         </p>
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <div className="relative flex-1 md:w-72">
-                            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                             <Input
                                 placeholder="Search items..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300"
+                                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300 dark:focus:border-orange-500"
                             />
                         </div>
                         <Button
@@ -298,7 +298,7 @@ export default function Services() {
                                 setEditingService(null);
                                 setShowForm(true);
                             }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-white rounded-2xl font-bold shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all whitespace-nowrap"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-white rounded-2xl font-bold shadow-lg shadow-orange-100 dark:shadow-orange-900/30 hover:bg-orange-700 transition-all whitespace-nowrap"
                         >
                             <PlusIcon className="w-5 h-5" /> Add New
                         </Button>
@@ -309,12 +309,12 @@ export default function Services() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {isLoading ? (
                         Array.from({ length: 6 }).map((_, i) => (
-                            <Card key={i} className="rounded-[32px] overflow-hidden">
+                            <Card key={i} className="rounded-[32px] overflow-hidden bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700">
                                 <CardContent className="p-6">
                                     <div className="animate-pulse space-y-4">
-                                        <div className="h-6 bg-slate-200 rounded w-2/3" />
-                                        <div className="h-4 bg-slate-100 rounded w-1/2" />
-                                        <div className="h-16 bg-slate-100 rounded" />
+                                        <div className="h-6 bg-slate-200 dark:bg-slate-600 rounded w-2/3" />
+                                        <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-1/2" />
+                                        <div className="h-16 bg-slate-100 dark:bg-slate-700 rounded" />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -331,7 +331,7 @@ export default function Services() {
                                         initial={{ opacity: 0, y: 12 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ duration: 0.25 }}
-                                        className="group bg-white border border-slate-100 rounded-[32px] p-6 hover:shadow-xl hover:border-orange-100 transition-all duration-300 relative overflow-hidden cursor-pointer"
+                                        className="group bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[32px] p-6 hover:shadow-xl hover:border-orange-100 dark:hover:border-orange-900/50 transition-all duration-300 relative overflow-hidden cursor-pointer"
                                         onClick={() => {
                                             setEditingService(service);
                                             setShowForm(true);
@@ -349,37 +349,37 @@ export default function Services() {
                                         <div className="flex justify-between items-start mb-6">
                                             <div
                                                 className={`p-3 rounded-2xl shrink-0 ${
-                                                    isService ? "bg-blue-50" : "bg-orange-50"
+                                                    isService ? "bg-blue-50 dark:bg-blue-950/50" : "bg-orange-50 dark:bg-orange-950/50"
                                                 }`}
                                             >
                                                 {isService ? (
-                                                    <TagIcon className="w-6 h-6 text-blue-600" />
+                                                    <TagIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                                                 ) : (
-                                                    <CubeIcon className="w-6 h-6 text-orange-600" />
+                                                    <CubeIcon className="w-6 h-6 text-orange-600 dark:text-orange-400" />
                                                 )}
                                             </div>
-                                            <span className="text-2xl font-black text-slate-900 tabular-nums">
+                                            <span className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums">
                                                 {formatCurrency(price, userCurrency)}
                                             </span>
                                         </div>
 
                                         <div className="mb-8">
-                                            <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-orange-600 transition-colors line-clamp-2">
+                                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors line-clamp-2">
                                                 {service.name}
                                             </h3>
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                                                 {service.category || (service.item_type || "Service")}
                                             </p>
                                         </div>
 
-                                        <div className="pt-6 border-t border-slate-50 flex justify-between items-center">
-                                            <div className="flex items-center gap-2 text-slate-400">
+                                        <div className="pt-6 border-t border-slate-50 dark:border-slate-700 flex justify-between items-center">
+                                            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
                                                 <ChartBarIcon className="w-4 h-4 shrink-0" />
                                                 <span className="text-[10px] font-bold uppercase tracking-widest">
                                                     Billed {billed}x
                                                 </span>
                                             </div>
-                                            <span className="text-xs font-black text-orange-500 group-hover:text-orange-700">
+                                            <span className="text-xs font-black text-orange-500 dark:text-orange-400 group-hover:text-orange-700 dark:group-hover:text-orange-300">
                                                 EDIT DETAILS →
                                             </span>
                                         </div>
@@ -394,7 +394,7 @@ export default function Services() {
                                     setEditingService(null);
                                     setShowForm(true);
                                 }}
-                                className="border-2 border-dashed border-slate-200 rounded-[32px] flex flex-col items-center justify-center p-12 text-slate-400 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50/30 transition-all min-h-[240px]"
+                                className="border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-[32px] flex flex-col items-center justify-center p-12 text-slate-400 dark:text-slate-500 hover:border-orange-300 dark:hover:border-orange-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50/30 dark:hover:bg-orange-950/30 transition-all min-h-[240px]"
                             >
                                 <PlusIcon className="w-10 h-10 mb-2" />
                                 <span className="font-bold">Create New Offer</span>
@@ -404,14 +404,14 @@ export default function Services() {
                 </div>
 
                 {!isLoading && filteredServices.length === 0 && (
-                    <Card className="rounded-[32px] border border-slate-100 overflow-hidden">
+                    <Card className="rounded-[32px] border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
                         <CardContent className="p-12 text-center">
-                            <p className="text-slate-500 font-medium">
+                            <p className="text-slate-500 dark:text-slate-400 font-medium">
                                 {searchTerm
                                     ? "No items match your search."
                                     : "No products or services yet."}
                             </p>
-                            <p className="text-sm text-slate-400 mt-1 mb-6">
+                            <p className="text-sm text-slate-400 dark:text-slate-500 mt-1 mb-6">
                                 {searchTerm
                                     ? "Try a different search term."
                                     : "Add your first item to get started."}
@@ -437,7 +437,7 @@ export default function Services() {
             <Sheet open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditingService(null); }}>
                 <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
                     <div className="py-2">
-                        <h2 className="text-xl font-bold text-slate-900 mb-6">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-6">
                             {editingService ? "Edit item" : "New item"}
                         </h2>
                         <ServiceForm

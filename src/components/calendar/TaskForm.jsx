@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -288,7 +288,7 @@ export default function TaskForm({ open, onClose, onSave, task, clients = [], ta
                                 <Link2 className="w-4 h-4" />
                                 Dependencies (Blocked by)
                             </Label>
-                            <div className="flex flex-wrap gap-2 p-3 border rounded-lg min-h-[60px] bg-slate-50">
+                            <div className="flex flex-wrap gap-2 p-3 border dark:border-slate-600 rounded-lg min-h-[60px] bg-slate-50 dark:bg-slate-800/50">
                                 {availableTasks.map(t => (
                                     <Badge
                                         key={t.id}
@@ -300,7 +300,7 @@ export default function TaskForm({ open, onClose, onSave, task, clients = [], ta
                                     </Badge>
                                 ))}
                                 {availableTasks.length === 0 && (
-                                    <span className="text-sm text-slate-400">No other tasks available</span>
+                                    <span className="text-sm text-slate-400 dark:text-slate-500">No other tasks available</span>
                                 )}
                             </div>
                         </div>
