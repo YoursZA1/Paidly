@@ -220,24 +220,245 @@ app.post("/api/payfast/subscription", (req, res) => {
   });
 });
 
-app.post("/api/payfast/itn", (req, res) => {
+/**
+ * One-time PayFast payment for invoices.
+ * Generates a signed PayFast payload for a single invoice payment.
+ * This endpoint is intentionally unauthenticated so it can be called from the public invoice view.
+ */
+app.post("/api/payfast/once", async (req, res) => {
+  try {
+    const {
+      invoiceId,
+      amount,
+      currency,
+      clientName,
+      clientEmail,
+      returnUrl,
+      cancelUrl
+    } = req.body || {};
+
+    if (!invoiceId || !amount || !clientEmail) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        fields: ["invoiceId", "amount", "clientEmail"]
+      });
+    }
+
+    const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
+    const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
+    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    const notifyUrl =
+      process.env.PAYFAST_ONCE_NOTIFY_URL ||
+      process.env.PAYFAST_NOTIFY_URL ||
+      returnUrl;
+    const returnUrlResolved =
+      process.env.PAYFAST_ONCE_RETURN_URL ||
+      process.env.PAYFAST_RETURN_URL ||
+      returnUrl;
+    const cancelUrlResolved =
+      process.env.PAYFAST_ONCE_CANCEL_URL ||
+      process.env.PAYFAST_CANCEL_URL ||
+      cancelUrl;
+
+    if (!merchantId || !merchantKey) {
+      return res.status(500).json({
+        error: "Payfast merchant credentials not configured"
+      });
+    }
+
+    // Load invoice to validate amount and get org/client ids for ITN handling.
+    const { data: invoice, error: invoiceError } = await supabaseAdmin
+      .from("invoices")
+      .select("id, org_id, client_id, total_amount, invoice_number, currency")
+      .eq("id", invoiceId)
+      .maybeSingle();
+
+    if (invoiceError) {
+      console.error("[payfast-once] Failed to load invoice", invoiceError.message);
+      return res.status(500).json({ error: "Failed to load invoice" });
+    }
+
+    if (!invoice) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const invoiceAmount = Number(invoice.total_amount ?? amount);
+    const paymentAmount = Number(amount);
+    const safeAmount = Number.isFinite(invoiceAmount)
+      ? invoiceAmount
+      : Number.isFinite(paymentAmount)
+        ? paymentAmount
+        : 0;
+
+    if (!Number.isFinite(safeAmount) || safeAmount <= 0) {
+      return res.status(400).json({ error: "Invalid invoice amount" });
+    }
+
+    const [firstName, ...restName] = String(clientName || "").trim().split(" ");
+    const lastName = restName.join(" ");
+
+    const payload = {
+      merchant_id: merchantId,
+      merchant_key: merchantKey,
+      return_url: returnUrlResolved,
+      cancel_url: cancelUrlResolved,
+      notify_url: notifyUrl,
+      m_payment_id: `invoice-${invoice.id}-${Date.now()}`,
+      amount: safeAmount.toFixed(2),
+      item_name: `Invoice ${invoice.invoice_number || invoice.id}`,
+      item_description: `Payment for invoice ${invoice.invoice_number || invoice.id}`,
+      name_first: firstName || "",
+      name_last: lastName || "",
+      email_address: clientEmail,
+      custom_str1: `invoice:${invoice.id}`,
+      custom_str2: invoice.client_id || "",
+      custom_str3: invoice.org_id || "",
+      custom_str4: "once",
+      custom_str5: invoice.currency || currency || "ZAR"
+    };
+
+    payload.signature = signPayfastPayload(payload, passphrase);
+
+    return res.json({
+      payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
+      fields: payload
+    });
+  } catch (err) {
+    console.error("[payfast-once] Error", err);
+    return res.status(500).json({ error: "Failed to start Payfast payment" });
+  }
+});
+
+/**
+ * PayFast ITN handler for one-time invoice payments.
+ * Expects custom_str1 in the format "invoice:<invoiceId>" for one-time payments.
+ */
+app.post("/api/payfast/itn", async (req, res) => {
   const payload = req.body || {};
   const passphrase = process.env.PAYFAST_PASSPHRASE || "";
   const signatureValid = verifyPayfastSignature(payload, passphrase);
 
   if (!signatureValid) {
+    console.error("[payfast-itn] Invalid signature", {
+      m_payment_id: payload.m_payment_id,
+      payment_status: payload.payment_status
+    });
     return res.status(400).send("Invalid signature");
   }
 
-  // TODO: Validate payload with Payfast and update subscription status in storage.
-  console.log("Payfast ITN received", {
-    m_payment_id: payload.m_payment_id,
-    payment_status: payload.payment_status,
-    subscription_id: payload.custom_str1,
-    gross: payload.amount_gross
-  });
+  const paymentStatus = String(payload.payment_status || "").toUpperCase();
+  if (paymentStatus !== "COMPLETE") {
+    return res.status(200).send("OK");
+  }
 
-  return res.status(200).send("OK");
+  const customStr1 = String(payload.custom_str1 || "");
+  if (!customStr1.startsWith("invoice:")) {
+    // Not a one-time invoice payment; acknowledge for now.
+    console.log("[payfast-itn] Non-invoice ITN received", {
+      m_payment_id: payload.m_payment_id,
+      payment_status: payload.payment_status
+    });
+    return res.status(200).send("OK");
+  }
+
+  const invoiceId = customStr1.split(":")[1];
+  if (!invoiceId) {
+    console.error("[payfast-itn] Missing invoice id in custom_str1", customStr1);
+    return res.status(200).send("OK");
+  }
+
+  const paymentAmountRaw = payload.amount_gross ?? payload.amount;
+  const paymentAmount = Number(paymentAmountRaw);
+
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    console.error("[payfast-itn] Invalid payment amount", paymentAmountRaw);
+    return res.status(200).send("OK");
+  }
+
+  try {
+    const { data: invoice, error: invoiceError } = await supabaseAdmin
+      .from("invoices")
+      .select("id, org_id, client_id, total_amount, status")
+      .eq("id", invoiceId)
+      .maybeSingle();
+
+    if (invoiceError) {
+      console.error("[payfast-itn] Failed to load invoice", invoiceError.message);
+      return res.status(200).send("OK");
+    }
+
+    if (!invoice) {
+      console.error("[payfast-itn] Invoice not found", invoiceId);
+      return res.status(200).send("OK");
+    }
+
+    const { data: existingPayments, error: paymentsError } = await supabaseAdmin
+      .from("payments")
+      .select("amount")
+      .eq("invoice_id", invoiceId);
+
+    if (paymentsError) {
+      console.error("[payfast-itn] Failed to load existing payments", paymentsError.message);
+      return res.status(200).send("OK");
+    }
+
+    const alreadyPaid = (existingPayments || []).reduce(
+      (sum, p) => sum + (Number(p.amount) || 0),
+      0
+    );
+    const newTotalPaid = alreadyPaid + paymentAmount;
+    const invoiceTotal = Number(invoice.total_amount || 0);
+
+    let newStatus = invoice.status;
+    if (invoiceTotal > 0) {
+      if (newTotalPaid >= invoiceTotal - 0.01) {
+        newStatus = "paid";
+      } else if (newTotalPaid > 0 && invoice.status !== "paid") {
+        newStatus = "partial_paid";
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const reference = String(payload.pf_payment_id || payload.m_payment_id || "");
+
+    const { error: insertError } = await supabaseAdmin.from("payments").insert({
+      org_id: invoice.org_id,
+      invoice_id: invoice.id,
+      client_id: invoice.client_id,
+      amount: paymentAmount,
+      payment_date: nowIso,
+      payment_method: "payfast",
+      reference_number: reference,
+      notes: "PayFast one-time payment"
+    });
+
+    if (insertError) {
+      console.error("[payfast-itn] Failed to insert payment", insertError.message);
+      return res.status(200).send("OK");
+    }
+
+    if (newStatus && newStatus !== invoice.status) {
+      const { error: updateError } = await supabaseAdmin
+        .from("invoices")
+        .update({ status: newStatus })
+        .eq("id", invoice.id);
+
+      if (updateError) {
+        console.error("[payfast-itn] Failed to update invoice status", updateError.message);
+      }
+    }
+
+    console.log("[payfast-itn] Recorded payment for invoice", {
+      invoiceId,
+      paymentAmount,
+      status: newStatus
+    });
+
+    return res.status(200).send("OK");
+  } catch (err) {
+    console.error("[payfast-itn] Unexpected error", err);
+    return res.status(200).send("OK");
+  }
 });
 
 app.post("/api/admin/roles", async (req, res) => {

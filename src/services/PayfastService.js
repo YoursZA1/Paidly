@@ -27,6 +27,46 @@ const buildReturnUrl = (path) => {
 };
 
 const PayfastService = {
+  async startOneTimePayment({
+    invoiceId,
+    amount,
+    currency = "ZAR",
+    clientName,
+    clientEmail,
+    returnPath = window.location.pathname + window.location.search,
+    cancelPath = window.location.pathname + window.location.search
+  }) {
+    const payload = {
+      invoiceId,
+      amount,
+      currency,
+      clientName,
+      clientEmail,
+      returnUrl: buildReturnUrl(returnPath),
+      cancelUrl: buildReturnUrl(cancelPath)
+    };
+
+    const response = await fetch(`${getServerBaseUrl()}/api/payfast/once`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to start Payfast payment");
+    }
+
+    const data = await response.json();
+    if (!data?.payfastUrl || !data?.fields) {
+      throw new Error("Invalid Payfast response");
+    }
+
+    submitPayfastForm(data.payfastUrl, data.fields);
+  },
+
   async startSubscription({
     subscriptionId,
     userId,

@@ -9,6 +9,7 @@ import { Loader2, AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
+import PayfastService from '@/services/PayfastService';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -21,6 +22,8 @@ export default function PublicInvoice() {
     const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [verificationError, setVerificationError] = useState('');
+    const [isPaying, setIsPaying] = useState(false);
+    const [payError, setPayError] = useState('');
 
     useEffect(() => {
         const fetchInvoiceData = async () => {
@@ -213,6 +216,32 @@ export default function PublicInvoice() {
     const canPayOnline = bankingDetail && bankingDetail.payment_gateway_url;
     const ownerCurrency = invoice.owner_currency || 'ZAR';
 
+    const handlePayFast = async () => {
+        if (!invoice) return;
+        setIsPaying(true);
+        setPayError('');
+        try {
+            const amount = invoice.total_amount || 0;
+            const clientName = client?.name || '';
+            const clientEmail = client?.email || invoice.sent_to_email || '';
+            const returnPath = location.pathname + location.search;
+
+            await PayfastService.startOneTimePayment({
+                invoiceId: invoice.id,
+                amount,
+                currency: ownerCurrency || 'ZAR',
+                clientName,
+                clientEmail,
+                returnPath,
+                cancelPath: returnPath,
+            });
+        } catch (err) {
+            console.error('Failed to start PayFast payment:', err);
+            setPayError(err?.message || 'Could not start PayFast payment. Please try again.');
+            setIsPaying(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
             <div className="max-w-4xl mx-auto">
@@ -226,6 +255,17 @@ export default function PublicInvoice() {
                             </button>
                         </a>
                     )}
+                    {ownerCurrency === 'ZAR' && (
+                        <button
+                            type="button"
+                            onClick={handlePayFast}
+                            disabled={isPaying}
+                            className="flex-grow sm:flex-grow-0 w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-70 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
+                        >
+                            <CreditCard className="w-5 h-5" />
+                            {isPaying ? 'Redirecting to PayFast…' : `Pay with PayFast (${formatCurrency(invoice.total_amount, ownerCurrency)})`}
+                        </button>
+                    )}
                     <a href={createPageUrl(`InvoicePDF?id=${invoice.id}`)} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
                         <button className="w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
                             <Download className="w-5 h-5" />
@@ -233,6 +273,12 @@ export default function PublicInvoice() {
                         </button>
                     </a>
                 </div>
+
+                {payError && (
+                    <div className="mb-4 text-sm text-red-600">
+                        {payError}
+                    </div>
+                )}
 
                 <div className="bg-white shadow-xl rounded-lg p-6 sm:p-10">
                     {/* Header */}
