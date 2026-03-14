@@ -34,3 +34,6 @@ dist-ssr
 .playwright-browsers
 playwright-browsers
 playwright-screenshots
+
+# Root-level screenshot PNGs (QA, tests)
+/*.png
