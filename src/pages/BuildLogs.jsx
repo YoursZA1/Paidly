@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 const serverUrl = (import.meta.env.VITE_SERVER_URL || "http://localhost:5179").replace(/\/$/, "");
+const BUILD_INFO_TIMEOUT_MS = 15000;
 const appVersion = import.meta.env.VITE_APP_VERSION || "0.0.0";
 const buildTime = import.meta.env.VITE_BUILD_TIME || null;
 const isDev = import.meta.env.DEV === true;
@@ -40,7 +41,7 @@ export default function BuildLogs() {
       const res = await fetch(`${serverUrl}/api/build-info`, {
         method: "GET",
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(BUILD_INFO_TIMEOUT_MS),
       });
       if (res.ok) {
         const data = await res.json();
@@ -51,7 +52,11 @@ export default function BuildLogs() {
         setServerLogs("");
       }
     } catch (e) {
-      setError(e.message || "Could not reach server");
+      const msg = e?.message || "Could not reach server";
+      const isTimeout = msg.includes("aborted") || msg.includes("timed out");
+      setError(isTimeout
+        ? `Request timed out after ${BUILD_INFO_TIMEOUT_MS / 1000}s. The server may be slow or offline.`
+        : msg);
       setBuildInfo(null);
       setServerLogs("");
     } finally {
