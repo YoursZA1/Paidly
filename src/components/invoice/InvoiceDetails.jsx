@@ -154,16 +154,16 @@ export default function InvoiceDetails({
     <>
     <div className="space-y-6">
       {/* 1. Invoice Info Card */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+      <div className="bg-card rounded-3xl p-8 border border-border shadow-sm">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-1.5 h-6 bg-orange-500 rounded-full" />
-          <h2 className="text-xl font-black text-slate-900">Invoice Info</h2>
+          <h2 className="text-xl font-black text-foreground">Invoice Info</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Client</Label>
+            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Client</Label>
             <Select value={invoiceData.client_id} onValueChange={(v) => setInvoiceData((prev) => ({ ...prev, client_id: v }))}>
-              <SelectTrigger className="h-12 rounded-2xl border-none bg-slate-50">
+              <SelectTrigger className="h-12 rounded-2xl border-none bg-muted/50">
                 <SelectValue placeholder="Choose a client..." />
               </SelectTrigger>
               <SelectContent>
@@ -174,21 +174,21 @@ export default function InvoiceDetails({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Project Title</Label>
+            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Project Title</Label>
             <Input
               value={invoiceData.project_title}
               onChange={(e) => setInvoiceData((prev) => ({ ...prev, project_title: e.target.value }))}
               placeholder="Enter project title"
-              className="h-12 rounded-2xl border-none bg-slate-50"
+              className="h-12 rounded-2xl border-none bg-muted/50"
             />
           </div>
         </div>
       </div>
 
       {/* 2. Line Items Card */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+      <div className="bg-card rounded-3xl p-8 border border-border shadow-sm">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-black text-slate-900">Line Items</h2>
+          <h2 className="text-xl font-black text-foreground">Line Items</h2>
           <div className="flex gap-2">
             <Button
               type="button"
@@ -206,7 +206,7 @@ export default function InvoiceDetails({
             <Button
               type="button"
               variant="outline"
-              className="border-slate-200 px-4 py-2 rounded-xl text-xs"
+              className="border-border px-4 py-2 rounded-xl text-xs"
               onClick={() => {
                 if (itemHistory.length > 0) {
                   setInvoiceData((prev) => ({ ...prev, items: itemHistory[itemHistory.length - 1] }));
@@ -221,7 +221,7 @@ export default function InvoiceDetails({
         </div>
 
         {/* Quick Add Row */}
-        <div className="flex gap-3 mb-6 p-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+        <div className="flex gap-3 mb-6 p-3 bg-muted/50 rounded-2xl border border-dashed border-border">
           <Input
             ref={quickNameRef}
             value={quickName}
@@ -236,7 +236,7 @@ export default function InvoiceDetails({
             value={quickQty}
             onChange={(e) => setQuickQty(e.target.value)}
             placeholder="Qty"
-            className="w-14 bg-white rounded-lg text-center text-sm p-2 h-9"
+            className="w-14 bg-background rounded-lg text-center text-sm p-2 h-9"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addQuickItem())}
           />
           <Input
@@ -246,7 +246,7 @@ export default function InvoiceDetails({
             value={quickPrice}
             onChange={(e) => setQuickPrice(e.target.value)}
             placeholder="Price"
-            className="w-24 bg-white rounded-lg text-right text-sm p-2 h-9"
+            className="w-24 bg-background rounded-lg text-right text-sm p-2 h-9"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addQuickItem())}
           />
           <Button type="button" size="icon" className="bg-orange-500 hover:bg-orange-600 text-white h-9 w-9 rounded-lg shrink-0" onClick={addQuickItem}>
@@ -260,9 +260,9 @@ export default function InvoiceDetails({
                 {invoiceData.items.map((item, idx) => {
                   const allCatalog = [...products, ...services];
                   return (
-                    <div key={idx} className="bg-slate-50 p-4 sm:p-6 rounded-2xl space-y-4">
+                    <div key={idx} className="bg-muted/50 p-4 sm:p-6 rounded-2xl space-y-4">
                       <div className="flex justify-between items-center">
-                        <h4 className="font-semibold text-slate-900">Item #{idx + 1}</h4>
+                        <h4 className="font-semibold text-foreground">Item #{idx + 1}</h4>
                         <Button
                           type="button"
                           variant="ghost"
@@ -437,7 +437,7 @@ export default function InvoiceDetails({
                       <div className="flex justify-end">
                         <div className="text-right">
                           <p className="text-sm text-slate-600">Total</p>
-                          <p className="text-xl font-bold text-slate-900">{formatCurrency(item.total || item.total_price || 0, userCurrency)}</p>
+                          <p className="text-xl font-bold text-foreground">{formatCurrency(item.total || item.total_price || 0, userCurrency)}</p>
                         </div>
                       </div>
                     </div>
@@ -445,17 +445,17 @@ export default function InvoiceDetails({
                 })}
               </>
             ) : (
-              <div className="text-center py-10 bg-slate-50 rounded-2xl">
+              <div className="text-center py-10 bg-muted/50 rounded-2xl">
                 <p className="text-slate-400 text-sm font-medium">No items yet. Start by adding a service.</p>
               </div>
             )}
       </div>
 
       {/* 3. Payment Details Card - Due Date & Tax Rate side-by-side */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+      <div className="bg-card rounded-3xl p-8 border border-border shadow-sm">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-1.5 h-6 bg-slate-300 rounded-full" />
-          <h2 className="text-xl font-black text-slate-900">Payment Details</h2>
+          <div className="w-1.5 h-6 bg-muted-foreground/30 rounded-full" />
+          <h2 className="text-xl font-black text-foreground">Payment Details</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex items-center gap-3 p-4 bg-orange-50/50 rounded-2xl">
@@ -472,7 +472,7 @@ export default function InvoiceDetails({
               />
             </div>
           </div>
-          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+          <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-2xl">
             <div className="w-6 h-6 flex items-center justify-center text-slate-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
             </div>
@@ -492,10 +492,10 @@ export default function InvoiceDetails({
       </div>
 
       {/* 4. Additional Details Card */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+      <div className="bg-card rounded-3xl p-8 border border-border shadow-sm">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-1.5 h-6 bg-slate-300 rounded-full" />
-          <h2 className="text-xl font-black text-slate-900">Additional Details</h2>
+          <div className="w-1.5 h-6 bg-muted-foreground/30 rounded-full" />
+          <h2 className="text-xl font-black text-foreground">Additional Details</h2>
         </div>
         <div className="grid md:grid-cols-1 gap-6">
           <div className="space-y-2">
@@ -504,7 +504,7 @@ export default function InvoiceDetails({
               value={invoiceData.project_description}
               onChange={(e) => setInvoiceData((prev) => ({ ...prev, project_description: e.target.value }))}
               placeholder="Describe the project in detail..."
-              className="min-h-24 rounded-2xl border-none bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
+              className="min-h-24 rounded-2xl border-none bg-muted/50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
             />
           </div>
           <div className="space-y-2">
@@ -513,7 +513,7 @@ export default function InvoiceDetails({
               value={invoiceData.notes}
               onChange={(e) => setInvoiceData((prev) => ({ ...prev, notes: e.target.value }))}
               placeholder="Any additional notes..."
-              className="min-h-24 rounded-2xl border-none bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
+              className="min-h-24 rounded-2xl border-none bg-muted/50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
             />
           </div>
           <div className="space-y-2">
@@ -522,7 +522,7 @@ export default function InvoiceDetails({
               value={invoiceData.terms_conditions}
               onChange={(e) => setInvoiceData((prev) => ({ ...prev, terms_conditions: e.target.value }))}
               placeholder="Enter terms and conditions..."
-              className="min-h-24 rounded-2xl border-none bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
+              className="min-h-24 rounded-2xl border-none bg-muted/50 focus-visible:ring-2 focus-visible:ring-orange-500/20"
             />
           </div>
         </div>

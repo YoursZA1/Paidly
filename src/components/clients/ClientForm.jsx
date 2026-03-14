@@ -12,7 +12,7 @@ import { X, Save, User, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { industries } from "./IndustryBadge";
 
-export default function ClientForm({ client, onSave, onCancel }) {
+export default function ClientForm({ client = null, onSave, onCancel }) {
     const [formData, setFormData] = useState({
         name: client?.name || "",
         email: client?.email || "",
@@ -53,10 +53,10 @@ export default function ClientForm({ client, onSave, onCancel }) {
             transition={{ duration: 0.3 }}
             className="mb-8"
         >
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="border-b border-slate-100 pb-6">
+            <Card className="bg-card/95 dark:bg-card backdrop-blur-sm border-0 dark:border dark:border-border shadow-xl">
+                <CardHeader className="border-b border-slate-100 dark:border-border pb-6">
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                             <User className="w-5 h-5" />
                             {client ? "Edit Client" : "Add New Client"}
                         </CardTitle>
@@ -64,7 +64,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                             variant="ghost"
                             size="icon"
                             onClick={onCancel}
-                            className="hover:bg-slate-100"
+                            className="hover:bg-muted"
                         >
                             <X className="w-4 h-4" />
                         </Button>
@@ -75,7 +75,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="name" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="name" className="text-sm font-semibold text-foreground">
                                     Client Name *
                                 </Label>
                                 <Input
@@ -83,12 +83,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.name}
                                     onChange={(e) => handleInputChange('name', e.target.value)}
                                     placeholder="Enter client name"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="email" className="text-sm font-semibold text-foreground">
                                     Email Address *
                                 </Label>
                                 <Input
@@ -97,12 +97,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.email}
                                     onChange={(e) => handleInputChange('email', e.target.value)}
                                     placeholder="client@example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="phone" className="text-sm font-semibold text-foreground">
                                     Phone Number
                                 </Label>
                                 <Input
@@ -110,12 +110,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.phone}
                                     onChange={(e) => handleInputChange('phone', e.target.value)}
                                     placeholder="+1 (555) 000-0000"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="contact_person" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="contact_person" className="text-sm font-semibold text-foreground">
                                     Contact Person
                                 </Label>
                                 <Input
@@ -123,12 +123,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.contact_person}
                                     onChange={(e) => handleInputChange('contact_person', e.target.value)}
                                     placeholder="Primary contact name"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="website" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="website" className="text-sm font-semibold text-foreground">
                                     Website
                                 </Label>
                                 <Input
@@ -137,12 +137,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.website}
                                     onChange={(e) => handleInputChange('website', e.target.value)}
                                     placeholder="https://example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="tax_id" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="tax_id" className="text-sm font-semibold text-foreground">
                                     Tax ID / VAT Number
                                 </Label>
                                 <Input
@@ -150,12 +150,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.tax_id}
                                     onChange={(e) => handleInputChange('tax_id', e.target.value)}
                                     placeholder="Tax ID or VAT number"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="alternate_email" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="alternate_email" className="text-sm font-semibold text-foreground">
                                     Alternate Email
                                 </Label>
                                 <Input
@@ -164,12 +164,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.alternate_email}
                                     onChange={(e) => handleInputChange('alternate_email', e.target.value)}
                                     placeholder="alternate@example.com"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="fax" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="fax" className="text-sm font-semibold text-foreground">
                                     Fax
                                 </Label>
                                 <Input
@@ -177,12 +177,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.fax}
                                     onChange={(e) => handleInputChange('fax', e.target.value)}
                                     placeholder="+1 (555) 000-0001"
-                                    className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="industry" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="industry" className="text-sm font-semibold text-foreground">
                                     Industry
                                 </Label>
                                 <Select
@@ -214,7 +214,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                             
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
-                                    <Label htmlFor="payment_terms" className="text-sm font-semibold text-slate-700">
+                                    <Label htmlFor="payment_terms" className="text-sm font-semibold text-foreground">
                                         Payment Terms
                                     </Label>
                                     <Select
@@ -247,7 +247,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
 
                                 {formData.payment_terms === 'custom' && (
                                     <div className="space-y-2">
-                                        <Label htmlFor="payment_terms_days" className="text-sm font-semibold text-slate-700">
+                                        <Label htmlFor="payment_terms_days" className="text-sm font-semibold text-foreground">
                                             Custom Days
                                         </Label>
                                         <Input
@@ -257,7 +257,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                             value={formData.payment_terms_days}
                                             onChange={(e) => handleInputChange('payment_terms_days', parseInt(e.target.value) || 0)}
                                             placeholder="Number of days"
-                                            className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                            className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
                                         />
                                     </div>
                                 )}
@@ -269,7 +269,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="address" className="text-sm font-semibold text-slate-700">
+                            <Label htmlFor="address" className="text-sm font-semibold text-foreground">
                                 Address
                             </Label>
                             <Textarea
@@ -277,13 +277,13 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                 value={formData.address}
                                 onChange={(e) => handleInputChange('address', e.target.value)}
                                 placeholder="Client's business address"
-                                className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
+                                className="min-h-24 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
                             />
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="notes" className="text-sm font-semibold text-slate-700">
+                                <Label htmlFor="notes" className="text-sm font-semibold text-foreground">
                                     Client Notes
                                 </Label>
                                 <p className="text-xs text-slate-500">Visible to client (shown on portal/emails)</p>
@@ -292,12 +292,12 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                     value={formData.notes}
                                     onChange={(e) => handleInputChange('notes', e.target.value)}
                                     placeholder="Public notes about this client..."
-                                    className="min-h-32 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
+                                    className="min-h-32 rounded-xl border-border focus:border-primary focus:ring-primary/20 resize-none"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="internal_notes" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                <Label htmlFor="internal_notes" className="text-sm font-semibold text-foreground flex items-center gap-2">
                                     <Lock className="w-4 h-4" />
                                     Internal Notes
                                 </Label>
@@ -313,9 +313,9 @@ export default function ClientForm({ client, onSave, onCancel }) {
                         </div>
 
                         {/* Follow-up Settings */}
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                        <div className="flex items-center justify-between p-4 bg-muted/60 rounded-xl">
                             <div>
-                                <Label className="text-sm font-semibold text-slate-700">
+                                <Label className="text-sm font-semibold text-foreground">
                                     Automated Follow-up Reminders
                                 </Label>
                                 <p className="text-xs text-slate-500 mt-1">
@@ -333,7 +333,7 @@ export default function ClientForm({ client, onSave, onCancel }) {
                                 type="button"
                                 variant="outline"
                                 onClick={onCancel}
-                                className="px-6 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+                                className="px-6 py-3 rounded-xl border-border hover:bg-muted"
                             >
                                 Cancel
                             </Button>
@@ -374,8 +374,4 @@ ClientForm.propTypes = {
     }),
     onSave: PropTypes.func.isRequired,
     onCancel: PropTypes.func.isRequired
-};
-
-ClientForm.defaultProps = {
-    client: null
 };

@@ -28,7 +28,7 @@ import RecurringInvoiceCycleHistory from '../components/recurring/RecurringInvoi
 const statusStyles = {
     active: "bg-emerald-100 text-emerald-700",
     paused: "bg-amber-100 text-amber-700",
-    ended: "bg-slate-100 text-slate-700",
+    ended: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
 };
 
 export default function RecurringInvoices() {
@@ -162,7 +162,7 @@ export default function RecurringInvoices() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <CreateRecurringInvoice
                 isOpen={isCreateDialogOpen}
                 onClose={() => setIsCreateDialogOpen(false)}
@@ -181,7 +181,7 @@ export default function RecurringInvoices() {
                             <Zap className="w-6 h-6 text-primary" />
                             Recurring Invoices
                         </h1>
-                        <p className="text-gray-600">Manage automated invoice templates and schedules.</p>
+                        <p className="text-muted-foreground">Manage automated invoice templates and schedules.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <input
@@ -240,7 +240,7 @@ export default function RecurringInvoices() {
                     <motion.div
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`p-4 mb-6 rounded-lg flex items-center gap-3 ${generationResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                        className={`p-4 mb-6 rounded-lg flex items-center gap-3 ${generationResult.success ? 'bg-green-100 dark:bg-green-950/50 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-950/50 text-red-800 dark:text-red-200'}`}
                     >
                         {generationResult.success ? <CheckCircle className="w-5 h-5"/> : <AlertCircle className="w-5 h-5"/>}
                         <p>
@@ -294,12 +294,12 @@ export default function RecurringInvoices() {
                                     {[...Array(3)].map((_, idx) => (
                                         <Card key={idx}>
                                             <CardHeader>
-                                                <div className="h-6 bg-gray-200 rounded w-3/4" />
+                                                <div className="h-6 bg-muted rounded w-3/4" />
                                             </CardHeader>
                                             <CardContent>
                                                 <div className="space-y-2">
-                                                    <div className="h-4 bg-gray-200 rounded w-1/2" />
-                                                    <div className="h-4 bg-gray-200 rounded" />
+                                                    <div className="h-4 bg-muted rounded w-1/2" />
+                                                    <div className="h-4 bg-muted rounded" />
                                                 </div>
                                             </CardContent>
                                         </Card>

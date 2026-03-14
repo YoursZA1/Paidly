@@ -1,7 +1,7 @@
 // billingService.js
 // Simulated API for Billing (replace with real API integration as needed)
 
-import { supabase } from "./supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 export async function getBillingStats() {
   // Try to fetch from Supabase, fallback to mock if not configured or error

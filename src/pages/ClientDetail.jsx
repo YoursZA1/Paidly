@@ -85,7 +85,7 @@ export default function ClientDetail() {
                 Client.filter({ id: clientId }),
                 Invoice.filter({ client_id: clientId }, '-created_date'),
                 User.me()
-            ]), 5000, 1);
+            ]), 15000, 2);
             if (!mountedRef.current) return;
             setClient(clientData?.[0] || null);
             setInvoices(invoicesData || []);

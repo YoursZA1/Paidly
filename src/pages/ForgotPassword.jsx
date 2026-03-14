@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Mail, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import SupabaseAuthService from "@/services/SupabaseAuthService";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -20,38 +21,11 @@ export default function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      // Simulate password reset request
-      const users = JSON.parse(localStorage.getItem("breakapi_users") || "[]");
-      const userExists = users.some((u) => u.email === email);
-
-      if (!userExists) {
-        setError("Email not found");
-        setIsLoading(false);
-        return;
-      }
-
-      // Generate reset token and store with expiry (1 hour)
-      const resetToken = Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
-      const expiresAt = Date.now() + 3600000; // 1 hour
-
-      const resetRequests = JSON.parse(
-        localStorage.getItem("breakapi_password_resets") || "{}"
-      );
-      resetRequests[resetToken] = {
-        email,
-        expiresAt,
-        createdAt: Date.now()
-      };
-      localStorage.setItem("breakapi_password_resets", JSON.stringify(resetRequests));
-
-      // Show reset link in console (since no email backend)
-      const resetLink = `${window.location.origin}/reset-password?token=${resetToken}`;
-      console.log("Password Reset Link:", resetLink);
-
+      const redirectTo = `${window.location.origin}${createPageUrl("ResetPassword")}`;
+      await SupabaseAuthService.resetPasswordForEmail(email.trim().toLowerCase(), redirectTo);
       setSubmitted(true);
     } catch (err) {
-      setError(err?.message || "Failed to process request");
+      setError(err?.message || "Failed to send reset link. Try again or contact support.");
     } finally {
       setIsLoading(false);
     }
@@ -66,12 +40,8 @@ export default function ForgotPassword() {
               <CheckCircle className="w-8 h-8 text-status-paid" />
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2 font-display">Check your email</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              We&apos;ve sent a password reset link to <strong className="text-foreground">{email}</strong>
-            </p>
-            <p className="text-xs text-muted-foreground mb-6 bg-muted p-3 rounded-lg border border-border">
-              <strong className="text-foreground">Demo Note:</strong> The reset link is logged in the browser console (F12).
-              Check the console to copy the reset link.
+            <p className="text-sm text-muted-foreground mb-6">
+              If an account exists for <strong className="text-foreground">{email}</strong>, you will receive a password reset link shortly. Check your inbox and spam folder.
             </p>
             <Button
               onClick={() => navigate(createPageUrl("Login"))}

@@ -38,7 +38,7 @@ export default function QuotesPage() {
                 Quote.list("-created_date"),
                 Client.list(),
                 User.me()
-            ]), 5000, 1);
+            ]), 15000, 2);
             if (!mountedRef.current) return;
             setQuotes(quotesData);
             setClients(clientsData);

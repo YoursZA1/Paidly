@@ -1,78 +1,86 @@
-import AdminFinancials from "./AdminFinancials";
-import AdminBusinesses from "./AdminBusinesses";
+import React, { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
-import Dashboard from "./Dashboard";
-import Login from "./Login";
-import Signup from "./Signup";
-import CreateInvoice from "./CreateInvoice";
-import Clients from "./Clients";
-import Invoices from "./Invoices";
-import InvoicePDF from "./InvoicePDF";
-import Settings from "./Settings";
-import Notes from "./Notes";
-import Services from "./Services";
-import ViewInvoice from "./ViewInvoice";
-import PublicInvoice from "./PublicInvoice";
-import InvoiceView from "./InvoiceView";
-import EditInvoice from "./EditInvoice";
-import Quotes from "./Quotes";
-import CreateQuote from "./CreateQuote";
-import ViewQuote from "./ViewQuote";
-import EditQuote from "./EditQuote";
-import QuotePDF from "./QuotePDF";
-import PublicQuote from "./PublicQuote";
-import ClientPortal from "./ClientPortal";
-import RecurringInvoices from "./RecurringInvoices";
-import CreateRecurringInvoice from "./CreateRecurringInvoice";
-import Reports from "./Reports";
-import Payslips from "./Payslips";
-import CreatePayslip from "./CreatePayslip";
-import EditPayslip from "./EditPayslip";
-import PayslipPDF from "./PayslipPDF";
-import ViewPayslip from "./ViewPayslip";
-import PublicPayslip from "./PublicPayslip";
-import ReportPDF from "./ReportPDF";
-import CashFlow from "./CashFlow";
-import CashFlowPDF from "./CashFlowPDF";
-import Calendar from "./Calendar";
-import Messages from "./Messages";
-import TaskSettings from "./TaskSettings";
-import ClientDetail from "./ClientDetail";
-import QuoteTemplates from "./QuoteTemplates";
-import Vendors from "./Vendors";
-import Budgets from "./Budgets";
-import Accounting from "./Accounting";
-import UserManagement from "./UserManagement";
-import UserAccessControl from "./UserAccessControl";
-import AdminControl from "./AdminControl";
-import LogsAuditTrail from "./LogsAuditTrail";
-import ExcelDataCapture from "./ExcelDataCapture";
-import SubscriptionsManagement from "./SubscriptionsManagement";
-import DocumentActivity from "./DocumentActivity";
-import AdminUsers from "./AdminUsers";
-import AdminAccounts from "./AdminAccounts";
-import AdminDocumentOversight from "./AdminDocumentOversight";
-import AdminSubscriptions from "./AdminSubscriptions";
-import AdminPlans from "./AdminPlans";
-import PlatformSettings from "./PlatformSettings";
-import SupportAdminTools from "./SupportAdminTools";
-import SecurityCompliance from "./SecurityCompliance";
-import AdminRolesManagement from "./AdminRolesManagement";
-import ForgotPassword from "./ForgotPassword";
-import ResetPassword from "./ResetPassword";
-import AcceptInvite from "./AcceptInvite";
-import AdminTransactions from "./AdminTransactions";
-import AdminPayouts from "./AdminPayouts";
-import AdminFees from "./AdminFees";
-import AdminBilling from "./AdminBilling";
-import AdminInvoicesQuotes from "./AdminInvoicesQuotes";
-import SystemStatus from "./SystemStatus";
-import BackgroundJobs from "./BackgroundJobs";
-import BuildLogs from "./BuildLogs";
-import About from "./About";
-import PrivacyPolicy from "./PrivacyPolicy";
-import BentoDemoPage from "./BentoDemo";
-import AnimatedIconsDemoPage from "./AnimatedIconsDemo";
+
+const RouteFallback = () => (
+  <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  </div>
+);
+
+const AdminFinancials = lazy(() => import("./AdminFinancials"));
+const AdminBusinesses = lazy(() => import("./AdminBusinesses"));
+const Dashboard = lazy(() => import("./Dashboard"));
+const Login = lazy(() => import("./Login"));
+const Signup = lazy(() => import("./Signup"));
+const CreateInvoice = lazy(() => import("./CreateInvoice"));
+const Clients = lazy(() => import("./Clients"));
+const Invoices = lazy(() => import("./Invoices"));
+const InvoicePDF = lazy(() => import("./InvoicePDF"));
+const Settings = lazy(() => import("./Settings"));
+const Notes = lazy(() => import("./Notes"));
+const Services = lazy(() => import("./Services"));
+const ViewInvoice = lazy(() => import("./ViewInvoice"));
+const PublicInvoice = lazy(() => import("./PublicInvoice"));
+const InvoiceView = lazy(() => import("./InvoiceView"));
+const EditInvoice = lazy(() => import("./EditInvoice"));
+const Quotes = lazy(() => import("./Quotes"));
+const CreateQuote = lazy(() => import("./CreateQuote"));
+const ViewQuote = lazy(() => import("./ViewQuote"));
+const EditQuote = lazy(() => import("./EditQuote"));
+const QuotePDF = lazy(() => import("./QuotePDF"));
+const PublicQuote = lazy(() => import("./PublicQuote"));
+const ClientPortal = lazy(() => import("./ClientPortal"));
+const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
+const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
+const Reports = lazy(() => import("./Reports"));
+const Payslips = lazy(() => import("./Payslips"));
+const CreatePayslip = lazy(() => import("./CreatePayslip"));
+const EditPayslip = lazy(() => import("./EditPayslip"));
+const PayslipPDF = lazy(() => import("./PayslipPDF"));
+const ViewPayslip = lazy(() => import("./ViewPayslip"));
+const PublicPayslip = lazy(() => import("./PublicPayslip"));
+const ReportPDF = lazy(() => import("./ReportPDF"));
+const CashFlow = lazy(() => import("./CashFlow"));
+const CashFlowPDF = lazy(() => import("./CashFlowPDF"));
+const Calendar = lazy(() => import("./Calendar"));
+const Messages = lazy(() => import("./Messages"));
+const TaskSettings = lazy(() => import("./TaskSettings"));
+const ClientDetail = lazy(() => import("./ClientDetail"));
+const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
+const Vendors = lazy(() => import("./Vendors"));
+const Budgets = lazy(() => import("./Budgets"));
+const Accounting = lazy(() => import("./Accounting"));
+const UserManagement = lazy(() => import("./UserManagement"));
+const UserAccessControl = lazy(() => import("./UserAccessControl"));
+const AdminControl = lazy(() => import("./AdminControl"));
+const LogsAuditTrail = lazy(() => import("./LogsAuditTrail"));
+const ExcelDataCapture = lazy(() => import("./ExcelDataCapture"));
+const SubscriptionsManagement = lazy(() => import("./SubscriptionsManagement"));
+const DocumentActivity = lazy(() => import("./DocumentActivity"));
+const AdminUsers = lazy(() => import("./AdminUsers"));
+const AdminAccounts = lazy(() => import("./AdminAccounts"));
+const AdminDocumentOversight = lazy(() => import("./AdminDocumentOversight"));
+const AdminSubscriptions = lazy(() => import("./AdminSubscriptions"));
+const AdminPlans = lazy(() => import("./AdminPlans"));
+const PlatformSettings = lazy(() => import("./PlatformSettings"));
+const SupportAdminTools = lazy(() => import("./SupportAdminTools"));
+const SecurityCompliance = lazy(() => import("./SecurityCompliance"));
+const AdminRolesManagement = lazy(() => import("./AdminRolesManagement"));
+const ForgotPassword = lazy(() => import("./ForgotPassword"));
+const ResetPassword = lazy(() => import("./ResetPassword"));
+const AcceptInvite = lazy(() => import("./AcceptInvite"));
+const AdminTransactions = lazy(() => import("./AdminTransactions"));
+const AdminPayouts = lazy(() => import("./AdminPayouts"));
+const AdminFees = lazy(() => import("./AdminFees"));
+const AdminBilling = lazy(() => import("./AdminBilling"));
+const AdminInvoicesQuotes = lazy(() => import("./AdminInvoicesQuotes"));
+const SystemStatus = lazy(() => import("./SystemStatus"));
+const BackgroundJobs = lazy(() => import("./BackgroundJobs"));
+const BuildLogs = lazy(() => import("./BuildLogs"));
+const About = lazy(() => import("./About"));
+const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
+const BentoDemoPage = lazy(() => import("./BentoDemo"));
+const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthContext";
@@ -264,6 +272,7 @@ function PagesContent() {
     const currentPageName = getPageName(location.pathname);
     return (
         <Layout currentPageName={currentPageName}>
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
                 {/* Auth & Public */}
                 {AUTH_ROUTES.map((route, i) => <Route key={"auth-"+i} {...route} />)}
@@ -278,6 +287,7 @@ function PagesContent() {
                 {/* Admin & Support */}
                 {ADMIN_ROUTES.map((route, i) => <Route key={"admin-"+i} {...route} />)}
             </Routes>
+            </Suspense>
         </Layout>
     );
 }

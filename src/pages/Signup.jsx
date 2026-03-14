@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Building2, Loader2, Lock, Mail, Phone, User, Eye, EyeOff, CheckCircle } from "lucide-react";
-import { createPageUrl } from "@/utils";
+import { createPageUrl, getAppDashboardUrl, shouldRedirectToAppAfterAuth } from "@/utils";
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
@@ -255,7 +255,11 @@ export default function Signup() {
       
       setSuccess(true);
       setTimeout(() => {
-        navigate(createPageUrl("Dashboard"));
+        if (shouldRedirectToAppAfterAuth()) {
+          window.location.href = getAppDashboardUrl();
+        } else {
+          navigate(createPageUrl("Dashboard"));
+        }
       }, 800);
     } catch (err) {
       setError(err?.message || "Failed to finish setup");

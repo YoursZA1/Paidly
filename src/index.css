@@ -2,9 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Smooth scrolling for the entire app */
+/* Smooth scrolling and color-scheme for dark mode (native controls, scrollbars) */
 html {
   scroll-behavior: smooth;
+}
+html.dark {
+  color-scheme: dark;
+}
+html.light {
+  color-scheme: light;
 }
 
 /* Viewport-based scale for mobile: fluid base font so rem units scale with screen size */

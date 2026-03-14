@@ -59,7 +59,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         setIsLoading(true);
         setError(null);
         try {
-            const invoiceData = await withTimeoutRetry(() => Invoice.get(invoiceId), 5000, 1);
+            const invoiceData = await withTimeoutRetry(() => Invoice.get(invoiceId), 15000, 2);
             if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
             if (!invoiceData) throw new Error("Invoice not found");
 
@@ -76,7 +76,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                     User.me().catch(() => null),
                     invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
                     Payment.list('-payment_date').catch(() => [])
-                ]), 5000, 1);
+                ]), 15000, 2);
 
                 if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
 

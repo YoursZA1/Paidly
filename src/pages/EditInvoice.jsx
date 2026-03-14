@@ -59,7 +59,7 @@ export default function EditInvoice() {
                 BankingDetail.list("-created_date"),
                 Service.list("-created_date"),
                 User.me().catch(() => null)
-            ]), 5000, 1);
+            ]), 15000, 2);
             if (!mountedRef.current) return;
 
             // Ensure invoice_date is set from created_date if not present

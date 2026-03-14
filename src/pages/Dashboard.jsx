@@ -139,8 +139,8 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
         </div>
       </div>
       {fintech && Array.isArray(sparklineData) && sparklineData.length > 1 && (
-        <div className="mt-3 h-10">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="mt-3 h-10 min-h-[40px] w-full">
+          <ResponsiveContainer width="100%" height={40}>
             <AreaChart data={sparklineData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
@@ -469,7 +469,7 @@ export default function Dashboard() {
       const [allInvoices, allPayments] = await withTimeoutRetry(() => Promise.all([
         Invoice.list(),
         Payment.list().catch(() => []),
-      ]), 5000, 1);
+      ]), 15000, 2);
       if (!mountedRef.current) return;
       setInvoicesState(allInvoices);
       setPaymentsState(Array.isArray(allPayments) ? allPayments : []);
@@ -671,7 +671,7 @@ export default function Dashboard() {
         Payment.list().catch(() => []),
         BankingDetail.list(),
         authUserId ? getBusinessGoal(authUserId, 2026).catch(() => null) : Promise.resolve(null)
-      ]), 5000, 1);
+      ]), 15000, 2);
 
       if (!userResult) {
         throw new Error("Not authenticated");
@@ -1744,7 +1744,7 @@ export default function Dashboard() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                    className="w-full"
+                    className="w-full min-h-[260px] h-[300px]"
                   >
                     <DashboardRevenueChart
                       revenueTrendData={revenueTrendData}

@@ -252,15 +252,15 @@ function ExcelDataCapture() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <FileSpreadsheet className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl font-bold text-slate-900">Excel Data Capture</h1>
+            <h1 className="text-3xl font-bold text-foreground">Excel Data Capture</h1>
           </div>
-          <p className="text-slate-600">Single file (paidly_data.xlsx) with multiple sheets - one sheet per table. No mixed data!</p>
+          <p className="text-muted-foreground">Single file (paidly_data.xlsx) with multiple sheets - one sheet per table. No mixed data!</p>
         </div>
 
         <Tabs defaultValue="import" className="w-full">

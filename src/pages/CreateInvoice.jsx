@@ -62,7 +62,7 @@ export default function CreateInvoice() {
           Service.list("-created_date"),
           BankingDetail.list().catch(() => []),
           quoteId ? Quote.get(quoteId).catch(() => null) : Promise.resolve(null),
-        ]), 5000, 1);
+        ]), 15000, 2);
         setClients(clientsList || []);
         setServices(servicesList || []);
         setBankingDetails(Array.isArray(bankingList) ? bankingList : []);

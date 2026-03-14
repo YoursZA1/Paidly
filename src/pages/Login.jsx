@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
-import { createPageUrl } from "@/utils";
+import { createPageUrl, getAppDashboardUrl, shouldRedirectToAppAfterAuth } from "@/utils";
 
 export default function Login() {
   const { login } = useAuth();
@@ -32,7 +32,12 @@ export default function Login() {
 
     try {
       await login({ email, password });
-      // After login, admins go to Admin Dashboard; others go to their intended page or Dashboard
+      // If on main site (e.g. www.paidly.co.za), redirect to app dashboard (e.g. app.paidly.co.za) so user lands in app with same session
+      if (shouldRedirectToAppAfterAuth()) {
+        window.location.href = getAppDashboardUrl();
+        return;
+      }
+      // Otherwise in-app: admins go to Dashboard; others go to intended page or Dashboard
       const storedUser = JSON.parse(localStorage.getItem("breakapi_user") || "null");
       const isAdmin = storedUser?.role === "admin";
       const safeFrom = from.startsWith("/admin") ? createPageUrl("Dashboard") : from;

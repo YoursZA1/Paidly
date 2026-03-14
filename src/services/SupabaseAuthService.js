@@ -77,6 +77,30 @@ const SupabaseAuthService = {
     if (error) throw new Error(mapAuthError(error));
     return data?.user ?? null;
   },
+
+  /**
+   * Send a password reset email. User will receive a link to the redirectTo URL.
+   * Redirect URL must be allowed in Supabase Auth URL configuration.
+   * Does not reveal whether the email exists (best practice).
+   */
+  async resetPasswordForEmail(email, redirectTo = null) {
+    const to = redirectTo || (typeof window !== "undefined" ? `${window.location.origin}/ResetPassword` : null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: to
+    });
+    if (error) throw new Error(mapAuthError(error));
+    return true;
+  },
+
+  /**
+   * Update the current user's password. Use after user lands on reset page from email link.
+   * Requires an active session (e.g. recovery session from reset link).
+   */
+  async updatePassword(newPassword) {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(mapAuthError(error));
+    return normalizeSession(data?.session);
+  },
 };
 
 export default SupabaseAuthService;

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
-import { Client, Invoice, User } from "@/api/entities";
+import { Client, Invoice } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   UserPlusIcon,
   PlusIcon,
@@ -15,10 +15,12 @@ import {
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import ClientForm from "../components/clients/ClientForm";
 import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
+import { useClientsQuery } from "@/hooks/useClientsQuery";
 import { format, parseISO, isValid } from "date-fns";
 
 const statusStyles = {
@@ -135,10 +137,13 @@ export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [clients, setClients] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const lastLoadErrorToastRef = useRef(0);
+  const { data, isLoading, isError, error, isRefetching, refetch } = useClientsQuery();
+  const clients = data?.clients ?? [];
+  const invoices = data?.invoices ?? [];
+  const user = data?.user ?? null;
+  const loadError = isError ? (error?.message || "Unable to load clients") : null;
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeClient, setActiveClient] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -147,7 +152,6 @@ export default function Clients() {
   const [deletingClient, setDeletingClient] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [detailTab, setDetailTab] = useState("invoices");
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const outstandingByClient = useMemo(
     () => clientOutstandingMap(invoices),
@@ -167,46 +171,38 @@ export default function Clients() {
     );
   }, [clients, searchTerm]);
 
-  const loadData = async (showRefreshingState = false) => {
-    if (showRefreshingState) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    try {
-      const [clientsData, invoicesData, userData] = await Promise.all([
-        Client.list("-created_date"),
-        Invoice.list("-created_date"),
-        User.me(),
-      ]);
-      setClients(clientsData || []);
-      setInvoices(invoicesData || []);
-      setUser(userData);
-      if (showRefreshingState && activeClient && clientsData?.length > 0) {
-        const updated = clientsData.find((c) => c.id === activeClient.id);
-        if (updated) setActiveClient(updated);
-      } else if (!activeClient && clientsData?.length > 0) {
-        setActiveClient(clientsData[0]);
-      }
-    } catch (error) {
-      console.error("Error loading clients:", error);
-      toast({
-        title: "Could not load clients",
-        description:
-          error?.message || "Please check your connection and try again.",
-        variant: "destructive",
+  const loadData = useCallback(
+    (showRefreshingState) => {
+      refetch().then(({ data: next }) => {
+        if (showRefreshingState && activeClient && next?.clients?.length > 0) {
+          const updated = next.clients.find((c) => c.id === activeClient.id);
+          if (updated) setActiveClient(updated);
+        } else if (!activeClient && next?.clients?.length > 0) {
+          setActiveClient(next.clients[0]);
+        }
       });
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
+    },
+    [refetch, activeClient]
+  );
 
   useEffect(() => {
-    loadData();
-    // Intentionally run only on mount; loadData is stable for initial load
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (isError && lastLoadErrorToastRef.current < Date.now() - 4000) {
+      lastLoadErrorToastRef.current = Date.now();
+      const msg = error?.message || "";
+      toast({
+        title: "Could not load clients",
+        description: msg.includes("timed out")
+          ? "The server took too long to respond. Use Try again below or refresh the page."
+          : msg || "Something went wrong. Use Try again below or refresh the page.",
+        variant: "destructive",
+        action: (
+          <ToastAction onClick={() => refetch()} aria-label="Retry loading clients">
+            Try again
+          </ToastAction>
+        ),
+      });
+    }
+  }, [isError, error?.message, toast, refetch]);
 
   useEffect(() => {
     if (searchFilteredClients.length > 0 && !activeClient) {
@@ -219,6 +215,7 @@ export default function Clients() {
       setActiveClient(searchFilteredClients[0] || null);
     }
   }, [searchFilteredClients, activeClient]);
+
 
   const handleSaveClient = async (clientData) => {
     if (!clientData.name?.trim()) {
@@ -254,9 +251,7 @@ export default function Clients() {
           description: "Client information has been updated.",
           variant: "success",
         });
-        setClients((prev) =>
-          prev.map((c) => (c.id === editingClient.id ? { ...c, ...clientData } : c))
-        );
+        await refetch();
         if (activeClient?.id === editingClient.id) {
           setActiveClient((prev) => (prev ? { ...prev, ...clientData } : null));
         }
@@ -267,7 +262,7 @@ export default function Clients() {
           description: `${clientData.name} has been added.`,
           variant: "success",
         });
-        setClients((prev) => [newClient, ...(prev || [])]);
+        await refetch();
         setActiveClient(newClient);
       }
       setShowForm(false);
@@ -315,14 +310,13 @@ export default function Clients() {
         variant: "default",
       });
       setShowDeleteConfirm(false);
+      const deletedId = deletingClient.id;
       setDeletingClient(null);
-      setClients((prev) => {
-        const next = prev.filter((c) => c.id !== deletingClient.id);
-        if (activeClient?.id === deletingClient.id) {
-          setActiveClient(next[0] || null);
-        }
-        return next;
-      });
+      const { data: next } = await refetch();
+      const nextClients = next?.clients ?? [];
+      if (activeClient?.id === deletedId) {
+        setActiveClient(nextClients[0] || null);
+      }
     } catch (error) {
       console.error("Error deleting client:", error);
       toast({
@@ -382,12 +376,12 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => loadData(true)}
-                disabled={isRefreshing || isLoading}
+                disabled={isRefetching || isLoading}
                 className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl active:scale-95 transition-all disabled:opacity-50"
                 aria-label="Refresh clients"
               >
                 <ArrowPathIcon
-                  className={`w-5 h-5 text-slate-400 dark:text-slate-500 ${isRefreshing ? "animate-spin" : ""}`}
+                  className={`w-5 h-5 text-slate-400 dark:text-slate-500 ${isRefetching ? "animate-spin" : ""}`}
                 />
               </button>
               <button
@@ -452,13 +446,13 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => loadData(true)}
-                disabled={isRefreshing || isLoading}
+                disabled={isRefetching || isLoading}
                 className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
                 aria-label="Refresh clients"
                 title="Refresh"
               >
                 <ArrowPathIcon
-                  className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
+                  className={`w-5 h-5 ${isRefetching ? "animate-spin" : ""}`}
                 />
               </button>
               <button
@@ -492,6 +486,24 @@ export default function Clients() {
                   className="h-16 rounded-[24px] bg-slate-100 dark:bg-slate-700 animate-pulse"
                 />
               ))}
+            </div>
+          ) : loadError ? (
+            <div className="py-8 px-2 text-center">
+              <p className="text-foreground text-sm font-medium mb-2">
+                Could not load clients
+              </p>
+              <p className="text-muted-foreground text-xs mb-4">
+                {loadError}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadData()}
+                className="gap-2"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Try again
+              </Button>
             </div>
           ) : searchFilteredClients.length === 0 ? (
             <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
@@ -544,14 +556,32 @@ export default function Clients() {
       <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6 md:p-10">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
-            <p className="text-lg font-medium">
-              {isLoading ? "Loading…" : "Select a client"}
-            </p>
-            <p className="text-sm mt-1">
-              {!isLoading && clients.length === 0
-                ? "Add a client to see their details here."
-                : "Choose a client from the list to view details and invoices."}
-            </p>
+            {loadError ? (
+              <>
+                <p className="text-lg font-medium text-foreground">Could not load clients</p>
+                <p className="text-sm text-muted-foreground mt-1 mb-4">{loadError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadData()}
+                  className="gap-2"
+                >
+                  <ArrowPathIcon className="w-4 h-4" />
+                  Try again
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-medium">
+                  {isLoading ? "Loading…" : "Select a client"}
+                </p>
+                <p className="text-sm mt-1">
+                  {!isLoading && clients.length === 0
+                    ? "Add a client to see their details here."
+                    : "Choose a client from the list to view details and invoices."}
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -792,6 +822,12 @@ export default function Clients() {
         }}
       >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogTitle className="sr-only">
+            {editingClient ? "Edit Client" : "Add New Client"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {editingClient ? "Edit client details and save changes." : "Fill in client name and email to add a new client. Optional fields include phone, address, and payment terms."}
+          </DialogDescription>
           <ClientForm
             client={editingClient}
             onSave={handleSaveClient}

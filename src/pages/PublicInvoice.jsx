@@ -134,31 +134,31 @@ export default function PublicInvoice() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-slate-50">
-                <Loader2 className="w-8 h-8 animate-spin text-slate-500" />
-                <p className="ml-2 text-slate-600">Loading Invoice...</p>
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <p className="ml-2 text-muted-foreground">Loading Invoice...</p>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-center p-4">
+            <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-4">
                 <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                <h1 className="text-xl font-bold text-slate-800">Oops! Something went wrong.</h1>
-                <p className="text-slate-600 mt-2">{error}</p>
+                <h1 className="text-xl font-bold text-foreground">Oops! Something went wrong.</h1>
+                <p className="text-muted-foreground mt-2">{error}</p>
             </div>
         );
     }
 
     if (needsEmailVerification) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
+            <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+                <div className="bg-card rounded-lg shadow-xl border border-border p-8 max-w-md w-full">
                     <div className="text-center mb-6">
                         <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
-                        <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
-                        <p className="text-slate-600">
+                        <h1 className="text-2xl font-bold text-foreground mb-2">Email Verification Required</h1>
+                        <p className="text-muted-foreground">
                             To view this invoice, please enter the email address it was sent to.
                         </p>
                     </div>
@@ -207,8 +207,8 @@ export default function PublicInvoice() {
 
     if (!invoice) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-slate-50">
-                <p className="text-slate-600">Invoice not found.</p>
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <p className="text-muted-foreground">Invoice not found.</p>
             </div>
         );
     }
@@ -243,7 +243,7 @@ export default function PublicInvoice() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
+        <div className="min-h-screen bg-background p-4 sm:p-8">
             <div className="max-w-4xl mx-auto">
                 {/* Action Buttons */}
                 <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
@@ -280,26 +280,26 @@ export default function PublicInvoice() {
                     </div>
                 )}
 
-                <div className="bg-white shadow-xl rounded-lg p-6 sm:p-10">
+                <div className="bg-card border border-border shadow-xl rounded-lg p-6 sm:p-10">
                     {/* Header */}
-                    <header className="border-b-2 border-slate-200 pb-6 mb-6">
+                    <header className="border-b-2 border-border pb-6 mb-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start">
                             <div className="mb-6 sm:mb-0">
                                 {invoice.owner_logo_url ? (
                                     <img src={invoice.owner_logo_url} alt="Company Logo" className="h-16 w-auto mb-4 object-contain" />
                                 ) : (
-                                    <h1 className="text-2xl font-bold text-slate-900 mb-2">
+                                    <h1 className="text-2xl font-bold text-foreground mb-2">
                                         {invoice.owner_company_name || 'Your Company'}
                                     </h1>
                                 )}
                                 {invoice.owner_company_address && (
-                                    <p className="text-slate-600 mt-2 whitespace-pre-line text-sm max-w-xs">{invoice.owner_company_address}</p>
+                                    <p className="text-muted-foreground mt-2 whitespace-pre-line text-sm max-w-xs">{invoice.owner_company_address}</p>
                                 )}
                             </div>
                             <div className="text-left sm:text-right w-full sm:w-auto">
                                 <h2 className="text-3xl font-bold text-primary mb-2">INVOICE</h2>
-                                <p className="text-slate-500 text-sm"># {invoice.invoice_number}</p>
-                                <p className="text-slate-500 text-sm mt-1">
+                                <p className="text-muted-foreground text-sm"># {invoice.invoice_number}</p>
+                                <p className="text-muted-foreground text-sm mt-1">
                                     Issued: {format(new Date(invoice.created_date), 'MMMM d, yyyy')}
                                 </p>
                             </div>
@@ -308,11 +308,11 @@ export default function PublicInvoice() {
 
                     {/* Client Info */}
                     <section className="mb-8">
-                        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Bill To</h3>
-                        <p className="font-bold text-slate-800">{client?.name || 'Client'}</p>
-                        <p className="text-slate-600">{client?.email || ''}</p>
-                        {client?.address && <p className="text-slate-600">{client.address}</p>}
-                        {client?.phone && <p className="text-slate-600">{client.phone}</p>}
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Bill To</h3>
+                        <p className="font-bold text-foreground">{client?.name || 'Client'}</p>
+                        <p className="text-muted-foreground">{client?.email || ''}</p>
+                        {client?.address && <p className="text-muted-foreground">{client.address}</p>}
+                        {client?.phone && <p className="text-muted-foreground">{client.phone}</p>}
                     </section>
 
                     {/* Items Table */}
@@ -320,7 +320,7 @@ export default function PublicInvoice() {
                          <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
-                                    <tr className="bg-slate-50 text-slate-600 text-sm uppercase">
+                                    <tr className="bg-muted/60 text-muted-foreground text-sm uppercase">
                                         <th className="p-3 font-semibold">Service</th>
                                         <th className="p-3 font-semibold text-center">Qty</th>
                                         <th className="p-3 font-semibold text-right">Price</th>
@@ -330,10 +330,10 @@ export default function PublicInvoice() {
                                 <tbody>
                                     {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                                         invoice.items.map((item, index) => (
-                                            <tr key={index} className="border-b border-slate-100">
+                                            <tr key={index} className="border-b border-border">
                                                 <td className="p-3">
-                                                    <p className="font-medium text-slate-800">{item.service_name}</p>
-                                                    {item.description && <p className="text-xs text-slate-500 mt-1">{item.description}</p>}
+                                                    <p className="font-medium text-foreground">{item.service_name}</p>
+                                                    {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
                                                 </td>
                                                 <td className="p-3 text-center">{item.quantity}</td>
                                                 <td className="p-3 text-right">{formatCurrency(item.unit_price, ownerCurrency)}</td>
@@ -342,7 +342,7 @@ export default function PublicInvoice() {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="4" className="p-3 text-center text-slate-500">No items found</td>
+                                            <td colSpan="4" className="p-3 text-center text-muted-foreground">No items found</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -354,22 +354,22 @@ export default function PublicInvoice() {
                     <section className="flex justify-end mb-8">
                         <div className="w-full max-w-sm">
                             <div className="flex justify-between py-2 border-b">
-                                <span className="text-slate-600">Subtotal</span>
+                                <span className="text-muted-foreground">Subtotal</span>
                                 <span className="font-medium">{formatCurrency(invoice.subtotal, ownerCurrency)}</span>
                             </div>
                             <div className="flex justify-between py-2 border-b">
-                                <span className="text-slate-600">Tax ({invoice.tax_rate}%)</span>
+                                <span className="text-muted-foreground">Tax ({invoice.tax_rate}%)</span>
                                 <span className="font-medium">{formatCurrency(invoice.tax_amount, ownerCurrency)}</span>
                             </div>
-                            <div className="flex justify-between py-3 bg-slate-50 -mx-4 px-4 rounded-md">
-                                <span className="text-xl font-bold text-slate-900">Total</span>
-                                <span className="text-xl font-bold text-slate-900">{formatCurrency(invoice.total_amount, ownerCurrency)}</span>
+                            <div className="flex justify-between py-3 bg-muted/60 -mx-4 px-4 rounded-md">
+                                <span className="text-xl font-bold text-foreground">Total</span>
+                                <span className="text-xl font-bold text-foreground">{formatCurrency(invoice.total_amount, ownerCurrency)}</span>
                             </div>
                         </div>
                     </section>
 
                     {/* Notes & Footer */}
-                    <footer className="pt-6 border-t-2 border-slate-200 text-sm text-slate-600">
+                    <footer className="pt-6 border-t-2 border-border text-sm text-muted-foreground">
                         {invoice.notes && (
                             <div>
                                 <h4 className="font-semibold text-slate-800 mb-2">Notes</h4>

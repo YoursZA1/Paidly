@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import SupabaseAuthService from "@/services/SupabaseAuthService";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -18,38 +19,66 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [tokenValid, setTokenValid] = useState(null);
+  const [isSupabaseRecovery, setIsSupabaseRecovery] = useState(false);
 
   useEffect(() => {
-    // Validate token on mount
-    if (!token) {
-      setError("Invalid reset link");
-      setTokenValid(false);
-      return;
-    }
+    let cancelled = false;
 
-    try {
-      const resetRequests = JSON.parse(
-        localStorage.getItem("breakapi_password_resets") || "{}"
-      );
-      const request = resetRequests[token];
+    async function validate() {
+      // 1) Supabase recovery: user landed from email link; hash is processed by Supabase and we have a session
+      try {
+        const session = await SupabaseAuthService.getSession();
+        if (!cancelled && session?.user) {
+          setIsSupabaseRecovery(true);
+          setTokenValid(true);
+          if (typeof window !== "undefined" && window.location.hash) {
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }
+          return;
+        }
+      } catch {
+        // no session
+      }
 
-      if (!request) {
-        setError("Reset link not found");
-        setTokenValid(false);
+      // 2) Legacy token in query (e.g. demo / old flow)
+      if (!token) {
+        if (!cancelled) {
+          setError("Invalid reset link");
+          setTokenValid(false);
+        }
         return;
       }
 
-      if (request.expiresAt < Date.now()) {
-        setError("Reset link has expired");
-        setTokenValid(false);
-        return;
+      try {
+        const resetRequests = JSON.parse(
+          localStorage.getItem("breakapi_password_resets") || "{}"
+        );
+        const request = resetRequests[token];
+        if (!request) {
+          if (!cancelled) {
+            setError("Reset link not found");
+            setTokenValid(false);
+          }
+          return;
+        }
+        if (request.expiresAt < Date.now()) {
+          if (!cancelled) {
+            setError("Reset link has expired");
+            setTokenValid(false);
+          }
+          return;
+        }
+        if (!cancelled) setTokenValid(true);
+      } catch {
+        if (!cancelled) {
+          setError("Invalid reset link");
+          setTokenValid(false);
+        }
       }
-
-      setTokenValid(true);
-    } catch {
-      setError("Invalid reset link");
-      setTokenValid(false);
     }
+
+    validate();
+    return () => { cancelled = true; };
   }, [token]);
 
   const handleSubmit = async (e) => {
@@ -70,7 +99,14 @@ export default function ResetPassword() {
         return;
       }
 
-      // Get reset request
+      if (isSupabaseRecovery) {
+        await SupabaseAuthService.updatePassword(password);
+        setSuccess(true);
+        setTimeout(() => navigate(createPageUrl("Login")), 2000);
+        return;
+      }
+
+      // Legacy token flow
       const resetRequests = JSON.parse(
         localStorage.getItem("breakapi_password_resets") || "{}"
       );
@@ -82,7 +118,6 @@ export default function ResetPassword() {
         return;
       }
 
-      // Update user password in localStorage
       const users = JSON.parse(localStorage.getItem("breakapi_users") || "[]");
       const userIndex = users.findIndex((u) => u.email === request.email);
 
@@ -95,14 +130,11 @@ export default function ResetPassword() {
       users[userIndex].password = password;
       localStorage.setItem("breakapi_users", JSON.stringify(users));
 
-      // Delete used token
       delete resetRequests[token];
       localStorage.setItem("breakapi_password_resets", JSON.stringify(resetRequests));
 
       setSuccess(true);
-      setTimeout(() => {
-        navigate(createPageUrl("Login"));
-      }, 2000);
+      setTimeout(() => navigate(createPageUrl("Login")), 2000);
     } catch (err) {
       setError(err?.message || "Failed to reset password");
     } finally {

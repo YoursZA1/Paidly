@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { Invoice, Client, User, Payment, InvoiceView, Expense } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
+import { withApiLogging } from "@/utils/apiLogger";
 
 /**
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
@@ -31,7 +32,9 @@ export const useAppStore = create((set, get) => ({
   fetchAll: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [invoicesData, clientsData, userData, paymentsData, viewsData, expensesData] = await withTimeoutRetry(
+      const [invoicesData, clientsData, userData, paymentsData, viewsData, expensesData] = await withApiLogging(
+        "appStore.fetchAll",
+        () => withTimeoutRetry(
         () =>
           Promise.all([
             Invoice.list("-created_date"),
@@ -47,8 +50,9 @@ export const useAppStore = create((set, get) => ({
             InvoiceView.list().catch(() => []),
             Expense.list("-date", 100).catch(() => []),
           ]),
-        20000,
+        30000,
         2
+      )
       );
 
       if (!userData) {
@@ -80,7 +84,6 @@ export const useAppStore = create((set, get) => ({
         lastFetchedAt: Date.now(),
       });
     } catch (err) {
-      console.error("App store fetchAll failed:", err);
       set({
         isLoading: false,
         error: err?.message || "Failed to load data",

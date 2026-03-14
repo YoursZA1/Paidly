@@ -1,7 +1,12 @@
 /**
- * Supabase client setup (frontend).
+ * Single Supabase client for the frontend app.
+ *
+ * This is the only place where the Supabase client is created. All app code should
+ * import { supabase } from "@/lib/supabaseClient" (or from this file). Do not
+ * call createClient() elsewhere in the app.
+ *
  * - Initialize with project URL and anon (public) key only. Never use the service_role key in the frontend.
- * - Credentials are stored securely via environment variables: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY.
+ * - Credentials: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY.
  * - RLS restricts data per user/role. See docs/SUPABASE_INTEGRATION_CHECKLIST.md.
  * - If env vars are missing, the app still loads and shows a setup message instead of a blank screen.
  */

@@ -910,7 +910,7 @@ export default function Layout({ children, currentPageName }) {
       </Sheet>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 bg-background ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
         {/* Top header: fixed on mobile (hamburger + Paidly + avatar); standard header on lg+ */}
         <motion.header
           initial={{ y: -100 }}
