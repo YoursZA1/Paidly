@@ -43,9 +43,16 @@ enable_confirmations = false
 
 [auth.external.google]
 enabled = true
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
 
 [auth.external.apple]
 enabled = true
+client_id = "env(APPLE_CLIENT_ID)"
+secret = "env(APPLE_CLIENT_SECRET)"
 
+# Global verify_jwt removed: newer Supabase CLI expects per-function [functions.<name>] or map.
+# To set verify_jwt per function, add e.g.:
+#   [functions.payfast-itn]
+#   verify_jwt = false
 [functions]
-verify_jwt = true
