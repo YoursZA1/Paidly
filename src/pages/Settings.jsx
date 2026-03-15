@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { User, BankingDetail } from "@/api/entities";
-import SupabaseStorageService from "@/services/SupabaseStorageService";
+import { uploadLogo, validateLogoFile, LOGO_CONSTRAINTS } from "@/lib/logoUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -191,29 +191,15 @@ function CompanyProfileSettings() {
     const handleLogoChange = (e) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            
-            // Validate file type (match bucket allowed types: jpeg, png, gif, webp, svg)
-            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
-            if (!validTypes.includes(file.type)) {
+            const validation = validateLogoFile(file);
+            if (!validation.valid) {
                 toast({
-                    title: "Invalid file type",
-                    description: "Please upload a PNG, JPG, GIF, WebP, or SVG image.",
+                    title: "Invalid logo",
+                    description: validation.message,
                     variant: "destructive"
                 });
                 return;
             }
-            
-            // Validate file size (2MB max)
-            const maxSize = 2 * 1024 * 1024; // 2MB in bytes
-            if (file.size > maxSize) {
-                toast({
-                    title: "File too large",
-                    description: "Please upload an image smaller than 2MB.",
-                    variant: "destructive"
-                });
-                return;
-            }
-            
             // Revoke old blob URL if it exists to prevent memory leaks
             if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
                 URL.revokeObjectURL(formData.logo_url);
@@ -269,7 +255,7 @@ function CompanyProfileSettings() {
                         setIsSaving(false);
                         return;
                     }
-                    const publicUrl = await SupabaseStorageService.uploadProfileLogo(logoFile, userId);
+                    const publicUrl = await uploadLogo(logoFile, userId);
                     updatedData.logo_url = publicUrl;
                 } catch (uploadError) {
                     console.error("Logo upload error:", uploadError);
@@ -495,8 +481,10 @@ function CompanyProfileSettings() {
                                 </Button>
                             )}
                         </div>
-                        <input id="logo-upload" type="file" accept="image/png,image/jpeg,image/jpg,image/svg+xml" className="hidden" onChange={handleLogoChange} />
-                        <p className="text-xs text-slate-400 dark:text-slate-500">PNG, JPG or SVG. Max 2MB.</p>
+                        <input id="logo-upload" type="file" accept="image/png,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                            PNG or SVG (SVG preferred for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
+                        </p>
                         {logoFile && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-500 flex items-center gap-1 justify-center md:justify-start">
                                 <Check className="w-3 h-3" /> Ready: {logoFile.name}

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Invoice, Payment, InvoiceView } from "@/api/entities";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Invoice, Client, User, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -24,17 +25,76 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 
+const INVOICES_PAGE_QUERY_KEY = ["invoices-page"];
+
+async function fetchInvoicesPageData() {
+    const [invoicesData, clientsData, userData, paymentsData, viewsData] = await Promise.all([
+        Invoice.list("-created_date"),
+        Client.list(),
+        (async () => {
+            try {
+                return await User.me();
+            } catch {
+                return await User.restoreFromSupabaseSession?.().catch(() => null) ?? null;
+            }
+        })(),
+        Payment.list().catch(() => []),
+        InvoiceView.list().catch(() => []),
+    ]);
+    if (!userData) {
+        throw new Error("Not authenticated");
+    }
+    return {
+        invoices: Array.isArray(invoicesData) ? invoicesData : [],
+        clients: Array.isArray(clientsData) ? clientsData : [],
+        userProfile: userData,
+        payments: Array.isArray(paymentsData) ? paymentsData : [],
+        invoiceViews: Array.isArray(viewsData) ? viewsData : [],
+    };
+}
+
 export default function InvoicesPage() {
     const { toast } = useToast();
-    const invoices = useAppStore((s) => s.invoices);
-    const clients = useAppStore((s) => s.clients);
-    const userProfile = useAppStore((s) => s.userProfile);
-    const payments = useAppStore((s) => s.payments);
-    const invoiceViews = useAppStore((s) => s.invoiceViews);
-    const isLoading = useAppStore((s) => s.isLoading);
-    const error = useAppStore((s) => s.error);
-    const fetchAll = useAppStore((s) => s.fetchAll);
-    const updateInvoice = useAppStore((s) => s.updateInvoice);
+    const queryClient = useQueryClient();
+    const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
+
+    const {
+        data,
+        isLoading,
+        error,
+        refetch,
+    } = useQuery({
+        queryKey: INVOICES_PAGE_QUERY_KEY,
+        queryFn: fetchInvoicesPageData,
+        staleTime: 5 * 60 * 1000,
+        refetchOnMount: false,
+    });
+
+    const invoices = data?.invoices ?? [];
+    const clients = data?.clients ?? [];
+    const userProfile = data?.userProfile ?? null;
+    const payments = data?.payments ?? [];
+    const invoiceViews = data?.invoiceViews ?? [];
+
+    const handleActionSuccess = useCallback(() => {
+        refetch();
+    }, [refetch]);
+
+    const handleOptimisticUpdate = useCallback(
+        async (id, status) => {
+            await storeUpdateInvoice(id, { status });
+            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+        },
+        [storeUpdateInvoice, queryClient]
+    );
+
+    useSupabaseRealtime(
+        ["invoices", "payments"],
+        () => {
+            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+        },
+        { channelName: "invoices-page" }
+    );
 
     const [filters, setFilters] = useState({});
     const [viewMode, setViewMode] = useState('list');
@@ -73,7 +133,7 @@ export default function InvoicesPage() {
         if (error && !isLoading) {
             toast({
                 title: "Could not load invoices",
-                description: error,
+                description: error?.message ?? String(error),
                 variant: "destructive",
             });
         }
@@ -102,7 +162,7 @@ export default function InvoicesPage() {
         setIsExporting(true);
         try {
             const ids = listToExport.map((i) => i.id);
-            const { data: itemsData } = await supabase.from("invoice_items").select("*").in("invoice_id", ids);
+            const { data: itemsData } = await supabase.from("invoice_items").select("id, invoice_id, service_name, description, quantity, unit_price, total_price").in("invoice_id", ids);
             const itemsByInvoiceId = new Map();
             if (Array.isArray(itemsData)) {
                 itemsData.forEach((row) => {
@@ -181,7 +241,7 @@ export default function InvoicesPage() {
                     skipped++;
                 }
             }
-            await fetchAll();
+            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
             toast({
                 title: "Import complete",
                 description: `${created} invoice(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
@@ -243,7 +303,7 @@ export default function InvoicesPage() {
                     skipped++;
                 }
             }
-            await fetchAll();
+            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
             toast({
                 title: "Import complete",
                 description: `${created} view(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
@@ -392,9 +452,9 @@ export default function InvoicesPage() {
                                         clients={clients} 
                                         userCurrency={userCurrency}
                                         paymentsMap={paymentsMap}
-                                        onActionSuccess={fetchAll}
+                                        onActionSuccess={handleActionSuccess}
                                         onPaymentFullyPaid={runPaidConfetti}
-                                        onOptimisticUpdate={(id, status) => updateInvoice(id, { status })}
+                                        onOptimisticUpdate={handleOptimisticUpdate}
                                     />
                                 ) : (
                                     <InvoiceGrid 
@@ -402,9 +462,9 @@ export default function InvoicesPage() {
                                         clients={clients} 
                                         userCurrency={userCurrency}
                                         paymentsMap={paymentsMap}
-                                        onActionSuccess={fetchAll}
+                                        onActionSuccess={handleActionSuccess}
                                         onPaymentFullyPaid={runPaidConfetti}
-                                        onOptimisticUpdate={(id, status) => updateInvoice(id, { status })}
+                                        onOptimisticUpdate={handleOptimisticUpdate}
                                     />
                                 )}
                                 

@@ -214,7 +214,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                                             checked={attachInvoice}
                                             onCheckedChange={setAttachInvoice}
                                         />
-                                        <span className="text-xs text-slate-500">Include link</span>
+                                        <span className="text-xs text-muted-foreground">Include link</span>
                                     </div>
                                 )}
                             </div>
@@ -247,7 +247,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                                             checked={attachQuote}
                                             onCheckedChange={setAttachQuote}
                                         />
-                                        <span className="text-xs text-slate-500">Include link</span>
+                                        <span className="text-xs text-muted-foreground">Include link</span>
                                     </div>
                                 )}
                             </div>
@@ -277,7 +277,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
 
                     <div className="space-y-2">
                         <Label>Message *</Label>
-                        <div className="bg-white rounded-md">
+                        <div className="bg-background rounded-md">
                             <ReactQuill
                                 value={formData.content}
                                 onChange={(content) => setFormData({ ...formData, content })}
@@ -297,7 +297,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                     {/* Attachments Preview */}
                     {(attachments.length > 0 || (attachInvoice && formData.invoice_id) || (attachQuote && formData.quote_id)) && (
                         <div className="space-y-2">
-                            <Label className="text-xs text-slate-500">Attachments</Label>
+                            <Label className="text-xs text-muted-foreground">Attachments</Label>
                             <div className="flex flex-wrap gap-2">
                                 {attachInvoice && formData.invoice_id && (
                                     <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5 text-sm text-primary">
@@ -306,17 +306,17 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                                     </div>
                                 )}
                                 {attachQuote && formData.quote_id && (
-                                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-sm text-amber-700">
+                                    <div className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground">
                                         <FileText className="w-3 h-3" />
                                         <span>Quote #{quotes.find(q => q.id === formData.quote_id)?.quote_number}</span>
                                     </div>
                                 )}
                                 {attachments.map((file, index) => (
-                                    <div key={index} className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 text-sm">
+                                    <div key={index} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 text-sm">
                                         <Paperclip className="w-3 h-3" />
                                         <span className="truncate max-w-32">{file.name}</span>
                                         <button type="button" onClick={() => removeAttachment(index)}>
-                                            <X className="w-3 h-3 text-slate-500 hover:text-red-500" />
+                                            <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
                                         </button>
                                     </div>
                                 ))}
@@ -327,7 +327,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                     <DialogFooter className="flex justify-between">
                         <div>
                             <label htmlFor="file-upload" className="cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                                     <Paperclip className="w-4 h-4" />
                                     Attach files
                                 </div>

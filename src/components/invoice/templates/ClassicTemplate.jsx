@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
-import LogoImage from '@/components/shared/LogoImage';
 
 export default function ClassicTemplate({ invoice, client, user, bankingDetail, userCurrency, safeFormatDate, documentTitle }) {
     const deliveryDate = safeFormatDate(invoice.delivery_date);
@@ -16,11 +15,11 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                     <div className="max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div className="mb-3 sm:mb-4">
-                                <LogoImage 
-                                    src={user.logo_url} 
-                                    alt="Company Logo" 
-                                    className="h-12 sm:h-16 w-auto max-w-[140px] sm:max-w-xs object-contain" 
-                                    style={{ maxHeight: '48px' }}
+                                <img
+                                    src={user.logo_url}
+                                    alt="Company Logo"
+                                    className="w-auto max-w-[140px] sm:max-w-xs"
+                                    style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
                                 />
                                 {user?.company_name && (
                                     <p className="text-sm font-semibold text-muted-foreground mt-2">{user.company_name}</p>

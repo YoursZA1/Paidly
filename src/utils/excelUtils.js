@@ -1,5 +1,5 @@
 // Excel utility functions for data import/export
-import * as XLSX from 'xlsx';
+// xlsx is lazy-loaded via dynamic import() to avoid pulling it into the main bundle (smaller initial load, no circular chunk).
 
 // Generate UUID
 const generateUUID = () => {
@@ -10,17 +10,17 @@ const generateUUID = () => {
   });
 };
 
-// Export data to Excel (single sheet)
-export const exportToExcel = (data, filename = 'export.xlsx', sheetName = 'Sheet1') => {
+// Export data to Excel (single sheet). Lazy-loads xlsx on first use.
+export const exportToExcel = async (data, filename = 'export.xlsx', sheetName = 'Sheet1') => {
+  const XLSX = await import('xlsx');
   try {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    
-    // Auto-size columns
+
     const max_width = data.reduce((w, r) => Math.max(w, JSON.stringify(r).length), 10);
     worksheet['!cols'] = [{ wch: max_width }];
-    
+
     XLSX.writeFile(workbook, filename);
     return { success: true, message: 'File exported successfully' };
   } catch (error) {
@@ -29,23 +29,22 @@ export const exportToExcel = (data, filename = 'export.xlsx', sheetName = 'Sheet
   }
 };
 
-// Export multiple sheets to one Excel file with data validation
-export const exportMultipleSheets = (sheets, filename = 'paidly_data.xlsx') => {
+// Export multiple sheets to one Excel file with data validation. Lazy-loads xlsx on first use.
+export const exportMultipleSheets = async (sheets, filename = 'paidly_data.xlsx') => {
+  const XLSX = await import('xlsx');
   try {
     const workbook = XLSX.utils.book_new();
 
     sheets.forEach(({ data, sheetName, validations }) => {
       const worksheet = XLSX.utils.json_to_sheet(data);
-      
-      // Auto-size columns
+
       const maxWidth = data.length > 0 ? Object.keys(data[0]).length : 10;
       worksheet['!cols'] = Array(maxWidth).fill({ wch: 20 });
-      
-      // Apply data validations if provided
+
       if (validations && validations.length > 0) {
         worksheet['!dataValidation'] = validations;
       }
-      
+
       XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     });
 
@@ -57,17 +56,23 @@ export const exportMultipleSheets = (sheets, filename = 'paidly_data.xlsx') => {
   }
 };
 
-// Import data from Excel (supports multiple sheets)
-export const importFromExcel = (file) => {
+// Import data from Excel (supports multiple sheets). Lazy-loads xlsx on first use.
+export const importFromExcel = async (file) => {
+  let XLSX;
+  try {
+    XLSX = await import('xlsx');
+  } catch (err) {
+    return { success: false, message: 'Failed to load Excel library: ' + (err?.message || err) };
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Read all sheets
+
         const sheets = {};
         workbook.SheetNames.forEach(sheetName => {
           const worksheet = workbook.Sheets[sheetName];
@@ -77,7 +82,7 @@ export const importFromExcel = (file) => {
 
         resolve({
           success: true,
-          sheets: sheets,
+          sheets,
           sheetNames: workbook.SheetNames,
           totalSheets: workbook.SheetNames.length
         });
@@ -88,20 +93,15 @@ export const importFromExcel = (file) => {
         });
       }
     };
-    
-    reader.onerror = () => {
-      reject({
-        success: false,
-        message: 'Failed to read file'
-      });
-    };
-    
+
+    reader.onerror = () => reject({ success: false, message: 'Failed to read file' });
     reader.readAsArrayBuffer(file);
   });
 };
 
-// Import data from an ArrayBuffer (supports multiple sheets)
-export const importFromExcelArrayBuffer = (arrayBuffer) => {
+// Import data from an ArrayBuffer (supports multiple sheets). Lazy-loads xlsx on first use.
+export const importFromExcelArrayBuffer = async (arrayBuffer) => {
+  const XLSX = await import('xlsx');
   try {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
@@ -138,7 +138,7 @@ export const importFromExcelUrl = async (url) => {
       };
     }
     const arrayBuffer = await response.arrayBuffer();
-    return importFromExcelArrayBuffer(arrayBuffer);
+    return await importFromExcelArrayBuffer(arrayBuffer);
   } catch (error) {
     return {
       success: false,
@@ -148,7 +148,7 @@ export const importFromExcelUrl = async (url) => {
 };
 
 // Generate complete Paidly data template (all sheets in one file)
-export const generatePaidlyTemplate = () => {
+export const generatePaidlyTemplate = async () => {
   const userTemplate = [
     {
       'id': generateUUID(),
@@ -364,7 +364,7 @@ export const generatePaidlyTemplate = () => {
     { data: serviceTemplate, sheetName: 'Services' }
   ];
 
-  return exportMultipleSheets(sheets, 'paidly_data.xlsx');
+  return await exportMultipleSheets(sheets, 'paidly_data.xlsx');
 };
 
 // Validate Users data
@@ -965,7 +965,7 @@ export const exportAllData = async (users, invoices, clients, services) => {
     { data: servicesData.length > 0 ? servicesData : [{ 'Service Name': '', 'Default Price': 0 }], sheetName: 'Services' }
   ];
 
-  return exportMultipleSheets(sheets, 'paidly_data.xlsx');
+  return await exportMultipleSheets(sheets, 'paidly_data.xlsx');
 };
 
 // Helper functions

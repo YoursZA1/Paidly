@@ -1,8 +1,13 @@
 import React, { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
 
+/**
+ * Lazy load all page components so the initial bundle only loads the current route.
+ * Each page is loaded on demand when the user navigates (major performance gain).
+ * Suspense shows this fallback while the chunk loads.
+ */
 const RouteFallback = () => (
-  <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading">
+  <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading page">
     <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
   </div>
 );
@@ -89,7 +94,10 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 
 // --- Auth & Public Pages ---
+// /Auth and /Auth.html allow sign-in from the marketing site (paidly.co.za/Auth.html) using the same Supabase DB; post-login redirect to app when VITE_APP_URL is set.
 const AUTH_ROUTES = [
+    { path: "/Auth", element: <Login /> },
+    { path: "/Auth.html", element: <Login /> },
     { path: "/Login", element: <Login /> },
     { path: "/login", element: <Login /> },
     { path: "/Signup", element: <Signup /> },

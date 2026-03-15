@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Quote, Client, User } from '@/api/entities';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
 
 // Import templates
 import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
@@ -105,7 +106,7 @@ export default function QuotePDF() {
     };
 
     if (isLoading) {
-        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+        return <DocumentPageSkeleton title="Loading quote…" />;
     }
 
     if (!quote || !client || !user) {

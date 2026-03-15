@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
 import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
@@ -28,22 +29,52 @@ import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const CASHFLOW_PAGE_QUERY_KEY = ['cashflow-page'];
+
+async function fetchCashFlowPageData() {
+    const [expensesData, invoicesData, paymentsData, userData] = await Promise.all([
+        Expense.list("-date"),
+        Invoice.list("-created_date"),
+        Payment.list("-payment_date"),
+        User.me(),
+    ]);
+    return {
+        expenses: expensesData || [],
+        invoices: invoicesData || [],
+        payments: paymentsData || [],
+        user: userData,
+    };
+}
+
 const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'];
 
 export default function CashFlowPage() {
     const navigate = useNavigate();
     const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const setExpensesInStore = useAppStore((s) => s.setExpenses);
+    const { data, isLoading, error } = useQuery({
+        queryKey: CASHFLOW_PAGE_QUERY_KEY,
+        queryFn: fetchCashFlowPageData,
+        staleTime: 5 * 60 * 1000,
+        refetchOnMount: false,
+    });
+    const expensesFromQuery = data?.expenses ?? [];
+    const payments = data?.payments ?? [];
+    const invoices = data?.invoices ?? [];
+    const user = data?.user ?? null;
+
+    useEffect(() => {
+        if (data?.expenses) setExpensesInStore(data.expenses);
+    }, [data?.expenses, setExpensesInStore]);
+
     const storeExpenses = useAppStore((s) => s.expenses);
     const addExpenseToStore = useAppStore((s) => s.addExpense);
     const updateExpenseInStore = useAppStore((s) => s.updateExpense);
     const deleteExpenseFromStore = useAppStore((s) => s.deleteExpense);
-    const setExpensesInStore = useAppStore((s) => s.setExpenses);
-    const [payments, setPayments] = useState([]);
-    const [invoices, setInvoices] = useState([]);
-    const [user, setUser] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
     const [showReceiptScanner, setShowReceiptScanner] = useState(false);
+    const [expenseFormFromScan, setExpenseFormFromScan] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
     const [monthsToShow, setMonthsToShow] = useState(6);
@@ -56,33 +87,17 @@ export default function CashFlowPage() {
     const [isImportingExpenses, setIsImportingExpenses] = useState(false);
     const expenseFileInputRef = useRef(null);
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    const invalidateCashFlow = () => queryClient.invalidateQueries({ queryKey: CASHFLOW_PAGE_QUERY_KEY });
 
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const [expensesData, invoicesData, paymentsData, userData] = await Promise.all([
-                Expense.list("-date"),
-                Invoice.list("-created_date"),
-                Payment.list("-payment_date"),
-                User.me()
-            ]);
-            setExpensesInStore(expensesData || []);
-            setPayments(paymentsData || []);
-            setInvoices(invoicesData);
-            setUser(userData);
-        } catch (error) {
-            console.error("Error loading cash flow data:", error);
+    useEffect(() => {
+        if (error) {
             toast({
                 title: "Could not load cash flow data",
                 description: error?.message || "Please check your connection and try again.",
                 variant: "destructive",
             });
         }
-        setIsLoading(false);
-    };
+    }, [error, toast]);
 
     const handleExportExpenseCsv = async () => {
         setIsExportingExpenses(true);
@@ -127,7 +142,7 @@ export default function CashFlowPage() {
                     created++;
                 }
                 toast({ title: "Import complete", description: `${created} expense(s) imported.`, variant: "default" });
-                loadData();
+                invalidateCashFlow();
             } catch (err) {
                 toast({ title: "Import failed", description: err?.message || "Could not parse CSV.", variant: "destructive" });
             }
@@ -256,6 +271,7 @@ export default function CashFlowPage() {
             }
             setShowExpenseForm(false);
             setEditingExpense(null);
+            setExpenseFormFromScan(false);
             toast({
                 title: editingExpense ? "Expense updated" : "Expense added",
                 variant: "default",
@@ -272,6 +288,7 @@ export default function CashFlowPage() {
 
     const handleEditExpense = (expense) => {
         setEditingExpense(expense);
+        setExpenseFormFromScan(false);
         setShowExpenseForm(true);
     };
 
@@ -291,6 +308,7 @@ export default function CashFlowPage() {
 
     const handleScanComplete = (scannedData) => {
         setEditingExpense(scannedData);
+        setExpenseFormFromScan(true);
         setShowReceiptScanner(false);
         setShowExpenseForm(true);
     };
@@ -325,7 +343,7 @@ export default function CashFlowPage() {
                             className="gap-2"
                         >
                             <Camera className="w-4 h-4" />
-                            <span className="hidden sm:inline">Scan</span>
+                            <span className="hidden sm:inline">Scan Receipt</span>
                         </Button>
                         <Button 
                             onClick={() => setShowImportModal(true)}
@@ -346,6 +364,7 @@ export default function CashFlowPage() {
                         <Button 
                             onClick={() => {
                                 setEditingExpense(null);
+                                setExpenseFormFromScan(false);
                                 setShowExpenseForm(true);
                             }}
                             className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white border-0 gap-2 font-semibold"
@@ -611,7 +630,7 @@ export default function CashFlowPage() {
                                 onEdit={handleEditExpense}
                                 onDelete={handleDeleteExpense}
                                 currency={userCurrency}
-                                onActionSuccess={loadData}
+                                onActionSuccess={invalidateCashFlow}
                             />
                         )}
                     </motion.div>
@@ -724,7 +743,7 @@ export default function CashFlowPage() {
                     <BankImportModal
                         onImportComplete={() => {
                             setShowImportModal(false);
-                            loadData();
+                            invalidateCashFlow();
                         }}
                         onCancel={() => setShowImportModal(false)}
                     />
@@ -734,10 +753,12 @@ export default function CashFlowPage() {
                 {showExpenseForm && (
                     <ExpenseForm
                         expense={editingExpense}
+                        fromReceiptScan={expenseFormFromScan}
                         onSave={handleSaveExpense}
                         onCancel={() => {
                             setShowExpenseForm(false);
                             setEditingExpense(null);
+                            setExpenseFormFromScan(false);
                         }}
                     />
                 )}

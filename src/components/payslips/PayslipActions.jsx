@@ -78,7 +78,7 @@ export default function PayslipActions({ payslip, onActionSuccess }) {
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

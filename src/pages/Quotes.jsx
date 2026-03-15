@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Quote, Client, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,55 +17,61 @@ import QuoteGrid from "../components/quote/QuoteGrid";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
+const QUOTES_PAGE_QUERY_KEY = ["quotes-page"];
+
+async function fetchQuotesPageData() {
+    const [quotesData, clientsData, userData] = await withTimeoutRetry(() => Promise.all([
+        Quote.list("-created_date"),
+        Client.list(),
+        User.me(),
+    ]), 15000, 2);
+    if (!userData) throw new Error("Not authenticated");
+    return {
+        quotes: Array.isArray(quotesData) ? quotesData : [],
+        clients: Array.isArray(clientsData) ? clientsData : [],
+        user: userData,
+    };
+}
+
 export default function QuotesPage() {
-    const [quotes, setQuotes] = useState([]);
-    const [clients, setClients] = useState([]);
-    const [user, setUser] = useState(null);
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const {
+        data,
+        isLoading,
+        error,
+    } = useQuery({
+        queryKey: QUOTES_PAGE_QUERY_KEY,
+        queryFn: fetchQuotesPageData,
+        staleTime: 5 * 60 * 1000,
+        refetchOnMount: false,
+    });
+
+    const quotes = data?.quotes ?? [];
+    const clients = data?.clients ?? [];
+    const user = data?.user ?? null;
+
     const [searchTerm, setSearchTerm] = useState("");
     const [sortBy, setSortBy] = useState('date_newest');
-    const [isLoading, setIsLoading] = useState(true);
     const [viewMode, setViewMode] = useState('list');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isImporting, setIsImporting] = useState(false);
     const quoteFileInputRef = useRef(null);
-    const mountedRef = useRef(true);
-    const { toast } = useToast();
-
-    const loadData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const [quotesData, clientsData, userData] = await withTimeoutRetry(() => Promise.all([
-                Quote.list("-created_date"),
-                Client.list(),
-                User.me()
-            ]), 15000, 2);
-            if (!mountedRef.current) return;
-            setQuotes(quotesData);
-            setClients(clientsData);
-            setUser(userData);
-        } catch (error) {
-            if (!mountedRef.current) return;
-            console.error("Error loading data:", error);
-            toast({
-                title: "Could not load quotes",
-                description: error?.message || "Please check your connection and try again.",
-                variant: "destructive",
-            });
-        } finally {
-            if (mountedRef.current) setIsLoading(false);
-        }
-    }, [toast]);
 
     useEffect(() => {
-        mountedRef.current = true;
-        loadData();
-        return () => { mountedRef.current = false; };
-    }, [loadData]);
+        if (error && !isLoading) {
+            toast({
+                title: "Could not load quotes",
+                description: error?.message ?? String(error),
+                variant: "destructive",
+            });
+        }
+    }, [error, isLoading, toast]);
 
     useSupabaseRealtime(
         ["quotes"],
-        () => loadData(),
+        () => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY }),
         { channelName: "quotes-page" }
     );
 
@@ -117,7 +124,7 @@ export default function QuotesPage() {
         }
         try {
             const ids = listToExport.map((q) => q.id);
-            const { data: itemsData } = await supabase.from("quote_items").select("*").in("quote_id", ids);
+            const { data: itemsData } = await supabase.from("quote_items").select("id, quote_id, service_name, description, quantity, unit_price, total_price").in("quote_id", ids);
             const itemsByQuoteId = new Map();
             if (Array.isArray(itemsData)) {
                 itemsData.forEach((row) => {
@@ -178,7 +185,7 @@ export default function QuotesPage() {
                     skipped++;
                 }
             }
-            await loadData();
+            queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY });
             toast({
                 title: "Import complete",
                 description: `${created} quote(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
@@ -325,14 +332,14 @@ export default function QuotesPage() {
                                         quotes={paginatedQuotes} 
                                         clients={clients} 
                                         userCurrency={userCurrency}
-                                        onActionSuccess={loadData}
+                                        onActionSuccess={() => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY })}
                                     />
                                 ) : (
                                     <QuoteGrid 
                                         quotes={paginatedQuotes} 
                                         clients={clients} 
                                         userCurrency={userCurrency}
-                                        onActionSuccess={loadData}
+                                        onActionSuccess={() => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY })}
                                     />
                                 )}
                                 

@@ -5,7 +5,7 @@ returns boolean
 language sql
 stable
 as $$
-  select coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '') = 'admin';
+  select coalesce(((select auth.jwt()) -> 'app_metadata' ->> 'role'), '') = 'admin';
 $$;
 
 create table if not exists public.organizations (
@@ -579,32 +579,32 @@ create policy "org members select banking_details" on public.banking_details
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = banking_details.org_id and m.user_id = auth.uid()
+    where m.org_id = banking_details.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write banking_details" on public.banking_details
   for insert
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = banking_details.org_id and m.user_id = auth.uid()
+    where m.org_id = banking_details.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members update banking_details" on public.banking_details
   for update
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = banking_details.org_id and m.user_id = auth.uid()
+    where m.org_id = banking_details.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = banking_details.org_id and m.user_id = auth.uid()
+    where m.org_id = banking_details.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members delete banking_details" on public.banking_details
   for delete
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = banking_details.org_id and m.user_id = auth.uid()
+    where m.org_id = banking_details.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "admin full access recurring_invoices" on public.recurring_invoices
@@ -616,32 +616,32 @@ create policy "org members select recurring_invoices" on public.recurring_invoic
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = recurring_invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = recurring_invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write recurring_invoices" on public.recurring_invoices
   for insert
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = recurring_invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = recurring_invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members update recurring_invoices" on public.recurring_invoices
   for update
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = recurring_invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = recurring_invoices.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = recurring_invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = recurring_invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members delete recurring_invoices" on public.recurring_invoices
   for delete
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = recurring_invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = recurring_invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 -- Packages: platform (org_id null) visible to all; org-scoped visible to org members; admin full access
@@ -657,7 +657,7 @@ create policy "packages select platform or own org" on public.packages
     packages.org_id is null
     or exists (
       select 1 from public.memberships m
-      where m.org_id = packages.org_id and m.user_id = auth.uid()
+      where m.org_id = packages.org_id and m.user_id = (select auth.uid())
     )
   );
 
@@ -668,7 +668,7 @@ create policy "packages insert admin or org" on public.packages
     public.is_admin()
     or (packages.org_id is not null and exists (
       select 1 from public.memberships m
-      where m.org_id = packages.org_id and m.user_id = auth.uid()
+      where m.org_id = packages.org_id and m.user_id = (select auth.uid())
     ))
   );
 
@@ -679,14 +679,14 @@ create policy "packages update admin or org" on public.packages
     public.is_admin()
     or (packages.org_id is not null and exists (
       select 1 from public.memberships m
-      where m.org_id = packages.org_id and m.user_id = auth.uid()
+      where m.org_id = packages.org_id and m.user_id = (select auth.uid())
     ))
   )
   with check (
     public.is_admin()
     or (packages.org_id is not null and exists (
       select 1 from public.memberships m
-      where m.org_id = packages.org_id and m.user_id = auth.uid()
+      where m.org_id = packages.org_id and m.user_id = (select auth.uid())
     ))
   );
 
@@ -697,7 +697,7 @@ create policy "packages delete admin or org" on public.packages
     public.is_admin()
     or (packages.org_id is not null and exists (
       select 1 from public.memberships m
-      where m.org_id = packages.org_id and m.user_id = auth.uid()
+      where m.org_id = packages.org_id and m.user_id = (select auth.uid())
     ))
   );
 
@@ -711,18 +711,18 @@ create policy "org members select invoice_views" on public.invoice_views
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = invoice_views.org_id and m.user_id = auth.uid()
+    where m.org_id = invoice_views.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write invoice_views" on public.invoice_views
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = invoice_views.org_id and m.user_id = auth.uid()
+    where m.org_id = invoice_views.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = invoice_views.org_id and m.user_id = auth.uid()
+    where m.org_id = invoice_views.org_id and m.user_id = (select auth.uid())
   ));
 
 -- Payslips: org-scoped; user activity via created_by_id
@@ -735,18 +735,18 @@ create policy "org members select payslips" on public.payslips
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = payslips.org_id and m.user_id = auth.uid()
+    where m.org_id = payslips.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write payslips" on public.payslips
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = payslips.org_id and m.user_id = auth.uid()
+    where m.org_id = payslips.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = payslips.org_id and m.user_id = auth.uid()
+    where m.org_id = payslips.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "admin full access expenses" on public.expenses
@@ -757,16 +757,16 @@ create policy "admin full access expenses" on public.expenses
 create policy "org members select expenses" on public.expenses
   for select using (exists (
     select 1 from public.memberships m
-    where m.org_id = expenses.org_id and m.user_id = auth.uid()
+    where m.org_id = expenses.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write expenses" on public.expenses
   for all using (exists (
     select 1 from public.memberships m
-    where m.org_id = expenses.org_id and m.user_id = auth.uid()
+    where m.org_id = expenses.org_id and m.user_id = (select auth.uid())
   )) with check (exists (
     select 1 from public.memberships m
-    where m.org_id = expenses.org_id and m.user_id = auth.uid()
+    where m.org_id = expenses.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "admin full access tasks" on public.tasks
@@ -777,16 +777,16 @@ create policy "admin full access tasks" on public.tasks
 create policy "org members select tasks" on public.tasks
   for select using (exists (
     select 1 from public.memberships m
-    where m.org_id = tasks.org_id and m.user_id = auth.uid()
+    where m.org_id = tasks.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write tasks" on public.tasks
   for all using (exists (
     select 1 from public.memberships m
-    where m.org_id = tasks.org_id and m.user_id = auth.uid()
+    where m.org_id = tasks.org_id and m.user_id = (select auth.uid())
   )) with check (exists (
     select 1 from public.memberships m
-    where m.org_id = tasks.org_id and m.user_id = auth.uid()
+    where m.org_id = tasks.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "admin full access notifications" on public.notifications
@@ -796,27 +796,27 @@ create policy "admin full access notifications" on public.notifications
 
 create policy "users own notifications" on public.notifications
   for all
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 
 create policy "org owner manage org" on public.organizations
   for all
-  using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+  using (owner_id = (select auth.uid()))
+  with check (owner_id = (select auth.uid()));
 
 create policy "profile self access" on public.profiles
   for all
-  using (id = auth.uid())
-  with check (id = auth.uid());
+  using (id = (select auth.uid()))
+  with check (id = (select auth.uid()));
 
 -- Non-recursive: do not query memberships inside this policy (avoids infinite recursion)
 create policy "memberships org access" on public.memberships
   for select
   using (
-    memberships.user_id = auth.uid()
+    memberships.user_id = (select auth.uid())
     or exists (
       select 1 from public.organizations o
-      where o.id = memberships.org_id and o.owner_id = auth.uid()
+      where o.id = memberships.org_id and o.owner_id = (select auth.uid())
     )
   );
 
@@ -824,65 +824,65 @@ create policy "memberships owner manage" on public.memberships
   for all
   using (exists (
     select 1 from public.organizations o
-    where o.id = memberships.org_id and o.owner_id = auth.uid()
+    where o.id = memberships.org_id and o.owner_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.organizations o
-    where o.id = memberships.org_id and o.owner_id = auth.uid()
+    where o.id = memberships.org_id and o.owner_id = (select auth.uid())
   ));
 
 create policy "org members select" on public.clients
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = clients.org_id and m.user_id = auth.uid()
+    where m.org_id = clients.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write" on public.clients
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = clients.org_id and m.user_id = auth.uid()
+    where m.org_id = clients.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = clients.org_id and m.user_id = auth.uid()
+    where m.org_id = clients.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select services" on public.services
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = services.org_id and m.user_id = auth.uid()
+    where m.org_id = services.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write services" on public.services
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = services.org_id and m.user_id = auth.uid()
+    where m.org_id = services.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = services.org_id and m.user_id = auth.uid()
+    where m.org_id = services.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select quotes" on public.quotes
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = quotes.org_id and m.user_id = auth.uid()
+    where m.org_id = quotes.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write quotes" on public.quotes
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = quotes.org_id and m.user_id = auth.uid()
+    where m.org_id = quotes.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = quotes.org_id and m.user_id = auth.uid()
+    where m.org_id = quotes.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select quote items" on public.quote_items
@@ -890,7 +890,7 @@ create policy "org members select quote items" on public.quote_items
   using (exists (
     select 1 from public.quotes q
     join public.memberships m on m.org_id = q.org_id
-    where q.id = quote_items.quote_id and m.user_id = auth.uid()
+    where q.id = quote_items.quote_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write quote items" on public.quote_items
@@ -898,30 +898,30 @@ create policy "org members write quote items" on public.quote_items
   using (exists (
     select 1 from public.quotes q
     join public.memberships m on m.org_id = q.org_id
-    where q.id = quote_items.quote_id and m.user_id = auth.uid()
+    where q.id = quote_items.quote_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.quotes q
     join public.memberships m on m.org_id = q.org_id
-    where q.id = quote_items.quote_id and m.user_id = auth.uid()
+    where q.id = quote_items.quote_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select invoices" on public.invoices
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write invoices" on public.invoices
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = invoices.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = invoices.org_id and m.user_id = auth.uid()
+    where m.org_id = invoices.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select invoice items" on public.invoice_items
@@ -929,7 +929,7 @@ create policy "org members select invoice items" on public.invoice_items
   using (exists (
     select 1 from public.invoices i
     join public.memberships m on m.org_id = i.org_id
-    where i.id = invoice_items.invoice_id and m.user_id = auth.uid()
+    where i.id = invoice_items.invoice_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write invoice items" on public.invoice_items
@@ -937,30 +937,30 @@ create policy "org members write invoice items" on public.invoice_items
   using (exists (
     select 1 from public.invoices i
     join public.memberships m on m.org_id = i.org_id
-    where i.id = invoice_items.invoice_id and m.user_id = auth.uid()
+    where i.id = invoice_items.invoice_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.invoices i
     join public.memberships m on m.org_id = i.org_id
-    where i.id = invoice_items.invoice_id and m.user_id = auth.uid()
+    where i.id = invoice_items.invoice_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members select payments" on public.payments
   for select
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = payments.org_id and m.user_id = auth.uid()
+    where m.org_id = payments.org_id and m.user_id = (select auth.uid())
   ));
 
 create policy "org members write payments" on public.payments
   for all
   using (exists (
     select 1 from public.memberships m
-    where m.org_id = payments.org_id and m.user_id = auth.uid()
+    where m.org_id = payments.org_id and m.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from public.memberships m
-    where m.org_id = payments.org_id and m.user_id = auth.uid()
+    where m.org_id = payments.org_id and m.user_id = (select auth.uid())
   ));
 
 -- Create storage buckets if they don't exist
@@ -1010,7 +1010,7 @@ create policy "Users can upload own logos" on storage.objects
   to authenticated
   with check (
     bucket_id IN ('invoicebreek', 'profile-logos') AND
-    (storage.foldername(name))[1] = auth.uid()::text
+    (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
 drop policy if exists "Users can read own logos" on storage.objects;
@@ -1019,7 +1019,7 @@ create policy "Users can read own logos" on storage.objects
   to authenticated
   using (
     bucket_id IN ('invoicebreek', 'profile-logos') AND
-    (storage.foldername(name))[1] = auth.uid()::text
+    (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
 -- Policy: Users can update/delete their own objects (e.g. replace or remove logo)
@@ -1029,11 +1029,11 @@ create policy "Users can update delete own storage" on storage.objects
   to authenticated
   using (
     bucket_id IN ('invoicebreek', 'profile-logos') AND
-    (storage.foldername(name))[1] = auth.uid()::text
+    (storage.foldername(name))[1] = (select auth.uid())::text
   )
   with check (
     bucket_id IN ('invoicebreek', 'profile-logos') AND
-    (storage.foldername(name))[1] = auth.uid()::text
+    (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
 drop policy if exists "Users can delete own storage" on storage.objects;
@@ -1042,7 +1042,7 @@ create policy "Users can delete own storage" on storage.objects
   to authenticated
   using (
     bucket_id IN ('invoicebreek', 'profile-logos') AND
-    (storage.foldername(name))[1] = auth.uid()::text
+    (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
 -- Policy: Organization members can access org-scoped objects (path first segment = org_id)
@@ -1052,14 +1052,14 @@ create policy "org members access assets" on storage.objects
   using (
     bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND exists (
       select 1 from public.memberships m
-      where m.user_id = auth.uid()
+      where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
     )
   )
   with check (
     bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND exists (
       select 1 from public.memberships m
-      where m.user_id = auth.uid()
+      where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
     )
   );

@@ -29,13 +29,13 @@ export default function AdminInvoicesQuotes() {
   const fetchData = useCallback(async () => {
     setError(null);
     try {
-      const { data: invoicesData, error: invoicesError } = await supabase.from('invoices').select('*');
+      const { data: invoicesData, error: invoicesError } = await supabase.from('invoices').select('id, org_id, client_id, invoice_number, status, project_title, delivery_date, subtotal, tax_amount, total_amount, currency, created_at, updated_at');
       if (invoicesError) {
         setError(getSupabaseErrorMessage(invoicesError, 'Failed to load invoices'));
         console.error('AdminInvoicesQuotes: invoices', invoicesError);
         return;
       }
-      const { data: quotesData, error: quotesError } = await supabase.from('quotes').select('*');
+      const { data: quotesData, error: quotesError } = await supabase.from('quotes').select('id, org_id, client_id, quote_number, status, project_title, subtotal, tax_amount, total_amount, currency, created_at, updated_at');
       if (quotesError) {
         setError(getSupabaseErrorMessage(quotesError, 'Failed to load quotes'));
         console.error('AdminInvoicesQuotes: quotes', quotesError);

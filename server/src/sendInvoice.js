@@ -4,6 +4,7 @@
  * Resend client is created lazily at call time so process.env is populated (after dotenv.config() in index.js).
  */
 import { Resend } from "resend";
+import { getInvoiceEmailContent } from "./invoiceEmailTemplate.js";
 
 let resendClient = null;
 
@@ -15,7 +16,14 @@ function getResend() {
   return resendClient;
 }
 
-export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromName = "Paidly") {
+/**
+ * @param {string} base64PDF
+ * @param {string} clientEmail
+ * @param {string} invoiceNum
+ * @param {string} [fromName="Paidly"]
+ * @param {{ clientName?: string, amountDue?: string, dueDate?: string }} [template] - Optional. When provided, uses recommended subject/body template.
+ */
+export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromName = "Paidly", template = null) {
   if (!process.env.RESEND_API_KEY) {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
@@ -25,7 +33,8 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const fromAddress = process.env.RESEND_FROM || "Paidly <sales@paidly.co.za>";
+  // Invoice emails always send from noreply@paidly.co.za for all users
+  const fromAddress = "Paidly <noreply@paidly.co.za>";
 
   // Resend requires raw base64 only; never send data URI prefix.
   let cleanBase64;
@@ -51,12 +60,29 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
     return { success: false, error: "Missing clientEmail or invoiceNum" };
   }
 
+  const clientName = template?.clientName ?? "there";
+  const amountDue = template?.amountDue ?? "";
+  const dueDate = template?.dueDate ?? "";
+  const useTemplate = clientName !== "there" || amountDue || dueDate;
+  const { subject, html } = useTemplate
+    ? getInvoiceEmailContent({
+        clientName,
+        invoiceNum,
+        amountDue,
+        dueDate,
+        brandName: fromName,
+      })
+    : {
+        subject: `Invoice ${invoiceNum} from ${fromName}`,
+        html: `<strong>Hello,</strong><p>Please find your invoice ${invoiceNum} attached.</p>`,
+      };
+
   try {
     const data = await resend.emails.send({
       from: fromAddress,
       to: [clientEmail],
-      subject: `Invoice ${invoiceNum} from ${fromName}`,
-      html: `<strong>Hello,</strong><p>Please find your invoice ${invoiceNum} attached.</p>`,
+      subject,
+      html,
       attachments: [
         {
           content: cleanBase64,

@@ -1,5 +1,4 @@
 import { formatCurrency } from '@/utils/currencyCalculations';
-import LogoImage from '@/components/shared/LogoImage';
 
 export default function BoldTemplate({ invoice, client, user, bankingDetail, userCurrency, safeFormatDate, documentTitle }) {
     const deliveryDate = safeFormatDate(invoice.delivery_date);
@@ -15,11 +14,11 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                     <div className="max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div>
-                                <LogoImage 
-                                    src={user.logo_url} 
-                                    alt="Logo" 
-                                    className="h-12 sm:h-16 w-auto max-w-[140px] sm:max-w-xs object-contain bg-white p-2 sm:p-3 rounded-lg shadow-lg" 
-                                    style={{ maxHeight: '48px' }}
+                                <img
+                                    src={user.logo_url}
+                                    alt="Company Logo"
+                                    className="w-auto max-w-[140px] sm:max-w-xs bg-white p-2 sm:p-3 rounded-lg shadow-lg"
+                                    style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
                                 />
                                 {user?.company_name && (
                                     <p className="text-white text-xs sm:text-sm font-bold mt-2">{user.company_name}</p>

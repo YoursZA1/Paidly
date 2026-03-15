@@ -33,6 +33,10 @@ export const Task = breakApi.entities.Task;
 
 export const Message = breakApi.entities.Message;
 
+export const DocumentSend = breakApi.entities.DocumentSend;
+
+export const MessageLog = breakApi.entities.MessageLog;
+
 export const TaskAssignmentRule = breakApi.entities.TaskAssignmentRule;
 
 export const QuoteTemplate = breakApi.entities.QuoteTemplate;

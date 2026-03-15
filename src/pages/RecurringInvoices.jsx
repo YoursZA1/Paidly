@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RecurringInvoice, Client } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -25,6 +26,19 @@ import RecurringInvoiceAnalytics from '../components/recurring/RecurringInvoiceA
 import RecurringInvoiceAutoGenerationTester_UI from '../components/recurring/RecurringInvoiceAutoGenerationTester_UI';
 import RecurringInvoiceCycleHistory from '../components/recurring/RecurringInvoiceCycleHistory';
 
+const RECURRING_PAGE_QUERY_KEY = ['recurring-invoices-page'];
+
+async function fetchRecurringPageData() {
+    const [invoicesData, clientsData] = await Promise.all([
+        RecurringInvoice.list("-created_date"),
+        Client.list(),
+    ]);
+    return {
+        recurringInvoices: invoicesData || [],
+        clients: clientsData || [],
+    };
+}
+
 const statusStyles = {
     active: "bg-emerald-100 text-emerald-700",
     paused: "bg-amber-100 text-amber-700",
@@ -33,9 +47,16 @@ const statusStyles = {
 
 export default function RecurringInvoices() {
     const navigate = useNavigate();
-    const [recurringInvoices, setRecurringInvoices] = useState([]);
-    const [clients, setClients] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const { data, isLoading, error } = useQuery({
+        queryKey: RECURRING_PAGE_QUERY_KEY,
+        queryFn: fetchRecurringPageData,
+        staleTime: 5 * 60 * 1000,
+        refetchOnMount: false,
+    });
+    const recurringInvoices = data?.recurringInvoices ?? [];
+    const clients = data?.clients ?? [];
+
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationResult, setGenerationResult] = useState(null);
     const [viewMode, setViewMode] = useState('cards');
@@ -47,24 +68,13 @@ export default function RecurringInvoices() {
     const recurringFileInputRef = useRef(null);
     const { toast } = useToast();
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    const invalidateRecurring = () => queryClient.invalidateQueries({ queryKey: RECURRING_PAGE_QUERY_KEY });
 
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const [invoicesData, clientsData] = await Promise.all([
-                RecurringInvoice.list("-created_date"),
-                Client.list(),
-            ]);
-            setRecurringInvoices(invoicesData || []);
-            setClients(clientsData || []);
-        } catch (error) {
-            console.error("Error loading data:", error);
+    useEffect(() => {
+        if (error) {
+            toast({ title: 'Could not load recurring invoices', description: error?.message, variant: 'destructive' });
         }
-        setIsLoading(false);
-    };
+    }, [error, toast]);
 
     const getClientName = (clientId) => {
         return clients.find(c => c.id === clientId)?.name || "N/A";
@@ -76,7 +86,7 @@ export default function RecurringInvoices() {
         try {
             const generated = await RecurringInvoiceService.checkAndGenerateDueInvoices();
             setGenerationResult({ success: true, count: generated.length });
-            await loadData(); // Refresh the list to show updated next_generation_date
+            invalidateRecurring();
         } catch (error) {
             console.error("Error generating invoices:", error);
             setGenerationResult({ success: false, error: "Failed to generate invoices." });
@@ -87,11 +97,11 @@ export default function RecurringInvoices() {
 
     const handleCreateSuccess = () => {
         setIsCreateDialogOpen(false);
-        loadData();
+        invalidateRecurring();
     };
 
     const handleRefreshCard = () => {
-        loadData();
+        invalidateRecurring();
     };
 
     const handleViewCycleHistory = (invoice) => {
@@ -148,7 +158,7 @@ export default function RecurringInvoices() {
                     skipped++;
                 }
             }
-            await loadData();
+            invalidateRecurring();
             toast({
                 title: 'Import complete',
                 description: `${created} recurring invoice(s) imported${skipped ? `, ${skipped} skipped.` : '.'}`,

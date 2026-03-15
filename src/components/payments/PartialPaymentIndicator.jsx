@@ -1,9 +1,10 @@
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { CheckCircle, Clock, AlertCircle } from "lucide-react";
 import PropTypes from 'prop-types';
 
-export default function PartialPaymentIndicator({ invoice, totalPaid, currency = 'USD', size = 'default' }) {
+function PartialPaymentIndicator({ invoice, totalPaid, currency = 'USD', size = 'default' }) {
     const remainingBalance = invoice.total_amount - totalPaid;
     const paymentProgress = (totalPaid / invoice.total_amount) * 100;
     
@@ -79,3 +80,5 @@ PartialPaymentIndicator.propTypes = {
     currency: PropTypes.string,
     size: PropTypes.oneOf(['default', 'compact'])
 };
+
+export default React.memo(PartialPaymentIndicator);

@@ -4,6 +4,7 @@ import { Invoice, Client, User, BankingDetail } from '@/api/entities';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
+import InvoicePDFDownloadLink from '@/components/pdf/InvoicePDFDownloadLink';
 
 // Import templates
 import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
@@ -165,7 +166,7 @@ export default function InvoicePDF() {
     // Fallback user so template always has logo/company/currency (e.g. when User.me() failed or for public view)
     const resolvedUser = user || {
         company_name: invoice.owner_company_name || 'Company',
-        logo_url: invoice.owner_logo_url || null,
+        logo_url: invoice.company?.logo_url || invoice.owner_logo_url || null,
         company_address: invoice.owner_company_address || '',
         currency: invoice.owner_currency || 'ZAR',
         invoice_template: 'classic',
@@ -251,6 +252,12 @@ export default function InvoicePDF() {
                         >
                             {isDraft ? 'Close' : 'Back'}
                         </Button>
+                        <InvoicePDFDownloadLink
+                            invoice={invoice}
+                            client={client}
+                            user={resolvedUser}
+                            className="btn-download px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
+                        />
                         <Button
                             onClick={async () => {
                                 if (!pdfRef.current || isGeneratingPdf) return;
@@ -266,9 +273,10 @@ export default function InvoicePDF() {
                                 }
                             }}
                             disabled={isGeneratingPdf}
-                            className="btn-download bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
+                            variant="outline"
+                            className="px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
                         >
-                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
+                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF (template)'}
                         </Button>
                     </div>
 

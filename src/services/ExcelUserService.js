@@ -1,8 +1,7 @@
-import * as XLSX from 'xlsx';
-
 /**
  * ExcelUserService - Manages user data persistence to Excel files
  * Stores user accounts created in the system to an Excel workbook
+ * xlsx is lazy-loaded via dynamic import() to avoid pulling it into the main bundle.
  */
 
 const USERS_STORAGE_KEY = 'breakapi_users_data';
@@ -190,31 +189,19 @@ class ExcelUserService {
   }
 
   /**
-   * Export users to Excel file
-   * @returns {Blob} Excel file blob
+   * Export users to Excel file. Lazy-loads xlsx on first use.
+   * @returns {Promise<ArrayBuffer>} Excel file as array buffer
    */
-  exportToExcel() {
+  async exportToExcel() {
+    const XLSX = await import('xlsx');
     const worksheet = XLSX.utils.json_to_sheet(this.users);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
 
-    // Set column widths
     worksheet['!cols'] = [
-      { wch: 15 }, // id
-      { wch: 25 }, // email
-      { wch: 20 }, // full_name
-      { wch: 20 }, // display_name
-      { wch: 20 }, // company_name
-      { wch: 30 }, // company_address
-      { wch: 10 }, // role
-      { wch: 12 }, // status
-      { wch: 12 }, // plan
-      { wch: 8 },  // currency
-      { wch: 12 }, // timezone
-      { wch: 15 }, // phone
-      { wch: 25 }, // created_at
-      { wch: 25 }, // updated_at
-      { wch: 12 }, // subscription_amount
+      { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 30 },
+      { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 15 },
+      { wch: 25 }, { wch: 25 }, { wch: 12 }
     ];
 
     return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
@@ -223,8 +210,8 @@ class ExcelUserService {
   /**
    * Download Excel file
    */
-  downloadExcel() {
-    const excelData = this.exportToExcel();
+  async downloadExcel() {
+    const excelData = await this.exportToExcel();
     const blob = new Blob([excelData], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
@@ -237,11 +224,12 @@ class ExcelUserService {
   }
 
   /**
-   * Import users from Excel file
+   * Import users from Excel file. Lazy-loads xlsx on first use.
    * @param {File} file - Excel file
-   * @returns {Array} Imported users
+   * @returns {Promise<Array>} Imported users
    */
   async importFromExcel(file) {
+    const XLSX = await import('xlsx');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -251,7 +239,6 @@ class ExcelUserService {
           const worksheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-          // Add imported users to existing users
           jsonData.forEach(userData => {
             const existingUser = this.users.find(u => u.email === userData.email);
             if (!existingUser) {

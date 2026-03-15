@@ -68,9 +68,9 @@ export default function ViewPayslip() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-4 py-4">
+            <div className="bg-card border-b border-border px-4 py-4">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Button
@@ -81,10 +81,10 @@ export default function ViewPayslip() {
                             <ArrowLeft className="w-4 h-4" />
                         </Button>
                         <div>
-                            <h1 className="text-xl font-semibold text-gray-900">
+                            <h1 className="text-xl font-semibold text-foreground">
                                 {payslip ? `Payslip ${payslip.payslip_number}` : 'Loading...'}
                             </h1>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-muted-foreground">
                                 {payslip ? `${payslip.employee_name}` : ''}
                             </p>
                         </div>
@@ -109,7 +109,7 @@ export default function ViewPayslip() {
             {/* PDF Preview */}
             <div className="p-4">
                 <div className="max-w-7xl mx-auto">
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
                         <iframe
                             src={createPageUrl(`PayslipPDF?id=${payslipId}`)}
                             title="Payslip Preview"

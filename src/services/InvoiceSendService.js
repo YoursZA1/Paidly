@@ -3,8 +3,84 @@
  * Handles sending invoices to clients via email and notifications
  */
 
-import { Invoice } from '@/api/entities';
+import { Invoice, DocumentSend, MessageLog } from '@/api/entities';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
+
+/**
+ * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
+ * @param {string} [baseUrl] - Optional. When omitted in browser uses window.location.origin.
+ * @returns {string}
+ */
+export const getTrackableBaseUrl = (baseUrl) => {
+  if (baseUrl) return baseUrl.replace(/\/$/, '');
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return '';
+};
+
+/**
+ * URL for the email open-tracking pixel. Embed in HTML as:
+ * <img src="{url}" width="1" height="1" alt="" />
+ * When the email client loads the image, GET /api/email-track/:token runs and logs the open in message_logs.
+ * @param {string} trackingToken - Same token used for the invoice view link (from createTrackableInvoiceLink).
+ * @param {string} [baseUrl] - App base URL (e.g. https://yourapp.com). Omit in browser to use current origin.
+ * @returns {string} Full URL e.g. https://yourapp.com/api/email-track/{token}
+ */
+export const getEmailOpenTrackingPixelUrl = (trackingToken, baseUrl) => {
+  const base = getTrackableBaseUrl(baseUrl);
+  if (!base || !trackingToken) return '';
+  return `${base}/api/email-track/${encodeURIComponent(trackingToken)}`;
+};
+
+/**
+ * Log the send to message_logs and return a trackable link (and token for optional pixel).
+ * Every send action (email or WhatsApp) should call this so the message is logged.
+ * Inserts: document_type, document_id, client_id, channel, recipient, sent_at, tracking_token
+ * @param {object} invoice - { id, public_share_token, client_id }
+ * @param {string} channel - 'email' | 'whatsapp'
+ * @param {string} recipient - Email address or phone (for message_logs.recipient)
+ * @returns {Promise<{ url: string, trackingToken: string }>} url = view link; trackingToken = for email pixel
+ */
+export const createTrackableInvoiceLink = async (invoice, channel, recipient) => {
+  const shareToken = invoice?.public_share_token;
+  if (!shareToken) {
+    throw new Error('Invoice has no share token. Generate a share link first.');
+  }
+  const token = crypto.randomUUID();
+  const sentAt = new Date().toISOString();
+  await MessageLog.create({
+    document_type: 'invoice',
+    document_id: invoice.id,
+    client_id: invoice.client_id || null,
+    channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+    recipient: recipient || null,
+    sent_at: sentAt,
+    tracking_token: token,
+  });
+  const origin = getTrackableBaseUrl();
+  const url = `${origin}/view/${shareToken}?token=${token}`;
+  return { url, trackingToken: token };
+};
+
+/**
+ * Record a document send for Messages page tracking (Document, Client, Channel, Status, Opened, Viewed Time, Paid, Payment Time).
+ * @param {string} documentType - 'invoice' | 'quote'
+ * @param {string} documentId - UUID
+ * @param {string} clientId - UUID (optional for quotes)
+ * @param {string} channel - 'email' | 'whatsapp'
+ */
+export const recordDocumentSend = async (documentType, documentId, clientId, channel) => {
+  try {
+    await DocumentSend.create({
+      document_type: documentType,
+      document_id: documentId,
+      client_id: clientId || null,
+      channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+      sent_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn('Failed to record document send:', e);
+  }
+};
 
 /**
  * Send invoice to client
@@ -25,6 +101,12 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
         sent_date: new Date().toISOString(),
       })
     );
+
+    // Record send for Messages page (channel = email when sent from app)
+    const invoice = await retryOnAbort(() => Invoice.get(invoiceId)).catch(() => null);
+    if (invoice?.client_id) {
+      recordDocumentSend('invoice', invoiceId, invoice.client_id, 'email');
+    }
 
     // TODO: Implement actual email sending via API
     // await breakApi.post(`/api/invoices/${invoiceId}/send`, {

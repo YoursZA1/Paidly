@@ -25,9 +25,9 @@ import PayslipActions from "../components/payslips/PayslipActions";
 import { formatCurrency } from "../components/CurrencySelector";
 
 const statusStyles = {
-    draft: "bg-slate-100 text-slate-700 border-slate-200",
+    draft: "bg-muted text-muted-foreground border-border",
     sent: "bg-primary/15 text-primary border-primary/20",
-    paid: "bg-emerald-100 text-emerald-700 border-emerald-200"
+    paid: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
 };
 
 const safeFormatDate = (dateStr) => {
@@ -144,7 +144,7 @@ export default function PayslipsPage() {
     }, [searchTerm]);
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -153,10 +153,10 @@ export default function PayslipsPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+                        <h1 className="text-2xl font-semibold text-foreground mb-2">
                             Payslips
                         </h1>
-                        <p className="text-gray-600">
+                        <p className="text-muted-foreground">
                             Manage and distribute employee payslips
                         </p>
                     </div>
@@ -168,7 +168,7 @@ export default function PayslipsPage() {
                     </Link>
                 </motion.div>
 
-                <Card className="bg-white border border-gray-200">
+                <Card className="bg-card border border-border">
                     <CardHeader>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <CardTitle>Payslip List</CardTitle>
@@ -189,7 +189,7 @@ export default function PayslipsPage() {
                                     {isExporting ? "Exporting…" : "Export CSV"}
                                 </Button>
                                 <div className="relative w-full sm:max-w-xs">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                     <Input
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -263,9 +263,9 @@ export default function PayslipsPage() {
                                 Array(3).fill(0).map((_, i) => <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>)
                             ) : filteredPayslips.length === 0 ? (
                                 <div className="text-center py-12">
-                                    <Receipt className="mx-auto h-12 w-12 text-gray-400" />
-                                    <h3 className="mt-2 text-sm font-medium text-gray-900">No payslips found</h3>
-                                    <p className="mt-1 text-sm text-gray-500">Create your first payslip to see it here.</p>
+                                    <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
+                                    <h3 className="mt-2 text-sm font-medium text-foreground">No payslips found</h3>
+                                    <p className="mt-1 text-sm text-muted-foreground">Create your first payslip to see it here.</p>
                                     <div className="mt-6">
                                         <Link to={createPageUrl("CreatePayslip")}>
                                             <Button>
@@ -277,23 +277,23 @@ export default function PayslipsPage() {
                                 </div>
                             ) : (
                                 paginatedPayslips.map(payslip => (
-                                    <Card key={payslip.id} className="bg-white border border-slate-200">
+                                    <Card key={payslip.id} className="bg-card border border-border">
                                         <CardContent className="p-4">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1 space-y-1">
-                                                    <p className="font-semibold text-slate-800">{payslip.employee_name}</p>
-                                                    <p className="text-sm text-slate-600">{payslip.payslip_number}</p>
-                                                    <p className="text-sm text-slate-500">{payslip.position || 'N/A'}</p>
+                                                    <p className="font-semibold text-foreground">{payslip.employee_name}</p>
+                                                    <p className="text-sm text-muted-foreground">{payslip.payslip_number}</p>
+                                                    <p className="text-sm text-muted-foreground">{payslip.position || 'N/A'}</p>
                                                 </div>
                                                 <PayslipActions 
                                                     payslip={payslip}
                                                     onActionSuccess={loadData}
                                                 />
                                             </div>
-                                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
+                                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-border">
                                                 <div>
-                                                    <p className="text-sm font-bold text-slate-800">{formatCurrency(payslip.net_pay, userCurrency)}</p>
-                                                    <p className="text-xs text-slate-500">
+                                                    <p className="text-sm font-bold text-foreground">{formatCurrency(payslip.net_pay, userCurrency)}</p>
+                                                    <p className="text-xs text-muted-foreground">
                                                         {payslip.pay_period_start && payslip.pay_period_end
                                                             ? `${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`
                                                             : 'N/A'}
@@ -313,7 +313,7 @@ export default function PayslipsPage() {
                         {totalPages > 1 && (
                             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4 px-4">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm text-slate-600">Show</span>
+                                    <span className="text-sm text-muted-foreground">Show</span>
                                     <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
                                         <SelectTrigger className="w-[70px] h-9">
                                             <SelectValue />
@@ -325,7 +325,7 @@ export default function PayslipsPage() {
                                             <SelectItem value="100">100</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <span className="text-sm text-slate-600">
+                                    <span className="text-sm text-muted-foreground">
                                         of {filteredPayslips.length} payslips
                                     </span>
                                 </div>

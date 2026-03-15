@@ -21,7 +21,7 @@ import QuoteEmailPreviewModal from './QuoteEmailPreviewModal';
 import { breakApi } from '@/api/apiClient';
 import { Client } from '@/api/entities';
 
-export default function QuoteActions({ quote, onActionSuccess }) {
+function QuoteActions({ quote, onActionSuccess }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showManualShare, setShowManualShare] = useState(false);
@@ -223,3 +223,5 @@ export default function QuoteActions({ quote, onActionSuccess }) {
         </>
     );
 }
+
+export default React.memo(QuoteActions);

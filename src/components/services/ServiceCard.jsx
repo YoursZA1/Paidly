@@ -19,7 +19,7 @@ const serviceTypeLabels = {
     monthly: "Per Month"
 };
 
-export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0, userCurrency = 'USD' }) {
+function ServiceCard({ service, onEdit, onToggleActive, delay = 0, userCurrency = 'USD' }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -176,3 +176,5 @@ export default function ServiceCard({ service, onEdit, onToggleActive, delay = 0
         </motion.div>
     );
 }
+
+export default React.memo(ServiceCard);

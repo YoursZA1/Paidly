@@ -153,7 +153,7 @@ export default function AdminSubscriptions() {
     setLoading(true);
     setLoadError(null);
     try {
-      const { data: allSubs, error: subError } = await supabase.from('subscriptions').select('*');
+      const { data: allSubs, error: subError } = await supabase.from('subscriptions').select('id, status, created_at, user_id, user_name, user_email, current_plan, renewal_date, is_custom_plan, custom_price, billing_cycle');
       if (subError) throw new Error(getSupabaseErrorMessage(subError, 'Failed to load subscriptions'));
       setSubscriptions(allSubs || []);
     } catch (error) {
@@ -275,7 +275,7 @@ export default function AdminSubscriptions() {
   }, [subscriptions, searchQuery, filterStatus, filterPlan, sortBy]);
 
   const reloadSubscriptions = async () => {
-    const { data, error } = await supabase.from('subscriptions').select('*');
+    const { data, error } = await supabase.from('subscriptions').select('id, status, created_at, user_id, user_name, user_email, current_plan, renewal_date, is_custom_plan, custom_price, billing_cycle');
     if (!error) setSubscriptions(data ?? []);
     return error;
   };
@@ -394,7 +394,7 @@ export default function AdminSubscriptions() {
 
   const handleExportData = async () => {
     try {
-      const { data, error } = await supabase.from('subscriptions').select('*');
+      const { data, error } = await supabase.from('subscriptions').select('id, status, created_at, user_id, user_name, user_email, current_plan, renewal_date, is_custom_plan, custom_price, billing_cycle');
       if (error) throw new Error(getSupabaseErrorMessage(error, 'Failed to load subscriptions for export'));
       if (data?.length) {
         const timestamp = new Date().toISOString().split('T')[0];

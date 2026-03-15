@@ -57,7 +57,8 @@ import {
   Building2,
   BarChart3,
   Wrench,
-  Terminal
+  Terminal,
+  Receipt
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -265,6 +266,14 @@ const allNavigationItems = [
     id: "nav-services",
   },
   { type: "section", title: "Finance", id: "nav-section-finance" },
+  {
+    title: "Payslips",
+    url: createPageUrl("Payslips"),
+    icon: Receipt,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-payslips",
+  },
   {
     title: "Cash Flow",
     url: createPageUrl("CashFlow"),
@@ -633,14 +642,18 @@ export default function Layout({ children, currentPageName }) {
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fetchAll = useAppStore((s) => s.fetchAll);
+  const lastFetchedAt = useAppStore((s) => s.lastFetchedAt);
   const resetStore = useAppStore((s) => s.reset);
 
-  // Fetch shared app data once when user is present (non-admin). Dashboard and Invoices read from store.
+  // Fetch shared app data when user is present (non-admin). Skip if we have fresh data so navigation doesn't refetch.
+  const STALE_MS = 5 * 60 * 1000; // 5 min – same as React Query staleTime
   useEffect(() => {
     if (!user?.id) return;
     if ((user?.role || "").toLowerCase() === "admin") return;
+    const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
+    if (hasFreshData) return;
     fetchAll();
-  }, [user?.id, user?.role, fetchAll]);
+  }, [user?.id, user?.role, fetchAll, lastFetchedAt]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
   useEffect(() => {

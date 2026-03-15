@@ -30,15 +30,15 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 -- RLS policies: users can view, update, and insert their own profile (needed for Settings save/upsert)
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile" ON public.profiles
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT USING ((select auth.uid()) = id);
 
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles
-  FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+  FOR UPDATE USING ((select auth.uid()) = id) WITH CHECK ((select auth.uid()) = id);
 
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles
-  FOR INSERT WITH CHECK (auth.uid() = id);
+  FOR INSERT WITH CHECK ((select auth.uid()) = id);
 
 alter table public.profiles add column if not exists company_address text;
 alter table public.profiles add column if not exists phone text;

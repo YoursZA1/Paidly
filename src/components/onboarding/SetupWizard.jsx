@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { User, BankingDetail } from "@/api/entities";
-import { uploadToBucket } from "@/services/SupabaseMultiBucketService";
+import { uploadLogo, validateLogoFile, LOGO_CONSTRAINTS } from "@/lib/logoUpload";
 import { Loader2, UploadCloud, CheckCircle, ArrowRight, Building, CreditCard, Image as ImageIcon, X } from "lucide-react";
 import CurrencySelector from "@/components/CurrencySelector";
 import { motion, AnimatePresence } from "framer-motion";
@@ -56,7 +56,12 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
     const handleLogoChange = (e) => {
         if (e.target.files && e.target.files[0]) {
-            setLogoFile(e.target.files[0]);
+            const file = e.target.files[0];
+            const validation = validateLogoFile(file);
+            if (validation.valid) {
+                setLogoFile(file);
+            }
+            // If invalid, do not set (user can pick another file); uploadLogo will also validate on submit
         }
     };
 
@@ -84,7 +89,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
             }
             let finalLogoUrl = formData.logo_url;
             if (logoFile) {
-                finalLogoUrl = await uploadToBucket(logoFile, 'profile-logos', `${userId}/logo.${logoFile.name.split('.').pop()}`);
+                finalLogoUrl = await uploadLogo(logoFile, userId);
             }
 
             // Save to Supabase profiles table (one row per user, keyed by auth user id)
@@ -246,12 +251,12 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                                     <UploadCloud className="w-4 h-4" />
                                                     {logoFile || formData.logo_url ? "Change Logo" : "Upload Logo"}
                                                 </span>
-                                                <span className="text-xs text-slate-400">Recommended: 400x400px PNG or JPG</span>
+                                                <span className="text-xs text-slate-400">PNG or SVG (SVG for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.</span>
                                             </div>
                                             <Input 
                                                 id="logo-upload" 
                                                 type="file" 
-                                                accept="image/*" 
+                                                accept="image/png,image/svg+xml" 
                                                 className="hidden" 
                                                 onChange={handleLogoChange}
                                             />

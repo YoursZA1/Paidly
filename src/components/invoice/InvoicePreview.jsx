@@ -1,14 +1,11 @@
 import PropTypes from "prop-types";
 import React, { memo, useRef, useState } from "react";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, FileText, Download, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { formatCurrencyInvoice } from "../CurrencySelector";
-import LogoImage from "@/components/shared/LogoImage";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { getBackendBaseUrl } from "@/api/backendClient";
@@ -63,10 +60,14 @@ function InvoicePreview({
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
-  /** Build PDF from preview ref; returns jsPDF instance or null. */
+  /** Build PDF from preview ref; returns jsPDF instance or null. Lazy-loads jspdf and html2canvas to avoid circular chunk (pdf ↔ vendor). */
   const buildPdf = async () => {
     if (!previewRef.current) return null;
     const element = previewRef.current;
+    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
@@ -77,7 +78,6 @@ function InvoicePreview({
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
-    // Document is fixed A4 size so image fits one page
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
     return pdf;
   };
@@ -119,6 +119,21 @@ function InvoicePreview({
         return;
       }
       const invoiceNum = invoiceData?.invoice_number || invoiceData?.reference_number || "Draft";
+      const currency = user?.currency || invoiceData?.owner_currency || "ZAR";
+      const amountDue = new Intl.NumberFormat("en-ZA", { style: "currency", currency }).format(
+        Number(invoiceData?.total_amount ?? invoiceData?.total ?? 0)
+      );
+      const dueDateRaw = invoiceData?.delivery_date || invoiceData?.due_date;
+      const dueDate = dueDateRaw
+        ? (() => {
+            try {
+              const d = typeof dueDateRaw === "string" ? new Date(dueDateRaw) : dueDateRaw;
+              return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
+            } catch {
+              return "";
+            }
+          })()
+        : "";
       const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
       const res = await fetch(`${apiBase}/api/send-invoice`, {
         method: "POST",
@@ -128,6 +143,9 @@ function InvoicePreview({
           clientEmail,
           invoiceNum,
           fromName: user?.company_name || "Paidly",
+          clientName: client?.name?.trim() || undefined,
+          amountDue: amountDue || undefined,
+          dueDate: dueDate || undefined,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -164,11 +182,11 @@ function InvoicePreview({
         <CardHeader className="border-b border-border pb-4 sm:pb-6 px-4 sm:px-6">
           {user?.logo_url && (
             <div className="mb-3 sm:mb-4 flex justify-center">
-              <LogoImage
+              <img
                 src={user.logo_url}
                 alt="Company Logo"
-                className="h-12 sm:h-16 w-auto max-w-[200px] sm:max-w-xs object-contain rounded shadow"
-                style={{ maxHeight: "48px" }}
+                className="w-auto max-w-[200px] sm:max-w-xs rounded shadow"
+                style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
               />
             </div>
           )}
@@ -254,11 +272,11 @@ function InvoicePreview({
               <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 sm:gap-8 pb-6 sm:pb-10 border-b border-slate-100">
                 <div className="space-y-2 sm:space-y-3 min-w-0">
                   {user?.logo_url ? (
-                    <LogoImage
+                    <img
                       src={user.logo_url}
-                      alt=""
-                      className="h-10 sm:h-14 w-auto max-w-[140px] sm:max-w-[180px] object-contain"
-                      style={{ maxHeight: "40px" }}
+                      alt="Company Logo"
+                      className="w-auto max-w-[140px] sm:max-w-[180px]"
+                      style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
                     />
                   ) : (
                     <div className="w-10 h-10 sm:w-14 sm:h-14 bg-primary rounded-lg sm:rounded-xl flex items-center justify-center text-white text-lg sm:text-xl font-black">

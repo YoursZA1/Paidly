@@ -8,19 +8,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { X, ExternalLink, ScanLine, Paperclip, Upload, Loader2, Sparkles, MapPin, Car } from "lucide-react";
 import { format } from "date-fns";
 import { Vendor } from "@/api/entities";
-import { UploadToActivities, ExtractDataFromUploadedFile, InvokeLLM } from "@/api/integrations";
+import { UploadToActivities, UploadToReceipts, ExtractDataFromUploadedFile, InvokeLLM } from "@/api/integrations";
+import { getReceiptExtractionSchema, parsedReceiptToExpenseForm } from "@/constants/receiptOcrExtractionSpec";
+import { extractReceiptDataWithTesseract } from "@/utils/receiptTesseractOcr";
 import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-export default function ExpenseForm({ expense, onSave, onCancel }) {
+export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan }) {
     const { toast } = useToast();
     const [formData, setFormData] = useState(expense || {
         category: "office",
         description: "",
         amount: "",
-        date: format(new Date(), 'yyyy-MM-dd'),
+        date: format(new Date(), "yyyy-MM-dd"),
         payment_method: "bank_transfer",
         vendor: "",
         vendor_id: "",
@@ -28,6 +30,8 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
         attachments: [],
         is_claimable: true,
         notes: "",
+        vat: "",
+        currency: "ZAR",
         is_mileage: false,
         distance: "",
         distance_unit: "km",
@@ -39,7 +43,10 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
     const [vendors, setVendors] = useState([]);
     const [isScanning, setIsScanning] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
+    const [useBrowserOcr, setUseBrowserOcr] = useState(false);
     const [activeTab, setActiveTab] = useState(expense?.is_mileage ? "mileage" : "general");
+
+    const isImageFile = (file) => /^image\/(jpeg|png|webp|gif)$/i.test(file?.type);
 
     useEffect(() => {
         loadVendors();
@@ -119,53 +126,62 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const useOcr = useBrowserOcr && isImageFile(file);
+        if (useBrowserOcr && !isImageFile(file)) {
+            toast({
+                title: "Browser OCR works with images only",
+                description: "Use JPG or PNG for browser OCR, or turn off to use server extraction for PDFs.",
+                variant: "destructive"
+            });
+            return;
+        }
+
         setIsScanning(true);
         try {
-            const { file_url } = await UploadToActivities({ file });
+            const { file_url } = await UploadToReceipts({ file });
             const newAttachments = [...(formData.attachments || []), { name: file.name, url: file_url }];
-            // 3. Extract Data
-            const schema = {
-                type: "object",
-                properties: {
-                    vendor_name: { type: "string" },
-                    date: { type: "string", format: "date" },
-                    amount: { type: "number" },
-                    description: { type: "string" },
-                    category: { 
-                        type: "string", 
-                        enum: ["office", "travel", "utilities", "supplies", "salary", "marketing", "software", "consulting", "legal", "maintenance", "vehicle", "meals", "other"]
-                    }
-                }
-            };
 
-            const result = await ExtractDataFromUploadedFile({
-                file_url,
-                json_schema: schema
-            });
-
-            if (result.status === "success" && result.output) {
-                const data = result.output;
-                setFormData(prev => ({
-                    ...prev,
-                    attachments: newAttachments,
-                    amount: data.amount || prev.amount,
-                    date: data.date || prev.date,
-                    description: data.description || `Receipt from ${data.vendor_name || 'Unknown'}`,
-                    category: data.category || prev.category,
-                    vendor: data.vendor_name || prev.vendor,
-                    // Try to match vendor
-                    vendor_id: vendors.find(v => v.name.toLowerCase() === data.vendor_name?.toLowerCase())?.id || prev.vendor_id
-                }));
+            let data = null;
+            if (useOcr) {
+                data = await extractReceiptDataWithTesseract(file);
             } else {
-                setFormData(prev => ({ ...prev, attachments: newAttachments }));
-                alert("Could not extract data, but receipt was attached.");
+                const result = await ExtractDataFromUploadedFile({
+                    file_url,
+                    json_schema: getReceiptExtractionSchema()
+                });
+                if (result.status === "success" && result.output) data = result.output;
             }
 
+            if (data) {
+                // Auto-fill expense form after parsing: vendor, amount, date (+ vat, currency, category, description)
+                const filled = parsedReceiptToExpenseForm(data);
+                setFormData(prev => ({
+                    ...prev,
+                    vendor: filled.vendor,
+                    amount: filled.amount,
+                    date: filled.date,
+                    vat: filled.vat,
+                    currency: filled.currency,
+                    category: filled.category,
+                    description: filled.description,
+                    attachments: newAttachments,
+                    vendor_id: vendors.find(v => v.name.toLowerCase() === (data.vendor_name || "").toLowerCase())?.id ?? prev.vendor_id,
+                }));
+                toast({ title: "Receipt scanned", description: useOcr ? "Data extracted with browser OCR." : "Data extracted.", variant: "default" });
+            } else {
+                setFormData(prev => ({ ...prev, attachments: newAttachments }));
+                toast({ title: "Receipt attached", description: "Could not extract data. Please fill in manually.", variant: "default" });
+            }
         } catch (error) {
             console.error("Scanning failed", error);
-            alert("Failed to scan receipt.");
+            toast({
+                title: "Scan failed",
+                description: error?.message || "Failed to scan receipt. Try again or enter manually.",
+                variant: "destructive"
+            });
         }
         setIsScanning(false);
+        e.target.value = "";
     };
 
     const suggestCategory = async () => {
@@ -206,9 +222,14 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b shrink-0">
-                    <h2 className="text-xl font-semibold text-primary">
-                        {expense ? 'Edit Expense' : 'Add New Expense'}
-                    </h2>
+                    <div>
+                        <h2 className="text-xl font-semibold text-primary">
+                            {fromReceiptScan ? "Confirm & save" : expense?.id ? "Edit Expense" : "Add New Expense"}
+                        </h2>
+                        {fromReceiptScan && (
+                            <p className="text-sm text-muted-foreground mt-1">Review the details below and save your expense</p>
+                        )}
+                    </div>
                     <Button variant="ghost" size="icon" onClick={onCancel}>
                         <X className="w-4 h-4" />
                     </Button>
@@ -223,9 +244,9 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                             </TabsList>
 
                             <TabsContent value="general" className="space-y-4">
-                                {/* Scan Button */}
-                                <div className="flex justify-center mb-4">
-                                    <div className="relative">
+                                {/* Scan Button: default server extraction; optional browser OCR */}
+                                <div className="space-y-2 mb-4">
+                                    <div className="relative flex justify-center">
                                         <input
                                             type="file"
                                             accept="image/*,.pdf"
@@ -238,6 +259,13 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                             {isScanning ? "Scanning Receipt..." : "Scan Receipt with AI"}
                                         </Button>
                                     </div>
+                                    <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-muted-foreground">
+                                        <Checkbox
+                                            checked={useBrowserOcr}
+                                            onCheckedChange={(checked) => setUseBrowserOcr(!!checked)}
+                                        />
+                                        <span>Extract with browser OCR (works offline, images only)</span>
+                                    </label>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

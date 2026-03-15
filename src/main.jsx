@@ -43,10 +43,13 @@ class AppErrorBoundary extends React.Component {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000,
-      gcTime: 5 * 60 * 1000,
+      // Keep data fresh for 5 min so navigating back (Dashboard → Clients → Invoices → Dashboard) uses cache
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
       retry: 2,
       refetchOnWindowFocus: false,
+      // Avoid refetch when mounting a page that already has cached data (e.g. back to Invoices/Clients)
+      refetchOnMount: false,
     },
   },
 })

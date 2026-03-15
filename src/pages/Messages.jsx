@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Message, Client, Invoice, Quote, User } from '@/api/entities';
+import { Message, Client, Invoice, Quote, User, DocumentSend, MessageLog, InvoiceView, Payment } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, MessageCircle, Inbox, Send as SendIcon } from 'lucide-react';
+import { Plus, Search, MessageCircle, Inbox, FileText, X } from 'lucide-react';
+import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { breakApi } from '@/api/apiClient';
@@ -23,6 +24,12 @@ export default function MessagesPage() {
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('all');
+    const [pageTab, setPageTab] = useState('conversations'); // 'conversations' | 'sent-documents'
+    const [documentSends, setDocumentSends] = useState([]);
+    const [messageLogs, setMessageLogs] = useState([]);
+    const [invoiceViews, setInvoiceViews] = useState([]);
+    const [payments, setPayments] = useState([]);
+    const [selectedMessageDetail, setSelectedMessageDetail] = useState(null);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -50,12 +57,16 @@ export default function MessagesPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [messagesData, clientsData, invoicesData, quotesData, userData] = await Promise.all([
+            const [messagesData, clientsData, invoicesData, quotesData, userData, sendsData, logsData, viewsData, paymentsData] = await Promise.all([
                 Message.list('-created_date'),
                 Client.list(),
                 Invoice.list('-created_date'),
                 Quote.list('-created_date'),
-                User.me()
+                User.me(),
+                DocumentSend.list('-sent_at').catch(() => []),
+                MessageLog.list('-sent_at').catch(() => []),
+                InvoiceView.list('-viewed_at').catch(() => []),
+                Payment.list('-paid_at').catch(() => [])
             ]);
             if (!mountedRef.current) return;
             setMessages(messagesData || []);
@@ -63,6 +74,10 @@ export default function MessagesPage() {
             setInvoices(invoicesData || []);
             setQuotes(quotesData || []);
             setUser(userData);
+            setDocumentSends(sendsData || []);
+            setMessageLogs(logsData || []);
+            setInvoiceViews(viewsData || []);
+            setPayments(paymentsData || []);
         } catch (error) {
             console.error('Error loading messages:', error);
         } finally {
@@ -230,9 +245,82 @@ export default function MessagesPage() {
         return count + conv.messages.filter(m => !m.is_read && m.sender_type === 'client').length;
     }, 0);
 
+    // Timeline table: Document, Client, Channel, Sent, Opened, Paid (⚪ Sent, 🟡 Opened, 🟢 Paid)
+    const buildTimelineRow = (row, sentAt, openedAt, paymentDate) => {
+        const isInvoice = row.document_type === 'invoice';
+        const doc = isInvoice
+            ? invoices.find((i) => i.id === row.document_id)
+            : quotes.find((q) => q.id === row.document_id);
+        const docNumber = doc?.invoice_number ?? doc?.quote_number ?? row.document_id;
+        const docLabel = doc
+            ? (isInvoice ? `Invoice ${docNumber}` : `Quote ${docNumber}`)
+            : (isInvoice ? 'Invoice' : 'Quote');
+        const client = clients.find((c) => c.id === row.client_id);
+        const clientName = client?.name || '—';
+        const channelLabel = row.channel === 'whatsapp' ? 'WhatsApp' : 'Email';
+        const opened = row.viewed === true;
+        const paid = row.paid === true;
+        const sentAtDate = sentAt ? new Date(sentAt) : null;
+        return {
+            id: row.id,
+            sentAt: sentAtDate,
+            document: docLabel,
+            client: clientName,
+            channel: channelLabel,
+            sent: '✓',
+            sentIndicator: '⚪',
+            opened: opened ? '✓' : '✗',
+            openedIndicator: opened ? '🟡' : null,
+            paid: paid ? '✓' : '–',
+            paidIndicator: paid ? '🟢' : null,
+            detail: {
+                rowId: row.id,
+                documentLabel: isInvoice ? `Invoice ${docNumber}` : `Quote ${docNumber}`,
+                channel: row.channel,
+                channelLabel,
+                sentAt: sentAtDate,
+                openedAt: openedAt ? new Date(openedAt) : null,
+                paymentDate: paymentDate ? new Date(paymentDate) : null,
+            },
+        };
+    };
+    const timelineFromMessageLogs = messageLogs.map((log) =>
+        buildTimelineRow(log, log.sent_at, log.opened_at, log.payment_date)
+    );
+    const timelineFromDocumentSends = documentSends
+        .filter((send) => !messageLogs.some((l) => l.document_id === send.document_id && l.channel === send.channel))
+        .map((send) => {
+            const isInvoice = send.document_type === 'invoice';
+            const doc = isInvoice ? invoices.find((i) => i.id === send.document_id) : quotes.find((q) => q.id === send.document_id);
+            const viewsForDoc = isInvoice ? invoiceViews.filter((v) => v.invoice_id === send.document_id) : [];
+            const paymentsForInvoice = isInvoice ? payments.filter((p) => p.invoice_id === send.document_id) : [];
+            const paid = isInvoice && (doc?.status === 'paid' || paymentsForInvoice.length > 0);
+            const latestView = viewsForDoc.length > 0
+                ? viewsForDoc.reduce((a, v) => (new Date(v.viewed_at) > new Date(a.viewed_at) ? v : a), viewsForDoc[0])
+                : null;
+            const latestPayment = paymentsForInvoice.length > 0
+                ? paymentsForInvoice.reduce((a, p) => {
+                    const d = p.paid_at || p.payment_date || p.created_at;
+                    const aD = a.paid_at || a.payment_date || a.created_at;
+                    return d && new Date(d) > new Date(aD) ? p : a;
+                }, paymentsForInvoice[0])
+                : null;
+            const openedAt = latestView?.viewed_at ?? null;
+            const paymentDate = latestPayment ? (latestPayment.paid_at || latestPayment.payment_date || latestPayment.created_at) : null;
+            return buildTimelineRow(
+                { ...send, viewed: viewsForDoc.length > 0, paid },
+                send.sent_at,
+                openedAt,
+                paymentDate
+            );
+        });
+    const sentDocumentsRows = [...timelineFromMessageLogs, ...timelineFromDocumentSends].sort(
+        (a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0)
+    );
+
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+            <div className="min-h-screen bg-background p-4 sm:p-6">
                 <div className="max-w-7xl mx-auto">
                     <Skeleton className="h-12 w-64 mb-8" />
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -245,7 +333,7 @@ export default function MessagesPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -253,8 +341,8 @@ export default function MessagesPage() {
                     className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
                 >
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Messages</h1>
-                        <p className="text-slate-600">Communicate with your clients</p>
+                        <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
+                        <p className="text-muted-foreground">Communicate with your clients</p>
                     </div>
                     <Button onClick={() => setShowComposer(true)} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
@@ -262,6 +350,111 @@ export default function MessagesPage() {
                     </Button>
                 </motion.div>
 
+                <Tabs value={pageTab} onValueChange={setPageTab} className="mb-6">
+                    <TabsList className="grid w-full max-w-xs grid-cols-2">
+                        <TabsTrigger value="conversations" className="gap-2">
+                            <MessageCircle className="w-4 h-4" />
+                            Conversations
+                        </TabsTrigger>
+                        <TabsTrigger value="sent-documents" className="gap-2">
+                            <FileText className="w-4 h-4" />
+                            Sent documents
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
+
+                {pageTab === 'sent-documents' ? (
+                    <div className={`grid gap-6 ${selectedMessageDetail ? 'lg:grid-cols-[1fr,320px]' : ''}`}>
+                        <Card className="bg-card shadow-xl border border-border">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <FileText className="w-5 h-5" />
+                                    Sent documents
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Timeline: Document, Client, Channel, Sent, Opened, Paid.
+                                    <span className="ml-2">🟢 Paid</span>
+                                    <span className="ml-2">🟡 Opened</span>
+                                    <span className="ml-2">⚪ Sent</span>
+                                </p>
+                            </CardHeader>
+                            <CardContent className="overflow-x-auto">
+                                {sentDocumentsRows.length === 0 ? (
+                                    <p className="text-muted-foreground py-8 text-center">
+                                        No sent documents yet. Send an invoice via Email or WhatsApp to see them here.
+                                    </p>
+                                ) : (
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-border">
+                                                <th className="text-left py-3 px-2 font-medium">Document</th>
+                                                <th className="text-left py-3 px-2 font-medium">Client</th>
+                                                <th className="text-left py-3 px-2 font-medium">Channel</th>
+                                                <th className="text-left py-3 px-2 font-medium">Sent</th>
+                                                <th className="text-left py-3 px-2 font-medium">Opened</th>
+                                                <th className="text-left py-3 px-2 font-medium">Paid</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {sentDocumentsRows.map((row) => (
+                                                <tr
+                                                    key={row.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={() => setSelectedMessageDetail(row.detail)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && setSelectedMessageDetail(row.detail)}
+                                                    className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer ${selectedMessageDetail?.rowId === row.id ? 'bg-muted/70' : ''}`}
+                                                >
+                                                    <td className="py-2.5 px-2">{row.document}</td>
+                                                    <td className="py-2.5 px-2">{row.client}</td>
+                                                    <td className="py-2.5 px-2">{row.channel}</td>
+                                                    <td className="py-2.5 px-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
+                                                    <td className="py-2.5 px-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
+                                                    <td className="py-2.5 px-2">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </CardContent>
+                        </Card>
+                        {selectedMessageDetail && (
+                            <Card className="bg-card shadow-xl border border-border h-fit">
+                                <CardHeader className="border-b border-border flex flex-row items-start justify-between space-y-0 gap-2">
+                                    <div>
+                                        <CardTitle className="text-lg">{selectedMessageDetail.documentLabel}</CardTitle>
+                                        <p className="text-sm text-muted-foreground">
+                                            Sent via {selectedMessageDetail.channelLabel}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="shrink-0 h-8 w-8"
+                                        onClick={() => setSelectedMessageDetail(null)}
+                                        aria-label="Close detail"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </CardHeader>
+                                <CardContent className="pt-4 space-y-3">
+                                    <p className="text-sm">
+                                        <span className="text-muted-foreground">Sent: </span>
+                                        {selectedMessageDetail.sentAt ? format(selectedMessageDetail.sentAt, 'MMMM d') : '—'}
+                                    </p>
+                                    <p className="text-sm">
+                                        <span className="text-muted-foreground">Opened: </span>
+                                        {selectedMessageDetail.openedAt ? format(selectedMessageDetail.openedAt, 'MMMM d, HH:mm') : '—'}
+                                    </p>
+                                    <p className="text-sm">
+                                        <span className="text-muted-foreground">Paid: </span>
+                                        {selectedMessageDetail.paymentDate ? format(selectedMessageDetail.paymentDate, 'MMMM d') : '—'}
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Conversations List */}
                     <motion.div
@@ -269,21 +462,21 @@ export default function MessagesPage() {
                         animate={{ opacity: 1, x: 0 }}
                         className={`${selectedConversation ? 'hidden lg:block' : ''}`}
                     >
-                        <Card className="bg-white shadow-xl border-0">
-                            <CardHeader className="border-b border-slate-100">
+                        <Card className="bg-card shadow-xl border border-border">
+                            <CardHeader className="border-b border-border">
                                 <div className="flex items-center justify-between mb-4">
                                     <CardTitle className="flex items-center gap-2">
                                         <MessageCircle className="w-5 h-5" />
                                         Conversations
                                     </CardTitle>
                                     {unreadCount > 0 && (
-                                        <span className="bg-primary text-white text-xs px-2 py-1 rounded-full">
+                                        <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
                                             {unreadCount} new
                                         </span>
                                     )}
                                 </div>
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                     <Input
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -323,7 +516,7 @@ export default function MessagesPage() {
                         animate={{ opacity: 1, x: 0 }}
                         className={`lg:col-span-2 ${!selectedConversation ? 'hidden lg:block' : ''}`}
                     >
-                        <Card className="bg-white shadow-xl border-0 h-[70vh]">
+                        <Card className="bg-card shadow-xl border border-border h-[70vh]">
                             {selectedConversation ? (
                                 <ConversationThread
                                     messages={selectedConversation.messages}
@@ -335,7 +528,7 @@ export default function MessagesPage() {
                                     onBack={() => setSelectedConversation(null)}
                                 />
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                                     <MessageCircle className="w-16 h-16 mb-4 opacity-50" />
                                     <p className="text-lg font-medium">Select a conversation</p>
                                     <p className="text-sm">Choose a conversation from the list to view messages</p>
@@ -344,6 +537,7 @@ export default function MessagesPage() {
                         </Card>
                     </motion.div>
                 </div>
+                )}
 
                 {/* Message Composer Modal */}
                 <MessageComposer

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Invoice, Client, BankingDetail } from '@/api/entities';
+import { getBackendBaseUrl } from '@/api/backendClient';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { format } from 'date-fns';
@@ -17,6 +18,8 @@ import InvoiceMetaTags from '@/components/invoice/InvoiceMetaTags';
  */
 export default function InvoiceView() {
   const { token } = useParams();
+  const [searchParams] = useSearchParams();
+  const trackingTokenRecorded = useRef(false);
   const [invoice, setInvoice] = useState(null);
   const [client, setClient] = useState(null);
   const [bankingDetail, setBankingDetail] = useState(null);
@@ -83,6 +86,18 @@ export default function InvoiceView() {
           } catch (e) {
             console.error('Could not update invoice status:', e);
           }
+        }
+
+        // Track when client opens the invoice: ?token=... or ?tracking=... → POST /api/track-open
+        const tokenParam = searchParams.get('token') || searchParams.get('tracking');
+        if (tokenParam && !trackingTokenRecorded.current) {
+          trackingTokenRecorded.current = true;
+          const apiBase = import.meta.env.DEV ? '' : getBackendBaseUrl();
+          fetch(`${apiBase}/api/track-open`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: tokenParam }),
+          }).catch((e) => console.warn('Track open:', e));
         }
       } catch (e) {
         console.error('Error fetching public invoice:', e);
@@ -242,15 +257,16 @@ export default function InvoiceView() {
           <header className="border-b-2 border-slate-200 pb-6 mb-6">
             <div className="flex flex-col sm:flex-row justify-between items-start">
               <div className="mb-6 sm:mb-0">
-                {invoice.owner_logo_url ? (
+                {(invoice.company?.logo_url || invoice.owner_logo_url) ? (
                   <img
-                    src={invoice.owner_logo_url}
+                    src={invoice.company?.logo_url || invoice.owner_logo_url}
                     alt="Company Logo"
-                    className="h-16 w-auto mb-4 object-contain"
+                    className="w-auto mb-4"
+                    style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
                   />
                 ) : (
                   <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                    {invoice.owner_company_name || 'Your Company'}
+                    {invoice.company?.name || invoice.owner_company_name || 'Your Company'}
                   </h1>
                 )}
                 {invoice.owner_company_address && (

@@ -11,9 +11,9 @@ drop policy if exists "memberships org access" on public.memberships;
 create policy "memberships org access" on public.memberships
   for select
   using (
-    memberships.user_id = auth.uid()
+    memberships.user_id = (select auth.uid())
     or exists (
       select 1 from public.organizations o
-      where o.id = memberships.org_id and o.owner_id = auth.uid()
+      where o.id = memberships.org_id and o.owner_id = (select auth.uid())
     )
   );

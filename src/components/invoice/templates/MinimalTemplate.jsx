@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatCurrency } from '@/utils/currencyCalculations';
-import LogoImage from '@/components/shared/LogoImage';
 
 /* Agency-style: INVOICE left, company logo-aligned accent box right, Payable To | Bank Details, 4-col table, Notes, Totals. Colours match app/logo (primary). */
 
@@ -21,7 +20,12 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                     <div className={`inline-block rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 ${CARD_ACCENT_BG} border ${CARD_ACCENT_BORDER}`}>
                         {user?.logo_url ? (
                             <div className="flex items-center gap-2 sm:gap-3">
-                                <LogoImage src={user.logo_url} alt="" className="h-8 sm:h-10 w-auto" style={{ maxHeight: '36px' }} />
+                                <img
+                                    src={user.logo_url}
+                                    alt="Company Logo"
+                                    className="w-auto"
+                                    style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
+                                />
                                 <span className="font-semibold text-foreground text-sm sm:text-base">{user?.company_name || 'Company'}</span>
                             </div>
                         ) : (

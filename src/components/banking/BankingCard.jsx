@@ -29,7 +29,7 @@ const paymentGradients = {
     check: "from-gray-500 to-gray-600"
 };
 
-export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 }) {
+function BankingCard({ detail, onEdit, onSetDefault, delay = 0 }) {
     const IconComponent = paymentIcons[detail.payment_method] || CreditCard;
     const gradient = paymentGradients[detail.payment_method] || "from-primary to-[#ff7c00]";
 
@@ -139,3 +139,5 @@ export default function BankingCard({ detail, onEdit, onSetDefault, delay = 0 })
         </motion.div>
     );
 }
+
+export default React.memo(BankingCard);

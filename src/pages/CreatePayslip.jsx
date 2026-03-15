@@ -202,7 +202,7 @@ export default function CreatePayslip() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-4xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -214,19 +214,19 @@ export default function CreatePayslip() {
                         variant="outline"
                         size="icon"
                         onClick={() => navigate(createPageUrl("Payslips"))}
-                        className="rounded-lg border-gray-200 hover:bg-gray-50"
+                        className="rounded-lg border-border hover:bg-muted"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </Button>
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Create New Payslip</h1>
-                        <p className="text-sm sm:text-base text-gray-600 mt-1">Generate payslips with automatic PAYE tax calculation</p>
+                        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Create New Payslip</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-1">Generate payslips with automatic PAYE tax calculation</p>
                     </div>
                 </motion.div>
 
                 <div className="space-y-8">
                     {/* Employee Information */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Employee Information</CardTitle>
                         </CardHeader>
@@ -290,7 +290,7 @@ export default function CreatePayslip() {
                     </Card>
 
                     {/* Pay Period */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Pay Period Information</CardTitle>
                         </CardHeader>
@@ -326,7 +326,7 @@ export default function CreatePayslip() {
                     </Card>
 
                     {/* Earnings */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <Calculator className="w-5 h-5" />
@@ -411,7 +411,7 @@ export default function CreatePayslip() {
                     </Card>
 
                     {/* Deductions */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 Deductions
@@ -430,9 +430,9 @@ export default function CreatePayslip() {
                                         type="number"
                                         value={payslipData.tax_deduction.toFixed(2)}
                                         disabled
-                                        className="bg-gray-100"
+                                        className="bg-muted"
                                     />
-                                    <p className="text-xs text-gray-500">Based on SARS 2024/2025 tax tables</p>
+                                    <p className="text-xs text-muted-foreground">Based on SARS 2024/2025 tax tables</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="uif_deduction">UIF (Auto-calculated)</Label>
@@ -441,9 +441,9 @@ export default function CreatePayslip() {
                                         type="number"
                                         value={payslipData.uif_deduction.toFixed(2)}
                                         disabled
-                                        className="bg-gray-100"
+                                        className="bg-muted"
                                     />
-                                    <p className="text-xs text-gray-500">1% of gross pay (max R177.12)</p>
+                                    <p className="text-xs text-muted-foreground">1% of gross pay (max R177.12)</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="pension_deduction">Pension Fund (ZAR)</Label>
@@ -454,7 +454,7 @@ export default function CreatePayslip() {
                                         onChange={(e) => setPayslipData({...payslipData, pension_deduction: e.target.value})}
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-gray-500">Reduces taxable income (max 27.5% of remuneration)</p>
+                                    <p className="text-xs text-muted-foreground">Reduces taxable income (max 27.5% of remuneration)</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="medical_aid_deduction">Medical Aid (ZAR)</Label>
@@ -465,7 +465,7 @@ export default function CreatePayslip() {
                                         onChange={(e) => setPayslipData({...payslipData, medical_aid_deduction: e.target.value})}
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-gray-500">Provides tax credits (rebates) based on number of beneficiaries</p>
+                                    <p className="text-xs text-muted-foreground">Provides tax credits (rebates) based on number of beneficiaries</p>
                                 </div>
                             </div>
 
@@ -507,7 +507,7 @@ export default function CreatePayslip() {
                     </Card>
 
                     {/* Summary */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Payslip Summary</CardTitle>
                         </CardHeader>
@@ -528,9 +528,9 @@ export default function CreatePayslip() {
                             </div>
                             
                             {calculatedPayroll && (
-                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                    <h4 className="font-medium text-gray-900 mb-2">Tax Information</h4>
-                                    <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600">
+                                <div className="mt-4 p-4 bg-muted rounded-lg">
+                                    <h4 className="font-medium text-foreground mb-2">Tax Information</h4>
+                                    <div className="grid md:grid-cols-2 gap-4 text-sm text-muted-foreground">
                                         <div>Annual Salary: {formatCurrency(calculatedPayroll.taxInfo.annualSalary, 'ZAR')}</div>
                                         <div>Marginal Tax Rate: {calculatedPayroll.taxInfo.marginalTaxRate}</div>
                                         <div>Taxable Income: {formatCurrency(calculatedPayroll.taxInfo.taxableIncome, 'ZAR')}</div>

@@ -4,8 +4,9 @@ import { Payroll } from '@/api/entities';
 import { formatCurrency } from '../components/CurrencySelector';
 import { format } from 'date-fns';
 import DocumentLayout from '../components/shared/DocumentLayout';
+import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { createPageUrl } from '@/utils';
-import { Loader2, AlertCircle, Mail } from 'lucide-react';
+import { AlertCircle, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -108,12 +109,7 @@ export default function PublicPayslip() {
     };
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-slate-50">
-                <Loader2 className="w-8 h-8 animate-spin text-slate-500" />
-                <p className="ml-2 text-slate-600">Loading Payslip...</p>
-            </div>
-        );
+        return <DocumentPageSkeleton title="Loading payslip…" className="bg-slate-50" />;
     }
 
     if (error) {

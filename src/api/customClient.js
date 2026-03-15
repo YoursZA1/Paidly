@@ -10,6 +10,67 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 
+/** Explicit select columns per table for better query performance (avoid .select("*")). */
+const SUPABASE_SELECT_COLUMNS = {
+  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency",
+  companies: "id, org_id, name, logo_url, created_at, updated_at",
+  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, created_at, updated_at",
+  invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
+  quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
+  clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
+  services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
+  payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
+  profiles: "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, created_at, updated_at",
+  banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
+  recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
+  packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
+  invoice_views: "id, org_id, invoice_id, client_id, viewed_at, ip_address, user_agent, is_read, created_at, updated_at",
+  document_sends: "id, org_id, document_type, document_id, client_id, channel, sent_at, created_at",
+  message_logs: "id, org_id, document_type, document_id, client_id, channel, recipient, sent_at, opened_at, viewed, paid, payment_date, tracking_token, created_at",
+  payslips: "id, org_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, gross_pay, tax_deduction, uif_deduction, total_deductions, net_pay, status, public_share_token, created_at, updated_at",
+  expenses: "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, created_at, updated_at",
+  tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
+  notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
+};
+function getSelectColumns(table) {
+  return SUPABASE_SELECT_COLUMNS[table] || "id, created_at, updated_at";
+}
+
+/** Default limit for list queries on large tables to avoid loading thousands of rows at once. */
+const DEFAULT_LIST_LIMIT = 100;
+
+/** Map app sort field names to Supabase column names for .order() */
+const SORT_FIELD_TO_COLUMN = {
+  created_date: "created_at",
+  updated_date: "updated_at",
+  delivery_date: "delivery_date",
+  valid_until: "valid_until",
+  paid_at: "paid_at",
+  payment_date: "paid_at",
+  date: "date",
+};
+function getOrderColumn(sortBy) {
+  const field = (sortBy || "").replace(/^-/, "");
+  return SORT_FIELD_TO_COLUMN[field] || field || "created_at";
+}
+/** sortBy "-created_date" => descending, so ascending = false */
+function getOrderAscending(sortBy) {
+  return !(sortBy || "").startsWith("-");
+}
+
+/** Multi-brand: attach invoice.company from companies table when invoice.company_id is set. */
+async function attachInvoiceCompany(record) {
+  if (!record || !record.company_id || record.company) return;
+  try {
+    const { data } = await supabase
+      .from("companies")
+      .select("id, name, logo_url")
+      .eq("id", record.company_id)
+      .single();
+    if (data) record.company = { id: data.id, name: data.name, logo_url: data.logo_url };
+  } catch (_) { /* ignore */ }
+}
+
 function clearOrgIdCache() {
   Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
 }
@@ -131,15 +192,20 @@ class EntityManager {
                                 ? "tasks"
                                 : table === "notes"
                                   ? "notes"
-                                  : null;
+                                  : table === "documentsends"
+                                    ? "document_sends"
+                                    : table === "messagelogs"
+                                      ? "message_logs"
+                                      : null;
 
       if (supabaseTable) {
-        let query = supabase.from(supabaseTable).select("*");
-        
+        const columns = getSelectColumns(supabaseTable);
+        let query = supabase.from(supabaseTable).select(columns);
+
         // Notes: filter by user_id (auth.uid())
         if (supabaseTable === 'notes') {
           query = query.eq('user_id', userId);
-        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
           query = query.eq('org_id', orgId);
         }
         // Packages: platform (org_id null) or user's org
@@ -149,6 +215,17 @@ class EntityManager {
           } else {
             query = query.is('org_id', null);
           }
+        }
+
+        // Optional limit/offset and ordering (biggest performance win: avoid loading all rows)
+        const opts = this._listOptions || {};
+        const orderColumn = opts.orderBy?.column ?? 'created_at';
+        const orderAsc = opts.orderBy?.ascending ?? false;
+        if (opts.limit != null && opts.limit > 0) {
+          query = query.order(orderColumn, { ascending: orderAsc });
+          const from = opts.offset ?? 0;
+          const to = from + opts.limit - 1;
+          query = query.range(from, to);
         }
 
         const { data, error } = await query;
@@ -233,13 +310,16 @@ class EntityManager {
                                  table === 'payrolls' ? 'payslips' :
                                  table === 'expenses' ? 'expenses' :
                                  table === 'tasks' ? 'tasks' :
-                                 table === 'notes' ? 'notes' : null;
+                                 table === 'notes' ? 'notes' :
+                                 table === 'documentsends' ? 'document_sends' :
+                                 table === 'messagelogs' ? 'message_logs' : null;
 
             if (supabaseTable) {
-              let query = supabase.from(supabaseTable).select('*').eq('id', idStr);
+              const columns = getSelectColumns(supabaseTable);
+              let query = supabase.from(supabaseTable).select(columns).eq('id', idStr);
               if (supabaseTable === 'notes') {
                 query = query.eq('user_id', userId);
-              } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+              } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
                 query = query.eq('org_id', orgId);
               }
               // packages: RLS enforces visibility (platform or own org)
@@ -261,9 +341,10 @@ class EntityManager {
                 if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
                   const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
                   const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
+                  const itemColumns = getSelectColumns(itemsTable);
                   const { data: itemsData, error: itemsError } = await supabase
                     .from(itemsTable)
-                    .select('*')
+                    .select(itemColumns)
                     .eq(parentIdField, idStr);
                   if (!itemsError && Array.isArray(itemsData)) {
                     record.items = itemsData.map(row => ({
@@ -277,6 +358,7 @@ class EntityManager {
                     record.items = [];
                   }
                 }
+                if (supabaseTable === 'invoices') await attachInvoiceCompany(record);
                 this.data[idStr] = record;
                 this.saveToStorage();
                 return record;
@@ -295,9 +377,10 @@ class EntityManager {
       const itemsTable = this.entityName === 'Invoice' ? 'invoice_items' : 'quote_items';
       const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
       try {
+        const itemColumns = getSelectColumns(itemsTable);
         const { data: itemsData, error: itemsError } = await supabase
           .from(itemsTable)
-          .select('*')
+          .select(itemColumns)
           .eq(parentIdField, idStr);
         if (!itemsError && Array.isArray(itemsData)) {
           record.items = itemsData.map(row => ({
@@ -317,6 +400,7 @@ class EntityManager {
         record.items = [];
       }
     }
+    if (this.entityName === 'Invoice') await attachInvoiceCompany(record);
     return record;
   }
 
@@ -333,27 +417,42 @@ class EntityManager {
     });
   }
 
-  async list(sortBy = '') {
-    // Always pull fresh from Supabase first
-    await this.pullFromSupabase();
-    
-    // List all records, optionally sorted
+  /**
+   * List records with optional sort and limit (limits Supabase query for performance).
+   * @param {string} sortBy - e.g. "-created_date", "delivery_date"
+   * @param {{ limit?: number, offset?: number } | number} options - limit/offset object, or legacy numeric limit (e.g. Expense.list("-date", 100)).
+   */
+  async list(sortBy = '', options = {}) {
+    const opts = typeof options === 'number' ? { limit: options } : options;
+    const table = this.entityName.toLowerCase() + 's';
+    const largeTables = ['invoices', 'quotes', 'clients', 'expenses'];
+    const useDefaultLimit = largeTables.includes(table) && opts.limit == null;
+    const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
+    const offset = opts.offset ?? 0;
+    const orderColumn = getOrderColumn(sortBy);
+    const orderAsc = getOrderAscending(sortBy);
+
+    this._listOptions = limit != null ? { limit, offset, orderBy: { column: orderColumn, ascending: orderAsc } } : {};
+    try {
+      await this.pullFromSupabase();
+    } finally {
+      this._listOptions = {};
+    }
+
     let records = Object.values(this.data);
-    
+
     if (sortBy) {
       const field = sortBy.replace(/^-/, '');
       const isDescending = sortBy.startsWith('-');
-      
       records.sort((a, b) => {
         const aVal = a[field];
         const bVal = b[field];
-        
         if (aVal < bVal) return isDescending ? 1 : -1;
         if (aVal > bVal) return isDescending ? -1 : 1;
         return 0;
       });
     }
-    
+
     return records;
   }
 
@@ -537,13 +636,27 @@ class EntityManager {
                                 ? "tasks"
                                 : table === "notes"
                                   ? "notes"
-                                  : null;
+                                  : table === "documentsends"
+                                    ? "document_sends"
+                                    : table === "messagelogs"
+                                      ? "message_logs"
+                                      : null;
 
       // Prepare data for Supabase (field names match schema: created_at, updated_at, org_id, etc.)
       const supabaseData = {
         ...data,
         updated_at: new Date().toISOString()
       };
+      if (supabaseTable === 'document_sends') {
+        delete supabaseData.updated_at;
+      }
+      const MESSAGE_LOG_INSERT_COLUMNS = ['org_id', 'document_type', 'document_id', 'client_id', 'channel', 'recipient', 'sent_at', 'opened_at', 'viewed', 'paid', 'payment_date', 'tracking_token', 'created_at'];
+      if (supabaseTable === 'message_logs') {
+        if (supabaseData.sent_at === undefined) supabaseData.sent_at = new Date().toISOString();
+        Object.keys(supabaseData).forEach(key => {
+          if (!MESSAGE_LOG_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
       if (supabaseTable === 'notes') {
         supabaseData.user_id = sessionData.session.user.id;
       } else if (supabaseTable !== 'packages') {
@@ -582,6 +695,13 @@ class EntityManager {
       }
       if (supabaseTable === 'tasks') {
         if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+      }
+      const DOCUMENT_SEND_INSERT_COLUMNS = ['org_id', 'document_type', 'document_id', 'client_id', 'channel', 'sent_at', 'created_at'];
+      if (supabaseTable === 'document_sends') {
+        if (supabaseData.sent_at === undefined) supabaseData.sent_at = new Date().toISOString();
+        Object.keys(supabaseData).forEach(key => {
+          if (!DOCUMENT_SEND_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
       }
       // Map payment payload to DB columns (payments table has paid_at, method, reference, not payment_date etc.)
       if (supabaseTable === 'payments') {
@@ -757,7 +877,7 @@ class EntityManager {
 
       const EXPENSE_INSERT_COLUMNS = [
         'org_id', 'expense_number', 'category', 'description', 'amount', 'date',
-        'payment_method', 'vendor', 'receipt_url', 'is_claimable', 'claimed', 'notes',
+        'payment_method', 'vendor', 'vat', 'receipt_url', 'is_claimable', 'claimed', 'notes',
         'created_by_id', 'created_at', 'updated_at', 'is_sample'
       ];
       if (supabaseTable === 'expenses') {
@@ -953,7 +1073,9 @@ class EntityManager {
                            table === 'payrolls' ? 'payslips' :
                            table === 'expenses' ? 'expenses' :
                            table === 'tasks' ? 'tasks' :
-                           table === 'notes' ? 'notes' : null;
+                           table === 'notes' ? 'notes' :
+                           table === 'documentsends' ? 'document_sends' :
+                           table === 'messagelogs' ? 'message_logs' : null;
 
       // Prepare update data
       const updateData = {
@@ -1058,7 +1180,7 @@ class EntityManager {
       }
       const EXPENSE_UPDATE_COLUMNS = [
         'expense_number', 'category', 'description', 'amount', 'date',
-        'payment_method', 'vendor', 'receipt_url', 'is_claimable', 'claimed', 'notes', 'is_sample', 'updated_at'
+        'payment_method', 'vendor', 'vat', 'receipt_url', 'is_claimable', 'claimed', 'notes', 'is_sample', 'updated_at'
       ];
       if (supabaseTable === 'expenses') {
         if (typeof updateData.is_claimable === 'string') updateData.is_claimable = updateData.is_claimable === 'true';
@@ -1073,6 +1195,20 @@ class EntityManager {
       if (supabaseTable === 'notes') {
         Object.keys(updateData).forEach(key => {
           if (!NOTE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const DOCUMENT_SEND_UPDATE_COLUMNS = ['sent_at'];
+      if (supabaseTable === 'document_sends') {
+        delete updateData.updated_at;
+        Object.keys(updateData).forEach(key => {
+          if (!DOCUMENT_SEND_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+      const MESSAGE_LOG_UPDATE_COLUMNS = ['opened_at', 'viewed', 'paid', 'payment_date'];
+      if (supabaseTable === 'message_logs') {
+        delete updateData.updated_at;
+        Object.keys(updateData).forEach(key => {
+          if (!MESSAGE_LOG_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
       }
 
@@ -1123,7 +1259,7 @@ class EntityManager {
         // Ensure we only update records belonging to user (notes: user_id; others: org_id)
         if (supabaseTable === 'notes') {
           query = query.eq('user_id', sessionData.session.user.id);
-        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
           query = query.eq('org_id', orgId);
         }
 
@@ -1228,13 +1364,15 @@ class EntityManager {
                                table === 'payrolls' ? 'payslips' :
                                table === 'expenses' ? 'expenses' :
                                table === 'tasks' ? 'tasks' :
-                               table === 'notes' ? 'notes' : null;
+                               table === 'notes' ? 'notes' :
+                               table === 'documentsends' ? 'document_sends' :
+                               table === 'messagelogs' ? 'message_logs' : null;
 
           if (supabaseTable) {
             let deleteQuery = supabase.from(supabaseTable).delete().eq("id", id);
             if (supabaseTable === 'notes') {
               deleteQuery = deleteQuery.eq('user_id', sessionData.session.user.id);
-            } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+            } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
               const orgId = await this.ensureUserHasOrganization(sessionData.session.user.id);
               if (orgId) deleteQuery = deleteQuery.eq('org_id', orgId);
             }
@@ -1319,7 +1457,7 @@ class AuthManager {
         supabaseUserId = sessionData.session.user.id;
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("*")
+          .select(getSelectColumns("profiles"))
           .eq("id", sessionData.session.user.id)
           .maybeSingle();
         if (profileError) {
@@ -1385,7 +1523,7 @@ class AuthManager {
         const authUserId = sessionData.session.user.id;
         const { data: profile, error } = await supabase
           .from("profiles")
-          .select("*")
+          .select(getSelectColumns("profiles"))
           .eq("id", authUserId)
           .maybeSingle();
         if (error) {
@@ -1445,7 +1583,7 @@ class AuthManager {
 
       let profileData = {};
       try {
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", su.id).maybeSingle();
+        const { data: profile } = await supabase.from("profiles").select(getSelectColumns("profiles")).eq("id", su.id).maybeSingle();
         profileData = profile || {};
       } catch (profileErr) {
         console.warn("Could not load profile in restoreFromSupabaseSession:", getSupabaseErrorMessage(profileErr, "Profile load failed"));
@@ -1808,6 +1946,28 @@ class IntegrationManager {
       UploadToActivities: async ({ file }) => {
         return uploadToStorage({ file, folder: "activities", bucket: "activities" });
       },
+      /** Store receipt image in receipts bucket: receipt-{Date.now()}.{ext} under org_id */
+      UploadToReceipts: async ({ file }) => {
+        if (!file) throw new Error("No file provided");
+        const sessionUser = await getSessionUser();
+        const orgId = sessionUser?.id
+          ? await getOrgIdForUser(sessionUser.id)
+          : `local-${getLocalUserId() || "guest"}`;
+        const ext = (file.name?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "jpg");
+        const filePath = `${orgId}/receipt-${Date.now()}.${ext}`;
+        const bucket = "receipts";
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(filePath, file, { upsert: false, contentType: file.type || undefined });
+        if (uploadError) {
+          throw new Error(getSupabaseErrorMessage(uploadError, "Receipt upload failed"));
+        }
+        const fileUrl = await buildFileUrlWithBucket({ filePath, preferSigned: !!sessionUser?.id }, bucket);
+        if (!fileUrl) {
+          throw new Error("Receipt upload succeeded but could not generate URL.");
+        }
+        return { file_url: fileUrl, file_path };
+      },
       /** Upload to bank-details bucket (statements, imports); path = org_id/bank-details/... */
       UploadToBankDetails: async ({ file }) => {
         return uploadToStorage({ file, folder: "bank-details", bucket: "bank-details" });
@@ -1896,6 +2056,8 @@ class CustomAPIClient {
       'Payroll',
       'Task',
       'Message',
+      'DocumentSend',
+      'MessageLog',
       'TaskAssignmentRule',
       'QuoteTemplate',
       'QuoteReminder',

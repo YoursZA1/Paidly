@@ -11,7 +11,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
 
     if (conversations.length === 0) {
         return (
-            <div className="text-center py-12 text-slate-500">
+            <div className="text-center py-12 text-muted-foreground">
                 <MessageCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No conversations yet</p>
             </div>
@@ -33,7 +33,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                             className={`cursor-pointer hover:shadow-md transition-all group relative ${
                                 selectedId === conv.client_id + (conv.invoice_id || '')
                                     ? 'ring-2 ring-primary bg-primary/10'
-                                    : 'bg-white'
+                                    : 'bg-card'
                             }`}
                             onClick={() => onSelect(conv)}
                         >
@@ -41,13 +41,13 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                            hasUnread ? 'bg-primary/15' : 'bg-slate-100'
+                                            hasUnread ? 'bg-primary/15' : 'bg-muted'
                                         }`}>
-                                            <Building2 className={`w-5 h-5 ${hasUnread ? 'text-primary' : 'text-slate-600'}`} />
+                                            <Building2 className={`w-5 h-5 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <h4 className={`font-semibold truncate ${hasUnread ? 'text-slate-900' : 'text-slate-700'}`}>
+                                                <h4 className={`font-semibold truncate ${hasUnread ? 'text-foreground' : 'text-foreground'}`}>
                                                     {client?.name || 'Unknown Client'}
                                                 </h4>
                                                 {hasUnread && (
@@ -55,13 +55,13 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                                 )}
                                             </div>
                                             {invoice && (
-                                                <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                                                     <FileText className="w-3 h-3" />
                                                     {invoice.invoice_number}
                                                 </div>
                                             )}
                                             {lastMessage && (
-                                                <p className="text-sm text-slate-500 truncate mt-1">
+                                                <p className="text-sm text-muted-foreground truncate mt-1">
                                                     {lastMessage.sender_type === 'business' ? 'You: ' : ''}
                                                     {lastMessage.content.replace(/<[^>]*>?/gm, '')}
                                                 </p>
@@ -70,7 +70,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                     </div>
                                     <div className="text-right shrink-0 flex flex-col items-end">
                                         {lastMessage && (
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-xs text-muted-foreground">
                                                 {isToday(new Date(lastMessage.created_date)) 
                                                     ? format(new Date(lastMessage.created_date), 'h:mm a')
                                                     : format(new Date(lastMessage.created_date), 'MMM d')}
@@ -84,7 +84,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-6 w-6 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         setConversationToDelete(conv);

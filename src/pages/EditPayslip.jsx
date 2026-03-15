@@ -134,7 +134,7 @@ export default function EditPayslip() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+            <div className="min-h-screen bg-background p-4 sm:p-6">
                 <div className="max-w-4xl mx-auto space-y-8">
                     <Skeleton className="h-10 w-1/2" />
                     <Skeleton className="h-64 w-full" />
@@ -146,7 +146,7 @@ export default function EditPayslip() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+        <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-4xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -158,19 +158,19 @@ export default function EditPayslip() {
                         variant="outline"
                         size="icon"
                         onClick={() => navigate(createPageUrl("Payslips"))}
-                        className="rounded-lg border-gray-200 hover:bg-gray-50"
+                        className="rounded-lg border-border hover:bg-muted"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </Button>
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Edit Payslip</h1>
-                        <p className="text-sm sm:text-base text-gray-600 mt-1">Update payslip for {payslipData.employee_name}</p>
+                        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Edit Payslip</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-1">Update payslip for {payslipData.employee_name}</p>
                     </div>
                 </motion.div>
 
                 <div className="space-y-8">
                     {/* Employee Information */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Employee Information</CardTitle>
                         </CardHeader>
@@ -234,7 +234,7 @@ export default function EditPayslip() {
                     </Card>
 
                     {/* Pay Period */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Pay Period Information</CardTitle>
                         </CardHeader>
@@ -270,7 +270,7 @@ export default function EditPayslip() {
                     </Card>
 
                     {/* Earnings */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <Calculator className="w-5 h-5" />
@@ -349,7 +349,7 @@ export default function EditPayslip() {
                     </Card>
 
                     {/* Deductions */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Deductions</CardTitle>
                         </CardHeader>
@@ -372,9 +372,9 @@ export default function EditPayslip() {
                                         type="number"
                                         value={uifDeduction.toFixed(2)}
                                         disabled
-                                        className="bg-gray-100"
+                                        className="bg-muted"
                                     />
-                                    <p className="text-xs text-gray-500">1% of gross pay (max R177.12)</p>
+                                    <p className="text-xs text-muted-foreground">1% of gross pay (max R177.12)</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="pension_deduction">Pension Fund (ZAR)</Label>
@@ -436,7 +436,7 @@ export default function EditPayslip() {
                     </Card>
 
                     {/* Summary */}
-                    <Card className="bg-white border border-slate-200">
+                    <Card className="bg-card border border-border">
                         <CardHeader>
                             <CardTitle>Payslip Summary</CardTitle>
                         </CardHeader>

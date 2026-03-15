@@ -16,7 +16,7 @@ ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
   bucket_id = 'invoicebreek' AND
-  (storage.foldername(name))[1] = auth.uid()::text
+  (storage.foldername(name))[1] = (select auth.uid())::text
 );
 
 -- Policy 2: Users can read their own logos
@@ -25,7 +25,7 @@ ON storage.objects FOR SELECT
 TO authenticated
 USING (
   bucket_id = 'invoicebreek' AND
-  (storage.foldername(name))[1] = auth.uid()::text
+  (storage.foldername(name))[1] = (select auth.uid())::text
 );
 
 -- Policy 3: Organization members can access org assets
@@ -35,14 +35,14 @@ TO authenticated
 USING (
   bucket_id = 'invoicebreek' AND EXISTS (
     SELECT 1 FROM public.memberships m
-    WHERE m.user_id = auth.uid()
+    WHERE m.user_id = (select auth.uid())
       AND (storage.foldername(name))[1] = m.org_id::text
   )
 )
 WITH CHECK (
   bucket_id = 'invoicebreek' AND EXISTS (
     SELECT 1 FROM public.memberships m
-    WHERE m.user_id = auth.uid()
+    WHERE m.user_id = (select auth.uid())
       AND (storage.foldername(name))[1] = m.org_id::text
   )
 );

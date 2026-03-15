@@ -5,7 +5,8 @@ import { Invoice, Client, BankingDetail } from '@/api/entities';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '../components/CurrencySelector';
 import { format } from 'date-fns';
-import { Loader2, AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
+import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
+import { AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
@@ -133,12 +134,7 @@ export default function PublicInvoice() {
     };
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-background">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                <p className="ml-2 text-muted-foreground">Loading Invoice...</p>
-            </div>
-        );
+        return <DocumentPageSkeleton title="Loading invoice…" />;
     }
 
     if (error) {
@@ -285,11 +281,16 @@ export default function PublicInvoice() {
                     <header className="border-b-2 border-border pb-6 mb-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start">
                             <div className="mb-6 sm:mb-0">
-                                {invoice.owner_logo_url ? (
-                                    <img src={invoice.owner_logo_url} alt="Company Logo" className="h-16 w-auto mb-4 object-contain" />
+                                {(invoice.company?.logo_url || invoice.owner_logo_url) ? (
+                                    <img
+                                        src={invoice.company?.logo_url || invoice.owner_logo_url}
+                                        alt="Company Logo"
+                                        className="w-auto mb-4"
+                                        style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
+                                    />
                                 ) : (
                                     <h1 className="text-2xl font-bold text-foreground mb-2">
-                                        {invoice.owner_company_name || 'Your Company'}
+                                        {invoice.company?.name || invoice.owner_company_name || 'Your Company'}
                                     </h1>
                                 )}
                                 {invoice.owner_company_address && (

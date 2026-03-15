@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Invoice } from '@/api/entities';
 import { Calendar, Eye, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -108,8 +109,20 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="pt-12 pb-12">
-          <div className="text-center text-gray-500">Loading cycle history...</div>
+        <CardContent className="p-6">
+          <div className="space-y-4">
+            <Skeleton className="h-5 w-48 rounded" />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-4 py-3 border-b border-border last:border-0">
+                <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32 rounded" />
+                  <Skeleton className="h-3 w-24 rounded" />
+                </div>
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
     );

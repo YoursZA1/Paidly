@@ -293,7 +293,13 @@ function ExcelDataCapture() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => generatePaidlyTemplate()}
+                    onClick={async () => {
+                      try {
+                        await generatePaidlyTemplate();
+                      } catch (e) {
+                        toast({ title: "Download failed", description: e?.message, variant: "destructive" });
+                      }
+                    }}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Download Template (paidly_data.xlsx)

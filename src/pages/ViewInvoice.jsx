@@ -19,7 +19,6 @@ import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
-import LogoImage from '@/components/shared/LogoImage';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 
 export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClose }) {
@@ -117,18 +116,30 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         setIsSending(true);
 
         try {
+            let inv = invoice;
+            if (!inv.public_share_token) {
+                const token = crypto.randomUUID();
+                await retryOnAbort(() => Invoice.update(inv.id, { public_share_token: token }));
+                setInvoice((prev) => ({ ...prev, public_share_token: token }));
+                inv = { ...inv, public_share_token: token };
+            }
+            const { createTrackableInvoiceLink, recordDocumentSend } = await import('@/services/InvoiceSendService');
+            const { url: trackableViewUrl } = await createTrackableInvoiceLink(inv, 'email', client.email);
             const result = await InvoiceService.sendInvoiceEmail(
-                invoice,
+                inv,
                 client.email,
                 client.name,
                 company.company_name,
-                invoice.invoice_number
+                inv.invoice_number,
+                '',
+                trackableViewUrl
             );
 
-            if (invoice.status === 'draft') {
-                await retryOnAbort(() => Invoice.update(invoice.id, { ...invoice, status: 'sent' }));
+            if (inv.status === 'draft') {
+                await retryOnAbort(() => Invoice.update(inv.id, { ...inv, status: 'sent' }));
                 setInvoice(prev => ({...prev, status: 'sent'}));
             }
+            recordDocumentSend('invoice', inv.id, client?.id, 'email');
             alert(result.message);
         } catch (error) {
             console.error("Failed to send email:", error);
@@ -178,20 +189,23 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
     const handleShareViaWhatsApp = async () => {
         setIsSharing(true);
         try {
-            let token = invoice.public_share_token;
-            if (!token) {
-                token = crypto.randomUUID();
-                await retryOnAbort(() => Invoice.update(invoice.id, { public_share_token: token }));
+            let inv = invoice;
+            if (!inv.public_share_token) {
+                const token = crypto.randomUUID();
+                await retryOnAbort(() => Invoice.update(inv.id, { public_share_token: token }));
                 setInvoice((prev) => ({ ...prev, public_share_token: token }));
+                inv = { ...inv, public_share_token: token };
             }
-            const publicViewUrl = `${window.location.origin}/view/${token}`;
+            const { createTrackableInvoiceLink, recordDocumentSend } = await import('@/services/InvoiceSendService');
+            const { url: trackableUrl } = await createTrackableInvoiceLink(inv, 'whatsapp', client?.phone || client?.email);
             const brandName = company?.company_name || invoice.owner_company_name || 'Paidly';
-            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView it here: ${publicViewUrl}`;
+            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView your invoice here: ${trackableUrl}`;
             const phone = client?.phone?.replace(/\D/g, '') || '';
             const whatsappUrl = phone
                 ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
                 : `https://wa.me/?text=${encodeURIComponent(message)}`;
             window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+            recordDocumentSend('invoice', invoice.id, client?.id, 'whatsapp');
         } catch (err) {
             console.error('Failed to share via WhatsApp:', err);
             alert(err?.message || 'Failed to open WhatsApp. Please try again.');
@@ -380,7 +394,12 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                                         <div className="inline-block rounded-lg px-4 py-3 bg-[#f5f0e8] border border-[#e8e0d5]">
                                             {company?.logo_url ? (
                                                 <div className="flex items-center gap-3">
-                                                    <LogoImage src={company.logo_url} alt="" className="h-10 w-auto" style={{ maxHeight: "40px" }} />
+                                                    <img
+                                                        src={company.logo_url}
+                                                        alt="Company Logo"
+                                                        className="w-auto"
+                                                        style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
+                                                    />
                                                     <span className="font-semibold text-gray-800">{company?.company_name}</span>
                                                 </div>
                                             ) : (

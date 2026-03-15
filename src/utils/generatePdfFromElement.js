@@ -1,5 +1,3 @@
-import html2pdf from 'html2pdf.js';
-
 /** A4 page size in mm (ISO 216). */
 const A4_WIDTH_MM = 210;
 
@@ -8,12 +6,14 @@ const PDF_PAGE_MARGIN_MM = [15, 18, 15, 18];
 
 /**
  * Generate a high-resolution PDF from an HTML element (invoice/quote).
- * Uses html2pdf.js with scale 3 for sharp text; forces content width to A4 and applies document margins.
+ * Lazy-loads html2pdf.js to avoid circular chunk (pdf ↔ vendor).
  * @param {HTMLElement} element - The DOM node to capture (e.g. invoice container)
  * @param {string} filename - Output filename (e.g. 'INV-001.pdf')
  */
 export default async function generatePdfFromElement(element, filename = 'document.pdf') {
   if (!element) throw new Error('No element provided to generate PDF');
+
+  const html2pdf = (await import('html2pdf.js')).default;
 
   const originalWidth = element.style.width;
   const originalMaxWidth = element.style.maxWidth;
@@ -27,7 +27,6 @@ export default async function generatePdfFromElement(element, filename = 'docume
     element.style.maxWidth = `${A4_WIDTH_MM}mm`;
     element.style.boxSizing = 'border-box';
     element.style.backgroundColor = '#ffffff';
-    // Document margins: apply as padding so the captured area has correct left/right (and top/bottom) inset
     element.style.padding = `${PDF_PAGE_MARGIN_MM[0]}mm ${PDF_PAGE_MARGIN_MM[1]}mm ${PDF_PAGE_MARGIN_MM[2]}mm ${PDF_PAGE_MARGIN_MM[3]}mm`;
 
     const options = {

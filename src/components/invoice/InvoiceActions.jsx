@@ -25,7 +25,7 @@ import ManualShareModal from '../shared/ManualShareModal';
 import EmailPreviewModal from './EmailPreviewModal';
 import InvoiceService from '@/api/InvoiceService';
 import { useToast } from '@/components/ui/use-toast';
-import { sendDraftInvoice } from '@/services/InvoiceSendService';
+import { sendDraftInvoice, recordDocumentSend, createTrackableInvoiceLink } from '@/services/InvoiceSendService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { getAutoStatusUpdate, isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
@@ -42,7 +42,7 @@ const statusOptions = [
     { value: 'cancelled', label: 'Mark as Cancelled', icon: XCircle },
 ];
 
-export default function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid }) {
+function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -188,15 +188,17 @@ export default function InvoiceActions({ invoice, client, onActionSuccess, onOpt
 
     const handleSendViaWhatsApp = async () => {
         try {
-            const token = await ensureToken();
-            const publicInvoiceUrl = `${window.location.origin}/view/${token}`;
+            await ensureToken();
+            const { createTrackableInvoiceLink } = await import('@/services/InvoiceSendService');
+            const { url: trackableUrl } = await createTrackableInvoiceLink(invoice, 'whatsapp', client?.phone || client?.email);
             const brandName = invoice.owner_company_name || 'Paidly';
-            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView it here: ${publicInvoiceUrl}`;
+            const message = `Hi ${client?.name || 'there'}, here is your invoice ${invoice.invoice_number} from ${brandName}.\n\nView your invoice here: ${trackableUrl}`;
             const phone = client?.phone?.replace(/\D/g, '') || '';
             const whatsappUrl = phone
                 ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
                 : `https://wa.me/?text=${encodeURIComponent(message)}`;
             window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+            recordDocumentSend('invoice', invoice.id, client?.id, 'whatsapp');
             toast({
                 title: "WhatsApp opened",
                 description: "Share the invoice link with your client.",
@@ -255,7 +257,8 @@ export default function InvoiceActions({ invoice, client, onActionSuccess, onOpt
                 );
                 onActionSuccess();
             }
-            
+            recordDocumentSend('invoice', invoice.id, client?.id, 'email');
+
             setShowEmailPreview(false);
             toast({
                 title: "Email sent successfully",
@@ -780,8 +783,11 @@ export default function InvoiceActions({ invoice, client, onActionSuccess, onOpt
                     onClose={() => setShowEmailPreview(false)}
                     onSend={handleSendEmail}
                     isSending={isProcessing}
+                    getTrackableLink={() => createTrackableInvoiceLink(invoice, 'email', client?.email)}
                 />
             )}
         </>
     );
 }
+
+export default React.memo(InvoiceActions);

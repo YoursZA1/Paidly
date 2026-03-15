@@ -86,6 +86,65 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+/**
+ * Track when a client opens an invoice link (tracking_token in message_logs).
+ * No auth required; called from public invoice view when URL has ?token=...
+ */
+app.post("/api/track-open", async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ error: "Missing token" });
+    }
+    const { error } = await supabaseAdmin
+      .from("message_logs")
+      .update({ viewed: true, opened_at: new Date().toISOString() })
+      .eq("tracking_token", token.trim());
+    if (error) {
+      console.warn("[track-open]", error.message);
+      return res.status(500).json({ error: "Failed to record open" });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err?.message || "Track open failed" });
+    }
+  }
+});
+
+/** 1x1 transparent GIF for email open tracking (same 43-byte standard) */
+const TRACKING_PIXEL_GIF = Buffer.from(
+  "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  "base64"
+);
+
+/**
+ * Email open tracking pixel: GET /api/email-track/:token
+ * When the email client loads the image, we record the open in message_logs.
+ * No auth; use same tracking_token as the invoice link.
+ */
+app.get("/api/email-track/:token", async (req, res) => {
+  try {
+    const token = (req.params.token || "").trim();
+    if (!token) {
+      res.set("Content-Type", "image/gif");
+      return res.send(TRACKING_PIXEL_GIF);
+    }
+    await supabaseAdmin
+      .from("message_logs")
+      .update({ viewed: true, opened_at: new Date().toISOString() })
+      .eq("tracking_token", token);
+    res.set("Content-Type", "image/gif");
+    res.set("Cache-Control", "no-store, private");
+    res.send(TRACKING_PIXEL_GIF);
+  } catch (err) {
+    if (!res.headersSent) {
+      res.set("Content-Type", "image/gif");
+      res.send(TRACKING_PIXEL_GIF);
+    }
+  }
+});
+
 app.post("/api/send-invoice", async (req, res) => {
   try {
     const { user, error: authError } = await getUserFromRequest(req);
@@ -93,7 +152,7 @@ app.post("/api/send-invoice", async (req, res) => {
       return res.status(401).json({ error: authError || "Authentication required" });
     }
 
-    const { base64PDF, clientEmail, invoiceNum, fromName } = req.body || {};
+    const { base64PDF, clientEmail, invoiceNum, fromName, clientName, amountDue, dueDate } = req.body || {};
     if (!base64PDF || !clientEmail || !invoiceNum) {
       return res.status(400).json({
         error: "Missing required fields",
@@ -101,11 +160,16 @@ app.post("/api/send-invoice", async (req, res) => {
       });
     }
 
+    const template = [clientName, amountDue, dueDate].some(Boolean)
+      ? { clientName: clientName?.trim() || "there", amountDue: amountDue ?? "", dueDate: dueDate ?? "" }
+      : null;
+
     const result = await sendInvoiceEmail(
       base64PDF,
       clientEmail.trim(),
       String(invoiceNum).trim(),
-      fromName ? String(fromName).trim() : "Paidly"
+      fromName ? String(fromName).trim() : "Paidly",
+      template
     );
 
     if (!result.success) {

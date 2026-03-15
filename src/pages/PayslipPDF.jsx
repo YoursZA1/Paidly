@@ -69,7 +69,7 @@ export default function PayslipPDF() {
         >
             {/* Employee Information */}
             <section className="mb-4 sm:mb-6">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Employee Details</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Employee Details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-xs sm:text-sm">
                     <div><strong>Employee Name:</strong> {payslip.employee_name}</div>
                     <div><strong>Position:</strong> {payslip.position || 'N/A'}</div>
@@ -83,7 +83,7 @@ export default function PayslipPDF() {
             <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
                 {/* Earnings */}
                 <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Earnings</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Earnings</h3>
                     <table className="w-full text-xs sm:text-sm">
                         <tbody>
                             <tr className="border-b"><td className="py-2">Basic Salary</td><td className="text-right">{formatCurrency(payslip.basic_salary, userCurrency)}</td></tr>
@@ -93,14 +93,14 @@ export default function PayslipPDF() {
                             ))}
                         </tbody>
                         <tfoot>
-                            <tr className="bg-gray-100 font-bold"><td className="p-2">Gross Pay</td><td className="p-2 text-right">{formatCurrency(payslip.gross_pay, userCurrency)}</td></tr>
+                            <tr className="bg-muted font-bold"><td className="p-2">Gross Pay</td><td className="p-2 text-right">{formatCurrency(payslip.gross_pay, userCurrency)}</td></tr>
                         </tfoot>
                     </table>
                 </div>
 
                 {/* Deductions */}
                 <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Deductions</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Deductions</h3>
                     <table className="w-full text-xs sm:text-sm">
                         <tbody>
                             <tr className="border-b"><td className="py-2">PAYE Tax</td><td className="text-right">{formatCurrency(payslip.tax_deduction, userCurrency)}</td></tr>
@@ -112,17 +112,17 @@ export default function PayslipPDF() {
                             ))}
                         </tbody>
                         <tfoot>
-                            <tr className="bg-gray-100 font-bold"><td className="p-2">Total Deductions</td><td className="p-2 text-right">{formatCurrency(payslip.total_deductions, userCurrency)}</td></tr>
+                            <tr className="bg-muted font-bold"><td className="p-2">Total Deductions</td><td className="p-2 text-right">{formatCurrency(payslip.total_deductions, userCurrency)}</td></tr>
                         </tfoot>
                     </table>
                 </div>
             </section>
 
             {/* Summary */}
-            <section className="mt-6 sm:mt-8 pt-4 border-t-2 border-gray-200">
+            <section className="mt-6 sm:mt-8 pt-4 border-t-2 border-border">
                  <div className="w-full sm:max-w-xs sm:ml-auto">
                     <div className="flex justify-between py-3 text-lg sm:text-xl bg-primary/10 px-4 rounded-md mt-2">
-                        <span className="font-bold text-gray-800">Net Pay</span>
+                        <span className="font-bold text-foreground">Net Pay</span>
                         <span className="font-bold text-primary">{formatCurrency(payslip.net_pay, userCurrency)}</span>
                     </div>
                 </div>

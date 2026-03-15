@@ -5,6 +5,7 @@ import { formatCurrency } from '../components/CurrencySelector';
 import { format, parseISO, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, isWithinInterval } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Printer, Download, FileSpreadsheet } from 'lucide-react';
+import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 
 export default function ReportPDF() {
     const location = useLocation();
@@ -231,7 +232,7 @@ export default function ReportPDF() {
         setIsLoading(false);
     };
 
-    if (isLoading) return <div className="p-10 text-center">Loading Report...</div>;
+    if (isLoading) return <DocumentPageSkeleton title="Loading report…" />;
 
     const currency = user?.currency || 'ZAR';
 

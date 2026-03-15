@@ -8,8 +8,10 @@ import { Mail, FileText, X, Send } from 'lucide-react';
 import { User, BankingDetail } from '@/api/entities';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { format } from 'date-fns';
+import { getEmailOpenTrackingPixelUrl } from '@/services/InvoiceSendService';
 
-export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail, publicViewUrl) => {
+/** Optional pixelUrl: when set, embeds a 1x1 tracking pixel to log email opens (GET /api/email-track/:token). */
+export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail, publicViewUrl, pixelUrl = '') => {
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
     const formattedAmount = formatCurrency(invoice.total_amount, userCurrency);
@@ -82,11 +84,12 @@ export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail
         <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 10px 10px; text-align: center; border: 1px solid #e1e5e9; border-top: none;">
             <p style="margin: 0; color: #666; font-size: 14px;">This is an automated message from ${companyName}.</p>
         </div>
+        ${pixelUrl ? `<img src="${String(pixelUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" width="1" height="1" alt="" />` : ''}
     </div>
     `;
 };
 
-export default function EmailPreviewModal({ invoice, client, onClose, onSend, isSending }) {
+export default function EmailPreviewModal({ invoice, client, onClose, onSend, isSending, getTrackableLink }) {
     const [company, setCompany] = useState(null);
     const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -126,6 +129,18 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
         );
     }
 
+    const publicViewUrl = invoice?.public_share_token
+        ? `${window.location.origin}/view/${invoice.public_share_token}`
+        : '';
+    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, publicViewUrl);
+    const handleSend = async () => {
+        const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
+        const viewUrl = (result && typeof result === 'object' && result.url != null) ? result.url : result;
+        const pixelUrl = result?.trackingToken ? getEmailOpenTrackingPixelUrl(result.trackingToken) : '';
+        const html = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, viewUrl, pixelUrl);
+        onSend(html);
+    };
+
     if (error) {
         return (
             <Dialog open={true} onOpenChange={onClose}>
@@ -141,7 +156,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                         <Button variant="outline" onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-primary hover:bg-primary/90">
+                        <Button onClick={handleSend} disabled={isSending} className="bg-primary hover:bg-primary/90">
                             <Send className="w-4 h-4 mr-2" />
                             {isSending ? 'Sending...' : 'Send Anyway'}
                         </Button>
@@ -153,11 +168,6 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
 
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
-    const publicViewUrl = invoice.public_share_token
-        ? `${window.location.origin}/view/${invoice.public_share_token}`
-        : '';
-    
-    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, publicViewUrl);
 
     return (
         <Dialog open={true} onOpenChange={onClose}>
@@ -326,10 +336,10 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                         <X className="w-4 h-4 mr-2" />
                         Cancel
                     </Button>
-                    <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-primary hover:bg-primary/90">
-                        <Send className="w-4 h-4 mr-2" />
-                        {isSending ? 'Sending...' : 'Send Email with Download Link'}
-                    </Button>
+                        <Button onClick={handleSend} disabled={isSending} className="bg-primary hover:bg-primary/90">
+                            <Send className="w-4 h-4 mr-2" />
+                            {isSending ? 'Sending...' : 'Send Email with Download Link'}
+                        </Button>
                 </div>
             </DialogContent>
         </Dialog>

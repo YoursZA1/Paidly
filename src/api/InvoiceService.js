@@ -99,11 +99,12 @@ class InvoiceService {
     clientName,
     companyName,
     invoiceNumber,
-    customMessage = ''
+    customMessage = '',
+    trackableViewUrl = ''
   ) {
     try {
       const baseUrl = window.location.origin;
-      const publicViewUrl = `${baseUrl}/PublicInvoice?id=${invoiceData.id}`;
+      const publicViewUrl = trackableViewUrl || `${baseUrl}/view/${invoiceData.public_share_token || ''}` || `${baseUrl}/PublicInvoice?id=${invoiceData.id}`;
       const pdfUrl = `${baseUrl}/InvoicePDF?id=${invoiceData.id}`;
 
       const emailSubject = `Invoice #${invoiceNumber} from ${companyName}`;

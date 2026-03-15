@@ -1,3 +1,4 @@
+import React from "react";
 import PropTypes from 'prop-types';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Send, CheckCircle, Clock, AlertCircle, XCircle, Eye } from 'lucide-react';
@@ -6,7 +7,7 @@ import { FileText, Send, CheckCircle, Clock, AlertCircle, XCircle, Eye } from 'l
  * InvoiceStatusBadge Component
  * Displays invoice status with appropriate styling
  */
-export default function InvoiceStatusBadge({ status, size = 'default' }) {
+function InvoiceStatusBadge({ status, size = 'default' }) {
   const sizeClasses = {
     small: 'text-[11px] px-2 py-0.5',
     default: 'text-xs px-2.5 py-1',
@@ -95,3 +96,5 @@ InvoiceStatusBadge.propTypes = {
   status: PropTypes.string,
   size: PropTypes.oneOf(['small', 'default', 'large']),
 };
+
+export default React.memo(InvoiceStatusBadge);

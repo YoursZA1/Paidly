@@ -176,7 +176,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
             <input className="w-full border rounded p-2" name="country" placeholder="Country" value={form.country} onChange={handleChange} required />
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Upload Logo (optional)</label>
-              <input type="file" name="logo" accept="image/*" onChange={handleChange} />
+              <input type="file" name="logo" accept="image/png,image/svg+xml" onChange={handleChange} title="PNG or SVG, max 500KB" />
             </div>
           </div>
         )}

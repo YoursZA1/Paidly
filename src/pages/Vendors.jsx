@@ -3,6 +3,7 @@ import { Vendor, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CardGridSkeleton } from "@/components/shared/PageSkeleton";
 import { ArrowLeft, Plus, Search, Pencil, Trash2, Building2, Phone, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -131,7 +132,7 @@ export default function VendorsPage() {
                     </CardHeader>
                     <CardContent>
                         {isLoading ? (
-                            <div className="text-center py-8">Loading...</div>
+                            <CardGridSkeleton count={6} />
                         ) : filteredVendors.length === 0 ? (
                             <Card className="border-dashed border-border">
                                 <CardContent className="py-12 text-center">
