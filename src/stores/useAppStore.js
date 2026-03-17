@@ -32,33 +32,45 @@ export const useAppStore = create((set, get) => ({
   fetchAll: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [invoicesData, clientsData, userData, paymentsData, viewsData, expensesData] = await withApiLogging(
-        "appStore.fetchAll",
-        () => withTimeoutRetry(
-        () =>
-          Promise.all([
-            Invoice.list("-created_date"),
-            Client.list(),
-            (async () => {
-              try {
-                return await User.me();
-              } catch {
-                return await User.restoreFromSupabaseSession?.();
-              }
-            })().catch(() => null),
-            Payment.list().catch(() => []),
-            InvoiceView.list().catch(() => []),
-            Expense.list("-date", 100).catch(() => []),
-          ]),
-        30000,
-        2
-      )
+      const safe = async (endpoint, fn, fallback, timeoutMs = 30000, retries = 1) => {
+        try {
+          return await withApiLogging(endpoint, () => withTimeoutRetry(fn, timeoutMs, retries));
+        } catch {
+          return fallback;
+        }
+      };
+
+      // Auth is required. Resolve it first (faster failure, clearer errors).
+      const userData = await safe(
+        "auth.me",
+        async () => {
+          try {
+            return await User.me();
+          } catch {
+            return await User.restoreFromSupabaseSession?.();
+          }
+        },
+        null,
+        15000,
+        0
       );
 
       if (!userData) {
         set({ isLoading: false, error: "Not authenticated" });
         return;
       }
+
+      const settled = await Promise.allSettled([
+        safe("invoices.list", () => Invoice.list("-created_date"), [], 30000, 1),
+        safe("clients.list", () => Client.list(), [], 30000, 1),
+        safe("payments.list", () => Payment.list(), [], 30000, 0),
+        safe("invoiceViews.list", () => InvoiceView.list(), [], 30000, 0),
+        safe("expenses.list", () => Expense.list("-date", 100), [], 30000, 0),
+      ]);
+
+      const [invoicesData, clientsData, paymentsData, viewsData, expensesData] = settled.map((r) =>
+        r.status === "fulfilled" ? r.value : []
+      );
 
       // Apply auto status updates (e.g. overdue, viewed) and persist
       const updates = (invoicesData || [])

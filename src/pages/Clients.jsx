@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { Client, Invoice } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -136,6 +137,7 @@ function QuickBillCard({ client, balance, userCurrency, onSelectClient, onCreate
 export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const lastLoadErrorToastRef = useRef(0);
   const { data, isLoading, isError, error, isRefetching, refetch } = useClientsQuery();
@@ -261,6 +263,19 @@ export default function Clients() {
           title: "Client Added",
           description: `${clientData.name} has been added.`,
           variant: "success",
+        });
+        // Optimistically insert into cached clients list so UI/search can find it immediately,
+        // even if the full refetch is slow or rate-limited.
+        queryClient.setQueryData(["clients"], (old) => {
+          if (!old || typeof old !== "object") return old;
+          const prevClients = Array.isArray(old.clients) ? old.clients : [];
+          const exists = prevClients.some((c) => c?.id === newClient?.id);
+          return exists
+            ? old
+            : {
+                ...old,
+                clients: [newClient, ...prevClients],
+              };
         });
         await refetch();
         setActiveClient(newClient);
@@ -389,6 +404,7 @@ export default function Clients() {
                 onClick={() => { setEditingClient(null); setShowForm(true); }}
                 className="p-2 bg-orange-500 rounded-xl active:scale-95 shadow-lg shadow-orange-100 dark:shadow-orange-900/30 transition-all text-white"
                 aria-label="Add client"
+                data-testid="clients-add"
               >
                 <UserPlusIcon className="w-5 h-5" />
               </button>
@@ -402,6 +418,7 @@ export default function Clients() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-base text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-orange-500/20 placeholder:text-slate-300 dark:placeholder:text-slate-500 outline-none min-w-0"
             style={{ fontSize: "16px" }}
+            data-testid="clients-search"
           />
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pb-24 min-h-0">
@@ -463,6 +480,7 @@ export default function Clients() {
                 }}
                 className="p-2 bg-orange-500 rounded-xl text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 hover:bg-orange-600 transition-colors"
                 aria-label="Add client"
+                data-testid="clients-add"
               >
                 <UserPlusIcon className="w-5 h-5" />
               </button>
@@ -474,6 +492,7 @@ export default function Clients() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-3 text-base text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-500/30 outline-none min-w-0 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             style={{ fontSize: "16px" }}
+            data-testid="clients-search"
           />
         </div>
 
@@ -519,6 +538,8 @@ export default function Clients() {
                   key={client.id}
                   type="button"
                   onClick={() => setActiveClient(client)}
+                  data-testid="client-list-item"
+                  data-client-name={client.name}
                   className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
                     isActive
                       ? "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800"
@@ -587,7 +608,10 @@ export default function Clients() {
           <>
             <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-10">
               <div className="min-w-0">
-                <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-slate-100 mb-2 truncate">
+                <h2
+                  className="text-3xl md:text-4xl font-black text-slate-900 dark:text-slate-100 mb-2 truncate"
+                  data-testid="client-active-name"
+                >
                   {activeClient.name}
                 </h2>
                 <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400 font-medium">
@@ -620,6 +644,7 @@ export default function Clients() {
                   variant="outline"
                   className="rounded-2xl font-bold border-slate-200 dark:border-slate-600 dark:hover:bg-slate-800"
                   onClick={() => handleEditClient(activeClient)}
+                  data-testid="client-edit"
                 >
                   <PencilSquareIcon className="w-4 h-4 mr-2" />
                   Edit Profile
@@ -628,6 +653,7 @@ export default function Clients() {
                   variant="outline"
                   className="rounded-2xl font-bold border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-700 dark:hover:text-red-300"
                   onClick={() => handleDeleteRequest(activeClient)}
+                  data-testid="client-delete"
                 >
                   <TrashIcon className="w-4 h-4 mr-2" />
                   Delete
@@ -821,7 +847,7 @@ export default function Clients() {
           if (!open) setEditingClient(null);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="client-form-dialog">
           <DialogTitle className="sr-only">
             {editingClient ? "Edit Client" : "Add New Client"}
           </DialogTitle>

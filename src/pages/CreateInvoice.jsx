@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { createPageUrl } from "@/utils";
 import InvoicePreviewSkeleton from "@/components/invoice/InvoicePreviewSkeleton";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { withApiLogging } from "@/utils/apiLogger";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,10 @@ export default function CreateInvoice() {
   const [bankingDetails, setBankingDetails] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loadFailures, setLoadFailures] = useState([]);
   const [showPreview, setShowPreview] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loadedQuote, setLoadedQuote] = useState(null);
 
   const [invoiceData, setInvoiceData] = useState({
     client_id: "",
@@ -49,26 +53,62 @@ export default function CreateInvoice() {
 
   // Load clients, services, and optionally prefill from quote (Convert Quote to Invoice)
   useEffect(() => {
+    let cancelled = false;
+    let watchdog;
+
     async function loadInitialData() {
       setLoading(true);
       setError("");
+      setLoadFailures([]);
+      // Fail-safe: never stay stuck in skeleton forever (e.g. hanging network call).
+      watchdog = setTimeout(() => {
+        if (!cancelled) {
+          setError("Failed to load data. Please refresh.");
+          setLoading(false);
+        }
+      }, 20000);
+
       try {
         const urlParams = new URLSearchParams(location.search);
         const quoteId = urlParams.get("quoteId");
         const clientId = urlParams.get("client_id");
 
-        const [clientsList, servicesList, bankingList, quoteData] = await withTimeoutRetry(() => Promise.all([
-          Client.list("-created_date"),
-          Service.list("-created_date"),
-          BankingDetail.list().catch(() => []),
-          quoteId ? Quote.get(quoteId).catch(() => null) : Promise.resolve(null),
-        ]), 15000, 2);
-        setClients(clientsList || []);
-        setServices(servicesList || []);
+        const safe = async (endpoint, fn, fallback, timeoutMs = 15000, retries = 1) => {
+          try {
+            return await withApiLogging(endpoint, () => withTimeoutRetry(fn, timeoutMs, retries));
+          } catch (e) {
+            if (!cancelled) {
+              const msg = e?.message || String(e);
+              setLoadFailures((prev) => [
+                ...prev,
+                { endpoint, message: msg },
+              ]);
+            }
+            return fallback;
+          }
+        };
+
+        // Fetch a small "recent" slice first so the form becomes usable quickly.
+        // Then hydrate larger lists in the background (best-effort).
+        const RECENT_LIMIT = 50;
+        const FULL_LIMIT = 500;
+
+        const [clientsList, servicesList, bankingList, quoteData] = await Promise.all([
+          safe("createInvoice.clients.list(recent)", () => Client.list("-created_date", { limit: RECENT_LIMIT, maxWaitMs: 4000 }), [], 12000, 0),
+          safe("createInvoice.services.list(recent)", () => Service.list("-created_date", { limit: RECENT_LIMIT, maxWaitMs: 4000 }), [], 12000, 0),
+          safe("createInvoice.banking.list", () => BankingDetail.list("", { limit: 50, maxWaitMs: 4000 }), [], 12000, 0),
+          quoteId ? safe("createInvoice.quote.get", () => Quote.get(quoteId), null, 15000, 0) : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        setClients(Array.isArray(clientsList) ? clientsList : []);
+        setServices(Array.isArray(servicesList) ? servicesList : []);
         setBankingDetails(Array.isArray(bankingList) ? bankingList : []);
 
         if (quoteData && quoteId) {
           const quote = quoteData;
+          setLoadedQuote(quote);
             const items = Array.isArray(quote?.items) ? quote.items : [];
             const dueDate = quote?.valid_until
               ? new Date(quote.valid_until).toISOString().split("T")[0]
@@ -130,9 +170,38 @@ export default function CreateInvoice() {
             description: "The quote could not be loaded. You can still create an invoice from scratch.",
             variant: "destructive",
           });
-        } else if (clientId && clientsList.find((c) => c.id === clientId)) {
+        } else if (clientId && Array.isArray(clientsList) && clientsList.find((c) => c.id === clientId)) {
           setInvoiceData((prev) => ({ ...prev, client_id: clientId }));
         }
+
+        // If core datasets are missing, show a retry banner (but still exit loading).
+        const clientsEmpty = !Array.isArray(clientsList) || clientsList.length === 0;
+        const servicesEmpty = !Array.isArray(servicesList) || servicesList.length === 0;
+        if (clientsEmpty && servicesEmpty) {
+          setError("Failed to load data (clients and services). Please retry.");
+        } else if (clientsEmpty) {
+          setError("Failed to load clients. Please retry.");
+        } else if (servicesEmpty) {
+          setError("Failed to load services. Please retry.");
+        } else {
+          // Clear banner if we have enough to proceed.
+          setError("");
+        }
+
+        // Background hydration: fetch more rows without blocking the UI.
+        // This reduces the chance that heavy orgs stall initial render.
+        setTimeout(() => {
+          if (cancelled) return;
+          void (async () => {
+            const [moreClients, moreServices] = await Promise.all([
+              safe("createInvoice.clients.list(full)", () => Client.list("-created_date", { limit: FULL_LIMIT, maxWaitMs: 8000 }), null, 30000, 0),
+              safe("createInvoice.services.list(full)", () => Service.list("-created_date", { limit: FULL_LIMIT, maxWaitMs: 8000 }), null, 30000, 0),
+            ]);
+            if (cancelled) return;
+            if (Array.isArray(moreClients) && moreClients.length > (clientsList?.length || 0)) setClients(moreClients);
+            if (Array.isArray(moreServices) && moreServices.length > (servicesList?.length || 0)) setServices(moreServices);
+          })();
+        }, 0);
       } catch (err) {
         console.error("Error loading data:", err);
         setError("Failed to load data. Please refresh.");
@@ -142,11 +211,44 @@ export default function CreateInvoice() {
           variant: "destructive",
         });
       } finally {
+        clearTimeout(watchdog);
         setLoading(false);
       }
     }
     loadInitialData();
-  }, [location.search, toast, user?.currency]);
+    return () => {
+      cancelled = true;
+      clearTimeout(watchdog);
+    };
+  }, [location.search, toast, user?.currency, reloadNonce]);
+
+  // If we loaded a quote before clients finished hydrating, fill in client-dependent fields once clients arrive.
+  useEffect(() => {
+    if (!loadedQuote?.client_id) return;
+    if (!Array.isArray(clients) || clients.length === 0) return;
+
+    setInvoiceData((prev) => {
+      // Don't overwrite if user already edited the delivery address.
+      if (prev.delivery_address && prev.delivery_address.trim().length > 0) return prev;
+      if (prev.client_id && prev.client_id !== loadedQuote.client_id) return prev;
+
+      const quoteClient = clients.find((c) => c.id === loadedQuote.client_id);
+      if (!quoteClient) return prev;
+
+      const deliveryAddress = [
+        quoteClient?.address,
+        quoteClient?.name,
+        quoteClient?.email ? `Email: ${quoteClient.email}` : "",
+        quoteClient?.phone ? `Phone: ${quoteClient.phone}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+
+      if (!deliveryAddress) return prev;
+      return { ...prev, delivery_address: deliveryAddress };
+    });
+  }, [loadedQuote, clients]);
 
   async function handleCreateInvoice(options = {}) {
     const sendNow = options && typeof options === "object" && options.sendNow === true;
@@ -318,8 +420,28 @@ export default function CreateInvoice() {
         </nav>
 
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-sm">
-            {error}
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-sm flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate">{error}</div>
+              {Array.isArray(loadFailures) && loadFailures.length > 0 && (
+                <div className="mt-1 text-[11px] text-destructive/80 break-words">
+                  {loadFailures.slice(0, 2).map((f, idx) => (
+                    <div key={`${f.endpoint}-${idx}`}>
+                      {f.endpoint}: {f.message}
+                    </div>
+                  ))}
+                  {loadFailures.length > 2 && <div>…and {loadFailures.length - 2} more</div>}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReloadNonce((n) => n + 1)}
+              className="shrink-0"
+            >
+              Retry
+            </Button>
           </div>
         )}
 
@@ -358,6 +480,7 @@ export default function CreateInvoice() {
               className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-2xl font-bold"
               onClick={() => handleCreateInvoice({ sendNow: true })}
               disabled={loading}
+              data-testid="invoice-send-now"
             >
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
               Send Invoice Now
@@ -367,6 +490,7 @@ export default function CreateInvoice() {
               className="border-slate-200 px-6 py-3 rounded-2xl font-bold"
               onClick={() => handleCreateInvoice({ sendNow: false })}
               disabled={loading}
+              data-testid="invoice-save-draft"
             >
               <Save className="w-4 h-4 mr-2" />
               Save as Draft
@@ -397,6 +521,7 @@ export default function CreateInvoice() {
                 className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold shadow-lg shadow-orange-200 transition-all"
                 onClick={() => handleCreateInvoice({ sendNow: true })}
                 disabled={loading}
+                data-testid="invoice-send-now"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -415,6 +540,7 @@ export default function CreateInvoice() {
                 className="w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-all"
                 onClick={() => handleCreateInvoice({ sendNow: false })}
                 disabled={loading}
+                data-testid="invoice-save-draft"
               >
                 <Save className="w-5 h-5 mr-2" />
                 Save as Draft

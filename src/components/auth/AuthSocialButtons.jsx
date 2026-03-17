@@ -26,15 +26,6 @@ function GoogleIcon({ className = "w-5 h-5" }) {
   );
 }
 
-/** Apple logo - single color for dark/light backgrounds */
-function AppleIcon({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-1.18 1.62-2.38 3.23-4.07 4.43-.96.71-1.95 1.48-3.23 1.47-1.27-.01-1.68-.42-3.18-.42-1.51 0-1.95.41-3.2.42-1.3.01-2.37-.74-3.35-1.47-2.02-1.5-3.57-3.34-4.74-5.38-2.57-3.83-4.54-10.1-1.89-14.5 1.33-2.2 3.71-3.59 6.27-3.59 1.27 0 2.4.43 3.4 1.2.99-.29 1.99-.54 3.09-.54 2.89 0 5.35 1.77 6.38 4.45-1.76 1.12-2.64 2.68-2.42 4.68.21 1.9 1.42 3.18 2.66 4.35z" />
-    </svg>
-  );
-}
-
 export default function AuthSocialButtons({ mode = "signin", className = "" }) {
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [error, setError] = useState("");
@@ -64,7 +55,7 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <Button
           type="button"
           variant="outline"
@@ -78,20 +69,6 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
             <GoogleIcon className="w-5 h-5 shrink-0" />
           )}
           <span className="ml-2 hidden xs:inline">Google</span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-12 rounded-xl border-border bg-background hover:bg-muted/50"
-          onClick={() => handleOAuth("apple")}
-          disabled={!!loadingProvider}
-        >
-          {loadingProvider === "apple" ? (
-            <span className="inline-block size-5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
-          ) : (
-            <AppleIcon className="w-5 h-5 shrink-0" />
-          )}
-          <span className="ml-2 hidden xs:inline">Apple</span>
         </Button>
       </div>
 

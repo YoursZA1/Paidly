@@ -163,7 +163,7 @@ export default function InvoiceDetails({
           <div className="space-y-1.5">
             <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Client</Label>
             <Select value={invoiceData.client_id} onValueChange={(v) => setInvoiceData((prev) => ({ ...prev, client_id: v }))}>
-              <SelectTrigger className="h-12 rounded-2xl border-none bg-muted/50">
+              <SelectTrigger className="h-12 rounded-2xl border-none bg-muted/50" data-testid="invoice-client">
                 <SelectValue placeholder="Choose a client..." />
               </SelectTrigger>
               <SelectContent>
@@ -229,6 +229,7 @@ export default function InvoiceDetails({
             placeholder="Service name..."
             className="flex-1 bg-transparent border-none text-sm focus-visible:ring-0 h-9"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addQuickItem())}
+            data-testid="invoice-item-name"
           />
           <Input
             type="number"
@@ -238,6 +239,7 @@ export default function InvoiceDetails({
             placeholder="Qty"
             className="w-14 bg-background rounded-lg text-center text-sm p-2 h-9"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addQuickItem())}
+            data-testid="invoice-item-qty"
           />
           <Input
             type="number"
@@ -248,6 +250,7 @@ export default function InvoiceDetails({
             placeholder="Price"
             className="w-24 bg-background rounded-lg text-right text-sm p-2 h-9"
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addQuickItem())}
+            data-testid="invoice-item-price"
           />
           <Button type="button" size="icon" className="bg-orange-500 hover:bg-orange-600 text-white h-9 w-9 rounded-lg shrink-0" onClick={addQuickItem}>
             <Send className="w-4 h-4" />

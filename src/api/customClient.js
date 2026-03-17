@@ -420,7 +420,7 @@ class EntityManager {
   /**
    * List records with optional sort and limit (limits Supabase query for performance).
    * @param {string} sortBy - e.g. "-created_date", "delivery_date"
-   * @param {{ limit?: number, offset?: number } | number} options - limit/offset object, or legacy numeric limit (e.g. Expense.list("-date", 100)).
+   * @param {{ limit?: number, offset?: number, maxWaitMs?: number } | number} options - limit/offset object, optional maxWaitMs to avoid hanging, or legacy numeric limit.
    */
   async list(sortBy = '', options = {}) {
     const opts = typeof options === 'number' ? { limit: options } : options;
@@ -429,12 +429,24 @@ class EntityManager {
     const useDefaultLimit = largeTables.includes(table) && opts.limit == null;
     const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
     const offset = opts.offset ?? 0;
+    const maxWaitMs = typeof opts.maxWaitMs === 'number' ? opts.maxWaitMs : null;
     const orderColumn = getOrderColumn(sortBy);
     const orderAsc = getOrderAscending(sortBy);
 
     this._listOptions = limit != null ? { limit, offset, orderBy: { column: orderColumn, ascending: orderAsc } } : {};
     try {
-      await this.pullFromSupabase();
+      const pull = this.pullFromSupabase();
+      // If maxWaitMs is set, do not block UI on slow Supabase; return cached records.
+      if (maxWaitMs != null && maxWaitMs > 0) {
+        await Promise.race([
+          pull,
+          new Promise((resolve) => setTimeout(resolve, maxWaitMs)),
+        ]);
+        // Ensure no unhandled rejections if pull continues after we stop waiting.
+        void pull.catch(() => {});
+      } else {
+        await pull;
+      }
     } finally {
       this._listOptions = {};
     }
@@ -1521,16 +1533,37 @@ class AuthManager {
     }
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const withLocalTimeout = async (promise, ms, label) => {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+        });
+        try {
+          return await Promise.race([promise, timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
+      // Do not block the UI on slow auth/profile round-trips.
+      const { data: sessionData, error: sessionError } = await withLocalTimeout(
+        supabase.auth.getSession(),
+        5000,
+        "auth.getSession"
+      );
       if (sessionError) {
         console.warn("Failed to get session in me():", getSupabaseErrorMessage(sessionError, "Session failed"));
       } else if (sessionData?.session?.user?.id) {
         const authUserId = sessionData.session.user.id;
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select(getSelectColumns("profiles"))
-          .eq("id", authUserId)
-          .maybeSingle();
+        const { data: profile, error } = await withLocalTimeout(
+          supabase
+            .from("profiles")
+            .select(getSelectColumns("profiles"))
+            .eq("id", authUserId)
+            .maybeSingle(),
+          7000,
+          "profiles.select"
+        );
         if (error) {
           console.warn("Failed to load profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
         }
@@ -1561,7 +1594,10 @@ class AuthManager {
         }
       }
     } catch (error) {
-      console.warn("Failed to load profile from Supabase:", getSupabaseErrorMessage(error, "Load profile failed"));
+      // If session/profile refresh is slow or fails, keep cached user so pages don't hang.
+      if (import.meta.env?.DEV) {
+        console.warn("Failed to refresh session/profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
+      }
     }
     return this.user;
   }

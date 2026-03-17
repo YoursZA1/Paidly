@@ -338,6 +338,7 @@ export function AuthProvider({ children }) {
 const AUTH_FALLBACK = {
   user: null,
   loading: false,
+  isAuthenticated: false,
   session: null,
   error: "",
   login: async () => {},

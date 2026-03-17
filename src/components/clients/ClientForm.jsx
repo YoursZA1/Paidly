@@ -84,6 +84,7 @@ export default function ClientForm({ client = null, onSave, onCancel }) {
                                     onChange={(e) => handleInputChange('name', e.target.value)}
                                     placeholder="Enter client name"
                                     className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                                    data-testid="client-name"
                                 />
                             </div>
 
@@ -98,6 +99,7 @@ export default function ClientForm({ client = null, onSave, onCancel }) {
                                     onChange={(e) => handleInputChange('email', e.target.value)}
                                     placeholder="client@example.com"
                                     className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                                    data-testid="client-email"
                                 />
                             </div>
 
@@ -334,6 +336,7 @@ export default function ClientForm({ client = null, onSave, onCancel }) {
                                 variant="outline"
                                 onClick={onCancel}
                                 className="px-6 py-3 rounded-xl border-border hover:bg-muted"
+                                data-testid="client-cancel"
                             >
                                 Cancel
                             </Button>
@@ -341,6 +344,7 @@ export default function ClientForm({ client = null, onSave, onCancel }) {
                                 type="submit"
                                 disabled={!isValid}
                                 className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
+                                data-testid="client-save"
                             >
                                 <Save className="w-4 h-4 mr-2" />
                                 {client ? "Update Client" : "Save Client"}
