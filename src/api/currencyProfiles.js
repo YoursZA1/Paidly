@@ -88,7 +88,9 @@ export const getExchangeRates = async (baseCurrency = 'ZAR') => {
       return response.data || {};
     }
   } catch (error) {
-    console.error('Error fetching exchange rates:', error);
+    if (import.meta.env?.DEV) {
+      console.warn('Exchange rates unavailable (backend may be down or returned an error). Using empty rates.', error?.response?.status || error?.message);
+    }
   }
   return {};
 };
@@ -112,7 +114,9 @@ export const getHistoricalExchangeRates = async (
       return response.data || {};
     }
   } catch (error) {
-    console.error('Error fetching historical exchange rates:', error);
+    if (import.meta.env?.DEV) {
+      console.warn('Historical exchange rates unavailable.', error?.response?.status || error?.message);
+    }
   }
   return {};
 };

@@ -726,17 +726,12 @@ export default function Layout({ children, currentPageName }) {
   }, [user]);
 
   const handleLogout = async () => {
+    // Force logout: always reset local state and go to Login.
+    resetStore();
     try {
-      resetStore();
       await logout();
+    } finally {
       navigate(createPageUrl("Login"));
-    } catch (error) {
-      console.error("Error logging out:", error);
-      toast({
-        title: "Logout failed",
-        description: error?.message || "Could not sign out. Please try again.",
-        variant: "destructive",
-      });
     }
   };
 

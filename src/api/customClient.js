@@ -1018,7 +1018,12 @@ class EntityManager {
 
       return record;
     } catch (e) {
-      console.error(`Failed to create ${this.entityName}:`, e);
+      const isAuthError = e?.message === 'Not authenticated';
+      if (isAuthError) {
+        console.warn(`[${this.entityName}] Not authenticated — session may have expired.`);
+      } else {
+        console.error(`Failed to create ${this.entityName}:`, e);
+      }
       throw e;
     }
   }

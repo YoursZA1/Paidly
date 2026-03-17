@@ -169,15 +169,70 @@ export function AuthProvider({ children }) {
     setUser(currentUser ?? null);
   }, []);
 
-  const logout = useCallback(async () => {
+  const purgeSupabaseAuthStorage = useCallback(() => {
+    const shouldRemoveKey = (k) =>
+      typeof k === "string" &&
+      (k === "supabase.auth.token" || /^sb-.*-auth-token$/i.test(k));
+
     try {
-      await SupabaseAuthService.signOut();
-    } finally {
-      await User.logout();
-      setSession(null);
-      setUser(null);
+      if (typeof localStorage !== "undefined") {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (shouldRemoveKey(k)) keys.push(k);
+        }
+        keys.forEach((k) => localStorage.removeItem(k));
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const keys = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (shouldRemoveKey(k)) keys.push(k);
+        }
+        keys.forEach((k) => sessionStorage.removeItem(k));
+      }
+    } catch {
+      // ignore
     }
   }, []);
+
+  const logout = useCallback(async () => {
+    // Logout should never leave the UI stuck. We always clear local state and tokens,
+    // even if the network is down or Supabase returns an error.
+    try {
+      // Prefer global sign-out to invalidate all sessions for this user.
+      const { error } = await supabase.auth.signOut({ scope: "global" });
+      if (error) throw error;
+    } catch (e) {
+      if (import.meta.env?.DEV) {
+        console.warn("[Auth] Supabase signOut failed; forcing local logout.", e?.message || e);
+      }
+      // Best-effort local sign-out; ignore failures.
+      try {
+        await SupabaseAuthService.signOut();
+      } catch {
+        // ignore
+      }
+    } finally {
+      purgeSupabaseAuthStorage();
+      try {
+        await User.logout();
+      } catch {
+        // ignore
+      }
+      setSession(null);
+      setUser(null);
+      setError("");
+      setShowVerifyDialog(false);
+      setResendLoading(false);
+      setResendSuccess("");
+    }
+  }, [purgeSupabaseAuthStorage]);
 
   const sendPasswordReset = useCallback(async (email) => {
     // Generate reset token and store with expiry (1 hour)
@@ -280,9 +335,34 @@ export function AuthProvider({ children }) {
   </>;
 }
 
+const AUTH_FALLBACK = {
+  user: null,
+  loading: false,
+  session: null,
+  error: "",
+  login: async () => {},
+  signup: async () => {},
+  logout: () => {},
+  refreshUser: async () => {},
+  refreshSession: async () => {},
+  sendPasswordReset: async () => {},
+  sendUserInvite: async () => {},
+  setShowVerifyDialog: () => {},
+  showVerifyDialog: false,
+  resendLoading: false,
+  resendSuccess: "",
+  handleResendConfirmation: async () => {},
+  userRole: null,
+  userPermissions: [],
+};
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) {
+    if (import.meta.env?.DEV) {
+      console.warn("[Auth] useAuth called outside AuthProvider (e.g. during HMR). Using fallback. If you see this after a hot reload, refresh the page.");
+      return AUTH_FALLBACK;
+    }
     throw new Error("useAuth must be used within AuthProvider");
   }
   return ctx;

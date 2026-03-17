@@ -46,13 +46,22 @@ const PayfastService = {
       cancelUrl: buildReturnUrl(cancelPath)
     };
 
-    const response = await fetch(`${getServerBaseUrl()}/api/payfast/once`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
+    let response;
+    try {
+      response = await fetch(`${getServerBaseUrl()}/api/payfast/once`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (networkError) {
+      const msg = networkError?.message || String(networkError);
+      if (msg.includes("Failed to fetch") || msg.includes("Connection refused") || msg.includes("NetworkError")) {
+        throw new Error("Payment server is unavailable. Please try again later or ensure the backend is running (npm run server).");
+      }
+      throw networkError;
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -92,13 +101,22 @@ const PayfastService = {
       cancelUrl: buildReturnUrl(cancelPath)
     };
 
-    const response = await fetch(`${getServerBaseUrl()}/api/payfast/subscription`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
+    let response;
+    try {
+      response = await fetch(`${getServerBaseUrl()}/api/payfast/subscription`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (networkError) {
+      const msg = networkError?.message || String(networkError);
+      if (msg.includes("Failed to fetch") || msg.includes("Connection refused") || msg.includes("NetworkError")) {
+        throw new Error("Payment server is unavailable. Please try again later or ensure the backend is running (npm run server).");
+      }
+      throw networkError;
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

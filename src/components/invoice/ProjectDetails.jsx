@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "../CurrencySelector";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ClientForm from "../clients/ClientForm";
 import BankingForm from "../banking/BankingForm";
 import ServiceForm from "../services/ServiceForm";
@@ -2116,7 +2116,8 @@ export default function ProjectDetails({
             </Card>
 
             <Dialog open={isAddingClient} onOpenChange={setIsAddingClient}>
-                <DialogContent>
+                <DialogContent aria-describedby={undefined}>
+                    <DialogTitle className="sr-only">Add new client</DialogTitle>
                     <ClientForm 
                         onSave={handleSaveNewClient}
                         onCancel={() => setIsAddingClient(false)}
@@ -2125,7 +2126,8 @@ export default function ProjectDetails({
             </Dialog>
 
             <Dialog open={isAddingBankingDetail} onOpenChange={setIsAddingBankingDetail}>
-                <DialogContent>
+                <DialogContent aria-describedby={undefined}>
+                    <DialogTitle className="sr-only">Add banking detail</DialogTitle>
                     <BankingForm 
                         onSave={handleSaveNewBankingDetail}
                         onCancel={() => setIsAddingBankingDetail(false)}
@@ -2134,7 +2136,8 @@ export default function ProjectDetails({
             </Dialog>
 
             <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
-                <DialogContent>
+                <DialogContent aria-describedby={undefined}>
+                    <DialogTitle className="sr-only">Add service</DialogTitle>
                     <ServiceForm 
                         onSave={handleSaveNewService}
                         onCancel={() => setIsAddingService(false)}

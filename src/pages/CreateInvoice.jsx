@@ -255,6 +255,18 @@ export default function CreateInvoice() {
       setError(errorMessage);
 
       let description = `Failed to create invoice: ${errorMessage}`;
+      if (errorLower.includes("not authenticated")) {
+        description = "Your session may have expired. Please log in again.";
+        toast({
+          title: "✗ Session expired",
+          description,
+          variant: "destructive",
+          duration: 6000,
+        });
+        setTimeout(() => navigate(createPageUrl("Login")), 1500);
+        setLoading(false);
+        return;
+      }
       if (errorLower.includes("organization")) {
         description =
           "No organization found. Please contact support or try logging out and back in.";

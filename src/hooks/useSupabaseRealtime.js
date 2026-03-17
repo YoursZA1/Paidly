@@ -42,8 +42,8 @@ export function useSupabaseRealtime(tables, onPayload, opts = {}) {
     });
 
     channel.subscribe((status) => {
-      if (status === "CHANNEL_ERROR") {
-        console.warn("[useSupabaseRealtime] channel error; ensure tables are in supabase_realtime publication.");
+      if (status === "CHANNEL_ERROR" && import.meta.env?.DEV) {
+        console.debug("[useSupabaseRealtime] channel error (optional). To use Realtime, add tables to supabase_realtime publication.");
       }
     });
 
