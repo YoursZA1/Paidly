@@ -481,7 +481,7 @@ function CompanyProfileSettings() {
                                 </Button>
                             )}
                         </div>
-                        <input id="logo-upload" type="file" accept="image/png,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                        <input id="logo-upload" name="logo-upload" type="file" accept="image/png,image/svg+xml" className="hidden" onChange={handleLogoChange} />
                         <p className="text-xs text-slate-400 dark:text-slate-500">
                             PNG or SVG (SVG preferred for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
