@@ -4,8 +4,9 @@ import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { withApiLogging, getCurrentPage } from '@/utils/apiLogger';
 
 const CLIENT_LIST_KEY = ['clients'];
-const TIMEOUT_MS = 20000;
-const RETRIES = 2;
+const TIMEOUT_MS = 8000;
+const RETRIES = 0;
+const LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
 
 async function fetchClientsAndInvoices() {
   const page = getCurrentPage();
@@ -15,8 +16,8 @@ async function fetchClientsAndInvoices() {
       withTimeoutRetry(
         () =>
           Promise.all([
-            Client.list('-created_date'),
-            Invoice.list('-created_date'),
+            Client.list('-created_date', LIST_OPTS),
+            Invoice.list('-created_date', LIST_OPTS),
             User.me(),
           ]),
         TIMEOUT_MS,

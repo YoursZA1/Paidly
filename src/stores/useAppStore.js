@@ -53,7 +53,7 @@ export const useAppStore = create((set, get) => ({
           }
         },
         null,
-        15000,
+        10000,
         0
       );
 
@@ -63,11 +63,11 @@ export const useAppStore = create((set, get) => ({
       }
 
       const settled = await Promise.allSettled([
-        // Keep app shell responsive: prefer small, recent slices and strict max wait.
-        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
-        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
-        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
-        safe("expenses.list", () => Expense.list("-date", 50), [], 15000, 0),
+        // Keep app shell responsive: short timeouts so pages can show store-first / best-effort quickly.
+        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
+        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
+        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
+        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 4000 }), [], 8000, 0),
       ]);
 
       const [invoicesData, clientsData, paymentsData, expensesData] = settled.map((r) =>

@@ -22,6 +22,7 @@ import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
 import { useClientsQuery } from "@/hooks/useClientsQuery";
+import { useAppStore } from "@/stores/useAppStore";
 import { format, parseISO, isValid } from "date-fns";
 
 const statusStyles = {
@@ -138,13 +139,29 @@ export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const clientsFromStore = useAppStore((s) => s.clients);
+  const invoicesFromStore = useAppStore((s) => s.invoices);
+  const userProfileFromStore = useAppStore((s) => s.userProfile);
 
   const lastLoadErrorToastRef = useRef(0);
-  const { data, isLoading, isError, error, isRefetching, refetch } = useClientsQuery();
-  const clients = data?.clients ?? [];
-  const invoices = data?.invoices ?? [];
-  const user = data?.user ?? null;
+  const hasStoreData =
+    (clientsFromStore?.length > 0) ||
+    (invoicesFromStore?.length > 0) ||
+    userProfileFromStore != null;
+  const { data, isLoading, isError, error, isRefetching, refetch } = useClientsQuery({
+    initialData: hasStoreData
+      ? {
+          clients: clientsFromStore ?? [],
+          invoices: invoicesFromStore ?? [],
+          user: userProfileFromStore ?? null,
+        }
+      : undefined,
+  });
+  const clients = data?.clients ?? clientsFromStore ?? [];
+  const invoices = data?.invoices ?? invoicesFromStore ?? [];
+  const user = data?.user ?? userProfileFromStore ?? null;
   const loadError = isError ? (error?.message || "Unable to load clients") : null;
+  const showLoadingSkeleton = isLoading && clients.length === 0;
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeClient, setActiveClient] = useState(null);
@@ -391,7 +408,7 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => loadData(true)}
-                disabled={isRefetching || isLoading}
+                disabled={isRefetching || showLoadingSkeleton}
                 className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl active:scale-95 transition-all disabled:opacity-50"
                 aria-label="Refresh clients"
               >
@@ -422,7 +439,18 @@ export default function Clients() {
           />
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pb-24 min-h-0">
-            {isLoading ? (
+            {loadError && (
+              <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
+                <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">
+                  Could not refresh clients. Showing cached data. {loadError}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 gap-1">
+                  <ArrowPathIcon className={`w-4 h-4 ${isRefetching ? "animate-spin" : ""}`} />
+                  Try again
+                </Button>
+              </div>
+            )}
+            {showLoadingSkeleton ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div
@@ -463,7 +491,7 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => loadData(true)}
-                disabled={isRefetching || isLoading}
+                disabled={isRefetching || showLoadingSkeleton}
                 className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
                 aria-label="Refresh clients"
                 title="Refresh"
@@ -497,7 +525,18 @@ export default function Clients() {
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-2 min-h-0">
-          {isLoading ? (
+          {loadError && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-2 flex items-center justify-between gap-2 mb-2">
+              <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-0 truncate">
+                Could not refresh. Showing cached data.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 h-8 text-xs gap-1">
+                <ArrowPathIcon className={`w-3.5 h-3.5 ${isRefetching ? "animate-spin" : ""}`} />
+                Retry
+              </Button>
+            </div>
+          )}
+          {showLoadingSkeleton ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div
@@ -505,24 +544,6 @@ export default function Clients() {
                   className="h-16 rounded-[24px] bg-slate-100 dark:bg-slate-700 animate-pulse"
                 />
               ))}
-            </div>
-          ) : loadError ? (
-            <div className="py-8 px-2 text-center">
-              <p className="text-foreground text-sm font-medium mb-2">
-                Could not load clients
-              </p>
-              <p className="text-muted-foreground text-xs mb-4">
-                {loadError}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadData()}
-                className="gap-2"
-              >
-                <ArrowPathIcon className="w-4 h-4" />
-                Try again
-              </Button>
             </div>
           ) : searchFilteredClients.length === 0 ? (
             <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
@@ -577,32 +598,25 @@ export default function Clients() {
       <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6 md:p-10">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
-            {loadError ? (
-              <>
-                <p className="text-lg font-medium text-foreground">Could not load clients</p>
-                <p className="text-sm text-muted-foreground mt-1 mb-4">{loadError}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => loadData()}
-                  className="gap-2"
-                >
-                  <ArrowPathIcon className="w-4 h-4" />
+            {loadError && (
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md w-full text-center sm:text-left">
+                <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
+                  {clients.length > 0 ? "Showing cached data. Refresh failed." : "Could not load clients. Try again or refresh the page."}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 gap-1">
+                  <ArrowPathIcon className={`w-4 h-4 ${isRefetching ? "animate-spin" : ""}`} />
                   Try again
                 </Button>
-              </>
-            ) : (
-              <>
-                <p className="text-lg font-medium">
-                  {isLoading ? "Loading…" : "Select a client"}
-                </p>
-                <p className="text-sm mt-1">
-                  {!isLoading && clients.length === 0
-                    ? "Add a client to see their details here."
-                    : "Choose a client from the list to view details and invoices."}
-                </p>
-              </>
+              </div>
             )}
+            <p className="text-lg font-medium">
+              {showLoadingSkeleton ? "Loading…" : "Select a client"}
+            </p>
+            <p className="text-sm mt-1">
+              {!showLoadingSkeleton && clients.length === 0
+                ? "Add a client to see their details here."
+                : "Choose a client from the list to view details and invoices."}
+            </p>
           </div>
         ) : (
           <>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Quote } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -50,30 +50,25 @@ export default function QuotesPage() {
         }
     }, [initialError, toast]);
 
-    // On first mount, hydrate quotes best-effort, but don't block render.
+    const loadQuotes = useCallback(async (forceRefresh = false) => {
+        if (quotes.length > 0 && !forceRefresh) return;
+        setIsRefreshing(true);
+        setInitialError(null);
+        try {
+            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 });
+            setQuotes(Array.isArray(fresh) ? fresh : []);
+            setInitialError(null);
+        } catch (err) {
+            console.warn("Failed to load quotes:", err);
+            setInitialError(err);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [quotes.length, setQuotes]);
+
     useEffect(() => {
-        let cancelled = false;
-        const loadQuotes = async () => {
-            // If we already have cached quotes, don't block on refresh.
-            if (quotes.length > 0) return;
-            setIsRefreshing(true);
-            try {
-                const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 });
-                if (cancelled) return;
-                setQuotes(Array.isArray(fresh) ? fresh : []);
-                setInitialError(null);
-            } catch (err) {
-                if (cancelled) return;
-                console.warn("Failed to load quotes:", err);
-                setInitialError(err);
-            } finally {
-                if (!cancelled) setIsRefreshing(false);
-            }
-        };
         loadQuotes();
-        return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [loadQuotes]);
 
     useSupabaseRealtime(
         ["quotes"],
@@ -315,6 +310,24 @@ export default function QuotesPage() {
                         </div>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6">
+                        {initialError && (
+                            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3 mb-4">
+                                <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">
+                                    {quotes.length > 0
+                                        ? "Could not refresh quotes. Showing cached data."
+                                        : "Could not load quotes. Try again or refresh the page."}
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => loadQuotes(true)}
+                                    disabled={isRefreshing}
+                                    className="shrink-0 gap-1"
+                                >
+                                    {isRefreshing ? "Loading…" : "Try again"}
+                                </Button>
+                            </div>
+                        )}
                         {isLoading ? (
                             viewMode === 'list' ? (
                                 <QuoteList isLoading={true} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
+import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
@@ -108,19 +109,24 @@ export default function InvoicePDF() {
 
     const loadInvoiceData = async () => {
         try {
-            const invoiceRecord = await Invoice.get(invoiceId);
+            const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), 25000, 1);
             if (!invoiceRecord) {
                 setIsLoading(false);
                 return;
             }
-            
-            const [clientData, userData, bankingData] = await Promise.all([
-                Client.get(invoiceRecord.client_id),
-                User.me(),
-                invoiceRecord.banking_detail_id 
-                    ? BankingDetail.get(invoiceRecord.banking_detail_id).catch(() => null)
-                    : Promise.resolve(null)
-            ]);
+
+            const [clientData, userData, bankingData] = await withTimeoutRetry(
+                () =>
+                    Promise.all([
+                        Client.get(invoiceRecord.client_id),
+                        User.me(),
+                        invoiceRecord.banking_detail_id
+                            ? BankingDetail.get(invoiceRecord.banking_detail_id).catch(() => null)
+                            : Promise.resolve(null),
+                    ]),
+                25000,
+                1
+            );
             
             // Normalize items so templates always get service_name, quantity, unit_price, total_price
             const items = Array.isArray(invoiceRecord.items)

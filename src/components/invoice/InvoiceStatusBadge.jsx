@@ -83,7 +83,7 @@ function InvoiceStatusBadge({ status, size = 'default' }) {
   return (
     <Badge
       variant="outline"
-      className={`${config.className} ${sizeClasses[size]} flex items-center gap-1 font-medium border rounded-full`}
+      className={`status-pill ${config.className} ${sizeClasses[size]} flex items-center gap-1 font-medium border rounded-full`}
       title={config.description}
     >
       <Icon className="w-3 h-3" />
