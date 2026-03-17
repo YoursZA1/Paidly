@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Invoice } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Expense } from '@/api/entities';
+import { useAppStore } from '@/stores/useAppStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,13 +23,20 @@ import { format } from 'date-fns';
 import { startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 
+const REPORTS_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
+
 export default function Reports() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [invoices, setInvoices] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const storeInvoices = useAppStore((s) => s.invoices);
+  const storeExpenses = useAppStore((s) => s.expenses);
+  const storeUser = useAppStore((s) => s.userProfile);
+  const hasStoreData = (storeInvoices?.length > 0) || (storeExpenses?.length > 0) || storeUser != null;
+  const hadDataOnMount = useRef(hasStoreData);
+  const [invoices, setInvoices] = useState(storeInvoices ?? []);
+  const [expenses, setExpenses] = useState(storeExpenses ?? []);
+  const [user, setUser] = useState(storeUser ?? null);
+  const [isLoading, setIsLoading] = useState(!hasStoreData);
 
   useEffect(() => {
     loadData();
@@ -36,12 +44,12 @@ export default function Reports() {
   }, []);
 
   const loadData = async () => {
-    setIsLoading(true);
+    if (!hadDataOnMount.current) setIsLoading(true);
     try {
       const [invoicesData, userData, expensesData] = await Promise.all([
-        Invoice.list('-created_date'),
+        Invoice.list('-created_date', REPORTS_LIST_OPTS),
         User.me(),
-        Expense.list('-date', 500),
+        Expense.list('-date', REPORTS_LIST_OPTS),
       ]);
       setInvoices(invoicesData || []);
       setUser(userData);

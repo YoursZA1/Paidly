@@ -272,7 +272,7 @@ export default function Signup() {
     <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x overflow-auto">
       {/* Popup after Create account: check your email for confirmation link (step 2) */}
       <Dialog open={showEmailConfirmPopup} onOpenChange={(open) => !open && setShowEmailConfirmPopup(false)}>
-        <DialogContent className="sm:max-w-md rounded-2xl border-border" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-border" onPointerDownOutside={(e) => e.preventDefault()} aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="h-5 w-5 shrink-0" />

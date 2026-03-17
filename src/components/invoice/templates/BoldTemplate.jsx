@@ -116,7 +116,6 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                                 <tr key={index} className="border-b border-slate-50">
                                     <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 min-w-0">
                                         <p className="font-semibold text-gray-900 text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
-                                        {item.description && <p className="text-xs text-gray-500 mt-0.5 truncate">{item.description}</p>}
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3.5 text-center text-gray-700 tabular-nums whitespace-nowrap">{item.quantity}</td>
                                     <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
@@ -212,11 +211,24 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                 </section>
             )}
 
-            {/* Notes */}
-            {invoice.notes && (
+            {/* Notes: invoice notes + line-item notes */}
+            {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
                 <section className="p-4 bg-gray-100 rounded-lg">
                     <h3 className="font-black text-gray-700 mb-2 uppercase text-sm">Notes</h3>
-                    <p className="text-gray-600 text-sm whitespace-pre-line">{invoice.notes}</p>
+                    {invoice.notes && <p className="text-gray-600 text-sm whitespace-pre-line">{invoice.notes}</p>}
+                    {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
+                        <div className={invoice.notes ? 'mt-3 pt-3 border-t border-gray-300' : ''}>
+                            <p className="text-xs font-black text-gray-600 uppercase tracking-wider mb-1.5">Service / line item notes</p>
+                            <ul className="text-gray-600 text-sm list-none space-y-1">
+                                {invoice.items.filter((item) => item.description).map((item, idx) => (
+                                    <li key={idx}>
+                                        <span className="font-semibold text-gray-900">{item.service_name || item.name || 'Item'}:</span>{' '}
+                                        <span className="whitespace-pre-line">{item.description}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </section>
             )}
 

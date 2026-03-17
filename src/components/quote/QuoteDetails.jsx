@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "../CurrencySelector";
 import { User, Service } from "@/api/entities";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "../services/ServiceForm";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
 
@@ -746,7 +746,8 @@ export default function QuoteDetails({
         </motion.div>
         
         <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
-            <DialogContent>
+            <DialogContent aria-describedby={undefined}>
+                <DialogTitle className="sr-only">Add service</DialogTitle>
                 <ServiceForm 
                     onSave={handleSaveNewService}
                     onCancel={() => setIsAddingService(false)}

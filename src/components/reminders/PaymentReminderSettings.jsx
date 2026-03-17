@@ -219,7 +219,7 @@ export default function PaymentReminderSettings() {
 
                 {/* Edit/Add Rule Dialog */}
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl" aria-describedby={undefined}>
                         <DialogHeader>
                             <DialogTitle>{editingRule?.id ? 'Edit Reminder Rule' : 'New Reminder Rule'}</DialogTitle>
                         </DialogHeader>

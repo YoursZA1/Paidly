@@ -135,7 +135,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && phase === 'form' && onClose()}>
-      <DialogContent className={showSuccess ? 'sm:max-w-md' : ''}>
+      <DialogContent className={showSuccess ? 'sm:max-w-md' : ''} aria-describedby={undefined}>
         <AnimatePresence mode="wait">
           {showForm && (
             <motion.div

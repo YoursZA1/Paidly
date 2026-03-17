@@ -164,7 +164,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg" aria-describedby={undefined}>
                 <DialogHeader>
                     <DialogTitle>New Message</DialogTitle>
                 </DialogHeader>

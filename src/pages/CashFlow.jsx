@@ -31,11 +31,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const CASHFLOW_PAGE_QUERY_KEY = ['cashflow-page'];
 
+const CASHFLOW_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
+
 async function fetchCashFlowPageData() {
     const [expensesData, invoicesData, paymentsData, userData] = await Promise.all([
-        Expense.list("-date"),
-        Invoice.list("-created_date"),
-        Payment.list("-payment_date"),
+        Expense.list("-date", CASHFLOW_LIST_OPTS),
+        Invoice.list("-created_date", CASHFLOW_LIST_OPTS),
+        Payment.list("-payment_date", CASHFLOW_LIST_OPTS),
         User.me(),
     ]);
     return {
@@ -53,16 +55,29 @@ export default function CashFlowPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const setExpensesInStore = useAppStore((s) => s.setExpenses);
+    const storeExpensesForInit = useAppStore((s) => s.expenses);
+    const storeInvoices = useAppStore((s) => s.invoices);
+    const storePayments = useAppStore((s) => s.payments);
+    const storeUser = useAppStore((s) => s.userProfile);
+    const hasStoreData = (storeExpensesForInit?.length > 0) || (storeInvoices?.length > 0) || (storePayments?.length > 0) || storeUser != null;
     const { data, isLoading, error } = useQuery({
         queryKey: CASHFLOW_PAGE_QUERY_KEY,
         queryFn: fetchCashFlowPageData,
         staleTime: 5 * 60 * 1000,
         refetchOnMount: false,
+        initialData: hasStoreData
+            ? {
+                expenses: storeExpensesForInit ?? [],
+                invoices: storeInvoices ?? [],
+                payments: storePayments ?? [],
+                user: storeUser ?? null,
+            }
+            : undefined,
     });
-    const expensesFromQuery = data?.expenses ?? [];
-    const payments = data?.payments ?? [];
-    const invoices = data?.invoices ?? [];
-    const user = data?.user ?? null;
+    const expensesFromQuery = data?.expenses ?? storeExpensesForInit ?? [];
+    const payments = data?.payments ?? storePayments ?? [];
+    const invoices = data?.invoices ?? storeInvoices ?? [];
+    const user = data?.user ?? storeUser ?? null;
 
     useEffect(() => {
         if (data?.expenses) setExpensesInStore(data.expenses);

@@ -156,7 +156,7 @@ export default function BudgetsPage() {
             </div>
 
             <Dialog open={showBudgetForm} onOpenChange={setShowBudgetForm}>
-                <DialogContent>
+                <DialogContent aria-describedby={undefined}>
                     <DialogHeader>
                         <DialogTitle>{editingBudget ? 'Edit Budget' : 'Set New Budget'}</DialogTitle>
                     </DialogHeader>

@@ -90,6 +90,25 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: "#F15A24",
     fontWeight: "bold"
+  },
+
+  notesSection: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTop: "1px solid #eee"
+  },
+
+  notesTitle: {
+    fontSize: 10,
+    fontWeight: "bold",
+    marginBottom: 6,
+    color: "#333"
+  },
+
+  notesText: {
+    fontSize: 9,
+    lineHeight: 1.4,
+    color: "#555"
   }
 });
 
@@ -157,6 +176,14 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
             Total: {fmt(invoice.total)}
           </Text>
         </View>
+
+        {/* Notes: invoice notes + service/line item notes */}
+        {invoice.notes && (
+          <View style={styles.notesSection}>
+            <Text style={styles.notesTitle}>Notes</Text>
+            <Text style={styles.notesText}>{invoice.notes}</Text>
+          </View>
+        )}
 
       </Page>
     </Document>

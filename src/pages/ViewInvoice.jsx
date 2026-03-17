@@ -96,10 +96,14 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 setPayments(paymentsData || []);
                 setPaymentSchedule(invoiceData.payment_schedule || []);
             } catch (relatedErr) {
-                // If related data fails to load, still set the invoice
+                // If related data fails to load, still set the invoice; clear related so UI doesn't read null refs
                 if (!mountedRef.current) return;
                 console.warn("Some related data failed to load:", relatedErr);
                 setInvoice(invoiceWithItems);
+                setClient(null);
+                setCompany(null);
+                setBankingDetail(null);
+                setPayments([]);
             }
         } catch (err) {
             if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
@@ -345,7 +349,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                             <Button
                                 size="sm"
                                 onClick={handleSendEmail}
-                                disabled={isSending}
+                                disabled={isSending || !invoice}
                                 className="bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
                             >
                                 <Mail className="w-4 h-4 shrink-0" />
@@ -417,9 +421,9 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                                 <div className="grid md:grid-cols-2 gap-8 mb-8">
                                     <div>
                                         <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Payable To</h3>
-                                        <p className="font-medium text-gray-900">{client.name}</p>
-                                        {client.address && <p className="text-sm text-gray-600 mt-0.5">{client.address}</p>}
-                                        {client.email && <p className="text-sm text-gray-600">{client.email}</p>}
+                                        <p className="font-medium text-gray-900">{client?.name ?? '—'}</p>
+                                        {client?.address && <p className="text-sm text-gray-600 mt-0.5">{client.address}</p>}
+                                        {client?.email && <p className="text-sm text-gray-600">{client.email}</p>}
                                     </div>
                                     <div className="text-right md:text-right">
                                         <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>

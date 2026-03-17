@@ -97,11 +97,24 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                 </table>
             </div>
 
-            {/* Notes */}
-            {invoice.notes && (
+            {/* Notes: invoice notes + line-item notes */}
+            {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
                 <div className="mb-8">
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Notes</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{invoice.notes}</p>
+                    {invoice.notes && <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{invoice.notes}</p>}
+                    {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
+                        <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
+                            <ul className="text-sm text-muted-foreground list-none space-y-1">
+                                {invoice.items.filter((item) => item.description).map((item, idx) => (
+                                    <li key={idx}>
+                                        <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
+                                        <span className="whitespace-pre-line">{item.description}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
             )}
 

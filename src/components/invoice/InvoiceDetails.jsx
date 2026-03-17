@@ -19,7 +19,7 @@ import {
 import { useAuth } from "@/components/auth/AuthContext";
 import { mapCatalogToLineItem } from "@/services/CatalogSyncService";
 import { Service } from "@/api/entities";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "@/components/services/ServiceForm";
 import { formatCurrency } from "@/components/CurrencySelector";
 
@@ -584,7 +584,8 @@ export default function InvoiceDetails({
     </div>
 
     <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
-      <DialogContent className="max-w-2xl max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-xl">
+      <DialogContent className="max-w-2xl max-h-[calc(100vh-2rem)] sm:max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-xl" aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Add service</DialogTitle>
         <div className="flex-1 min-h-0 overflow-y-auto p-6 pt-12 pb-6">
           <ServiceForm
             onSave={handleSaveNewService}

@@ -98,7 +98,6 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                                 <tr key={index} className="border-b border-slate-50">
                                     <td className="pl-2 pr-2 sm:pl-3 sm:pr-3 py-2.5 sm:py-3.5 min-w-0">
                                         <p className="font-medium text-foreground text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
-                                        {item.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.description}</p>}
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3.5 text-center text-foreground tabular-nums whitespace-nowrap">{item.quantity}</td>
                                     <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
@@ -194,11 +193,24 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 </section>
             )}
 
-            {/* Notes */}
-            {invoice.notes && (
+            {/* Notes: invoice notes + line-item notes */}
+            {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
                 <section className="p-4 bg-muted rounded-xl">
                     <h3 className="font-bold text-foreground mb-2 text-sm">Notes</h3>
-                    <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>
+                    {invoice.notes && <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>}
+                    {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
+                        <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
+                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
+                            <ul className="text-muted-foreground text-sm list-none space-y-1">
+                                {invoice.items.filter((item) => item.description).map((item, idx) => (
+                                    <li key={idx}>
+                                        <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
+                                        <span className="whitespace-pre-line">{item.description}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </section>
             )}
 

@@ -171,7 +171,7 @@ export default function TaskSettingsPage() {
                 </Card>
 
                 <Dialog open={showForm} onOpenChange={setShowForm}>
-                    <DialogContent>
+                    <DialogContent aria-describedby={undefined}>
                         <DialogHeader>
                             <DialogTitle>{editingRule ? 'Edit Rule' : 'Create Assignment Rule'}</DialogTitle>
                         </DialogHeader>

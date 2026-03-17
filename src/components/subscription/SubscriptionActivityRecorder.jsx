@@ -117,7 +117,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
           Record Activity
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Record Subscription Activity</DialogTitle>
         </DialogHeader>

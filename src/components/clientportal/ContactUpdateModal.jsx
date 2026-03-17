@@ -39,7 +39,8 @@ export default function ContactUpdateModal({ isOpen, onClose, client, onUpdate }
     if (success) {
         return (
             <Dialog open={isOpen} onOpenChange={onClose}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-md" aria-describedby={undefined}>
+                    <DialogTitle className="sr-only">Contact information updated</DialogTitle>
                     <div className="py-8 text-center">
                         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <CheckCircle className="w-10 h-10 text-green-600" />

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { uploadAndSaveLogo } from "./SetupWizard.uploadLogo";
 import PropTypes from "prop-types";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { User, BankingDetail } from "@/api/entities";
 
 /**
@@ -156,7 +156,8 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onComplete(); }}>
-      <DialogContent className="sm:max-w-lg p-0 overflow-hidden border-0 bg-transparent shadow-none">
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden border-0 bg-transparent shadow-none" aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Setup wizard</DialogTitle>
       <form className="bg-card border border-border rounded-xl shadow-lg p-8 max-w-lg w-full" onSubmit={handleSubmit}>
         <div className="mb-6">
           <div className="text-xs text-muted-foreground mb-1">Step {step + 1} of {steps.length}</div>

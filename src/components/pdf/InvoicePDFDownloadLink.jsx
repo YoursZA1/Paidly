@@ -21,9 +21,9 @@ function mapToInvoiceData(invoice, client, user) {
     client?.email ||
     "";
 
-  const items = (invoice?.items || []).map((item) => ({
-    description:
-      item.service_name || item.name || item.description || "Item",
+  const rawItems = invoice?.items || [];
+  const items = rawItems.map((item) => ({
+    description: item.service_name || item.name || item.description || "Item",
     qty: Number(item.quantity ?? item.qty ?? 1),
     price: Number(item.unit_price ?? item.rate ?? item.price ?? 0).toFixed(2),
     total: Number(
@@ -33,6 +33,21 @@ function mapToInvoiceData(invoice, client, user) {
           Number(item.unit_price ?? item.rate ?? item.price ?? 0))
     ).toFixed(2),
   }));
+  const lineItemNotes = rawItems
+    .filter((item) => item.description)
+    .map((item) => ({
+      label: item.service_name || item.name || "Item",
+      note: item.description,
+    }));
+  const notes = [
+    invoice?.notes?.trim(),
+    lineItemNotes.length > 0
+      ? "Service / line item notes:\n" +
+        lineItemNotes.map(({ label, note }) => `${label}: ${note}`).join("\n")
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const subtotal = Number(
     invoice?.subtotal ?? invoice?.total_amount ?? 0
@@ -68,6 +83,7 @@ function mapToInvoiceData(invoice, client, user) {
       email: client?.email || "",
     },
     items,
+    notes,
     subtotal,
     total,
     currency,

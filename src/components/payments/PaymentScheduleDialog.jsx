@@ -160,7 +160,7 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Create Payment Schedule - Invoice #{invoice.invoice_number}</DialogTitle>
           <p className="text-sm text-gray-600 mt-1">

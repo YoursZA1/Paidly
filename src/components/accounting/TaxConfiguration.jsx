@@ -137,7 +137,7 @@ export default function TaxConfiguration({ user, onSave }) {
                   Add Profile
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent aria-describedby={undefined}>
                 <DialogHeader>
                   <DialogTitle>Create Tax Profile</DialogTitle>
                 </DialogHeader>
