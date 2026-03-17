@@ -274,7 +274,7 @@ export default function EditInvoice() {
                     <div className="flex-1">
                         <div className="flex items-center gap-3">
                             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Edit Invoice #{invoiceData.invoice_number}</h1>
-                            <InvoiceStatusBadge status={invoiceData.status || 'draft'} size="small" />
+                            <InvoiceStatusBadge status={invoiceData.status || 'draft'} />
                         </div>
                         <p className="text-sm sm:text-base text-gray-600 mt-1">Update details for this invoice.</p>
                     </div>

@@ -58,7 +58,7 @@ const InvoiceRow = React.memo(function InvoiceRow({ invoice, virtualRow, getClie
                 {invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "N/A"}
             </TableCell>
             <TableCell className="invoice-col-status text-center">
-                <InvoiceStatusBadge status={invoice.status || "draft"} size="small" />
+                <InvoiceStatusBadge status={invoice.status || "draft"} />
             </TableCell>
             <TableCell className="invoice-col-actions text-center">
                 <div className="flex justify-center">
@@ -96,7 +96,7 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
                     ) : (
                         <span className="text-[10px] text-muted-foreground">No payments</span>
                     )}
-                    <InvoiceStatusBadge status={invoice.status || "draft"} size="small" />
+                    <InvoiceStatusBadge status={invoice.status || "draft"} />
                 </div>
             </Link>
             <div className="flex items-center border-l border-border shrink-0" onClick={(e) => e.preventDefault()}>

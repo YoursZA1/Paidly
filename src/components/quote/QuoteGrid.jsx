@@ -1,20 +1,10 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { formatCurrency } from "../CurrencySelector";
 import QuoteActions from "./QuoteActions";
-import QuoteStatusTracker from "./QuoteStatusTracker";
-
-const statusStyles = {
-    draft: "bg-muted text-muted-foreground border-border",
-    sent: "bg-primary/15 text-primary border-primary/30",
-    viewed: "bg-purple-100 text-purple-700 border-purple-200",
-    accepted: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    rejected: "bg-rose-100 text-rose-700 border-rose-200",
-    expired: "bg-orange-100 text-orange-700 border-orange-200"
-};
+import QuoteStatusBadge from "./QuoteStatusBadge";
 
 export default function QuoteGrid({ quotes, clients, isLoading, userCurrency, onActionSuccess }) {
     const getClientName = (clientId) => {
@@ -48,9 +38,7 @@ export default function QuoteGrid({ quotes, clients, isLoading, userCurrency, on
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <p className="text-sm text-muted-foreground">{quote.quote_number}</p>
-                                    <Badge variant="secondary" className={`${statusStyles[quote.status || 'draft']} border text-[10px] px-1.5 py-0 h-5`}>
-                                        {(quote.status || 'draft').replace('_', ' ')}
-                                    </Badge>
+                                    <QuoteStatusBadge status={quote.status || "draft"} />
                                 </div>
                             </div>
                             <QuoteActions 
@@ -65,7 +53,6 @@ export default function QuoteGrid({ quotes, clients, isLoading, userCurrency, on
                         </p>
 
                         <div className="flex flex-col gap-4 pt-4 border-t border-border">
-                            <QuoteStatusTracker status={quote.status} />
                             <div className="flex justify-between items-end">
                                 <div>
                                     <p className="text-sm font-bold text-foreground text-lg">

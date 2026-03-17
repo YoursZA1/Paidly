@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/components/CurrencySelector';
 import QuoteActions from '@/components/quote/QuoteActions';
+import QuoteStatusTracker from '@/components/quote/QuoteStatusTracker';
 import LogoImage from '@/components/shared/LogoImage';
 
 export default function ViewQuote() {
@@ -237,8 +238,16 @@ export default function ViewQuote() {
                         </Card>
                     </div>
 
-                     {/* Actions */}
-                    <div className="lg:col-span-1">
+                     {/* Sidebar: Status timeline + Actions */}
+                    <div className="lg:col-span-1 space-y-6">
+                        <Card className="shadow-lg">
+                            <CardHeader>
+                                <h3 className="font-bold text-lg">Status</h3>
+                            </CardHeader>
+                            <CardContent>
+                                <QuoteStatusTracker status={quote.status} />
+                            </CardContent>
+                        </Card>
                         <Card className="shadow-lg">
                             <CardHeader>
                                 <h3 className="font-bold text-lg">Actions</h3>
