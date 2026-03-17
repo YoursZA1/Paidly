@@ -61,10 +61,11 @@ export const useAppStore = create((set, get) => ({
       }
 
       const settled = await Promise.allSettled([
-        safe("invoices.list", () => Invoice.list("-created_date"), [], 30000, 1),
-        safe("clients.list", () => Client.list(), [], 30000, 1),
-        safe("payments.list", () => Payment.list(), [], 30000, 0),
-        safe("invoiceViews.list", () => InvoiceView.list(), [], 30000, 0),
+        // Keep app shell responsive: prefer cached data quickly, refresh in background.
+        safe("invoices.list", () => Invoice.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
+        safe("clients.list", () => Client.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
+        safe("payments.list", () => Payment.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
+        safe("invoiceViews.list", () => InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
         safe("expenses.list", () => Expense.list("-date", 100), [], 30000, 0),
       ]);
 

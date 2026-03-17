@@ -293,10 +293,11 @@ class EntityManager {
             orgId = await this.ensureUserHasOrganization(userId);
           } catch (error) {
             console.error('Error ensuring organization in get():', error);
-            // Continue without org_id filter if we can't ensure organization
+            // Do not continue without scoping — it can leak cross-tenant data if RLS is misconfigured.
+            orgId = null;
           }
 
-          if (orgId || this.entityName === 'Note') {
+          if (orgId || this.entityName === 'Note' || this.entityName === 'Package') {
             const table = this.entityName.toLowerCase() + 's';
             const supabaseTable = table === 'services' ? 'services' :
                                  table === 'clients' ? 'clients' :
@@ -320,6 +321,9 @@ class EntityManager {
               if (supabaseTable === 'notes') {
                 query = query.eq('user_id', userId);
               } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+                if (!orgId) {
+                  throw new Error('Unable to determine organization for current user');
+                }
                 query = query.eq('org_id', orgId);
               }
               // packages: RLS enforces visibility (platform or own org)
@@ -425,7 +429,9 @@ class EntityManager {
   async list(sortBy = '', options = {}) {
     const opts = typeof options === 'number' ? { limit: options } : options;
     const table = this.entityName.toLowerCase() + 's';
-    const largeTables = ['invoices', 'quotes', 'clients', 'expenses'];
+    // Default-limit large tables to prevent pulling entire tenant datasets on first load.
+    // Note: payments and invoice_views can grow unbounded and were causing 30s timeouts.
+    const largeTables = ['invoices', 'quotes', 'clients', 'expenses', 'payments', 'invoice_views', 'message_logs', 'document_sends'];
     const useDefaultLimit = largeTables.includes(table) && opts.limit == null;
     const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
     const offset = opts.offset ?? 0;

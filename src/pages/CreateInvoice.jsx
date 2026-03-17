@@ -91,7 +91,7 @@ export default function CreateInvoice() {
         // Fetch a small "recent" slice first so the form becomes usable quickly.
         // Then hydrate larger lists in the background (best-effort).
         const RECENT_LIMIT = 50;
-        const FULL_LIMIT = 500;
+        const FULL_LIMIT = 200;
 
         const [clientsList, servicesList, bankingList, quoteData] = await Promise.all([
           safe("createInvoice.clients.list(recent)", () => Client.list("-created_date", { limit: RECENT_LIMIT, maxWaitMs: 4000 }), [], 12000, 0),
@@ -190,6 +190,13 @@ export default function CreateInvoice() {
 
         // Background hydration: fetch more rows without blocking the UI.
         // This reduces the chance that heavy orgs stall initial render.
+        const shouldHydrateClients = Array.isArray(clientsList) && clientsList.length >= RECENT_LIMIT;
+        const shouldHydrateServices = Array.isArray(servicesList) && servicesList.length >= RECENT_LIMIT;
+        if (!shouldHydrateClients && !shouldHydrateServices) {
+          // If we didn't even fill the recent slice, avoid extra background work.
+          return;
+        }
+
         setTimeout(() => {
           if (cancelled) return;
           void (async () => {
@@ -201,7 +208,7 @@ export default function CreateInvoice() {
             if (Array.isArray(moreClients) && moreClients.length > (clientsList?.length || 0)) setClients(moreClients);
             if (Array.isArray(moreServices) && moreServices.length > (servicesList?.length || 0)) setServices(moreServices);
           })();
-        }, 0);
+        }, 1500);
       } catch (err) {
         console.error("Error loading data:", err);
         setError("Failed to load data. Please refresh.");
