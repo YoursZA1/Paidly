@@ -29,6 +29,23 @@ export function getAppDashboardUrl(): string {
     return appOrigin + createPageUrl('Dashboard');
 }
 
+/**
+ * Origin to use for OAuth redirect (Google, etc.).
+ * Use VITE_APP_URL when set (e.g. production) so callback lands on the app domain;
+ * otherwise use current origin (e.g. http://localhost:5173 in dev).
+ * This value must be allowlisted in Supabase: Authentication → URL Configuration → Redirect URLs.
+ */
+export function getOAuthRedirectOrigin(): string {
+    if (typeof window === 'undefined') return '';
+    const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
+    try {
+        if (appUrl) return new URL(appUrl).origin;
+    } catch {
+        // ignore
+    }
+    return window.location.origin;
+}
+
 /** True when we should send the user to the app domain after login/signup (e.g. signed in on www → go to app). */
 export function shouldRedirectToAppAfterAuth(): boolean {
     const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();

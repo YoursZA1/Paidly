@@ -1,5 +1,8 @@
-const getServerBaseUrl = () => {
-  return import.meta.env.VITE_SERVER_URL || "http://localhost:5179";
+// In dev: use same origin so Vite proxy forwards /api to the backend. In production: use VITE_SERVER_URL.
+const getPayfastApiBase = () => {
+  if (import.meta.env.DEV) return "";
+  const url = (import.meta.env.VITE_SERVER_URL || "").replace(/\/$/, "");
+  return url || "http://localhost:5179";
 };
 
 const submitPayfastForm = (payfastUrl, fields) => {
@@ -48,7 +51,7 @@ const PayfastService = {
 
     let response;
     try {
-      response = await fetch(`${getServerBaseUrl()}/api/payfast/once`, {
+      response = await fetch(`${getPayfastApiBase()}/api/payfast/once`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -58,7 +61,10 @@ const PayfastService = {
     } catch (networkError) {
       const msg = networkError?.message || String(networkError);
       if (msg.includes("Failed to fetch") || msg.includes("Connection refused") || msg.includes("NetworkError")) {
-        throw new Error("Payment server is unavailable. Please try again later or ensure the backend is running (npm run server).");
+        const hint = import.meta.env.DEV
+          ? "Start the backend with: npm run server"
+          : "Set VITE_SERVER_URL to your payment API and ensure the server is running";
+        throw new Error(`Payment server is unavailable. ${hint}.`);
       }
       throw networkError;
     }
@@ -103,7 +109,7 @@ const PayfastService = {
 
     let response;
     try {
-      response = await fetch(`${getServerBaseUrl()}/api/payfast/subscription`, {
+      response = await fetch(`${getPayfastApiBase()}/api/payfast/subscription`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -113,7 +119,10 @@ const PayfastService = {
     } catch (networkError) {
       const msg = networkError?.message || String(networkError);
       if (msg.includes("Failed to fetch") || msg.includes("Connection refused") || msg.includes("NetworkError")) {
-        throw new Error("Payment server is unavailable. Please try again later or ensure the backend is running (npm run server).");
+        const hint = import.meta.env.DEV
+          ? "Start the backend with: npm run server"
+          : "Set VITE_SERVER_URL to your payment API and ensure the server is running";
+        throw new Error(`Payment server is unavailable. ${hint}.`);
       }
       throw networkError;
     }

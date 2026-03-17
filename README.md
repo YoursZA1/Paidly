@@ -61,7 +61,7 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    | `VITE_SERVER_URL` | No | Backend API base URL (default: `http://localhost:5179`). |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `invoicebreek`). |
 
-If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Store credentials securely:** never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production.
+If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Don't expose keys:** Never commit `.env` or paste API keys in code, issues, or chat. Use `.env.*.example` as templates; keep real values only in local `.env` (gitignored) and in your host's environment (e.g. Vercel). The repo uses `.cursorignore` so env and auth state are not included in AI context. If a key was ever exposed, rotate it in Supabase and update env. Never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production.
 
 ## Supabase & database
 

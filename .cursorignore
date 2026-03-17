@@ -1,0 +1,19 @@
+# Keep keys and secrets out of AI context (same syntax as .gitignore)
+.env
+.env.*
+!.env.example
+!.env*.example
+**/.env
+**/.env.*
+**/.env.development
+**/.env.production
+
+# Playwright auth state (contains real session tokens and user data)
+playwright/.auth/
+
+# Certificates and secret keys
+*.pem
+*.key
+**/secrets/
+**/*secret*
+**/service_role*

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
+import { getOAuthRedirectOrigin } from "@/utils";
 
 /** Google "G" logo - multicolor */
 function GoogleIcon({ className = "w-5 h-5" }) {
@@ -30,7 +31,7 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [error, setError] = useState("");
 
-  const redirectTo = typeof window !== "undefined" ? window.location.origin : null;
+  const redirectTo = getOAuthRedirectOrigin() || null;
 
   const handleOAuth = async (provider) => {
     setError("");
