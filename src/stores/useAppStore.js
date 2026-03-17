@@ -63,18 +63,14 @@ export const useAppStore = create((set, get) => ({
       }
 
       const settled = await Promise.allSettled([
-        // Keep app shell responsive: prefer cached data quickly, refresh in background.
-        safe("invoices.list", () => Invoice.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
-        safe("clients.list", () => Client.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
-        safe("payments.list", () => Payment.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
-        safe("invoiceViews.list", () => InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
-        safe("expenses.list", () => Expense.list("-date", 100), [], 30000, 0),
-        // These pages can be heavy; keep small warm caches for fast navigation.
-        safe("quotes.list", () => Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
-        safe("payslips.list", () => Payroll.list("-created_date", { limit: 50, maxWaitMs: 4000 }), [], 30000, 0),
+        // Keep app shell responsive: prefer small, recent slices and strict max wait.
+        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
+        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
+        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 15000, 0),
+        safe("expenses.list", () => Expense.list("-date", 50), [], 15000, 0),
       ]);
 
-      const [invoicesData, clientsData, paymentsData, viewsData, expensesData, quotesData, payslipsData] = settled.map((r) =>
+      const [invoicesData, clientsData, paymentsData, expensesData] = settled.map((r) =>
         r.status === "fulfilled" ? r.value : []
       );
 
@@ -92,12 +88,14 @@ export const useAppStore = create((set, get) => ({
 
       set({
         invoices: resolvedInvoices,
-        quotes: Array.isArray(quotesData) ? quotesData : [],
+        // Quotes and payslips are now loaded on-demand by their pages using store-first + background refresh.
+        quotes: get().quotes || [],
         clients: Array.isArray(clientsData) ? clientsData : [],
-        payslips: Array.isArray(payslipsData) ? payslipsData : [],
+        payslips: get().payslips || [],
         userProfile: userData,
         payments: Array.isArray(paymentsData) ? paymentsData : [],
-        invoiceViews: Array.isArray(viewsData) ? viewsData : [],
+        // Invoice views are hydrated lazily on the Invoices page.
+        invoiceViews: get().invoiceViews || [],
         expenses: Array.isArray(expensesData) ? expensesData : [],
         isLoading: false,
         error: null,
