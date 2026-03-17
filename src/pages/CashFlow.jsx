@@ -65,6 +65,7 @@ export default function CashFlowPage() {
         queryFn: fetchCashFlowPageData,
         staleTime: 5 * 60 * 1000,
         refetchOnMount: false,
+        refetchOnWindowFocus: true,
         initialData: hasStoreData
             ? {
                 expenses: storeExpensesForInit ?? [],
@@ -82,6 +83,13 @@ export default function CashFlowPage() {
     useEffect(() => {
         if (data?.expenses) setExpensesInStore(data.expenses);
     }, [data?.expenses, setExpensesInStore]);
+
+    const setPaymentsInStore = useAppStore((s) => s.setPayments);
+    const setInvoicesInStore = useAppStore((s) => s.setInvoices);
+    useEffect(() => {
+        if (data?.payments != null) setPaymentsInStore(data.payments);
+        if (data?.invoices != null) setInvoicesInStore(data.invoices);
+    }, [data?.payments, data?.invoices, setPaymentsInStore, setInvoicesInStore]);
 
     const storeExpenses = useAppStore((s) => s.expenses);
     const addExpenseToStore = useAppStore((s) => s.addExpense);

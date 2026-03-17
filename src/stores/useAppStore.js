@@ -139,6 +139,9 @@ export const useAppStore = create((set, get) => ({
   /** Append or replace invoices (e.g. after create). */
   setInvoices: (invoices) => set({ invoices: Array.isArray(invoices) ? invoices : get().invoices }),
 
+  /** Replace payments list (e.g. after Cash Flow or dashboard fetch). */
+  setPayments: (payments) => set({ payments: Array.isArray(payments) ? payments : get().payments }),
+
   /** Replace quotes list (e.g. after fetch). */
   setQuotes: (quotes) => set({ quotes: Array.isArray(quotes) ? quotes : get().quotes }),
 

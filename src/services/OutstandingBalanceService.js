@@ -5,6 +5,17 @@
 
 import { parseISO, isBefore, startOfDay } from 'date-fns';
 
+function safeParseISO(value) {
+  if (value == null || value === '') return null;
+  const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : null);
+  if (!str) return null;
+  try {
+    return parseISO(str);
+  } catch {
+    return null;
+  }
+}
+
 export const OutstandingBalanceService = {
   /**
    * Calculate outstanding balance for a single invoice
@@ -96,7 +107,8 @@ export const OutstandingBalanceService = {
       const balance = this.calculateInvoiceBalance(invoice, invoicePayments);
 
       if (balance.outstanding > 0) {
-        const invoiceDate = parseISO(invoice.created_date);
+        const dateStr = invoice.created_date || invoice.created_at;
+        const invoiceDate = safeParseISO(dateStr) || today;
         const daysSinceCreation = Math.floor((today - invoiceDate) / (1000 * 60 * 60 * 24));
 
         if (daysSinceCreation <= 30) {
@@ -183,7 +195,9 @@ export const OutstandingBalanceService = {
       const balance = this.calculateInvoiceBalance(invoice, invoicePayments);
 
       if (balance.outstanding > 0) {
-        const dueDate = parseISO(invoice.due_date);
+        const dueStr = invoice.due_date || invoice.delivery_date;
+        const dueDate = safeParseISO(dueStr);
+        if (!dueDate) continue;
 
         if (isBefore(today, dueDate)) {
           status.notDue.amount += balance.outstanding;
@@ -218,7 +232,8 @@ export const OutstandingBalanceService = {
       const balance = this.calculateInvoiceBalance(invoice, invoicePayments);
 
       if (balance.outstanding > 0) {
-        const invoiceDate = parseISO(invoice.created_date);
+        const dateStr = invoice.created_date || invoice.created_at;
+        const invoiceDate = safeParseISO(dateStr) || today;
         const daysSinceCreation = Math.floor((today - invoiceDate) / (1000 * 60 * 60 * 24));
         const isCritical = daysSinceCreation >= thresholdDays || balance.outstanding >= thresholdAmount;
 
@@ -248,10 +263,13 @@ export const OutstandingBalanceService = {
     invoices.forEach(invoice => {
       const invoicePayments = payments.filter(p => p.invoice_id === invoice.id);
       if (invoicePayments.length > 0) {
-        const invoiceDate = parseISO(invoice.created_date);
-        
+        const invDateStr = invoice.created_date || invoice.created_at;
+        const invoiceDate = safeParseISO(invDateStr);
+        if (!invoiceDate) return;
+
         invoicePayments.forEach(payment => {
-          const paymentDate = parseISO(payment.payment_date);
+          const paymentDate = safeParseISO(payment.payment_date || payment.paid_at);
+          if (!paymentDate) return;
           const days = Math.floor((paymentDate - invoiceDate) / (1000 * 60 * 60 * 24));
           totalDays += days;
           paymentCount++;
@@ -307,13 +325,13 @@ export const OutstandingBalanceService = {
     const dateThreshold = new Date(now.getFullYear(), now.getMonth() - monthsBack, now.getDate());
     
     const recentPayments = payments.filter(p => {
-      const paymentDate = parseISO(p.payment_date);
-      return paymentDate >= dateThreshold;
+      const paymentDate = safeParseISO(p.payment_date || p.paid_at);
+      return paymentDate && paymentDate >= dateThreshold;
     });
 
     const recentInvoices = invoices.filter(inv => {
-      const invDate = parseISO(inv.created_date);
-      return invDate >= dateThreshold;
+      const invDate = safeParseISO(inv.created_date || inv.created_at);
+      return invDate && invDate >= dateThreshold;
     });
 
     let totalRecentPaid = 0;

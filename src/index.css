@@ -151,20 +151,48 @@ body {
 .status-pill.expired { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
 .dark .status-pill.expired { background: hsl(25 50% 18%); color: hsl(25 95% 75%); border-color: hsl(25 50% 28%); }
 
-/* Invoice list rows: fixed height and vertical alignment */
+/* Invoice list rows: fixed height and vertical alignment (works with both Grid & Table) */
+.table-header,
+.table-row {
+  display: grid;
+  grid-template-columns: 220px 160px 220px 140px 140px 140px 120px 60px;
+  align-items: center;
+}
 .table-row {
   height: 64px;
   min-height: 64px;
   max-height: 64px;
-  display: grid;
-  align-items: center;
   overflow: hidden;
-  grid-template-columns: 220px 160px 220px 140px 140px 140px 120px 60px;
 }
 .table-row th,
 .table-row td {
   min-height: 0;
   overflow: hidden;
+}
+
+/* When using <table>: first column spacing and alignment */
+.invoice-list-table th:first-child,
+.invoice-list-table td:first-child {
+  padding-left: 24px;
+  text-align: left;
+}
+
+/* First column: allow truncation so long descriptions don’t break layout */
+.invoice-list-table td:first-child {
+  line-height: 1.4;
+  min-width: 0; /* needed for ellipsis in grid/flex */
+}
+/* Premium first column: truncate long text + styling */
+.invoice-list-table .table-row div:first-child {
+  font-weight: 500;
+  color: #2d3748;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Alternative for wrapping with a cap: max-width: 400px; remove the three lines above */
+}
+.dark .invoice-list-table .table-row div:first-child {
+  color: hsl(var(--foreground));
 }
 
 /* Quotes table: 7 columns — Quote # | Client | Project | Amount | Valid Until | Status | Actions */
@@ -181,6 +209,45 @@ body {
 .quote-table-row td {
   min-height: 0;
   overflow: hidden;
+}
+
+/* Invoice line-items table (templates, PDF, preview): fixed column widths — prevents shifting */
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.invoice-table th,
+.invoice-table td {
+  padding: 16px 20px;
+}
+.invoice-table td {
+  line-height: 1.5;
+  vertical-align: middle;
+}
+.invoice-table th:nth-child(1),
+.invoice-table td:nth-child(1) {
+  width: 55%;
+}
+.invoice-table th:nth-child(2),
+.invoice-table td:nth-child(2) {
+  width: 10%;
+  text-align: center;
+}
+.invoice-table th:nth-child(3),
+.invoice-table td:nth-child(3) {
+  width: 17.5%;
+  text-align: right;
+}
+.invoice-table th:nth-child(4),
+.invoice-table td:nth-child(4) {
+  width: 17.5%;
+  text-align: right;
+}
+
+/* Prevent row breaking in PDF/print — keep each line item on one page */
+.invoice-table tr {
+  page-break-inside: avoid;
 }
 
 /* Invoice list: Stripe / Notion / Linear — minimal, confident, not kit-like */

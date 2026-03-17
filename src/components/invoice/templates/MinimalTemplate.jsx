@@ -63,7 +63,7 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
 
             {/* Itemized table: description left, Qty one line, Price/Total room for 6+ digit values */}
             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 rounded-t-lg overflow-hidden mb-6 sm:mb-8">
-                <table className="w-full text-sm min-w-[300px] table-fixed">
+                <table className="invoice-table w-full text-sm min-w-[300px] table-fixed">
                     <colgroup>
                         <col className="w-auto min-w-0" />
                         <col style={{ width: '2.5rem' }} />

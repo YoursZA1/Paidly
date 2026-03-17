@@ -95,7 +95,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             
             {/* Items Table — Project Title left, Qty one line, Price/Total room for 6+ digits */}
             <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="w-full text-sm min-w-[320px] table-fixed">
+                <table className="invoice-table w-full text-sm min-w-[320px] table-fixed">
                     <colgroup>
                         <col className="w-auto min-w-0" />
                         <col style={{ width: '2.5rem' }} />

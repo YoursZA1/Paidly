@@ -348,7 +348,7 @@ function InvoicePreview({
 
               {/* 3. ITEMS TABLE — tabular-nums, right-aligned Price & Total */}
               <div className="flex-1 overflow-x-auto rounded-lg border border-slate-200 mb-4 sm:mb-8">
-                <table className="w-full text-sm text-left min-w-[320px]">
+                <table className="invoice-table w-full text-sm text-left min-w-[320px]">
                   <thead>
                     <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-900">
                       <th className="px-2 py-2 sm:px-4 sm:py-4 text-left">Description</th>

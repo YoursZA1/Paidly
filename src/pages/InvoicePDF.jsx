@@ -81,17 +81,17 @@ export default function InvoicePDF() {
         }
     }, [invoiceId, isDraft]);
 
-    const pdfRef = useRef(null);
+    const printRef = useRef(null);
 
     useEffect(() => {
         if (!autoDownload || isLoading || !invoice) return;
         let cancelled = false;
         const timer = setTimeout(async () => {
-            if (cancelled || !pdfRef.current) return;
+            if (cancelled || !printRef.current) return;
             try {
                 setIsGeneratingPdf(true);
                 const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                await generatePdfFromElement(pdfRef.current, filename);
+                await generatePdfFromElement(printRef.current, filename);
             } catch (e) {
                 if (!cancelled) {
                     console.error('Auto-download PDF failed, falling back to print:', e);
@@ -189,9 +189,19 @@ export default function InvoicePDF() {
                     max-width: 210mm !important;
                     box-sizing: border-box !important;
                 }
+                .print-container {
+                    width: 800px;
+                    margin: 0 auto;
+                }
                 @media print {
                     .no-print { display: none !important; }
-                    body { margin: 0; background-color: white; }
+                    body {
+                        margin: 0;
+                        background-color: white;
+                        font-family: Arial, Helvetica, sans-serif;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
                     .print-container { box-shadow: none !important; margin: 0 !important; border: none !important; }
                     .pdf-page { padding: 0 !important; }
                     .invoice-container {
@@ -202,6 +212,19 @@ export default function InvoicePDF() {
                         -webkit-print-color-adjust: exact;
                         print-color-adjust: exact;
                     }
+                    /* Gold standard: invoice line-items table uses real <table> for PDF/print */
+                    .pdf-content .invoice-table {
+                        display: table !important;
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                        border: 1px solid #ddd;
+                    }
+                    .pdf-content .invoice-table thead { display: table-header-group !important; }
+                    .pdf-content .invoice-table tbody { display: table-row-group !important; }
+                    .pdf-content .invoice-table tr { display: table-row !important; page-break-inside: avoid !important; }
+                    .pdf-content .invoice-table th,
+                    .pdf-content .invoice-table td { display: table-cell !important; }
+                    .pdf-content .invoice-table th { background: #f5e7df !important; }
                     .invoice-container tr,
                     .invoice-container td,
                     .invoice-container th {
@@ -266,11 +289,11 @@ export default function InvoicePDF() {
                         />
                         <Button
                             onClick={async () => {
-                                if (!pdfRef.current || isGeneratingPdf) return;
+                                if (!printRef.current || isGeneratingPdf) return;
                                 setIsGeneratingPdf(true);
                                 try {
                                     const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                                    await generatePdfFromElement(pdfRef.current, filename);
+                                    await generatePdfFromElement(printRef.current, filename);
                                 } catch (e) {
                                     console.error('PDF generation failed, falling back to print:', e);
                                     window.print();
@@ -286,8 +309,8 @@ export default function InvoicePDF() {
                         </Button>
                     </div>
 
-                    <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content invoice-container min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }} ref={pdfRef}>
+                    <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
+                        <div className="pdf-content invoice-container min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }}>
                             <TemplateComponent
                                 invoice={invoice}
                                 client={client}

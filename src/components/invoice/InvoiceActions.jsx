@@ -29,6 +29,7 @@ import { sendDraftInvoice, recordDocumentSend, createTrackableInvoiceLink } from
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { getAutoStatusUpdate, isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
@@ -47,10 +48,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const queryClient = useQueryClient();
     const { recordPayment, isProcessing: isRecordingPayment } = usePaymentActions(invoice, {
         onSuccess: (result) => {
             onActionSuccess?.();
             if (result?.isFullyPaid) onPaymentFullyPaid?.();
+            queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
         },
     });
     const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);

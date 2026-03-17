@@ -48,10 +48,12 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
         // Only check unpaid/partially paid invoices
         if (invoice.status === 'paid') return;
 
-        const dueDate = parseISO(invoice.due_date);
+        const dueStr = invoice.due_date || invoice.delivery_date;
+        if (!dueStr) return;
+        const dueDate = parseISO(dueStr);
         if (dueDate > today) return; // Not overdue
 
-        const daysOverdue = PaymentDateService.calculateDaysOverdue(invoice.due_date);
+        const daysOverdue = PaymentDateService.calculateDaysOverdue(dueStr);
         const category = PaymentDateService.getOverdueCategory(daysOverdue);
 
         // Calculate remaining balance

@@ -7,7 +7,7 @@ import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 
 const BILLING_PORTAL_URL = import.meta.env.VITE_STRIPE_BILLING_PORTAL || "https://paidly.com";
-const CONTACT_SALES_URL = "https://paidly.com/contact";
+const CONTACT_SALES_EMAIL = "support@paidly.co.za";
 
 const TIERS = [
     {
@@ -98,7 +98,7 @@ export default function SubscriptionSettings() {
     };
 
     const handleContactSales = () => {
-        window.open(CONTACT_SALES_URL, "_blank", "noopener,noreferrer");
+        window.location.href = `mailto:${CONTACT_SALES_EMAIL}`;
     };
 
     const handleTierAction = (tier) => {

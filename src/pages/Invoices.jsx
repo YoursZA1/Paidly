@@ -233,6 +233,7 @@ export default function InvoicesPage() {
                 }
             }
             queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
             toast({
                 title: "Import complete",
                 description: `${created} invoice(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,

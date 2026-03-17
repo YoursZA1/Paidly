@@ -38,8 +38,9 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                 const paymentDate = parseISO(payment.payment_date);
                 const invoice = invoices.find(inv => inv.id === payment.invoice_id);
                 
-                if (invoice && invoice.delivery_date) {
-                    const dueDate = parseISO(invoice.delivery_date);
+                const dueStr = invoice?.delivery_date || invoice?.due_date;
+                if (invoice && dueStr) {
+                    const dueDate = parseISO(dueStr);
                     const daysDiff = Math.floor((paymentDate - dueDate) / (1000 * 60 * 60 * 24));
                     
                     if (daysDiff <= 0) {
@@ -76,7 +77,9 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
             const monthEnd = endOfMonth(month);
 
             const monthPayments = payments.filter(p => {
-                const pDate = parseISO(p.payment_date);
+                const dateStr = p.payment_date || p.paid_at;
+                if (!dateStr) return false;
+                const pDate = parseISO(dateStr);
                 return pDate >= monthStart && pDate <= monthEnd;
             });
 

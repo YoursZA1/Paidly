@@ -116,17 +116,17 @@ export const CashFlowService = {
     const currentYear = now.getFullYear();
 
     // Get years from data
-    const allDates = [
-      ...payments.map(p => p.payment_date),
+    const allDateStrings = [
+      ...payments.map(p => p.payment_date || p.paid_at),
       ...expenses.map(e => e.date)
-    ].filter(Boolean);
+    ].filter(d => d != null && typeof d === 'string');
 
-    if (allDates.length === 0) {
+    if (allDateStrings.length === 0) {
       return [];
     }
 
     const minYear = Math.min(
-      ...allDates.map(d => parseISO(d).getFullYear())
+      ...allDateStrings.map(d => parseISO(d).getFullYear())
     );
 
     for (let year = minYear; year <= currentYear; year++) {

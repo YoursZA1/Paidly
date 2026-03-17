@@ -17,6 +17,7 @@ import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
@@ -218,6 +219,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         }
     };
 
+    const queryClient = useQueryClient();
     const { recordPayment } = usePaymentActions(
         invoice ? { ...invoice, payments } : null,
         {
@@ -226,6 +228,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 setPayments(mergedPayments);
                 setPaymentPreset(null);
                 if (isFullyPaid) runPaidConfetti();
+                queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
             },
         }
     );
