@@ -197,7 +197,7 @@ export const OutstandingBalanceService = {
       if (balance.outstanding > 0) {
         const dueStr = invoice.due_date || invoice.delivery_date;
         const dueDate = safeParseISO(dueStr);
-        if (!dueDate) continue;
+        if (!dueDate) return;
 
         if (isBefore(today, dueDate)) {
           status.notDue.amount += balance.outstanding;
