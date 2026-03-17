@@ -86,20 +86,23 @@ const typeSpecificConfig = {
     }
 };
 
-export default function ServiceForm({ service, onSave, onCancel, isSaving = false }) {
+export default function ServiceForm({ service, onSave, onCancel, isSaving = false, defaultType = 'service' }) {
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState({
         // Base Fields
         name: service?.name || "",
-        item_type: service?.item_type || "service",
+        item_type: service?.item_type || defaultType || "service",
         default_unit: service?.default_unit || service?.unit_of_measure || "unit",
         default_rate: service?.default_rate || service?.unit_price || 0,
         tax_category: service?.tax_category || "standard",
         is_active: service?.is_active !== undefined ? service.is_active : true,
         price_locked: service?.price_locked || false,
         
-        // Type-Specific Fields (Product)
+        // Type-Specific Fields (Product + Inventory)
         sku: service?.sku || "",
+        stock_quantity: service?.stock_quantity ?? null,
+        cost_price: service?.cost_price ?? null,
+        low_stock_threshold: service?.low_stock_threshold ?? 5,
         unit: service?.unit || "",
         price: service?.price || 0,
         
@@ -207,7 +210,17 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
             ...(formData.item_type === 'product' && {
                 ...(formData.sku && { sku: formData.sku }),
                 ...(formData.unit && { unit: formData.unit }),
-                ...(formData.price !== undefined && { price: Number(formData.price) || 0 })
+                ...(formData.price !== undefined && { price: Number(formData.price) || 0 }),
+                ...(formData.stock_quantity !== null && formData.stock_quantity !== undefined && {
+                    stock_quantity: Number(formData.stock_quantity),
+                }),
+                ...(formData.cost_price !== null && formData.cost_price !== undefined && {
+                    cost_price: Number(formData.cost_price),
+                }),
+                ...(formData.low_stock_threshold !== null &&
+                    formData.low_stock_threshold !== undefined && {
+                    low_stock_threshold: Number(formData.low_stock_threshold),
+                }),
             }),
             ...(formData.item_type === 'service' && {
                 ...(formData.billing_unit && { billing_unit: formData.billing_unit }),
@@ -427,18 +440,87 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                     {typeSpecificConfig[formData.item_type].label} • Type-Specific Fields
                                 </h3>
 
-                                {/* PRODUCT FIELDS */}
+                                {/* PRODUCT FIELDS (including inventory) */}
                                 {formData.item_type === 'product' && (
                                     <div className="space-y-6">
                                         <div className="space-y-2">
                                             <Label htmlFor="sku" className="text-sm font-semibold text-slate-700 dark:text-slate-300">SKU / Product Code</Label>
                                             <Input
                                                 id="sku"
+                                                data-testid="service-sku"
                                                 value={formData.sku}
                                                 onChange={(e) => handleInputChange('sku', e.target.value)}
                                                 placeholder="e.g., PROD-001, ITEM-SKU-123"
                                                 className="h-12 rounded-xl"
                                             />
+                                        </div>
+                                        <div className="grid md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="stock_quantity" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                    Stock Quantity
+                                                </Label>
+                                                <Input
+                                                    id="stock_quantity"
+                                                    type="number"
+                                                    min="0"
+                                                    data-testid="service-stock-quantity"
+                                                    value={formData.stock_quantity ?? ''}
+                                                    onChange={(e) =>
+                                                        handleInputChange(
+                                                            'stock_quantity',
+                                                            e.target.value === '' ? null : parseInt(e.target.value, 10) || 0
+                                                        )
+                                                    }
+                                                    placeholder="e.g., 100"
+                                                    className="h-12 rounded-xl"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="cost_price" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                    Cost Price
+                                                </Label>
+                                                <div className="relative">
+                                                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
+                                                    <Input
+                                                        id="cost_price"
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        data-testid="service-cost-price"
+                                                        value={formData.cost_price ?? ''}
+                                                        onChange={(e) =>
+                                                            handleInputChange(
+                                                                'cost_price',
+                                                                e.target.value === '' ? null : parseFloat(e.target.value) || 0
+                                                            )
+                                                        }
+                                                        placeholder="0.00"
+                                                        className="h-12 pl-10 rounded-xl"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="low_stock_threshold" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                Low Stock Threshold
+                                            </Label>
+                                            <Input
+                                                id="low_stock_threshold"
+                                                type="number"
+                                                min="0"
+                                                data-testid="service-low-stock-threshold"
+                                                value={formData.low_stock_threshold ?? 5}
+                                                onChange={(e) =>
+                                                    handleInputChange(
+                                                        'low_stock_threshold',
+                                                        e.target.value === '' ? 5 : parseInt(e.target.value, 10) || 0
+                                                    )
+                                                }
+                                                className="h-12 rounded-xl"
+                                            />
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                We’ll use this later to highlight products that are running low.
+                                            </p>
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unit</Label>

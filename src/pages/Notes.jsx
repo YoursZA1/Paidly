@@ -203,6 +203,8 @@ export default function Notes() {
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">Notes</h1>
             <button
               onClick={handleNewNote}
+              data-testid="notes-add"
+              aria-label="Add note"
               className="p-2 bg-orange-500 rounded-xl text-white hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 dark:shadow-orange-900/30"
             >
               <Plus className="w-5 h-5" />
@@ -215,6 +217,7 @@ export default function Notes() {
               placeholder="Search notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="notes-search"
               className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-orange-500/20 dark:focus:ring-orange-500/30"
             />
           </div>
@@ -234,6 +237,7 @@ export default function Notes() {
               <button
                 key={note.id}
                 onClick={() => handleSelectNote(note)}
+                data-testid="note-row"
                 className={`w-full text-left p-4 rounded-2xl transition-all ${
                   selectedNote?.id === note.id
                     ? "bg-orange-50 dark:bg-orange-950/50 ring-1 ring-orange-100 dark:ring-orange-800"
@@ -328,6 +332,7 @@ export default function Notes() {
                 </span>
                 <button
                   onClick={handleDeleteNote}
+                  data-testid="note-delete"
                   className="flex items-center gap-2 text-red-500 dark:text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -341,12 +346,14 @@ export default function Notes() {
               <input
                 value={editTitle}
                 onChange={handleTitleChange}
+                data-testid="note-title"
                 className="w-full text-4xl font-black text-slate-900 dark:text-slate-100 border-none bg-transparent focus:ring-0 mb-6 placeholder-slate-300 dark:placeholder-slate-500"
                 placeholder="Title"
               />
               <textarea
                 value={editContent}
                 onChange={handleContentChange}
+                data-testid="note-body"
                 className="w-full min-h-[70vh] text-lg text-slate-600 dark:text-slate-300 border-none bg-transparent focus:ring-0 leading-relaxed resize-none placeholder-slate-400 dark:placeholder-slate-500"
                 placeholder="Start typing your brilliant business ideas here..."
               />

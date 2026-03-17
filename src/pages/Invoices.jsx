@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Invoice, Client, User, Payment, InvoiceView } from "@/api/entities";
+import { useQueryClient } from "@tanstack/react-query";
+import { Invoice, Client, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,58 +27,54 @@ import { useAppStore } from "@/stores/useAppStore";
 
 const INVOICES_PAGE_QUERY_KEY = ["invoices-page"];
 
-async function fetchInvoicesPageData() {
-    const [invoicesData, clientsData, userData, paymentsData, viewsData] = await Promise.all([
-        Invoice.list("-created_date"),
-        Client.list(),
-        (async () => {
-            try {
-                return await User.me();
-            } catch {
-                return await User.restoreFromSupabaseSession?.().catch(() => null) ?? null;
-            }
-        })(),
-        Payment.list().catch(() => []),
-        InvoiceView.list().catch(() => []),
-    ]);
-    if (!userData) {
-        throw new Error("Not authenticated");
-    }
-    return {
-        invoices: Array.isArray(invoicesData) ? invoicesData : [],
-        clients: Array.isArray(clientsData) ? clientsData : [],
-        userProfile: userData,
-        payments: Array.isArray(paymentsData) ? paymentsData : [],
-        invoiceViews: Array.isArray(viewsData) ? viewsData : [],
-    };
-}
-
 export default function InvoicesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
+    const invoicesFromStore = useAppStore((s) => s.invoices);
+    const clientsFromStore = useAppStore((s) => s.clients);
+    const userProfile = useAppStore((s) => s.userProfile);
+    const [payments, setPayments] = useState([]);
+    const [invoiceViews, setInvoiceViews] = useState([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [initialError, setInitialError] = useState(null);
 
-    const {
-        data,
-        isLoading,
-        error,
-        refetch,
-    } = useQuery({
-        queryKey: INVOICES_PAGE_QUERY_KEY,
-        queryFn: fetchInvoicesPageData,
-        staleTime: 5 * 60 * 1000,
-        refetchOnMount: false,
-    });
+    // On first mount, hydrate payments + invoice views best-effort, but don't block render.
+    useEffect(() => {
+        let cancelled = false;
+        const loadSideData = async () => {
+            setIsRefreshing(true);
+            try {
+                const [paymentsData, viewsData] = await Promise.all([
+                    Payment.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => []),
+                    InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => []),
+                ]);
+                if (cancelled) return;
+                setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+                setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
+                setInitialError(null);
+            } catch (err) {
+                if (cancelled) return;
+                console.warn("Failed to load invoice side data:", err);
+                setInitialError(err);
+            } finally {
+                if (!cancelled) setIsRefreshing(false);
+            }
+        };
+        loadSideData();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
-    const invoices = data?.invoices ?? [];
-    const clients = data?.clients ?? [];
-    const userProfile = data?.userProfile ?? null;
-    const payments = data?.payments ?? [];
-    const invoiceViews = data?.invoiceViews ?? [];
+    const invoices = invoicesFromStore ?? [];
+    const clients = clientsFromStore ?? [];
+    const isLoading = invoices.length === 0 && isRefreshing;
 
     const handleActionSuccess = useCallback(() => {
-        refetch();
-    }, [refetch]);
+        // When an action succeeds, prefer reloading only invoices; the store will sync via its own logic.
+        queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+    }, [queryClient]);
 
     const handleOptimisticUpdate = useCallback(
         async (id, status) => {
@@ -91,6 +87,7 @@ export default function InvoicesPage() {
     useSupabaseRealtime(
         ["invoices", "payments"],
         () => {
+            // Supabase changefeed: refresh side data without blocking page.
             queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
         },
         { channelName: "invoices-page" }
@@ -105,12 +102,6 @@ export default function InvoicesPage() {
     const [isImportingViews, setIsImportingViews] = useState(false);
     const invoiceFileInputRef = useRef(null);
     const invoiceViewsFileInputRef = useRef(null);
-
-    useSupabaseRealtime(
-        ["invoices", "payments"],
-        () => { fetchAll(); },
-        { channelName: "invoices-page" }
-    );
 
     const getClientName = (clientId) => {
         const client = clients.find((c) => c.id === clientId);
@@ -130,14 +121,14 @@ export default function InvoicesPage() {
     }, [payments]);
 
     useEffect(() => {
-        if (error && !isLoading) {
+        if (initialError) {
             toast({
-                title: "Could not load invoices",
-                description: error?.message ?? String(error),
+                title: "Could not load invoice activity",
+                description: initialError?.message ?? String(initialError),
                 variant: "destructive",
             });
         }
-    }, [error, isLoading, toast]);
+    }, [initialError, toast]);
 
     const filteredInvoices = applyInvoiceFilters(invoices, filters, getClientName);
     

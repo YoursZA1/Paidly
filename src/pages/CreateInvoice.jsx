@@ -331,6 +331,10 @@ export default function CreateInvoice() {
                 quantity: Number(item.quantity || item.qty || 1),
                 unit_price: Number(item.unit_price || item.rate || item.price || 0),
                 total_price: Number(item.total_price || item.total || 0),
+                // Preserve catalog metadata for inventory/analytics.
+                item_type: item.item_type,
+                catalog_item_id: item.catalog_item_id,
+                sku: item.sku,
               }))
             : [],
       };

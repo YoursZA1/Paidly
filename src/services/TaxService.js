@@ -217,6 +217,130 @@ export class TaxService {
   static formatTaxDisplay(taxAmount, taxRate, currency = 'USD') {
     return `${taxRate}% (${currency} ${taxAmount.toFixed(2)})`;
   }
+
+  /**
+   * Calculate VAT liability on a payments (cash) basis.
+   *
+   * SARS VAT note (high level): on the payments basis, output VAT is accounted for
+   * when payment is received (including partial payments), not when the invoice is issued.
+   *
+   * This helper allocates VAT per payment using the invoice's VAT rate and assumes
+   * invoice totals are VAT-inclusive (`total_amount` includes VAT).
+   *
+   * @param {object} params
+   * @param {Array} params.invoices - Invoices (must include id, total_amount, tax_rate and/or tax_amount/subtotal)
+   * @param {Array} params.payments - Payments (must include invoice_id, amount, payment_date or created_date)
+   * @param {string|Date|null} [params.startDate] - Inclusive range start (by payment date)
+   * @param {string|Date|null} [params.endDate] - Inclusive range end (by payment date)
+   * @returns {object} VAT cash-basis totals and a per-invoice breakdown
+   */
+  static getVatLiabilityFromPaymentsCashBasis({
+    invoices = [],
+    payments = [],
+    startDate = null,
+    endDate = null,
+  } = {}) {
+    const invoiceMap = new Map((Array.isArray(invoices) ? invoices : []).map((inv) => [inv?.id, inv]));
+
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+    const inRange = (d) => {
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return false;
+      if (start && d < start) return false;
+      if (end && d > end) return false;
+      return true;
+    };
+
+    const safeNumber = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+    const resolveVatRate = (inv) => {
+      const directRate = safeNumber(inv?.tax_rate);
+      if (directRate > 0) return directRate;
+      const subtotal = safeNumber(inv?.subtotal);
+      const taxAmount = safeNumber(inv?.tax_amount);
+      if (subtotal > 0 && taxAmount > 0) return (taxAmount / subtotal) * 100;
+      return 0;
+    };
+
+    // Sort payments by date so invoice caps behave predictably.
+    const paymentsSorted = (Array.isArray(payments) ? payments : [])
+      .map((p) => {
+        const date = p?.payment_date || p?.created_date || p?.date;
+        return { ...p, __date: new Date(date) };
+      })
+      .filter((p) => inRange(p.__date))
+      .sort((a, b) => a.__date - b.__date);
+
+    let vatDue = 0;
+    let grossPayments = 0;
+    let netPayments = 0;
+
+    const byInvoice = {};
+    const paidSoFarByInvoice = new Map();
+
+    for (const p of paymentsSorted) {
+      const invoiceId = p?.invoice_id;
+      if (!invoiceId) continue;
+      const inv = invoiceMap.get(invoiceId);
+      if (!inv) continue;
+
+      const invoiceTotal = safeNumber(inv?.total_amount);
+      if (invoiceTotal <= 0) continue;
+
+      const gross = safeNumber(p?.amount);
+      if (gross <= 0) continue;
+
+      const alreadyAllocated = safeNumber(paidSoFarByInvoice.get(invoiceId));
+      const remaining = Math.max(0, invoiceTotal - alreadyAllocated);
+      if (remaining <= 0) continue;
+
+      const allocGross = Math.min(gross, remaining);
+      paidSoFarByInvoice.set(invoiceId, alreadyAllocated + allocGross);
+
+      const rate = resolveVatRate(inv);
+      if (rate <= 0) {
+        // Still track gross/net for completeness, but VAT is zero.
+        grossPayments += allocGross;
+        netPayments += allocGross;
+        if (!byInvoice[invoiceId]) {
+          byInvoice[invoiceId] = { invoiceId, vatRate: 0, grossPayments: 0, netPayments: 0, vatDue: 0 };
+        }
+        byInvoice[invoiceId].grossPayments += allocGross;
+        byInvoice[invoiceId].netPayments += allocGross;
+        continue;
+      }
+
+      const net = allocGross / (1 + rate / 100);
+      const vat = allocGross - net;
+
+      grossPayments += allocGross;
+      netPayments += net;
+      vatDue += vat;
+
+      if (!byInvoice[invoiceId]) {
+        byInvoice[invoiceId] = { invoiceId, vatRate: rate, grossPayments: 0, netPayments: 0, vatDue: 0 };
+      }
+      byInvoice[invoiceId].vatRate = rate;
+      byInvoice[invoiceId].grossPayments += allocGross;
+      byInvoice[invoiceId].netPayments += net;
+      byInvoice[invoiceId].vatDue += vat;
+    }
+
+    const round2 = (n) => parseFloat((safeNumber(n)).toFixed(2));
+
+    return {
+      vatDue: round2(vatDue),
+      grossPayments: round2(grossPayments),
+      netPayments: round2(netPayments),
+      byInvoice: Object.values(byInvoice).map((x) => ({
+        ...x,
+        grossPayments: round2(x.grossPayments),
+        netPayments: round2(x.netPayments),
+        vatDue: round2(x.vatDue),
+        vatRate: round2(x.vatRate),
+      })),
+    };
+  }
 }
 
 export default TaxService;

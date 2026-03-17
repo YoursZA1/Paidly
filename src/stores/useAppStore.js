@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Invoice, Client, User, Payment, InvoiceView, Expense } from "@/api/entities";
+import { Invoice, Client, User, Payment, InvoiceView, Expense, Quote, Payroll } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { withApiLogging } from "@/utils/apiLogger";
@@ -19,7 +19,9 @@ import { withApiLogging } from "@/utils/apiLogger";
 
 export const useAppStore = create((set, get) => ({
   invoices: [],
+  quotes: [],
   clients: [],
+  payslips: [],
   userProfile: null,
   payments: [],
   invoiceViews: [],
@@ -67,9 +69,12 @@ export const useAppStore = create((set, get) => ({
         safe("payments.list", () => Payment.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
         safe("invoiceViews.list", () => InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
         safe("expenses.list", () => Expense.list("-date", 100), [], 30000, 0),
+        // These pages can be heavy; keep small warm caches for fast navigation.
+        safe("quotes.list", () => Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 }), [], 30000, 0),
+        safe("payslips.list", () => Payroll.list("-created_date", { limit: 50, maxWaitMs: 4000 }), [], 30000, 0),
       ]);
 
-      const [invoicesData, clientsData, paymentsData, viewsData, expensesData] = settled.map((r) =>
+      const [invoicesData, clientsData, paymentsData, viewsData, expensesData, quotesData, payslipsData] = settled.map((r) =>
         r.status === "fulfilled" ? r.value : []
       );
 
@@ -87,7 +92,9 @@ export const useAppStore = create((set, get) => ({
 
       set({
         invoices: resolvedInvoices,
+        quotes: Array.isArray(quotesData) ? quotesData : [],
         clients: Array.isArray(clientsData) ? clientsData : [],
+        payslips: Array.isArray(payslipsData) ? payslipsData : [],
         userProfile: userData,
         payments: Array.isArray(paymentsData) ? paymentsData : [],
         invoiceViews: Array.isArray(viewsData) ? viewsData : [],
@@ -133,6 +140,12 @@ export const useAppStore = create((set, get) => ({
 
   /** Append or replace invoices (e.g. after create). */
   setInvoices: (invoices) => set({ invoices: Array.isArray(invoices) ? invoices : get().invoices }),
+
+  /** Replace quotes list (e.g. after fetch). */
+  setQuotes: (quotes) => set({ quotes: Array.isArray(quotes) ? quotes : get().quotes }),
+
+  /** Replace payslips list (e.g. after fetch). */
+  setPayslips: (payslips) => set({ payslips: Array.isArray(payslips) ? payslips : get().payslips }),
 
   /**
    * Create an expense and prepend it to the store.
@@ -184,7 +197,9 @@ export const useAppStore = create((set, get) => ({
   reset: () =>
     set({
       invoices: [],
+      quotes: [],
       clients: [],
+      payslips: [],
       userProfile: null,
       payments: [],
       invoiceViews: [],

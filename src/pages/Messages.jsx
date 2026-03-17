@@ -57,17 +57,39 @@ export default function MessagesPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [messagesData, clientsData, invoicesData, quotesData, userData, sendsData, logsData, viewsData, paymentsData] = await Promise.all([
-                Message.list('-created_date'),
-                Client.list(),
-                Invoice.list('-created_date'),
-                Quote.list('-created_date'),
-                User.me(),
-                DocumentSend.list('-sent_at').catch(() => []),
-                MessageLog.list('-sent_at').catch(() => []),
-                InvoiceView.list('-viewed_at').catch(() => []),
-                Payment.list('-paid_at').catch(() => [])
+            // Keep the page responsive even when tenant data grows.
+            // Use bounded queries + best-effort timeouts for heavy tables.
+            const safe = async (fn, fallback) => {
+                try {
+                    return await fn();
+                } catch {
+                    return fallback;
+                }
+            };
+
+            const settled = await Promise.allSettled([
+                safe(() => Message.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => Client.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => Invoice.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => Quote.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => User.me(), null),
+                safe(() => DocumentSend.list('-sent_at', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => MessageLog.list('-sent_at', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => InvoiceView.list('-viewed_at', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => Payment.list('-paid_at', { limit: 100, maxWaitMs: 4000 }), []),
             ]);
+
+            const [
+                messagesData,
+                clientsData,
+                invoicesData,
+                quotesData,
+                userData,
+                sendsData,
+                logsData,
+                viewsData,
+                paymentsData,
+            ] = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
             if (!mountedRef.current) return;
             setMessages(messagesData || []);
             setClients(clientsData || []);

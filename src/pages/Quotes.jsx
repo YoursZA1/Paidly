@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Quote, Client, User } from "@/api/entities";
+import { useQueryClient } from "@tanstack/react-query";
+import { Quote } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,41 +15,22 @@ import { motion } from "framer-motion";
 import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
-import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { useAppStore } from "@/stores/useAppStore";
 
 const QUOTES_PAGE_QUERY_KEY = ["quotes-page"];
-
-async function fetchQuotesPageData() {
-    const [quotesData, clientsData, userData] = await withTimeoutRetry(() => Promise.all([
-        Quote.list("-created_date"),
-        Client.list(),
-        User.me(),
-    ]), 15000, 2);
-    if (!userData) throw new Error("Not authenticated");
-    return {
-        quotes: Array.isArray(quotesData) ? quotesData : [],
-        clients: Array.isArray(clientsData) ? clientsData : [],
-        user: userData,
-    };
-}
 
 export default function QuotesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const {
-        data,
-        isLoading,
-        error,
-    } = useQuery({
-        queryKey: QUOTES_PAGE_QUERY_KEY,
-        queryFn: fetchQuotesPageData,
-        staleTime: 5 * 60 * 1000,
-        refetchOnMount: false,
-    });
+    const quotesFromStore = useAppStore((s) => s.quotes);
+    const setQuotes = useAppStore((s) => s.setQuotes);
+    const clients = useAppStore((s) => s.clients);
+    const userProfile = useAppStore((s) => s.userProfile);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [initialError, setInitialError] = useState(null);
 
-    const quotes = data?.quotes ?? [];
-    const clients = data?.clients ?? [];
-    const user = data?.user ?? null;
+    const quotes = quotesFromStore ?? [];
+    const isLoading = quotes.length === 0 && isRefreshing;
 
     const [searchTerm, setSearchTerm] = useState("");
     const [sortBy, setSortBy] = useState('date_newest');
@@ -60,18 +41,48 @@ export default function QuotesPage() {
     const quoteFileInputRef = useRef(null);
 
     useEffect(() => {
-        if (error && !isLoading) {
+        if (initialError) {
             toast({
                 title: "Could not load quotes",
-                description: error?.message ?? String(error),
+                description: initialError?.message ?? String(initialError),
                 variant: "destructive",
             });
         }
-    }, [error, isLoading, toast]);
+    }, [initialError, toast]);
+
+    // On first mount, hydrate quotes best-effort, but don't block render.
+    useEffect(() => {
+        let cancelled = false;
+        const loadQuotes = async () => {
+            // If we already have cached quotes, don't block on refresh.
+            if (quotes.length > 0) return;
+            setIsRefreshing(true);
+            try {
+                const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 });
+                if (cancelled) return;
+                setQuotes(Array.isArray(fresh) ? fresh : []);
+                setInitialError(null);
+            } catch (err) {
+                if (cancelled) return;
+                console.warn("Failed to load quotes:", err);
+                setInitialError(err);
+            } finally {
+                if (!cancelled) setIsRefreshing(false);
+            }
+        };
+        loadQuotes();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useSupabaseRealtime(
         ["quotes"],
-        () => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY }),
+        async () => {
+            // Refresh in background; keep the page responsive.
+            queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY });
+            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => null);
+            if (Array.isArray(fresh)) setQuotes(fresh);
+        },
         { channelName: "quotes-page" }
     );
 
@@ -80,7 +91,7 @@ export default function QuotesPage() {
         return client ? client.name : "N/A";
     };
 
-    const userCurrency = user?.currency || 'ZAR';
+    const userCurrency = userProfile?.currency || 'ZAR';
 
     const filteredQuotes = quotes.filter(quote =>
         quote.project_title.toLowerCase().includes(searchTerm.toLowerCase()) ||

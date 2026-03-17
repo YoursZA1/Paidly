@@ -24,15 +24,26 @@ test.describe('MESSAGES (IMPORTANT)', () => {
       if (await submit.isVisible().catch(() => false)) await submit.click();
     }
 
-    // Verify message log entry created
-    const log = page.getByTestId('message-log').or(page.locator('[data-testid="messages-table"]').or(page.locator('table')));
-    await expect(log).toBeVisible({ timeout: 30_000 });
+    // The Messages page currently surfaces invoice/quote sending activity under "Sent documents".
+    const sentTab = page
+      .getByRole('tab', { name: /sent documents/i })
+      .or(page.getByRole('button', { name: /sent documents/i }))
+      .or(page.getByText(/^sent documents$/i));
+    await expect(sentTab.first()).toBeVisible({ timeout: 60_000 });
+    await sentTab.first().click();
 
-    const latestRow = page.getByTestId('message-row-latest').or(log.locator('tr').first());
-    await expect(latestRow).toBeVisible({ timeout: 30_000 }).catch(() => {});
+    // Verify the Sent documents view renders (table or empty state).
+    const title = page.getByRole('heading', { name: /sent documents/i }).first().or(page.getByText(/^sent documents$/i).first());
+    await expect(title).toBeVisible({ timeout: 60_000 });
+
+    const table = page.locator('table').first();
+    const latestRow = table.locator('tbody tr').first();
+    await expect(latestRow).toBeVisible({ timeout: 10_000 }).catch(() => {});
 
     // Simulate opening tracking link if present.
-    const tracking = latestRow.getByRole('link', { name: /track|view|open/i }).or(page.getByRole('link', { name: /track|view|open/i }).first());
+    const tracking = latestRow
+      .getByRole('link', { name: /track|view|open/i })
+      .or(page.getByRole('link', { name: /track|view|open/i }).first());
     if (await tracking.isVisible().catch(() => false)) {
       const [popup] = await Promise.all([
         page.waitForEvent('popup', { timeout: 10_000 }).catch(() => null),

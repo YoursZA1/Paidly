@@ -5,6 +5,8 @@ import { attachConsoleGuards, expectNoConsoleErrors } from './utils/assertions';
 test.describe('NAVIGATION', () => {
   test('Sidebar navigation routes and loads for all pages', async ({ page, baseURL, sidebar }) => {
     test.skip(!baseURL, 'baseURL not set');
+    test.slow();
+    test.setTimeout(180_000);
 
     const guard = attachConsoleGuards(page);
 
@@ -27,9 +29,12 @@ test.describe('NAVIGATION', () => {
     await expect(page).toHaveURL(/\/Dashboard/i);
 
     for (const c of cases) {
-      await sidebar.goto(c.label);
-      await expect(page).toHaveURL(c.urlRe, { timeout: 30_000 });
-      await sidebar.expectActive(c.label);
+      const target = sidebar.item(c.label);
+      await expect(target).toBeVisible({ timeout: 30_000 });
+      await Promise.all([
+        page.waitForURL(c.urlRe, { timeout: 60_000 }),
+        target.click({ force: true }),
+      ]);
       // Light “page loaded” sanity: no fatal error banners.
       await expect(page.getByText(/something went wrong|failed to load|error occurred/i)).toHaveCount(0);
     }

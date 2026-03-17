@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Invoice, Expense } from '@/api/entities';
+import { Invoice, Expense, Payment } from '@/api/entities';
 import { format } from 'date-fns';
 import { 
   BarChart3, 
@@ -25,6 +25,7 @@ export default function AccountingDashboard({ user }) {
   const [isLoading, setIsLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [payments, setPayments] = useState([]);
 
   const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
   const userCurrency = user?.currency || 'USD';
@@ -33,12 +34,14 @@ export default function AccountingDashboard({ user }) {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [invoiceData, expenseData] = await Promise.all([
+        const [invoiceData, expenseData, paymentData] = await Promise.all([
           Invoice.list('-created_date'),
-          Expense.list('-date')
+          Expense.list('-date'),
+          Payment.list('-payment_date').catch(() => []),
         ]);
         setInvoices(invoiceData || []);
         setExpenses(expenseData || []);
+        setPayments(paymentData || []);
       } catch (error) {
         console.error('Failed to load accounting data:', error);
       }
@@ -60,6 +63,7 @@ export default function AccountingDashboard({ user }) {
     
     // Calculate tax information
     const taxSummary = TaxService.getTaxSummaryFromInvoices(invoices);
+    const vatCashBasis = TaxService.getVatLiabilityFromPaymentsCashBasis({ invoices, payments });
     
     const profit = revenue - expenseTotal;
     const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
@@ -73,9 +77,12 @@ export default function AccountingDashboard({ user }) {
       accountsPayable: 0,
       totalTax: taxSummary.totalTax,
       totalBeforeTax: taxSummary.totalBeforeTax,
-      taxByRate: taxSummary.byTaxRateArray
+      taxByRate: taxSummary.byTaxRateArray,
+      vatCashBasisDue: vatCashBasis.vatDue,
+      vatCashBasisGrossPayments: vatCashBasis.grossPayments,
+      vatCashBasisNetPayments: vatCashBasis.netPayments,
     };
-  }, [invoices, expenses]);
+  }, [invoices, expenses, payments]);
 
   const chartData = useMemo(() => {
     const byMonth = {};
@@ -490,12 +497,24 @@ export default function AccountingDashboard({ user }) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-sm text-amber-800 mb-2">This is the total tax collected from your invoices.</p>
-                  <p className="text-2xl font-bold text-amber-900">
-                    {formatCurrency(financialData.totalTax, userCurrency)}
+                  <p className="text-sm text-amber-800 mb-2">
+                    VAT due on a payments (cash) basis (calculated from payments received).
                   </p>
+                  <p className="text-2xl font-bold text-amber-900">
+                    {formatCurrency(financialData.vatCashBasisDue, userCurrency)}
+                  </p>
+                  <div className="mt-3 space-y-1 text-xs text-amber-800">
+                    <div className="flex justify-between">
+                      <span>Gross payments received</span>
+                      <span className="font-medium">{formatCurrency(financialData.vatCashBasisGrossPayments, userCurrency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Net (ex VAT)</span>
+                      <span className="font-medium">{formatCurrency(financialData.vatCashBasisNetPayments, userCurrency)}</span>
+                    </div>
+                  </div>
                   <p className="text-xs text-amber-700 mt-2">
-                    * This amount may need to be remitted to tax authorities depending on your jurisdiction and accounting method.
+                    * This is a best-effort VAT calculation based on recorded payments and invoice VAT rates.
                   </p>
                 </div>
               </CardContent>

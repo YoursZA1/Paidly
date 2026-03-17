@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Payroll, User } from "@/api/entities";
+import { Payroll } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import { format, parseISO, isValid } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import PayslipActions from "../components/payslips/PayslipActions";
 import { formatCurrency } from "../components/CurrencySelector";
+import { useAppStore } from "@/stores/useAppStore";
 
 const statusStyles = {
     draft: "bg-muted text-muted-foreground border-border",
@@ -37,10 +38,12 @@ const safeFormatDate = (dateStr) => {
 };
 
 export default function PayslipsPage() {
-    const [payslips, setPayslips] = useState([]);
-    const [user, setUser] = useState(null);
+    const payslipsFromStore = useAppStore((s) => s.payslips);
+    const setPayslipsInStore = useAppStore((s) => s.setPayslips);
+    const userProfile = useAppStore((s) => s.userProfile);
     const [searchTerm, setSearchTerm] = useState("");
-    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isLoading, setIsLoading] = useState(true); // kept for existing skeleton UI
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isExporting, setIsExporting] = useState(false);
@@ -54,24 +57,22 @@ export default function PayslipsPage() {
 
     const loadData = async () => {
         setIsLoading(true);
+        setIsRefreshing(true);
         try {
-            const [payslipsData, userData] = await Promise.all([
-                Payroll.list("-created_date"),
-                User.me()
-            ]);
-            setPayslips(payslipsData);
-            setUser(userData);
+            const payslipsData = await Payroll.list("-created_date", { limit: 100, maxWaitMs: 4000 });
+            setPayslipsInStore(Array.isArray(payslipsData) ? payslipsData : []);
         } catch (error) {
             console.error("Error loading data:", error);
             toast({ title: "Could not load payslips", description: error?.message, variant: "destructive" });
         }
+        setIsRefreshing(false);
         setIsLoading(false);
     };
 
     const handleExportCsv = async () => {
         setIsExporting(true);
         try {
-            const list = await Payroll.list("-created_date");
+            const list = await Payroll.list("-created_date", { limit: 500, maxWaitMs: 8000 });
             if (!list?.length) {
                 toast({ title: "No payslips to export", variant: "destructive" });
                 return;
@@ -123,7 +124,13 @@ export default function PayslipsPage() {
         reader.readAsText(file, "UTF-8");
     };
 
-    const userCurrency = user?.currency || 'ZAR';
+    const payslips = payslipsFromStore ?? [];
+    // Keep skeleton behavior: show loading only if we have no cached data and we're refreshing.
+    useEffect(() => {
+        setIsLoading(payslips.length === 0 && isRefreshing);
+    }, [payslips.length, isRefreshing]);
+
+    const userCurrency = userProfile?.currency || 'ZAR';
 
     const filteredPayslips = payslips.filter(payslip =>
         payslip.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

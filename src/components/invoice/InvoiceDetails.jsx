@@ -82,23 +82,31 @@ export default function InvoiceDetails({
       existingTaxRate: 0,
       userId: user?.id || null
     });
-    const rate = mapped?.success
-      ? Number(mapped.lineItem.unit_price) || 0
-      : getCatalogRate(catalogItem);
-    const total = mapped?.success
-      ? Number(mapped.lineItem.total_price) || 0
-      : qty * rate;
-    items[index] = {
-      ...currentItem,
-      name: catalogItem.name,
-      service_name: catalogItem.name,
-      description: catalogItem.description || currentItem.description || "",
-      quantity: mapped?.success ? (mapped.lineItem.quantity ?? qty) : qty,
-      rate,
-      total,
-      unit_price: rate,
-      total_price: total
-    };
+
+    if (mapped?.success) {
+      // Use the rich mapping (includes item_type, catalog_item_id, sku, tax, etc.).
+      items[index] = {
+        ...currentItem,
+        ...mapped.lineItem,
+        // Keep any user-edited description if present.
+        ...(currentItem?.description && { description: currentItem.description }),
+      };
+    } else {
+      const rate = getCatalogRate(catalogItem);
+      const total = qty * rate;
+      items[index] = {
+        ...currentItem,
+        name: catalogItem.name,
+        service_name: catalogItem.name,
+        description: catalogItem.description || currentItem?.description || "",
+        quantity: qty,
+        rate,
+        total,
+        unit_price: rate,
+        total_price: total
+      };
+    }
+
     setInvoiceData(prev => ({ ...prev, items }));
     if (catalogItem.description && !expandedItems.includes(index)) {
       setExpandedItems(prev => [...prev, index]);
@@ -262,6 +270,12 @@ export default function InvoiceDetails({
               <>
                 {invoiceData.items.map((item, idx) => {
                   const allCatalog = [...products, ...services];
+                  const catalogMatch =
+                    allCatalog.find((c) => c.id === item.catalog_item_id) ||
+                    allCatalog.find((c) => c.name?.toLowerCase() === (item.name || item.service_name || "").toLowerCase());
+                  const isProduct = (item.item_type || catalogMatch?.item_type) === "product";
+                  const stock = typeof catalogMatch?.stock_quantity === "number" ? catalogMatch.stock_quantity : null;
+
                   return (
                     <div key={idx} className="bg-muted/50 p-4 sm:p-6 rounded-2xl space-y-4">
                       <div className="flex justify-between items-center">
@@ -311,26 +325,32 @@ export default function InvoiceDetails({
                                             existingTaxRate: 0,
                                             userId: user?.id || null
                                           });
-                                          const rate = mapped?.success
-                                            ? Number(mapped.lineItem.unit_price) || 0
-                                            : getCatalogRate(catalogItem);
-                                          const total = mapped?.success
-                                            ? Number(mapped.lineItem.total_price) || 0
-                                            : qty * rate;
                                           setInvoiceData(prev => {
                                             const items = [...prev.items];
                                             const prevItem = items[idx];
-                                            items[idx] = {
-                                              ...prevItem,
-                                              name: catalogItem.name,
-                                              service_name: catalogItem.name,
-                                              description: catalogItem.description || prevItem.description || "",
-                                              quantity: mapped?.success ? (mapped.lineItem.quantity ?? qty) : qty,
-                                              rate,
-                                              total,
-                                              unit_price: rate,
-                                              total_price: total
-                                            };
+
+                                            if (mapped?.success) {
+                                              items[idx] = {
+                                                ...prevItem,
+                                                ...mapped.lineItem,
+                                                ...(prevItem?.description && { description: prevItem.description }),
+                                              };
+                                            } else {
+                                              const rate = getCatalogRate(catalogItem);
+                                              const total = qty * rate;
+                                              items[idx] = {
+                                                ...prevItem,
+                                                name: catalogItem.name,
+                                                service_name: catalogItem.name,
+                                                description: catalogItem.description || prevItem?.description || "",
+                                                quantity: qty,
+                                                rate,
+                                                total,
+                                                unit_price: rate,
+                                                total_price: total
+                                              };
+                                            }
+
                                             return { ...prev, items };
                                           });
                                           if (catalogItem.description && !expandedItems.includes(idx)) {
@@ -403,7 +423,14 @@ export default function InvoiceDetails({
                             min="1"
                             value={item.quantity}
                             onChange={e => {
-                              const value = Number(e.target.value);
+                              let value = Number(e.target.value) || 1;
+                              if (value < 1) value = 1;
+
+                              // For products with known stock, cap quantity to available stock.
+                              if (isProduct && Number.isFinite(stock) && stock >= 0 && value > stock) {
+                                value = stock || 0;
+                              }
+
                               setInvoiceData(prev => {
                                 const items = [...prev.items];
                                 const r = items[idx].rate ?? items[idx].unit_price ?? 0;
@@ -414,6 +441,13 @@ export default function InvoiceDetails({
                             }}
                             className="h-10 rounded-lg"
                           />
+                          {isProduct && (
+                            <p className="text-[11px] text-slate-500">
+                              {Number.isFinite(stock)
+                                ? `Stock: ${stock} available`
+                                : "Stock: not yet tracked in inventory"}
+                            </p>
+                          )}
                         </div>
 
                         <div className="space-y-2">
