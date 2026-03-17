@@ -12,6 +12,18 @@ import {
   format
 } from 'date-fns';
 
+/** Parse date from string or Date; never pass undefined to parseISO (throws .split). */
+function safeParseDate(value) {
+  if (value == null || value === '') return null;
+  const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : String(value));
+  if (!str) return null;
+  try {
+    return parseISO(str);
+  } catch {
+    return null;
+  }
+}
+
 export const CashFlowService = {
   /**
    * Calculate cash flow for a specific period
@@ -35,8 +47,8 @@ export const CashFlowService = {
     const periodIncome = payments
       .filter(payment => {
         if (!payment.payment_date || !payment.amount || payment.amount <= 0) return false;
-        const paymentDate = parseISO(payment.payment_date);
-        return paymentDate >= periodStart && paymentDate <= periodEnd;
+        const paymentDate = safeParseDate(payment.payment_date);
+        return paymentDate && paymentDate >= periodStart && paymentDate <= periodEnd;
       })
       .reduce((sum, payment) => sum + payment.amount, 0);
 
@@ -44,22 +56,22 @@ export const CashFlowService = {
     const periodExpenses = expenses
       .filter(expense => {
         if (!expense.date || !expense.amount || expense.amount <= 0) return false;
-        const expenseDate = parseISO(expense.date);
-        return expenseDate >= periodStart && expenseDate <= periodEnd;
+        const expenseDate = safeParseDate(expense.date);
+        return expenseDate && expenseDate >= periodStart && expenseDate <= periodEnd;
       })
       .reduce((sum, expense) => sum + expense.amount, 0);
 
     // Count transactions
     const incomeTransactions = payments.filter(payment => {
       if (!payment.payment_date || !payment.amount || payment.amount <= 0) return false;
-      const paymentDate = parseISO(payment.payment_date);
-      return paymentDate >= periodStart && paymentDate <= periodEnd;
+      const paymentDate = safeParseDate(payment.payment_date);
+      return paymentDate && paymentDate >= periodStart && paymentDate <= periodEnd;
     }).length;
 
     const expenseTransactions = expenses.filter(expense => {
       if (!expense.date || !expense.amount || expense.amount <= 0) return false;
-      const expenseDate = parseISO(expense.date);
-      return expenseDate >= periodStart && expenseDate <= periodEnd;
+      const expenseDate = safeParseDate(expense.date);
+      return expenseDate && expenseDate >= periodStart && expenseDate <= periodEnd;
     }).length;
 
     return {
@@ -125,9 +137,9 @@ export const CashFlowService = {
       return [];
     }
 
-    const minYear = Math.min(
-      ...allDateStrings.map(d => parseISO(d).getFullYear())
-    );
+    const yearNumbers = allDateStrings.map(d => safeParseDate(d)?.getFullYear()).filter(Boolean);
+    if (yearNumbers.length === 0) return [];
+    const minYear = Math.min(...yearNumbers);
 
     for (let year = minYear; year <= currentYear; year++) {
       const yearStart = startOfYear(new Date(year, 0, 1));

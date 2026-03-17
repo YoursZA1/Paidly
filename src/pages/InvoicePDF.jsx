@@ -35,6 +35,7 @@ export default function InvoicePDF() {
     const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [loadError, setLoadError] = useState(null);
 
     useEffect(() => {
         if (isDraft) {
@@ -108,8 +109,10 @@ export default function InvoicePDF() {
     }, [autoDownload, isLoading, invoice]);
 
     const loadInvoiceData = async () => {
+        setLoadError(null);
+        setIsLoading(true);
         try {
-            const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), 25000, 1);
+            const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), 45000, 2);
             if (!invoiceRecord) {
                 setIsLoading(false);
                 return;
@@ -124,10 +127,10 @@ export default function InvoicePDF() {
                             ? BankingDetail.get(invoiceRecord.banking_detail_id).catch(() => null)
                             : Promise.resolve(null),
                     ]),
-                25000,
-                1
+                45000,
+                2
             );
-            
+
             // Normalize items so templates always get service_name, quantity, unit_price, total_price
             const items = Array.isArray(invoiceRecord.items)
                 ? invoiceRecord.items.map((item) => ({
@@ -144,6 +147,7 @@ export default function InvoicePDF() {
             setBankingDetail(bankingData || null);
         } catch (error) {
             console.error('Error loading invoice data:', error);
+            setLoadError(error?.message || 'Failed to load invoice. Please check your connection and try again.');
         }
         setIsLoading(false);
     };
@@ -156,6 +160,20 @@ export default function InvoicePDF() {
 
     if (isLoading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    }
+
+    if (loadError) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4">
+                <p className="text-gray-600 text-center max-w-md">
+                    {loadError.includes('timed out') ? 'The request took too long. This can happen when the server is busy or your connection is slow.' : loadError}
+                </p>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => loadInvoiceData()} className="rounded-lg">Try again</Button>
+                    <Button variant="ghost" onClick={() => navigate(-1)} className="rounded-lg">Back</Button>
+                </div>
+            </div>
+        );
     }
 
     if (!invoice || !client) {

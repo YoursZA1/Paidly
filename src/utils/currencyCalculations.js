@@ -44,7 +44,8 @@ export const formatCurrency = (
   if (formatted == null || typeof formatted !== 'string') {
     formatted = String(num);
   }
-  const parts = formatted.split('.');
+  const str = typeof formatted === 'string' ? formatted : String(num);
+  const parts = str.split('.');
   const integerPart = parts[0] ?? '0';
   const decimalPart = parts[1] ?? '0'.repeat(decimals);
 

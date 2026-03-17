@@ -3,6 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
+
+function safeParseDate(value) {
+    if (value == null || value === '') return null;
+    const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : String(value));
+    if (!str) return null;
+    try {
+        return parseISO(str);
+    } catch {
+        return null;
+    }
+}
 import { TrendingUp } from "lucide-react";
 import PropTypes from 'prop-types';
 
@@ -35,12 +46,14 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
             metrics.totalAmountPaid += payment.amount || 0;
 
             if (payment.payment_date) {
-                const paymentDate = parseISO(payment.payment_date);
+                const paymentDate = safeParseDate(payment.payment_date);
+                if (!paymentDate) return;
                 const invoice = invoices.find(inv => inv.id === payment.invoice_id);
                 
                 const dueStr = invoice?.delivery_date || invoice?.due_date;
                 if (invoice && dueStr) {
-                    const dueDate = parseISO(dueStr);
+                    const dueDate = safeParseDate(dueStr);
+                    if (!dueDate) return;
                     const daysDiff = Math.floor((paymentDate - dueDate) / (1000 * 60 * 60 * 24));
                     
                     if (daysDiff <= 0) {
@@ -79,8 +92,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
             const monthPayments = payments.filter(p => {
                 const dateStr = p.payment_date || p.paid_at;
                 if (!dateStr) return false;
-                const pDate = parseISO(dateStr);
-                return pDate >= monthStart && pDate <= monthEnd;
+                const pDate = safeParseDate(dateStr);
+                return pDate && pDate >= monthStart && pDate <= monthEnd;
             });
 
             return {

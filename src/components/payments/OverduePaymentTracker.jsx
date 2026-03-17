@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { PaymentDateService } from '../../services/PaymentDateService';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+
+function safeParseDate(value) {
+  if (value == null || value === '') return null;
+  const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : String(value));
+  if (!str) return null;
+  try {
+    return parseISO(str);
+  } catch {
+    return null;
+  }
+}
 import { AlertCircle, Clock, TrendingUp } from 'lucide-react';
 import PropTypes from 'prop-types';
 
@@ -50,8 +61,8 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
 
         const dueStr = invoice.due_date || invoice.delivery_date;
         if (!dueStr) return;
-        const dueDate = parseISO(dueStr);
-        if (dueDate > today) return; // Not overdue
+        const dueDate = safeParseDate(dueStr);
+        if (!dueDate || dueDate > today) return; // Not overdue
 
         const daysOverdue = PaymentDateService.calculateDaysOverdue(dueStr);
         const category = PaymentDateService.getOverdueCategory(daysOverdue);
@@ -340,9 +351,9 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
                       ${invoice.remaining.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {invoice.lastPaymentDate
+                      {invoice.lastPaymentDate && safeParseDate(invoice.lastPaymentDate)
                         ? formatDistanceToNow(
-                            parseISO(invoice.lastPaymentDate),
+                            safeParseDate(invoice.lastPaymentDate),
                             { addSuffix: true }
                           )
                         : 'Never'}

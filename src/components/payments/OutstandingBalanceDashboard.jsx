@@ -76,7 +76,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-primary">
-              {analysis.metrics.averageDaysToPayment.toFixed(0)}
+              {(analysis.metrics?.averageDaysToPayment ?? 0).toFixed(0)}
             </p>
             <p className="text-xs text-gray-500 mt-1">days from creation</p>
           </CardContent>
@@ -88,15 +88,15 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-purple-600">
-              {analysis.metrics.paymentVelocity.toFixed(1)}%
+              {(analysis.metrics?.paymentVelocity ?? 0).toFixed(1)}%
             </p>
             <p className={`text-xs mt-1 font-semibold ${
-              analysis.metrics.trend === 'excellent' ? 'text-green-600' :
-              analysis.metrics.trend === 'good' ? 'text-primary' :
-              analysis.metrics.trend === 'fair' ? 'text-orange-600' :
+              analysis.metrics?.trend === 'excellent' ? 'text-green-600' :
+              analysis.metrics?.trend === 'good' ? 'text-primary' :
+              analysis.metrics?.trend === 'fair' ? 'text-orange-600' :
               'text-red-600'
             }`}>
-              {analysis.metrics.trend.toUpperCase()}
+              {(analysis.metrics?.trend ?? 'fair').toString().toUpperCase()}
             </p>
           </CardContent>
         </Card>

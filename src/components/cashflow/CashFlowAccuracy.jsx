@@ -77,7 +77,7 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
                 {analysis.metrics.profitabilityRate?.toFixed(0)}%
               </p>
               <p className="text-xs text-purple-700 mt-2">
-                {analysis.metrics.positiveMonths} of {analysis.metrics.positiveMonths + analysis.metrics.negativeMonths} months positive
+                {analysis.metrics?.positiveMonths ?? 0} of {(analysis.metrics?.positiveMonths ?? 0) + (analysis.metrics?.negativeMonths ?? 0)} months positive
               </p>
             </div>
           </div>
