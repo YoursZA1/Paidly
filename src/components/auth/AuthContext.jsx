@@ -202,35 +202,40 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Logout should never leave the UI stuck. We always clear local state and tokens,
-    // even if the network is down or Supabase returns an error.
+    // 1. Clear local state immediately so the UI shows logged out and redirect is never blocked.
+    purgeSupabaseAuthStorage();
     try {
-      // Prefer global sign-out to invalidate all sessions for this user.
-      const { error } = await supabase.auth.signOut({ scope: "global" });
-      if (error) throw error;
+      await User.logout();
+    } catch {
+      // ignore
+    }
+    setSession(null);
+    setUser(null);
+    setError("");
+    setShowVerifyDialog(false);
+    setResendLoading(false);
+    setResendSuccess("");
+
+    // 2. Best-effort server sign-out with timeout so this promise always resolves.
+    try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("signOut timeout")), 3000)
+      );
+      await Promise.race([
+        supabase.auth.signOut({ scope: "global" }).then(({ error }) => {
+          if (error) throw error;
+        }),
+        timeout
+      ]);
     } catch (e) {
       if (import.meta.env?.DEV) {
-        console.warn("[Auth] Supabase signOut failed; forcing local logout.", e?.message || e);
+        console.warn("[Auth] Supabase signOut failed or timed out.", e?.message || e);
       }
-      // Best-effort local sign-out; ignore failures.
       try {
         await SupabaseAuthService.signOut();
       } catch {
         // ignore
       }
-    } finally {
-      purgeSupabaseAuthStorage();
-      try {
-        await User.logout();
-      } catch {
-        // ignore
-      }
-      setSession(null);
-      setUser(null);
-      setError("");
-      setShowVerifyDialog(false);
-      setResendLoading(false);
-      setResendSuccess("");
     }
   }, [purgeSupabaseAuthStorage]);
 

@@ -731,7 +731,7 @@ export default function Layout({ children, currentPageName }) {
     try {
       await logout();
     } finally {
-      navigate(createPageUrl("Login"));
+      navigate(createPageUrl("Login"), { replace: true });
     }
   };
 
