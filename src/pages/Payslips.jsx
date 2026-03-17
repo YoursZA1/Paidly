@@ -182,6 +182,7 @@ export default function PayslipsPage() {
                             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                                 <input
                                     type="file"
+                                    name="payslips_import_csv"
                                     ref={payslipFileInputRef}
                                     accept=".csv"
                                     className="hidden"

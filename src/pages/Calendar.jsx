@@ -726,6 +726,7 @@ export default function CalendarPage() {
                                     <div className="flex flex-wrap items-center gap-2">
                                         <input
                                             type="file"
+                                            name="calendar_tasks_import_csv"
                                             ref={taskFileInputRef}
                                             accept=".csv"
                                             className="hidden"

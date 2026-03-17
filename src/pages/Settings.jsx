@@ -712,7 +712,14 @@ function PaymentMethodsSettings() {
 
     return (
         <div className="max-w-6xl mx-auto">
-            <input type="file" ref={bankingFileInputRef} accept=".csv" className="hidden" onChange={handleImportBankingFile} />
+            <input
+                type="file"
+                name="banking_details_import_csv"
+                ref={bankingFileInputRef}
+                accept=".csv"
+                className="hidden"
+                onChange={handleImportBankingFile}
+            />
 
             {/* Header Actions */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">

@@ -24,22 +24,32 @@ const InvoiceRow = React.memo(function InvoiceRow({ invoice, virtualRow, getClie
                 top: 0,
             }}
         >
-            <TableCell className="font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">{invoice.invoice_number}</TableCell>
-            <TableCell className="text-muted-foreground text-xs sm:text-sm max-w-[120px] sm:max-w-none truncate">{getClientName(invoice.client_id)}</TableCell>
-            <TableCell className="text-muted-foreground text-xs sm:text-sm max-w-[140px] sm:max-w-none truncate">{invoice.project_title}</TableCell>
-            <TableCell className="font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap currency-nums">{formatCurrency(invoice.total_amount, userCurrency)}</TableCell>
-            <TableCell className="whitespace-nowrap">
+            <TableCell className="w-[90px] font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">
+                {invoice.invoice_number}
+            </TableCell>
+            <TableCell className="min-w-[100px] text-muted-foreground text-xs sm:text-sm max-w-[120px] sm:max-w-none truncate">
+                {getClientName(invoice.client_id)}
+            </TableCell>
+            <TableCell className="min-w-[120px] text-muted-foreground text-xs sm:text-sm max-w-[140px] sm:max-w-none truncate">
+                {invoice.project_title}
+            </TableCell>
+            <TableCell className="w-[90px] font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap currency-nums text-right">
+                {formatCurrency(invoice.total_amount, userCurrency)}
+            </TableCell>
+            <TableCell className="w-[80px] whitespace-nowrap">
                 {totalPaid > 0 ? (
                     <PartialPaymentIndicator invoice={invoice} totalPaid={totalPaid} currency={userCurrency} size="compact" />
                 ) : (
                     <span className="text-xs text-muted-foreground">No payments</span>
                 )}
             </TableCell>
-            <TableCell className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">{invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "N/A"}</TableCell>
-            <TableCell>
+            <TableCell className="w-[85px] text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+                {invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "N/A"}
+            </TableCell>
+            <TableCell className="w-[75px]">
                 <InvoiceStatusBadge status={invoice.status || "draft"} size="small" />
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell className="w-[80px] text-right">
                 <InvoiceActions
                     invoice={invoice}
                     client={client}

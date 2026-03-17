@@ -1604,6 +1604,8 @@ export default function Dashboard() {
               }}
             >
               <input
+                id="admin-new-user-email"
+                name="admin_new_user_email"
                 type="email"
                 placeholder="Email"
                 value={newUser.email}
@@ -1612,6 +1614,8 @@ export default function Dashboard() {
                 required
               />
               <input
+                id="admin-new-user-full-name"
+                name="admin_new_user_full_name"
                 type="text"
                 placeholder="Full Name"
                 value={newUser.fullName}

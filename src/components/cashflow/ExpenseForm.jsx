@@ -529,6 +529,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                             <div className="relative flex-1">
                                                 <input
                                                     type="file"
+                                                    name="expense_attachments"
                                                     multiple
                                                     onChange={handleFileUpload}
                                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"

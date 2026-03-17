@@ -227,6 +227,7 @@ export default function QuotesPage() {
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
                         <input
                             type="file"
+                            name="quotes_import_csv"
                             ref={quoteFileInputRef}
                             accept=".csv"
                             className="hidden"

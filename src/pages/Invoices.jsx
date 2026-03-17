@@ -325,8 +325,22 @@ export default function InvoicesPage() {
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
-                        <input type="file" ref={invoiceFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoicesFile} />
-                        <input type="file" ref={invoiceViewsFileInputRef} accept=".csv" className="hidden" onChange={handleImportInvoiceViewsFile} />
+                        <input
+                            type="file"
+                            name="invoices_import_csv"
+                            ref={invoiceFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportInvoicesFile}
+                        />
+                        <input
+                            type="file"
+                            name="invoice_views_import_csv"
+                            ref={invoiceViewsFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportInvoiceViewsFile}
+                        />
                         {/* Primary action first on mobile */}
                         <Link to={createPageUrl("CreateInvoice")} className="order-first sm:order-none w-full sm:w-auto">
                             <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">

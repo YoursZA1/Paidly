@@ -562,6 +562,7 @@ export default function CashFlowPage() {
                             <div className="flex items-center gap-2">
                                 <input
                                     type="file"
+                                    name="cashflow_expense_csv"
                                     ref={expenseFileInputRef}
                                     accept=".csv"
                                     className="hidden"

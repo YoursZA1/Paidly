@@ -196,6 +196,7 @@ export default function RecurringInvoices() {
                     <div className="flex flex-wrap gap-2">
                         <input
                             type="file"
+                            name="recurring_invoices_import_csv"
                             ref={recurringFileInputRef}
                             accept=".csv"
                             className="hidden"
