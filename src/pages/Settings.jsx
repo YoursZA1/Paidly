@@ -19,6 +19,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import CurrencySelector from "@/components/CurrencySelector";
 import PaymentReminderSettings from "@/components/reminders/PaymentReminderSettings";
@@ -654,6 +655,19 @@ function PaymentMethodsSettings() {
         }
     };
 
+    const handleRemoveDetail = async (detail) => {
+        const label = detail.account_name || detail.bank_name || "this payment method";
+        if (!window.confirm(`Remove ${label}? Invoices already using it will keep the saved details.`)) return;
+        try {
+            await BankingDetail.delete(detail.id);
+            setBankingDetails((prev) => prev.filter((d) => d.id !== detail.id));
+            toast({ title: "✓ Removed", description: "Payment method removed.", variant: "success" });
+        } catch (error) {
+            console.error("Error removing payment method:", error);
+            toast({ title: "✗ Error", description: "Failed to remove payment method.", variant: "destructive" });
+        }
+    };
+
     const handleExportBanking = () => {
         try {
             const csvContent = bankingDetailsToCsv(bankingDetails);
@@ -806,6 +820,14 @@ function PaymentMethodsSettings() {
                                                     Set as Default
                                                 </DropdownMenuItem>
                                             )}
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                onClick={() => handleRemoveDetail(detail)}
+                                                className="text-destructive focus:text-destructive"
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                Remove payment method
+                                            </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
