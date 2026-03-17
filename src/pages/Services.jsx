@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Service } from "@/api/entities";
 import { User } from "@/api/entities";
+import { useAppStore } from "@/stores/useAppStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,10 +23,13 @@ import ConfirmationDialog from "@/components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
 
+const SERVICES_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
+
 export default function Services() {
     const { toast } = useToast();
+    const userProfileFromStore = useAppStore((s) => s.userProfile);
     const [services, setServices] = useState([]);
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(userProfileFromStore ?? null);
     const [searchTerm, setSearchTerm] = useState("");
     const [showForm, setShowForm] = useState(false);
     const [editingService, setEditingService] = useState(null);
@@ -40,15 +44,19 @@ export default function Services() {
     const serviceFileInputRef = useRef(null);
 
     useEffect(() => {
+        setIndustries(getIndustries());
         loadServices();
         loadUser();
-        setIndustries(getIndustries());
     }, []);
+
+    useEffect(() => {
+        if (userProfileFromStore != null && user === null) setUser(userProfileFromStore);
+    }, [userProfileFromStore, user]);
 
     const loadServices = async () => {
         setIsLoading(true);
         try {
-            const servicesData = await Service.list("-created_date");
+            const servicesData = await Service.list("-created_date", SERVICES_LIST_OPTS);
             setServices(servicesData || []);
         } catch (error) {
             console.error("Error loading services:", error);

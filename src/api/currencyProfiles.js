@@ -75,7 +75,7 @@ export const setBusinessCurrency = async (businessId, settings) => {
 };
 
 /**
- * Get exchange rates (optional backend).
+ * Get exchange rates (optional backend). Fails fast when backend is down (e.g. dev server not running).
  * @param {string} baseCurrency - Base currency code
  * @returns {Promise} Exchange rates object
  */
@@ -84,12 +84,13 @@ export const getExchangeRates = async (baseCurrency = 'ZAR') => {
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get('/api/exchange-rates', {
         params: { base: baseCurrency },
+        timeout: 5000,
       });
       return response.data || {};
     }
   } catch (error) {
     if (import.meta.env?.DEV) {
-      console.warn('Exchange rates unavailable (backend may be down or returned an error). Using empty rates.', error?.response?.status || error?.message);
+      console.warn('Exchange rates unavailable (backend may be down). Using empty rates.', error?.code || error?.message);
     }
   }
   return {};
@@ -109,7 +110,7 @@ export const getHistoricalExchangeRates = async (
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get(
         '/api/exchange-rates/historical',
-        { params: { base: baseCurrency, date } }
+        { params: { base: baseCurrency, date }, timeout: 5000 }
       );
       return response.data || {};
     }
