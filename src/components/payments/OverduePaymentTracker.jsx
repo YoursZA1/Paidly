@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { PaymentDateService } from '../../services/PaymentDateService';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { AlertCircle, Clock, TrendingUp } from 'lucide-react';
+import PropTypes from 'prop-types';
 
 function safeParseDate(value) {
   if (value == null || value === '') return null;
@@ -12,8 +14,6 @@ function safeParseDate(value) {
     return null;
   }
 }
-import { AlertCircle, Clock, TrendingUp } from 'lucide-react';
-import PropTypes from 'prop-types';
 
 const OverduePaymentTracker = ({ invoices, payments }) => {
   const [overdueData, setOverdueData] = useState({

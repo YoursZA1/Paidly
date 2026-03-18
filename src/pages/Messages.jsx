@@ -406,42 +406,74 @@ export default function MessagesPage() {
                                         No sent documents yet. Send an invoice via Email or WhatsApp to see them here.
                                     </p>
                                 ) : (
-                                    <table className="w-full text-sm border-collapse">
-                                        <thead>
-                                            <tr className="border-b border-border">
-                                                <th className="text-left py-3 px-2 font-medium">Document</th>
-                                                <th className="text-left py-3 px-2 font-medium">Client</th>
-                                                <th className="text-left py-3 px-2 font-medium">Channel</th>
-                                                <th className="text-left py-3 px-2 font-medium">Sent</th>
-                                                <th className="text-left py-3 px-2 font-medium">Opened</th>
-                                                <th className="text-left py-3 px-2 font-medium">Paid</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
+                                    <>
+                                        {/* Mobile: card list */}
+                                        <div className="sm:hidden space-y-2">
                                             {sentDocumentsRows.map((row) => (
-                                                <tr
+                                                <button
                                                     key={row.id}
-                                                    role="button"
-                                                    tabIndex={0}
+                                                    type="button"
                                                     onClick={() => setSelectedMessageDetail(row.detail)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && setSelectedMessageDetail(row.detail)}
-                                                    className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer ${selectedMessageDetail?.rowId === row.id ? 'bg-muted/70' : ''}`}
+                                                    className={`w-full text-left rounded-xl border border-border/60 bg-card px-4 py-3 hover:bg-muted/40 active:bg-muted/60 transition-colors ${
+                                                        selectedMessageDetail?.rowId === row.id ? 'ring-2 ring-primary/40' : ''
+                                                    }`}
                                                 >
-                                                    <td className="py-2.5 px-2">{row.document}</td>
-                                                    <td className="py-2.5 px-2">{row.client}</td>
-                                                    <td className="py-2.5 px-2">{row.channel}</td>
-                                                    <td className="py-2.5 px-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
-                                                    <td className="py-2.5 px-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
-                                                    <td className="py-2.5 px-2">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
-                                                </tr>
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="font-semibold text-foreground truncate">{row.document}</p>
+                                                            <p className="text-xs text-muted-foreground truncate">{row.client} • {row.channel}</p>
+                                                        </div>
+                                                        <div className="shrink-0 text-xs text-muted-foreground">
+                                                            {row.sentAt ? format(row.sentAt, 'MMM d') : '—'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-3 text-xs">
+                                                        <span className="text-muted-foreground">{row.sentIndicator} Sent</span>
+                                                        <span className="text-muted-foreground">{row.openedIndicator || '—'} Opened</span>
+                                                        <span className="text-muted-foreground">{row.paidIndicator || '—'} Paid</span>
+                                                    </div>
+                                                </button>
                                             ))}
-                                        </tbody>
-                                    </table>
+                                        </div>
+
+                                        {/* Desktop/tablet: table */}
+                                        <table className="hidden sm:table w-full text-sm border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-border">
+                                                    <th className="text-left py-3 px-2 font-medium">Document</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Client</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Channel</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Sent</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Opened</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Paid</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sentDocumentsRows.map((row) => (
+                                                    <tr
+                                                        key={row.id}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onClick={() => setSelectedMessageDetail(row.detail)}
+                                                        onKeyDown={(e) => e.key === 'Enter' && setSelectedMessageDetail(row.detail)}
+                                                        className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer ${selectedMessageDetail?.rowId === row.id ? 'bg-muted/70' : ''}`}
+                                                    >
+                                                        <td className="py-2.5 px-2">{row.document}</td>
+                                                        <td className="py-2.5 px-2">{row.client}</td>
+                                                        <td className="py-2.5 px-2">{row.channel}</td>
+                                                        <td className="py-2.5 px-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
+                                                        <td className="py-2.5 px-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
+                                                        <td className="py-2.5 px-2">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>
                         {selectedMessageDetail && (
-                            <Card className="bg-card shadow-xl border border-border h-fit">
+                            <Card className="bg-card shadow-xl border border-border h-fit sm:sticky sm:top-4">
                                 <CardHeader className="border-b border-border flex flex-row items-start justify-between space-y-0 gap-2">
                                     <div>
                                         <CardTitle className="text-lg">{selectedMessageDetail.documentLabel}</CardTitle>

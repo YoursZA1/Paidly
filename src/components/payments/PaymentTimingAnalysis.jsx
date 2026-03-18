@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
+import { TrendingUp } from "lucide-react";
+import PropTypes from 'prop-types';
 
 function safeParseDate(value) {
     if (value == null || value === '') return null;
@@ -14,8 +16,6 @@ function safeParseDate(value) {
         return null;
     }
 }
-import { TrendingUp } from "lucide-react";
-import PropTypes from 'prop-types';
 
 export default function PaymentTimingAnalysis({ payments = [], invoices = [], currency = 'USD' }) {
     // Calculate payment aging and timing metrics
@@ -45,9 +45,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
         payments.forEach(payment => {
             metrics.totalAmountPaid += payment.amount || 0;
 
-            if (payment.payment_date) {
-                const paymentDate = safeParseDate(payment.payment_date);
-                if (!paymentDate) return;
+            const paymentDate = safeParseDate(payment.payment_date || payment.paid_at);
+            if (paymentDate) {
                 const invoice = invoices.find(inv => inv.id === payment.invoice_id);
                 
                 const dueStr = invoice?.delivery_date || invoice?.due_date;

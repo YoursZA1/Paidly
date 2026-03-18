@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { quotesToCsv, parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
 import { Link } from "react-router-dom";
@@ -16,6 +16,7 @@ import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const QUOTES_PAGE_QUERY_KEY = ["quotes-page"];
 
@@ -219,7 +220,7 @@ export default function QuotesPage() {
                             Create, manage, and track your project quotations.
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full sm:w-auto items-center">
                         <input
                             type="file"
                             name="quotes_import_csv"
@@ -228,32 +229,21 @@ export default function QuotesPage() {
                             className="hidden"
                             onChange={handleImportQuotesFile}
                         />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleImportQuotes}
-                            disabled={isImporting}
-                            className="rounded-xl"
-                        >
-                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
-                            {isImporting ? "Importing…" : "Import CSV"}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportQuotes}
-                            disabled={sortedQuotes.length === 0}
-                            className="rounded-xl"
-                        >
-                            <Download className="w-4 h-4 mr-2" />
-                            Export CSV
-                        </Button>
-                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10">
+                        {/* Primary action first on mobile */}
+                        <Link to={createPageUrl("CreateQuote")} className="order-first sm:order-none w-full sm:w-auto">
+                            <Button className="w-full sm:w-auto rounded-xl gap-2 h-11 sm:h-9 px-4 touch-manipulation">
+                                <Plus className="w-4 h-4" />
+                                Create Quote
+                            </Button>
+                        </Link>
+
+                        {/* View toggle */}
+                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10 shrink-0">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -261,21 +251,63 @@ export default function QuotesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-lg ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <List className="w-4 h-4" />
+                            </Button>
+                        </div>
+
+                        {/* Mobile: import/export in dropdown */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="sm:hidden h-10 min-w-[44px] rounded-xl touch-manipulation"
+                                    aria-label="More actions"
+                                >
+                                    <MoreVertical className="w-5 h-5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                                <DropdownMenuItem onClick={handleImportQuotes} disabled={isImporting} className="rounded-lg">
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {isImporting ? "Importing…" : "Import CSV"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportQuotes} disabled={sortedQuotes.length === 0} className="rounded-lg">
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Export CSV
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* Desktop: buttons */}
+                        <div className="hidden sm:flex flex-wrap gap-2 items-center">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleImportQuotes}
+                                disabled={isImporting}
+                                className="rounded-xl"
+                            >
+                                <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                                {isImporting ? "Importing…" : "Import CSV"}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleExportQuotes}
+                                disabled={sortedQuotes.length === 0}
+                                className="rounded-xl"
+                            >
+                                <Download className="w-4 h-4 mr-2" />
+                                Export CSV
                             </Button>
                         </div>
                         <Link to={createPageUrl("QuoteTemplates")} className="flex-1 sm:flex-none">
                             <Button variant="outline" className="w-full sm:w-auto rounded-xl">
                                 <FileText className="w-4 h-4 mr-2" />
                                 Templates
-                            </Button>
-                        </Link>
-                        <Link to={createPageUrl("CreateQuote")} className="flex-1 sm:flex-none">
-                            <Button className="w-full sm:w-auto rounded-xl gap-2">
-                                <Plus className="w-4 h-4" />
-                                Create Quote
                             </Button>
                         </Link>
                     </div>

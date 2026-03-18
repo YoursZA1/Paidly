@@ -6,6 +6,17 @@ import { format, parseISO, isBefore, isToday } from "date-fns";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import PropTypes from 'prop-types';
 
+function safeParseDate(value) {
+    if (value == null || value === '') return null;
+    const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : String(value));
+    if (!str) return null;
+    try {
+        return parseISO(str);
+    } catch {
+        return null;
+    }
+}
+
 export default function PaymentSchedule({ 
     invoice, 
     payments = [], 
@@ -20,14 +31,17 @@ export default function PaymentSchedule({
 
     // Match payments to scheduled installments
     const installmentsWithStatus = schedule.map(installment => {
-        const matchingPayments = payments.filter(p => 
-            parseISO(p.payment_date).toDateString() === parseISO(installment.due_date).toDateString() ||
-            Math.abs(p.amount - installment.amount) < 0.01
-        );
+        const dueDate = safeParseDate(installment?.due_date);
+        const matchingPayments = payments.filter(p => {
+            const payDate = safeParseDate(p?.payment_date || p?.paid_at);
+            const dateMatch = dueDate && payDate ? payDate.toDateString() === dueDate.toDateString() : false;
+            const amountMatch = Math.abs((p?.amount || 0) - (installment?.amount || 0)) < 0.01;
+            return dateMatch || amountMatch;
+        });
         
         const paidAmount = matchingPayments.reduce((sum, p) => sum + p.amount, 0);
-        const isOverdue = isBefore(parseISO(installment.due_date), new Date()) && paidAmount < installment.amount;
-        const isDueToday = isToday(parseISO(installment.due_date));
+        const isOverdue = !!(dueDate && isBefore(dueDate, new Date()) && paidAmount < (installment?.amount || 0));
+        const isDueToday = !!(dueDate && isToday(dueDate));
         
         return {
             ...installment,
