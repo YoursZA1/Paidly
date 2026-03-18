@@ -2013,7 +2013,7 @@ class IntegrationManager {
         if (!fileUrl) {
           throw new Error("Receipt upload succeeded but could not generate URL.");
         }
-        return { file_url: fileUrl, file_path };
+        return { file_url: fileUrl, file_path: filePath };
       },
       /** Upload to bank-details bucket (statements, imports); path = org_id/bank-details/... */
       UploadToBankDetails: async ({ file }) => {
