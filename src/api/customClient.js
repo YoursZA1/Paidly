@@ -2026,8 +2026,9 @@ class IntegrationManager {
       },
       ExtractDataFromUploadedFile: async (file) => {
         void file; // Acknowledge parameter
-        console.warn('ExtractDataFromUploadedFile not implemented in custom client');
-        return null;
+        // This integration requires a backend/LLM service. In the custom client build, it isn't configured.
+        // Callers should fall back to browser OCR (images) or manual entry.
+        throw new Error("Receipt extraction service is not configured. Enable 'Extract with browser OCR' (images only) or fill in manually.");
       },
       CreateFileSignedUrl: async (fileId) => {
         void fileId; // Acknowledge parameter

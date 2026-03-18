@@ -89,21 +89,45 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                     payload,
                 });
             } else {
-                const apiResult = await ExtractDataFromUploadedFile({
-                    file_url,
-                    json_schema: getReceiptExtractionSchema(),
-                });
-                const payload = buildScanPayload(
-                    apiResult.status === "success" && apiResult.output ? apiResult.output : null,
-                    file_url,
-                    file
-                );
+                // Server extraction may not be configured in this app build (custom client).
+                // Handle gracefully: if extraction fails or is unavailable, still attach the receipt and let user fill manually.
+                let apiResult = null;
+                try {
+                    apiResult = await ExtractDataFromUploadedFile({
+                        file_url,
+                        json_schema: getReceiptExtractionSchema(),
+                    });
+                } catch (e) {
+                    apiResult = { status: "error", error: e?.message || String(e) };
+                }
+
+                // If server extraction isn't available, and this is an image, fall back to browser OCR automatically.
+                let extracted = apiResult?.status === "success" && apiResult.output ? apiResult.output : null;
+                let raw = "";
+                if (!extracted && isImage) {
+                    try {
+                        const data = await extractReceiptDataWithTesseract(file);
+                        extracted = data;
+                        raw = data?.raw || "";
+                    } catch (e) {
+                        // ignore; we'll still return an attached receipt payload
+                        if (import.meta.env.DEV) {
+                            console.warn("[ReceiptScanner] Browser OCR fallback failed:", e?.message || e);
+                        }
+                    }
+                }
+
+                if (!extracted && apiResult?.error) {
+                    setError(apiResult.error);
+                }
+
+                const payload = buildScanPayload(extracted, file_url, file);
                 const total = payload?.amount != null ? String(payload.amount) : null;
-                setResult({ total, raw: "", payload });
+                setResult({ total, raw, payload });
             }
         } catch (err) {
             console.error("Error scanning receipt:", err);
-            setError("Failed to scan receipt. Please try again.");
+            setError(err?.message || "Failed to scan receipt. Please try again.");
         } finally {
             setLoading(false);
         }
