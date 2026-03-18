@@ -98,7 +98,7 @@ const itemVariants = {
   },
 };
 
-const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, sparklineData, sparklineColor = "hsl(var(--foreground))", animateFromZero, numericValue, currencyForAnimation }) => {
+const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, sparklineData, sparklineColor = "hsl(var(--foreground))", animateFromZero, numericValue, currencyForAnimation }) => {
   const sparkId = `spark-${String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   const useTicker = animateFromZero && currencyForAnimation != null && !isLoading && typeof numericValue === 'number';
   const displayValue = useTicker ? null : value;
@@ -135,7 +135,20 @@ const StatCard = ({ title, value, icon: Icon, color: _color, iconBg: _iconBg, is
             ? `w-10 h-10 sm:w-12 sm:h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-muted"}`
             : "w-12 h-12 sm:w-14 sm:h-14 bg-muted"
         }`}>
-          <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
+          {iconImageSrc ? (
+            <img
+              src={iconImageSrc}
+              alt={iconImageAlt || String(title || "Icon")}
+              width={48}
+              height={48}
+              className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6" : "w-6 h-6 sm:w-7 sm:h-7"} object-contain`}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
+          )}
         </div>
       </div>
       {fintech && Array.isArray(sparklineData) && sparklineData.length > 1 && (
@@ -1451,7 +1464,7 @@ export default function Dashboard() {
             {/* Mobile: Framer Motion carousel */}
             <div className="md:hidden">
               <KPICarousel>
-                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
+                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
                 <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" />
                 <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" />
                 <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" />
@@ -1459,7 +1472,7 @@ export default function Dashboard() {
             </div>
             {/* Desktop: grid */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
               <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" /></motion.div>
               <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" /></motion.div>
               <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" /></motion.div>
