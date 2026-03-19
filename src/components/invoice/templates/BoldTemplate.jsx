@@ -7,11 +7,11 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
     const dueLabel = resolvedTitle === 'QUOTE' ? 'Valid Until' : 'Due Date';
 
     return (
-        <div className="bg-white">
+        <div className="invoice bg-white">
             {/* Bold Header — same structure: logo/company left, INVOICE right */}
-            <header className="bg-[#f24e00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-0">
+            <header className="header bg-[#f24e00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-0">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="max-w-md min-w-0">
+                    <div className="company max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div>
                                 <img
@@ -30,7 +30,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             </h1>
                         )}
                     </div>
-                    <div className="text-left sm:text-right shrink-0">
+                    <div className="invoice-meta text-left sm:text-right shrink-0">
                         <h2 className="text-3xl sm:text-5xl font-black">{resolvedTitle}</h2>
                     </div>
                 </div>
@@ -40,7 +40,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             <div className="bg-[#ff7c00] text-white px-4 sm:px-8 py-3 sm:py-4 -mx-4 sm:-mx-8 mb-6 sm:mb-8 flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 text-sm flex-wrap">
                 <div>
                     <span className="opacity-70">Invoice #:</span>
-                    <span className="font-bold ml-2">{invoice.invoice_number}</span>
+                    <span className="invoice-number font-bold ml-2">{invoice.invoice_number}</span>
                 </div>
                 {user?.company_address && (
                     <div className="flex-1 min-w-0 max-w-full sm:min-w-[200px]">
@@ -65,7 +65,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
             )}
 
             {/* Client Info — same structure as web: Bill To left, From right */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+            <section className="client grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
                 <div>
                     <h3 className="text-[#f24e00] font-black text-xs sm:text-sm uppercase mb-2 sm:mb-3">Bill To</h3>
                     <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
@@ -93,9 +93,11 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                 </div>
             </section>
             
-            {/* Items Table — Project Title left, Qty one line, Price/Total room for 6+ digits */}
-            <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="invoice-table w-full text-sm min-w-[320px] table-fixed">
+            <div className="invoice-layout">
+                <div className="invoice-layout-main">
+                    {/* Items Table — Project Title left, Qty one line, Price/Total room for 6+ digits */}
+                    <section className="mb-0 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                        <table className="items invoice-table w-full text-sm min-w-[320px] table-fixed">
                     <colgroup>
                         <col className="w-auto min-w-0" />
                         <col style={{ width: '2.5rem' }} />
@@ -110,7 +112,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             <th className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-xs font-bold uppercase whitespace-nowrap">Total</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-200 min-h-[200px]">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className="border-b border-slate-50">
@@ -118,8 +120,8 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                                         <p className="font-semibold text-gray-900 text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3.5 text-center text-gray-700 tabular-nums whitespace-nowrap">{item.quantity}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right font-semibold text-gray-900 tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-gray-700 tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right font-semibold text-gray-900 tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
@@ -128,47 +130,49 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
                             </tr>
                         )}
                     </tbody>
-                </table>
-            </section>
+                        </table>
+                    </section>
+                </div>
 
-            {/* Totals */}
-            <section className="flex justify-end mb-6 sm:mb-8">
-                <div className="w-full sm:w-80">
-                    <div className="flex justify-between py-3 px-4 border-b border-gray-200">
+                {/* Totals */}
+                <section className="summary invoice-layout-sidebar">
+                    <div className="invoice-summary w-full sm:w-80">
+                    <div className="row flex justify-between py-3 px-4 border-b border-gray-200">
                         <span className="text-gray-600">Subtotal</span>
-                        <span className="font-medium tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                        <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                     </div>
                     {invoice.discount_amount && invoice.discount_amount > 0 && (
-                        <div className="flex justify-between py-3 px-4 border-b border-gray-200">
+                        <div className="row flex justify-between py-3 px-4 border-b border-gray-200">
                             <span className="text-red-600">
                                 Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
                             </span>
-                            <span className="font-medium text-red-600 tabular-nums">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
+                            <span className="font-medium text-red-600 tabular-nums currency-value">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
                     {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
-                        <div className="flex justify-between py-3 px-4 border-b border-gray-200">
+                        <div className="row flex justify-between py-3 px-4 border-b border-gray-200">
                             <span className="text-gray-600">Item Taxes</span>
-                            <span className="font-medium text-orange-600 tabular-nums">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="font-medium text-orange-600 tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
                         </div>
                     )}
                     {invoice.tax_rate > 0 && (
-                        <div className="flex justify-between py-3 px-4 border-b border-gray-200">
+                        <div className="row flex justify-between py-3 px-4 border-b border-gray-200">
                             <span className="text-gray-600">Invoice Tax ({invoice.tax_rate}%)</span>
-                            <span className="font-medium tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between py-4 px-4 bg-[#f24e00] text-white rounded-lg mt-2">
+                    <div className="total-box total flex justify-between py-4 px-4 bg-[#f24e00] text-white rounded-lg mt-2">
                         <span className="font-black uppercase">Total Due</span>
-                        <span
-                            className="font-black tabular-nums tracking-tighter whitespace-nowrap min-w-0 pr-1"
+                        <strong
+                            className="font-black tabular-nums currency-value tracking-tighter whitespace-nowrap min-w-0 pr-1"
                             style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
                         >
                             {formatCurrency(invoice.total_amount, userCurrency)}
-                        </span>
+                        </strong>
                     </div>
-                </div>
-            </section>
+                    </div>
+                </section>
+            </div>
             
             {/* Payment Details */}
             {bankingDetail && (
@@ -213,7 +217,7 @@ export default function BoldTemplate({ invoice, client, user, bankingDetail, use
 
             {/* Notes: invoice notes + line-item notes */}
             {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
-                <section className="p-4 bg-gray-100 rounded-lg">
+                <section className="notes p-4 bg-gray-100 rounded-lg">
                     <h3 className="font-black text-gray-700 mb-2 uppercase text-sm">Notes</h3>
                     {invoice.notes && <p className="text-gray-600 text-sm whitespace-pre-line">{invoice.notes}</p>}
                     {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (

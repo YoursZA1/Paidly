@@ -207,6 +207,154 @@ export default function InvoicePDF() {
                     max-width: 210mm !important;
                     box-sizing: border-box !important;
                 }
+                .invoice-layout {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) 320px;
+                    gap: 24px;
+                    align-items: start;
+                    margin-bottom: 24px;
+                }
+                .invoice > .header {
+                    margin-bottom: 24px;
+                }
+                .header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                }
+                .invoice-meta {
+                    text-align: right;
+                }
+                .invoice-meta .invoice-number {
+                    display: block;
+                    font-weight: 700;
+                    letter-spacing: 0.02em;
+                    white-space: nowrap;
+                }
+                .invoice-number {
+                    white-space: nowrap;
+                }
+                .currency-value {
+                    text-align: right;
+                    white-space: nowrap;
+                    font-variant-numeric: tabular-nums lining-nums;
+                    font-feature-settings: 'tnum' 1, 'lnum' 1;
+                }
+                .header,
+                .client,
+                .summary,
+                .notes {
+                    page-break-inside: avoid;
+                }
+                .invoice > .client {
+                    margin-bottom: 24px;
+                }
+                .invoice .items {
+                    width: 100%;
+                }
+                .items {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 24px;
+                    table-layout: fixed;
+                }
+                .items th {
+                    text-align: left;
+                    font-size: 12px;
+                    text-transform: uppercase;
+                    padding: 10px;
+                    border-bottom: 2px solid #e5e7eb;
+                }
+                .items td {
+                    padding: 12px;
+                    border-bottom: 1px solid #e5e7eb;
+                    vertical-align: top;
+                }
+                .items th:nth-child(1),
+                .items td:nth-child(1) { width: 50%; }
+                .items th:nth-child(2),
+                .items td:nth-child(2) { width: 10%; text-align: center; }
+                .items th:nth-child(3),
+                .items td:nth-child(3),
+                .items th:nth-child(4),
+                .items td:nth-child(4) { width: 20%; text-align: right; }
+                .items tr {
+                    page-break-inside: avoid;
+                }
+                .items thead {
+                    display: table-header-group;
+                }
+                .invoice .summary {
+                    align-self: start;
+                }
+                .summary {
+                    width: 300px;
+                    margin-left: auto;
+                    margin-top: 24px;
+                    page-break-inside: avoid;
+                }
+                .summary .row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                }
+                .summary .total {
+                    margin-top: 12px;
+                    padding: 14px;
+                    border: 2px solid #111;
+                    background: #111;
+                    color: #fff;
+                    font-weight: bold;
+                    font-size: 18px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .invoice .notes {
+                    margin-top: 32px;
+                    font-size: 12px;
+                    color: #555;
+                }
+                .invoice-layout-main {
+                    min-width: 0;
+                }
+                .invoice-layout-sidebar {
+                    width: 320px;
+                    justify-self: end;
+                }
+                .invoice-summary {
+                    width: 320px;
+                    margin-left: auto;
+                    margin-top: 24px;
+                }
+                .invoice-layout .invoice-summary {
+                    width: 320px;
+                    max-width: 100%;
+                    margin-top: 0;
+                    margin-left: auto;
+                }
+                .invoice-summary .row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 12px;
+                    color: #6b7280;
+                }
+                .total-box {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: #fef3f2;
+                    border: 1px solid #fca5a5;
+                    padding: 16px;
+                    border-radius: 12px;
+                }
+                .total-box strong {
+                    font-size: 24px;
+                    color: #ea580c;
+                }
+                .pdf-content .invoice-table tbody {
+                    min-height: 200px;
+                }
                 .print-container {
                     width: 800px;
                     margin: 0 auto;
@@ -216,7 +364,8 @@ export default function InvoicePDF() {
                     body {
                         margin: 0;
                         background-color: white;
-                        font-family: Arial, Helvetica, sans-serif;
+                        font-family: 'Inter', sans-serif;
+                        color: #111;
                         -webkit-print-color-adjust: exact;
                         print-color-adjust: exact;
                     }
@@ -235,6 +384,7 @@ export default function InvoicePDF() {
                         display: table !important;
                         width: 100% !important;
                         border-collapse: collapse !important;
+                        table-layout: fixed !important;
                         border: 1px solid #ddd;
                     }
                     .pdf-content .invoice-table thead { display: table-header-group !important; }
@@ -243,6 +393,78 @@ export default function InvoicePDF() {
                     .pdf-content .invoice-table th,
                     .pdf-content .invoice-table td { display: table-cell !important; }
                     .pdf-content .invoice-table th { background: #f5e7df !important; }
+                    .pdf-content .items {
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                        margin-top: 24px !important;
+                        table-layout: fixed !important;
+                    }
+                    .pdf-content .items th {
+                        text-align: left !important;
+                        font-size: 12px !important;
+                        text-transform: uppercase !important;
+                        padding: 10px !important;
+                        border-bottom: 2px solid #e5e7eb !important;
+                    }
+                    .pdf-content .items td {
+                        padding: 12px !important;
+                        border-bottom: 1px solid #e5e7eb !important;
+                        vertical-align: top !important;
+                    }
+                    .pdf-content .items th:nth-child(1),
+                    .pdf-content .items td:nth-child(1) { width: 50% !important; }
+                    .pdf-content .items th:nth-child(2),
+                    .pdf-content .items td:nth-child(2) { width: 10% !important; text-align: center !important; }
+                    .pdf-content .items th:nth-child(3),
+                    .pdf-content .items td:nth-child(3),
+                    .pdf-content .items th:nth-child(4),
+                    .pdf-content .items td:nth-child(4) { width: 20% !important; text-align: right !important; }
+                    .pdf-content .items tr { page-break-inside: avoid !important; }
+                    .pdf-content .summary {
+                        width: 300px !important;
+                        margin-left: auto !important;
+                        margin-top: 24px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .pdf-content .summary .row {
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        margin-bottom: 8px !important;
+                    }
+                    .pdf-content .summary .total {
+                        margin-top: 12px !important;
+                        padding: 14px !important;
+                        border: 2px solid #111 !important;
+                        background: #111 !important;
+                        color: #fff !important;
+                        font-weight: bold !important;
+                        font-size: 18px !important;
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                    }
+                    .pdf-content .invoice-table td {
+                        padding: 16px !important;
+                        vertical-align: top !important;
+                    }
+                    .pdf-content .invoice-table th:nth-child(1),
+                    .pdf-content .invoice-table td:nth-child(1) {
+                        width: 50% !important;
+                        white-space: normal !important;
+                        word-break: break-word !important;
+                    }
+                    .pdf-content .invoice-table th:nth-child(2),
+                    .pdf-content .invoice-table td:nth-child(2) {
+                        width: 10% !important;
+                        text-align: center !important;
+                    }
+                    .pdf-content .invoice-table th:nth-child(3),
+                    .pdf-content .invoice-table td:nth-child(3),
+                    .pdf-content .invoice-table th:nth-child(4),
+                    .pdf-content .invoice-table td:nth-child(4) {
+                        width: 20% !important;
+                        text-align: right !important;
+                    }
                     .invoice-container tr,
                     .invoice-container td,
                     .invoice-container th {
@@ -257,14 +479,37 @@ export default function InvoicePDF() {
                     }
                 }
                 @page {
-                    margin: 0.5in;
                     size: A4;
+                    margin: 20mm;
                 }
                 @media screen {
                     .pdf-page { max-width: 8.27in; margin: 0 auto; }
-                    .pdf-content table { width: 100%; border-collapse: collapse; }
+                    .pdf-content table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                    .pdf-content .invoice-table { table-layout: fixed; }
                     .pdf-content th,
-                    .pdf-content td { word-break: break-word; }
+                    .pdf-content td { word-break: break-word; overflow-wrap: anywhere; }
+                    .pdf-content .invoice-table td {
+                        padding: 16px;
+                        vertical-align: top;
+                    }
+                    .pdf-content .invoice-table th:nth-child(1),
+                    .pdf-content .invoice-table td:nth-child(1) {
+                        width: 50%;
+                        white-space: normal;
+                        word-break: break-word;
+                    }
+                    .pdf-content .invoice-table th:nth-child(2),
+                    .pdf-content .invoice-table td:nth-child(2) {
+                        width: 10%;
+                        text-align: center;
+                    }
+                    .pdf-content .invoice-table th:nth-child(3),
+                    .pdf-content .invoice-table td:nth-child(3),
+                    .pdf-content .invoice-table th:nth-child(4),
+                    .pdf-content .invoice-table td:nth-child(4) {
+                        width: 20%;
+                        text-align: right;
+                    }
                     .invoice-container * {
                         text-rendering: optimizeLegibility !important;
                         -webkit-font-smoothing: antialiased !important;
@@ -276,6 +521,23 @@ export default function InvoicePDF() {
                     .pdf-wrapper { padding: 12px 8px !important; }
                     .pdf-page { padding: 12px 16px !important; border-radius: 12px !important; }
                     .pdf-content { font-size: 14px; }
+                    .header {
+                        flex-direction: column;
+                        gap: 12px;
+                    }
+                    .invoice-meta {
+                        text-align: left;
+                    }
+                    .invoice-layout {
+                        grid-template-columns: minmax(0, 1fr);
+                        gap: 16px;
+                        margin-bottom: 16px;
+                    }
+                    .invoice-layout-sidebar {
+                        width: 100%;
+                        justify-self: stretch;
+                    }
+                    .invoice-summary { width: 100%; }
                     .pdf-content h1 { font-size: 1.5rem; }
                     .pdf-content h2 { font-size: 1.25rem; }
                     .pdf-content h3 { font-size: 0.875rem; }

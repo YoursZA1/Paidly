@@ -8,11 +8,11 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
     const dueLabel = resolvedTitle === 'QUOTE' ? 'Valid Until' : 'Due Date';
 
     return (
-        <div className="bg-card">
+        <div className="invoice bg-card">
             {/* Header */}
-            <header className="border-b-2 border-border pb-4 sm:pb-6 mb-4 sm:mb-6">
+            <header className="header border-b-2 border-border pb-4 sm:pb-6 mb-4 sm:mb-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div className="max-w-md min-w-0">
+                    <div className="company max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div className="mb-3 sm:mb-4">
                                 <img
@@ -34,9 +34,9 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                             <p className="text-muted-foreground mt-1 sm:mt-2 whitespace-pre-line text-xs sm:text-sm leading-relaxed">{user.company_address}</p>
                         )}
                     </div>
-                    <div className="text-left sm:text-right shrink-0">
+                    <div className="invoice-meta text-left sm:text-right shrink-0">
                         <h2 className="text-2xl sm:text-3xl font-bold text-primary mb-1 sm:mb-2">{resolvedTitle}</h2>
-                        <p className="text-muted-foreground text-sm"><strong>#:</strong> {invoice.invoice_number}</p>
+                        <p className="invoice-number text-muted-foreground text-sm"><strong>#:</strong> {invoice.invoice_number}</p>
                     </div>
                 </div>
             </header>
@@ -49,7 +49,7 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
             )}
 
             {/* From & To Section — same structure as web: Billed To left, Date of Issue / Due right */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+            <section className="client grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
                 <div>
                     <h3 className="text-xs sm:text-sm font-semibold text-muted-foreground uppercase mb-2">Billed To</h3>
                     <p className="font-bold text-foreground">{client.name}</p>
@@ -74,9 +74,11 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                 </div>
             </section>
             
-            {/* Items Table — same columns as web: Project Title, Qty, Price, Total; left-aligned layout, Qty one line, values no wrap */}
-            <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="invoice-table w-full text-sm border border-border rounded-lg overflow-hidden min-w-[320px] table-fixed">
+            <div className="invoice-layout">
+                <div className="invoice-layout-main">
+                    {/* Items Table — same columns as web: Project Title, Qty, Price, Total; left-aligned layout, Qty one line, values no wrap */}
+                    <section className="mb-0 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                        <table className="items invoice-table w-full text-sm border border-border rounded-lg overflow-hidden min-w-[320px] table-fixed">
                     <colgroup>
                         <col className="w-auto min-w-0" />
                         <col style={{ width: '2.5rem' }} />
@@ -91,7 +93,7 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                             <th className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3 text-right text-xs font-semibold text-foreground uppercase whitespace-nowrap">Total</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className="divide-y divide-border min-h-[200px]">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className="border-b border-slate-50">
@@ -99,8 +101,8 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                                         <p className="font-medium text-foreground text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3 text-center text-foreground tabular-nums whitespace-nowrap">{item.quantity}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3 text-right text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3 text-right text-foreground tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3 text-right font-medium text-foreground tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
@@ -109,47 +111,49 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
                             </tr>
                         )}
                     </tbody>
-                </table>
-            </section>
+                        </table>
+                    </section>
+                </div>
 
-            {/* Totals Section */}
-            <section className="flex justify-end mb-6 sm:mb-8">
-                <div className="w-full sm:max-w-sm">
-                    <div className="flex justify-between py-2 border-b border-border text-sm">
+                {/* Totals Section */}
+                <section className="summary invoice-layout-sidebar">
+                    <div className="invoice-summary w-full sm:max-w-sm">
+                    <div className="row flex justify-between py-2 border-b border-border text-sm">
                         <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-medium tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                        <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                     </div>
                     {invoice.discount_amount && invoice.discount_amount > 0 && (
-                        <div className="flex justify-between py-2 border-b border-border">
+                        <div className="row flex justify-between py-2 border-b border-border">
                             <span className="text-destructive">
                                 Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
                             </span>
-                            <span className="font-medium text-destructive tabular-nums">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
+                            <span className="font-medium text-destructive tabular-nums currency-value">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
                     {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
-                        <div className="flex justify-between py-2 border-b border-border">
+                        <div className="row flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Item Taxes</span>
-                            <span className="font-medium text-primary tabular-nums">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="font-medium text-primary tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
                         </div>
                     )}
                     {invoice.tax_rate > 0 && (
-                        <div className="flex justify-between py-2 border-b border-border">
+                        <div className="row flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Invoice Tax ({invoice.tax_rate}%)</span>
-                            <span className="font-medium tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between py-3 text-lg bg-primary/10 px-3 rounded-md mt-2 border border-primary/20">
+                    <div className="total-box total flex justify-between py-3 text-lg bg-primary/10 px-3 rounded-md mt-2 border border-primary/20">
                         <span className="font-bold text-foreground">Total</span>
-                        <span
-                            className="font-black text-primary tabular-nums tracking-tighter whitespace-nowrap min-w-0 pr-1"
+                        <strong
+                            className="font-black text-primary tabular-nums currency-value tracking-tighter whitespace-nowrap min-w-0 pr-1"
                             style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
                         >
                             {formatCurrency(invoice.total_amount, userCurrency)}
-                        </span>
+                        </strong>
                     </div>
-                </div>
-            </section>
+                    </div>
+                </section>
+            </div>
             
             {/* Payment Details Section */}
             {bankingDetail && (
@@ -194,7 +198,7 @@ export default function ClassicTemplate({ invoice, client, user, bankingDetail, 
 
             {/* Notes Section: invoice notes + line-item notes (service descriptions) */}
             {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
-                <section>
+                <section className="notes">
                     <h3 className="font-semibold text-foreground mb-2">Notes</h3>
                     {invoice.notes && <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>}
                     {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (

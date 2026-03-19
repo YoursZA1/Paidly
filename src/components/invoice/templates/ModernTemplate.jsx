@@ -8,11 +8,11 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
     const dueLabel = resolvedTitle === 'QUOTE' ? 'Valid Until' : 'Due Date';
 
     return (
-        <div className="bg-card">
+        <div className="invoice bg-card">
             {/* Header with gradient — same structure: logo/company left, INVOICE + number right */}
-            <header className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-6 sm:mb-8 rounded-t-lg">
+            <header className="header bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white p-4 sm:p-8 -mx-4 sm:-mx-8 -mt-4 sm:-mt-8 mb-6 sm:mb-8 rounded-t-lg">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div className="max-w-md min-w-0">
+                    <div className="company max-w-md min-w-0">
                         {user?.logo_url ? (
                             <div className="mb-2 sm:mb-3">
                                 <img
@@ -34,9 +34,9 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             <p className="text-white/90 text-xs sm:text-sm whitespace-pre-line leading-relaxed line-clamp-2">{user.company_address}</p>
                         )}
                     </div>
-                    <div className="text-left sm:text-right shrink-0">
+                    <div className="invoice-meta text-left sm:text-right shrink-0">
                         <h2 className="text-2xl sm:text-4xl font-light tracking-wide mb-1 sm:mb-2">{resolvedTitle}</h2>
-                        <p className="text-white/80 text-sm">#{invoice.invoice_number}</p>
+                        <p className="invoice-number text-white/80 text-sm">#{invoice.invoice_number}</p>
                         <p className="text-white/80 text-xs sm:text-sm">Issued: {issueDate}</p>
                         <p className="text-white/80 text-xs sm:text-sm">{dueLabel}: {deliveryDate}</p>
                     </div>
@@ -51,7 +51,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
             )}
 
             {/* Client Info — same structure as web: Bill To left, Payment Due right */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+            <section className="client grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
                 <div className="bg-muted p-4 sm:p-5 rounded-xl">
                     <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Bill To</h3>
                     <p className="font-semibold text-foreground text-base sm:text-lg">{client.name}</p>
@@ -71,13 +71,15 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 <div className="bg-muted p-4 sm:p-5 rounded-xl text-left sm:text-right">
                     <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Payment Due</h3>
                     <p className="font-semibold text-foreground text-base sm:text-lg">{deliveryDate}</p>
-                    <p className="text-xl sm:text-2xl font-bold text-primary mt-2 tabular-nums whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-primary mt-2 tabular-nums currency-value whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                 </div>
             </section>
             
-            {/* Items Table — Project Title left, Qty one line, Price/Total no wrap; fixed layout for space */}
-            <section className="mb-6 sm:mb-8 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="invoice-table w-full text-sm border border-border rounded-xl overflow-hidden min-w-[320px] table-fixed">
+            <div className="invoice-layout">
+                <div className="invoice-layout-main">
+                    {/* Items Table — Project Title left, Qty one line, Price/Total no wrap; fixed layout for space */}
+                    <section className="mb-0 overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                        <table className="items invoice-table w-full text-sm border border-border rounded-xl overflow-hidden min-w-[320px] table-fixed">
                     <colgroup>
                         <col className="w-auto min-w-0" />
                         <col style={{ width: '2.5rem' }} />
@@ -92,7 +94,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             <th className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-xs font-bold text-primary uppercase whitespace-nowrap">Total</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className="divide-y divide-border min-h-[200px]">
                         {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
                             invoice.items.map((item, index) => (
                                 <tr key={index} className="border-b border-slate-50">
@@ -100,8 +102,8 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                                         <p className="font-medium text-foreground text-xs sm:text-sm truncate">{item.service_name || item.name || 'Item'}</p>
                                     </td>
                                     <td className="px-1 py-2.5 sm:py-3.5 text-center text-foreground tabular-nums whitespace-nowrap">{item.quantity}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right font-medium text-foreground tabular-nums text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right text-foreground tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                                    <td className="pl-2 pr-4 sm:pl-3 sm:pr-4 py-2.5 sm:py-3.5 text-right font-medium text-foreground tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                                 </tr>
                             ))
                         ) : (
@@ -110,47 +112,49 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                             </tr>
                         )}
                     </tbody>
-                </table>
-            </section>
+                        </table>
+                    </section>
+                </div>
 
-            {/* Totals */}
-            <section className="flex justify-end mb-6 sm:mb-8">
-                <div className="w-full sm:w-72">
-                    <div className="flex justify-between py-2 text-muted-foreground">
+                {/* Totals */}
+                <section className="summary invoice-layout-sidebar">
+                    <div className="invoice-summary w-full sm:w-72">
+                    <div className="row flex justify-between py-2 text-muted-foreground">
                         <span>Subtotal</span>
-                        <span className="tabular-nums">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                        <span className="tabular-nums currency-value">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                     </div>
                     {invoice.discount_amount && invoice.discount_amount > 0 && (
-                        <div className="flex justify-between py-2 text-destructive">
+                        <div className="row flex justify-between py-2 text-destructive">
                             <span>
                                 Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
                             </span>
-                            <span className="font-medium tabular-nums">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value">-{formatCurrency(invoice.discount_amount, userCurrency)}</span>
                         </div>
                     )}
                     {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
-                        <div className="flex justify-between py-2 text-muted-foreground">
+                        <div className="row flex justify-between py-2 text-muted-foreground">
                             <span>Item Taxes</span>
-                            <span className="text-primary font-medium tabular-nums">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="text-primary font-medium tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
                         </div>
                     )}
                     {invoice.tax_rate > 0 && (
-                        <div className="flex justify-between py-2 text-muted-foreground">
+                        <div className="row flex justify-between py-2 text-muted-foreground">
                             <span>Invoice Tax ({invoice.tax_rate}%)</span>
-                            <span className="tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between py-3 mt-2 bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white px-4 rounded-lg">
+                    <div className="total-box total flex justify-between py-3 mt-2 bg-gradient-to-r from-[#f24e00] to-[#ff7c00] text-white px-4 rounded-lg">
                         <span className="font-bold">Total Due</span>
-                        <span
-                            className="font-bold tabular-nums tracking-tighter whitespace-nowrap min-w-0 pr-1"
+                        <strong
+                            className="font-bold tabular-nums currency-value tracking-tighter whitespace-nowrap min-w-0 pr-1"
                             style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
                         >
                             {formatCurrency(invoice.total_amount, userCurrency)}
-                        </span>
+                        </strong>
                     </div>
-                </div>
-            </section>
+                    </div>
+                </section>
+            </div>
             
             {/* Payment Details */}
             {bankingDetail && (
@@ -195,7 +199,7 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
 
             {/* Notes: invoice notes + line-item notes */}
             {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
-                <section className="p-4 bg-muted rounded-xl">
+                <section className="notes p-4 bg-muted rounded-xl">
                     <h3 className="font-bold text-foreground mb-2 text-sm">Notes</h3>
                     {invoice.notes && <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>}
                     {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
