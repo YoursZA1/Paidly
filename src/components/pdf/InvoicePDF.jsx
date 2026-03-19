@@ -35,7 +35,6 @@ const calculateTotals = (items) => {
 const styles = StyleSheet.create({
   page: {
     padding: 40,
-    paddingBottom: 120, // Leave room for the absolute footer
     fontSize: 10,
     fontFamily: "Helvetica",
     color: "#333333",
@@ -283,10 +282,7 @@ const styles = StyleSheet.create({
   },
 
   footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    marginTop: 18,
     padding: 30,
     backgroundColor: "#0F172A",
     flexDirection: "row",
