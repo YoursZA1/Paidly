@@ -21,6 +21,7 @@ const TEMPLATES = {
 };
 
 const DRAFT_STORAGE_KEY = 'invoiceDraft';
+const OPTIONAL_FETCH_TIMEOUT_MS = 15000;
 
 export default function InvoicePDF() {
     const location = useLocation();
@@ -118,18 +119,27 @@ export default function InvoicePDF() {
                 return;
             }
 
-            const [clientData, userData, bankingData] = await withTimeoutRetry(
-                () =>
-                    Promise.all([
-                        Client.get(invoiceRecord.client_id),
-                        User.me(),
-                        invoiceRecord.banking_detail_id
-                            ? BankingDetail.get(invoiceRecord.banking_detail_id).catch(() => null)
-                            : Promise.resolve(null),
-                    ]),
-                45000,
-                2
-            );
+            const optionalFetch = async (fn, fallback = null) => {
+                try {
+                    return await withTimeoutRetry(fn, OPTIONAL_FETCH_TIMEOUT_MS, 1);
+                } catch (error) {
+                    console.warn('Optional invoice PDF dependency failed to load:', error?.message || error);
+                    return fallback;
+                }
+            };
+
+            const [clientData, userData, bankingData] = await Promise.all([
+                optionalFetch(
+                    () => Client.get(invoiceRecord.client_id),
+                    invoiceRecord.client_name
+                        ? { name: invoiceRecord.client_name, email: invoiceRecord.client_email || '' }
+                        : null
+                ),
+                optionalFetch(() => User.me(), null),
+                invoiceRecord.banking_detail_id
+                    ? optionalFetch(() => BankingDetail.get(invoiceRecord.banking_detail_id), null)
+                    : Promise.resolve(null),
+            ]);
 
             // Normalize items so templates always get service_name, quantity, unit_price, total_price
             const items = Array.isArray(invoiceRecord.items)
@@ -176,7 +186,7 @@ export default function InvoicePDF() {
         );
     }
 
-    if (!invoice || !client) {
+    if (!invoice) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
                 <p className="text-gray-600">
@@ -593,7 +603,7 @@ export default function InvoicePDF() {
                         <div className="pdf-content invoice-container min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }}>
                             <TemplateComponent
                                 invoice={invoice}
-                                client={client}
+                                client={client || { name: invoice.client_name || 'Client' }}
                                 user={resolvedUser}
                                 bankingDetail={bankingDetail}
                                 userCurrency={userCurrency}
