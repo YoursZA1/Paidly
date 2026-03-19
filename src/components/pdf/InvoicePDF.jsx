@@ -25,7 +25,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
     marginBottom: 14,
+    paddingBottom: 12,
   },
 
   headerLeft: {
@@ -73,14 +76,15 @@ const styles = StyleSheet.create({
   invoiceNumber: {
     fontSize: 10,
     fontWeight: 800,
-    marginTop: 4,
+    marginTop: 0,
   },
 
   status: {
     fontSize: 10,
     fontWeight: 800,
     color: "#334155",
-    marginTop: 2,
+    marginTop: 0,
+    alignSelf: "flex-end",
   },
 
   datesRow: {
@@ -208,7 +212,8 @@ const styles = StyleSheet.create({
   },
 
   emptyBody: {
-    minHeight: 260,
+    position: "relative",
+    minHeight: 290,
     paddingHorizontal: 10,
     paddingVertical: 26,
     justifyContent: "center",
@@ -217,16 +222,23 @@ const styles = StyleSheet.create({
   },
 
   watermark: {
-    fontSize: 44,
+    position: "absolute",
+    top: 80,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    fontSize: 64,
     fontWeight: 900,
-    color: "#E5E7EB",
-    marginBottom: 18,
+    color: "rgba(229,231,235,0.22)",
+    transform: "rotate(-25deg)",
+    marginBottom: 0,
   },
 
   emptyText: {
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 700,
     color: "#94A3B8",
+    marginTop: 12,
   },
 
   footer: {
@@ -258,7 +270,14 @@ const styles = StyleSheet.create({
   },
 
   footerSpacer: {
-    height: 14,
+    height: 10,
+  },
+
+  footerDivider: {
+    height: 1,
+    backgroundColor: "#233A55",
+    width: "100%",
+    marginVertical: 10,
   },
 
   footerRight: {
@@ -326,10 +345,15 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
 
           <View style={styles.headerRight}>
             <Text style={styles.invoiceWord}>INVOICE</Text>
-            <Text style={styles.invoiceNumber}>#{invoice.number}</Text>
-            <Text style={styles.status}>
-              {status === "PAID" ? "Paid" : status === "DRAFT" ? "Draft" : status}
-            </Text>
+            <View style={{ marginTop: 6, flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
+              <View>
+                <Text style={styles.dateLabel}>INVOICE NUMBER</Text>
+                <Text style={styles.invoiceNumber}>{invoice.number}</Text>
+              </View>
+              <Text style={styles.status}>
+                {status === "PAID" ? "Paid" : status === "DRAFT" ? "Draft" : status}
+              </Text>
+            </View>
             <View style={styles.datesRow}>
               <View style={styles.dateBlock}>
                 <Text style={styles.dateLabel}>ISSUED</Text>
@@ -384,7 +408,7 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
             <Text style={styles.footerLabel}>PAYMENT INFO</Text>
             <Text style={styles.footerText}>{paymentInfo}</Text>
 
-            <View style={styles.footerSpacer} />
+            <View style={styles.footerDivider} />
 
             <Text style={styles.footerLabel}>PAYMENT TERMS</Text>
             <Text style={styles.footerText}>{paymentTerms}</Text>
