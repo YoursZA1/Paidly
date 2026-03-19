@@ -13,22 +13,39 @@ const formatCurrency = (value, currency = "ZAR") =>
     currency
   }).format(Number(value) || 0);
 
+const toNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const calcLineTotal = (item) => {
+  // Prefer explicit `total` if present, otherwise compute from qty * price.
+  if (item?.total != null) return toNumber(item.total);
+  return toNumber(item?.qty) * toNumber(item?.price);
+};
+
+const calculateTotals = (items) => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const subtotal = safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0);
+  // For now we treat "grand total" as the final amount due (tax/discount not modeled here).
+  const grandTotal = subtotal;
+  return { subtotal, grandTotal };
+};
+
 const styles = StyleSheet.create({
   page: {
-    padding: 28,
+    padding: 40,
+    paddingBottom: 120, // Leave room for the absolute footer
     fontSize: 10,
     fontFamily: "Helvetica",
-    color: "#0F172A",
+    color: "#333333",
   },
 
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
-    marginBottom: 14,
-    paddingBottom: 12,
+    marginBottom: 40,
   },
 
   headerLeft: {
@@ -39,8 +56,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 46,
-    height: 46,
+    width: 40,
+    height: 40,
+    borderRadius: 4,
     objectFit: "contain",
   },
 
@@ -50,27 +68,27 @@ const styles = StyleSheet.create({
   },
 
   brand: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: 800,
-    marginBottom: 2,
+    marginBottom: 0,
   },
 
   address: {
     fontSize: 9,
-    color: "#64748B",
-    lineHeight: 1.25,
+    color: "#777777",
+    lineHeight: 1.35,
     maxWidth: 230,
   },
 
   headerRight: {
     alignItems: "flex-end",
-    minWidth: 180,
+    minWidth: 190,
   },
 
   invoiceWord: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 900,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
   invoiceNumber: {
@@ -79,10 +97,17 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
 
-  status: {
-    fontSize: 10,
+  invoiceNumberLabel: {
+    fontSize: 9,
     fontWeight: 800,
-    color: "#334155",
+    color: "#999999",
+    letterSpacing: 1,
+  },
+
+  status: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#333333",
     marginTop: 0,
     alignSelf: "flex-end",
   },
@@ -100,15 +125,23 @@ const styles = StyleSheet.create({
   dateLabel: {
     fontSize: 9,
     fontWeight: 800,
-    color: "#64748B",
-    letterSpacing: 0.3,
+    color: "#999999",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 
   dateValue: {
     marginTop: 2,
     fontSize: 10,
     fontWeight: 900,
-    color: "#0F172A",
+    color: "#333333",
+  },
+
+  dueDateValue: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: 900,
+    color: "#E67E22",
   },
 
   billTo: {
@@ -117,11 +150,12 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: 900,
-    color: "#64748B",
-    marginBottom: 6,
-    letterSpacing: 0.35,
+    color: "#999999",
+    marginBottom: 10,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 
   clientName: {
@@ -132,32 +166,39 @@ const styles = StyleSheet.create({
 
   clientAddress: {
     fontSize: 9,
-    color: "#64748B",
-    lineHeight: 1.3,
+    color: "#777777",
+    lineHeight: 1.35,
+  },
+
+  billToUnderline: {
+    width: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: "#333333",
+    marginBottom: 14,
   },
 
   tableOuter: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 6,
+    borderRadius: 5,
     overflow: "hidden",
   },
 
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#F3F4F6",
-    paddingVertical: 8,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
     paddingHorizontal: 10,
   },
 
   thDesc: {
-    width: "55%",
+    width: "60%",
     fontSize: 9,
     fontWeight: 900,
   },
 
   thQty: {
-    width: "10%",
+    width: "15%",
     fontSize: 9,
     fontWeight: 900,
     textAlign: "center",
@@ -167,11 +208,11 @@ const styles = StyleSheet.create({
     width: "15%",
     fontSize: 9,
     fontWeight: 900,
-    textAlign: "right",
+    textAlign: "center",
   },
 
   thTotal: {
-    width: "20%",
+    width: "10%",
     fontSize: 9,
     fontWeight: 900,
     textAlign: "right",
@@ -179,43 +220,43 @@ const styles = StyleSheet.create({
 
   row: {
     flexDirection: "row",
-    paddingVertical: 9,
+    paddingVertical: 8,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F7",
+    borderBottomColor: "#eeeeee",
   },
 
   descCell: {
-    width: "55%",
-    paddingRight: 8,
+    width: "60%",
+    paddingRight: 10,
     flexShrink: 1,
     flexWrap: "wrap",
     lineHeight: 1.35,
   },
 
   qtyCell: {
-    width: "10%",
+    width: "15%",
     textAlign: "center",
     fontWeight: 700,
   },
 
   moneyCell: {
     width: "15%",
-    textAlign: "right",
+    textAlign: "center",
     fontWeight: 700,
   },
 
   totalCell: {
-    width: "20%",
+    width: "10%",
     textAlign: "right",
     fontWeight: 900,
   },
 
   emptyBody: {
     position: "relative",
-    minHeight: 290,
+    minHeight: 260,
     paddingHorizontal: 10,
-    paddingVertical: 26,
+    paddingVertical: 40,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
@@ -223,11 +264,11 @@ const styles = StyleSheet.create({
 
   watermark: {
     position: "absolute",
-    top: 80,
+    top: 105,
     left: 0,
     right: 0,
     textAlign: "center",
-    fontSize: 64,
+    fontSize: 72,
     fontWeight: 900,
     color: "rgba(229,231,235,0.22)",
     transform: "rotate(-25deg)",
@@ -235,53 +276,52 @@ const styles = StyleSheet.create({
   },
 
   emptyText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 700,
-    color: "#94A3B8",
-    marginTop: 12,
+    color: "#999999",
+    marginTop: 0,
   },
 
   footer: {
-    marginTop: 18,
-    padding: 18,
-    backgroundColor: "#0B1D33",
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 30,
+    backgroundColor: "#0F172A",
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 18,
   },
 
   footerLeft: {
-    flexGrow: 1,
-    maxWidth: 330,
+    width: "60%",
   },
 
   footerLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 900,
-    color: "#CBD5E1",
-    letterSpacing: 0.35,
+    color: "#94A3B8",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 
   footerText: {
     fontSize: 9,
     color: "#94A3B8",
     lineHeight: 1.35,
-    marginTop: 6,
-  },
-
-  footerSpacer: {
-    height: 10,
+    marginTop: 4,
   },
 
   footerDivider: {
     height: 1,
-    backgroundColor: "#233A55",
-    width: "100%",
-    marginVertical: 10,
+    backgroundColor: "#334155",
+    width: "80%",
+    marginVertical: 12,
   },
 
   footerRight: {
-    minWidth: 130,
+    width: "30%",
     alignItems: "flex-end",
   },
 
@@ -301,13 +341,13 @@ const styles = StyleSheet.create({
   footerMoneyValue: {
     fontSize: 10,
     fontWeight: 900,
-    color: "#FFFFFF",
+    color: "#94A3B8",
   },
 
   footerAmountDueLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 900,
-    color: "#CBD5E1",
+    color: "#94A3B8",
     marginBottom: 6,
   },
 
@@ -318,15 +358,27 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function InvoicePDF({ invoice, currency = "ZAR" }) {
+export default function InvoicePDF({ invoice, data, currency = "ZAR" }) {
+  const inv = invoice ?? data ?? null;
+
+  if (!inv) {
+    return (
+      <Document>
+        <Page size="A4" />
+      </Document>
+    );
+  }
+
   const fmt = (value) => formatCurrency(value, currency);
 
-  const status = (invoice?.status || "draft").toString().toUpperCase();
-  const paymentInfo = invoice?.paymentInfo || "Bank details not specified";
+  const status = (inv?.status || "draft").toString().toUpperCase();
+  const paymentInfo = inv?.paymentInfo || "Bank details not specified";
   const paymentTerms =
-    invoice?.paymentTerms ||
+    inv?.paymentTerms ||
     "Due within 15 days upon acceptance. Late payments may incur interest.";
-  const hasItems = Array.isArray(invoice?.items) && invoice.items.length > 0;
+  const items = Array.isArray(inv?.items) ? inv.items : [];
+  const { subtotal, grandTotal } = calculateTotals(items);
+  const hasItems = items.length > 0;
 
   return (
     <Document>
@@ -334,12 +386,12 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            {invoice?.logo_url ? (
-              <Image src={invoice.logo_url} style={styles.logo} />
+            {inv?.logo_url ? (
+              <Image src={inv.logo_url} style={styles.logo} />
             ) : null}
             <View style={styles.brandBlock}>
-              <Text style={styles.brand}>{invoice.brand}</Text>
-              <Text style={styles.address}>{invoice.address}</Text>
+              <Text style={styles.brand}>{inv.brand}</Text>
+              <Text style={styles.address}>{inv.address}</Text>
             </View>
           </View>
 
@@ -347,8 +399,8 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
             <Text style={styles.invoiceWord}>INVOICE</Text>
             <View style={{ marginTop: 6, flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
               <View>
-                <Text style={styles.dateLabel}>INVOICE NUMBER</Text>
-                <Text style={styles.invoiceNumber}>{invoice.number}</Text>
+                <Text style={styles.invoiceNumberLabel}>INVOICE NUMBER</Text>
+                <Text style={styles.invoiceNumber}>{inv.number}</Text>
               </View>
               <Text style={styles.status}>
                 {status === "PAID" ? "Paid" : status === "DRAFT" ? "Draft" : status}
@@ -357,11 +409,11 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
             <View style={styles.datesRow}>
               <View style={styles.dateBlock}>
                 <Text style={styles.dateLabel}>ISSUED</Text>
-                <Text style={styles.dateValue}>{invoice.issuedDateFormatted || ""}</Text>
+                <Text style={styles.dateValue}>{inv.issuedDateFormatted || ""}</Text>
               </View>
               <View style={styles.dateBlock}>
                 <Text style={styles.dateLabel}>DUE DATE</Text>
-                <Text style={styles.dateValue}>{invoice.dueDateFormatted || ""}</Text>
+                <Text style={styles.dueDateValue}>{inv.dueDateFormatted || ""}</Text>
               </View>
             </View>
           </View>
@@ -370,9 +422,10 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
         {/* Billing */}
         <View style={styles.billTo}>
           <Text style={styles.sectionLabel}>BILL TO</Text>
-          <Text style={styles.clientName}>{invoice.client?.name || ""}</Text>
-          {invoice.client?.address ? (
-            <Text style={styles.clientAddress}>{invoice.client.address}</Text>
+          <View style={styles.billToUnderline} />
+          <Text style={styles.clientName}>{inv.client?.name || ""}</Text>
+          {inv.client?.address ? (
+            <Text style={styles.clientAddress}>{inv.client.address}</Text>
           ) : null}
         </View>
 
@@ -386,12 +439,12 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
           </View>
 
           {hasItems ? (
-            invoice.items.map((item, i) => (
+            items.map((item, i) => (
               <View key={i} style={styles.row} wrap={false}>
                 <Text style={styles.descCell}>{item.description}</Text>
-                <Text style={styles.qtyCell}>{item.qty}</Text>
+                <Text style={styles.qtyCell}>{item.qty ?? ""}</Text>
                 <Text style={styles.moneyCell}>{fmt(item.price)}</Text>
-                <Text style={styles.totalCell}>{fmt(item.total)}</Text>
+                <Text style={styles.totalCell}>{fmt(calcLineTotal(item))}</Text>
               </View>
             ))
           ) : (
@@ -417,10 +470,10 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
           <View style={styles.footerRight}>
             <View style={styles.footerMoneyRow}>
               <Text style={styles.footerMoneyLabel}>Sub Total</Text>
-              <Text style={styles.footerMoneyValue}>{fmt(invoice.subtotal)}</Text>
+              <Text style={styles.footerMoneyValue}>{fmt(inv.subtotal ?? subtotal)}</Text>
             </View>
             <Text style={styles.footerAmountDueLabel}>AMOUNT DUE</Text>
-            <Text style={styles.footerAmountDueValue}>{fmt(invoice.total)}</Text>
+            <Text style={styles.footerAmountDueValue}>{fmt(inv.total ?? grandTotal)}</Text>
           </View>
         </View>
       </Page>

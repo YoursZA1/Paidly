@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Quote, Client, User } from '@/api/entities';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
+import generatePdfFromElement from '@/utils/generatePdfFromElement';
+import { useRef } from 'react';
 
 // Import templates
 import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
@@ -22,6 +25,7 @@ const DRAFT_STORAGE_KEY = 'quoteDraft';
 
 export default function QuotePDF() {
     const location = useLocation();
+    const navigate = useNavigate();
     const urlParams = new URLSearchParams(location.search);
     const quoteId = urlParams.get('id');
     const isDraft = urlParams.get('draft') === '1';
@@ -30,6 +34,8 @@ export default function QuotePDF() {
     const [client, setClient] = useState(null);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const printRef = useRef(null);
 
     useEffect(() => {
         if (isDraft) {
@@ -41,7 +47,9 @@ export default function QuotePDF() {
                     if (quoteData && draftClient && draftUser) {
                         const mappedQuote = {
                             quote_number: quoteData.quote_number || 'Draft',
+                            created_date: quoteData.created_date || quoteData.invoice_date || quoteData.createdAt || new Date().toISOString(),
                             valid_until: quoteData.valid_until,
+                            status: quoteData.status || 'draft',
                             items: (quoteData.items || []).map((item) => ({
                                 service_name: item.name || item.service_name || 'Item',
                                 description: item.description || '',
@@ -75,12 +83,25 @@ export default function QuotePDF() {
     }, [quoteId, isDraft]);
 
     useEffect(() => {
-        if (autoDownload && !isLoading && quote) {
-            const timer = setTimeout(() => {
+        if (!autoDownload || isLoading || !quote || !printRef.current) return;
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (cancelled) return;
+            try {
+                setIsGeneratingPdf(true);
+                const filename = `${quote.quote_number || 'quote'}.pdf`;
+                await generatePdfFromElement(printRef.current, filename);
+            } catch (e) {
+                console.error('Auto-download quote PDF failed, falling back to print:', e);
                 window.print();
-            }, 500);
-            return () => clearTimeout(timer);
-        }
+            } finally {
+                if (!cancelled) setIsGeneratingPdf(false);
+            }
+        }, 600);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
     }, [autoDownload, isLoading, quote]);
 
     const loadQuoteData = async () => {
@@ -115,7 +136,7 @@ export default function QuotePDF() {
                 <p className="text-gray-600">
                     {isDraft ? 'No draft data found. Please try downloading from the Create Quote page again.' : 'Document not found.'}
                 </p>
-                <Button variant="outline" onClick={() => window.close()} className="rounded-lg">Close</Button>
+                <Button variant="outline" onClick={() => (isDraft ? window.close() : navigate(-1))} className="rounded-lg">Close</Button>
             </div>
         );
     }
@@ -132,6 +153,20 @@ export default function QuotePDF() {
         status: quote.status,
         type: 'QUOTE', // Add type to distinguish in template if needed
         delivery_date: quote.valid_until, // Map valid until to due date
+    };
+
+    const handleDownloadPDF = async () => {
+        if (!printRef.current || !quote) return;
+        try {
+            setIsGeneratingPdf(true);
+            const filename = `${quote.quote_number || 'quote'}.pdf`;
+            await generatePdfFromElement(printRef.current, filename);
+        } catch (e) {
+            console.error('Quote PDF generation failed, falling back to print:', e);
+            window.print();
+        } finally {
+            setIsGeneratingPdf(false);
+        }
     };
 
     return (
@@ -168,31 +203,34 @@ export default function QuotePDF() {
                 <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
                     <div className="no-print mb-4 flex justify-end gap-2">
                         <Button
-                            onClick={() => (isDraft ? window.close() : window.history.back())}
+                            onClick={() => (isDraft ? window.close() : navigate(-1))}
                             variant="outline"
                             className="px-4 sm:px-6 py-2 rounded-lg text-sm"
                         >
                             {isDraft ? 'Close' : 'Back'}
                         </Button>
                         <Button
-                            onClick={() => window.print()}
+                            onClick={handleDownloadPDF}
                             className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2 rounded-lg text-sm"
+                            disabled={isGeneratingPdf}
                         >
-                            Download PDF
+                            {isGeneratingPdf ? 'Generating…' : 'Download PDF'}
                         </Button>
                     </div>
 
                     <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
                         <div className="pdf-content">
-                            <TemplateComponent
-                                invoice={mappedInvoice}
-                                client={client}
-                                user={user}
-                                bankingDetail={null} // Quotes might not have banking details attached yet
-                                userCurrency={userCurrency}
-                                safeFormatDate={safeFormatDate}
-                                documentTitle="QUOTE" // Pass explicit title override
-                            />
+                            <div ref={printRef}>
+                                <TemplateComponent
+                                    invoice={mappedInvoice}
+                                    client={client}
+                                    user={user}
+                                    bankingDetail={null} // Quotes might not have banking details attached yet
+                                    userCurrency={userCurrency}
+                                    safeFormatDate={safeFormatDate}
+                                    documentTitle="QUOTE" // Pass explicit title override
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
