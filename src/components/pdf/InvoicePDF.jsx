@@ -15,7 +15,7 @@ const formatCurrency = (value, currency = "ZAR") =>
 
 const styles = StyleSheet.create({
   page: {
-    padding: 40,
+    padding: 36,
     fontSize: 10,
     fontFamily: "Helvetica"
   },
@@ -23,7 +23,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20
+    marginBottom: 16
   },
 
   brand: {
@@ -38,25 +38,30 @@ const styles = StyleSheet.create({
   },
 
   section: {
-    marginBottom: 20
+    marginBottom: 14
   },
 
   table: {
     width: "100%",
-    borderTop: "1px solid #ddd",
-    marginTop: 20
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+    marginTop: 14
   },
 
   tableRow: {
     flexDirection: "row",
-    borderBottom: "1px solid #eee",
-    padding: 8
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    paddingVertical: 7,
+    paddingHorizontal: 0
   },
 
   description: {
     width: "55%",
-    paddingRight: 10,
-    lineHeight: 1.4
+    paddingRight: 8,
+    flexShrink: 1,
+    flexWrap: "wrap",
+    lineHeight: 1.35
   },
 
   qty: {
@@ -77,17 +82,38 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: "row",
     backgroundColor: "#F5E5DC",
-    padding: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 0,
     fontWeight: "bold"
   },
 
   totals: {
-    marginTop: 30,
+    marginTop: 18,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
     alignItems: "flex-end"
   },
 
-  grandTotal: {
-    fontSize: 22,
+  moneyRow: {
+    flexDirection: "row",
+    width: "100%",
+    justifyContent: "space-between",
+    marginBottom: 6
+  },
+
+  moneyLabel: {
+    width: "55%",
+    color: "#333"
+  },
+
+  moneyValue: {
+    width: "45%",
+    textAlign: "right"
+  },
+
+  grandTotalValue: {
+    fontSize: 18,
     color: "#F15A24",
     fontWeight: "bold"
   },
@@ -95,7 +121,8 @@ const styles = StyleSheet.create({
   notesSection: {
     marginTop: 24,
     paddingTop: 16,
-    borderTop: "1px solid #eee"
+    borderTopWidth: 1,
+    borderTopColor: "#eee"
   },
 
   notesTitle: {
@@ -171,10 +198,14 @@ export default function InvoicePDF({ invoice, currency = "ZAR" }) {
 
         {/* Totals */}
         <View style={styles.totals}>
-          <Text>Subtotal: {fmt(invoice.subtotal)}</Text>
-          <Text style={styles.grandTotal}>
-            Total: {fmt(invoice.total)}
-          </Text>
+          <View style={styles.moneyRow}>
+            <Text style={styles.moneyLabel}>Subtotal</Text>
+            <Text style={styles.moneyValue}>{fmt(invoice.subtotal)}</Text>
+          </View>
+          <View style={[styles.moneyRow, { marginBottom: 0 }]}>
+            <Text style={styles.moneyLabel}>Total</Text>
+            <Text style={styles.grandTotalValue}>{fmt(invoice.total)}</Text>
+          </View>
         </View>
 
         {/* Notes: invoice notes + service/line item notes */}

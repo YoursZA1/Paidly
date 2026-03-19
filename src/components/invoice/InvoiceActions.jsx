@@ -16,7 +16,7 @@ import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle,
 import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Invoice } from '@/api/entities';
+import { Invoice, User } from '@/api/entities';
 import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
@@ -33,6 +33,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
+import { supabase } from '@/lib/supabaseClient';
+import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
+import { mapToInvoiceData } from '@/components/pdf/InvoicePDFDownloadLink';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -235,11 +238,60 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const handleSendEmail = async (htmlContent) => {
         setIsProcessing(true);
         try {
-            await breakApi.integrations.Core.SendEmail({
-                to: client.email,
-                subject: `Invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'Us'}`,
-                body: htmlContent
+            const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+            const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
+            if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
+
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            const accessToken = sessionData?.session?.access_token;
+            if (!accessToken) throw new Error('You must be logged in to send emails.');
+
+            // Generate the invoice PDF in the browser (React-PDF) and attach it via the Edge Function.
+            const userData = await User.me();
+            const invoiceData = mapToInvoiceData(invoice, client, userData);
+            const pdfBlob = await generateInvoicePDF(invoiceData);
+
+            const blobToBase64 = async (blob) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const result = String(reader.result || '');
+                        const base64 = result.includes(',') ? result.split(',')[1] : result;
+                        resolve(base64);
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read PDF blob.'));
+                    reader.readAsDataURL(blob);
+                });
+
+            const pdfBase64 = await blobToBase64(pdfBlob);
+            const subject = `Invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'Us'}`;
+            const filename = `invoice-${invoiceData.number}.pdf`;
+
+            const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    pdfBase64,
+                    email: client.email,
+                    subject,
+                    html: htmlContent,
+                    filename,
+                }),
             });
+
+            if (!sendRes.ok) {
+                let details = '';
+                try {
+                    details = await sendRes.text();
+                } catch {
+                    details = '';
+                }
+                throw new Error(details || 'Failed to send email via backend.');
+            }
             
             // Mark as sent (with retry on spurious AbortError)
             if (invoice.status === 'draft') {
