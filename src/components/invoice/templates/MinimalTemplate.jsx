@@ -119,6 +119,12 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                                 <span className="tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                             </div>
                         )}
+                        {Array.isArray(invoice.items) && invoice.items.some(item => item.item_tax_rate && item.item_tax_rate > 0) && (
+                            <div className="row flex justify-between py-2 text-sm text-foreground">
+                                <span>Item Taxes</span>
+                                <span className="tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            </div>
+                        )}
                         <div className="total-box total border-t border-border mt-2 pt-3 flex justify-between text-base font-bold text-foreground">
                             <span>Grand Total</span>
                             <strong

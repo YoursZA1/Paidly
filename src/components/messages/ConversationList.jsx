@@ -36,6 +36,15 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                     : 'bg-card'
                             }`}
                             onClick={() => onSelect(conv)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    onSelect(conv);
+                                }
+                            }}
+                            aria-label={`Open conversation with ${client?.name || 'Unknown Client'}`}
                         >
                             <CardContent className="p-4">
                                 <div className="flex items-start justify-between gap-3">
@@ -89,6 +98,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                                                         e.stopPropagation();
                                                         setConversationToDelete(conv);
                                                     }}
+                                                    aria-label={`Delete conversation with ${client?.name || 'Unknown Client'}`}
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </Button>

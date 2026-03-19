@@ -121,14 +121,25 @@ export default function Services() {
         setIsSaving(true);
         try {
             if (editingService) {
-                await Service.update(editingService.id, serviceData);
+                const updated = await Service.update(editingService.id, serviceData);
+                const resolvedUpdated = { ...editingService, ...serviceData, ...(updated || {}) };
+                setServices((prev) =>
+                    prev.map((item) => (item.id === editingService.id ? resolvedUpdated : item))
+                );
                 toast({
                     title: "✓ Item Updated",
                     description: `${serviceData.name} has been updated successfully.`,
                     variant: "success"
                 });
             } else {
-                await Service.create(serviceData);
+                const created = await Service.create(serviceData);
+                const resolvedCreated = {
+                    ...serviceData,
+                    ...(created || {}),
+                    id: created?.id || `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+                };
+                // Optimistically surface the new item immediately; list reload confirms canonical state.
+                setServices((prev) => [resolvedCreated, ...prev.filter((item) => item.id !== resolvedCreated.id)]);
                 toast({
                     title: "✓ Item Created",
                     description: `${serviceData.name} has been added to your catalog.`,

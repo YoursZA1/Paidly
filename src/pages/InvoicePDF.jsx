@@ -212,7 +212,7 @@ export default function InvoicePDF() {
                     grid-template-columns: minmax(0, 1fr) 320px;
                     gap: 24px;
                     align-items: start;
-                    margin-bottom: 24px;
+                    margin-bottom: 32px;
                 }
                 .invoice > .header {
                     margin-bottom: 24px;
@@ -531,7 +531,7 @@ export default function InvoicePDF() {
                     .invoice-layout {
                         grid-template-columns: minmax(0, 1fr);
                         gap: 16px;
-                        margin-bottom: 16px;
+                        margin-bottom: 24px;
                     }
                     .invoice-layout-sidebar {
                         width: 100%;

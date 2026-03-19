@@ -658,17 +658,17 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 </Section>
                 <DropdownMenuSeparator />
                 <Section label="Export">
-                    <DropdownMenuItem onClick={handlePreviewPDF} className={itemClass}>
+                    <DropdownMenuItem onClick={handlePreviewPDF} className={itemClass} data-testid="invoice-preview-pdf">
                         <FileText className={iconClass} />
                         Preview PDF
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDownloadPDF} disabled={isDownloading} className={itemClass}>
+                    <DropdownMenuItem onClick={handleDownloadPDF} disabled={isDownloading} className={itemClass} data-testid="invoice-download-pdf">
                         {isDownloading ? <Loader2 className={iconClass + " animate-spin"} /> : <Download className={iconClass} />}
                         Download PDF
                     </DropdownMenuItem>
                     {!isPaid && (
-                        <DropdownMenuItem asChild>
-                            <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass}>
+                        <DropdownMenuItem asChild data-testid="invoice-view-link-item">
+                            <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass} data-testid="invoice-view-link">
                                 <Eye className={iconClass} />
                                 View Invoice
                             </Link>
@@ -714,7 +714,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     };
 
     const triggerButton = (
-        <Button variant="ghost" size="icon" className="h-8 w-8 md:min-h-[44px] md:min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-accent">
+        <Button
+            variant="ghost"
+            size="icon"
+            data-testid="invoice-actions-trigger"
+            className="h-8 w-8 md:min-h-[44px] md:min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-accent"
+        >
             <MoreHorizontal className="w-4 h-4" />
         </Button>
     );

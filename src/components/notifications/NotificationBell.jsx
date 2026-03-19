@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/services/ActivityNotificationService";
@@ -9,6 +9,9 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [fetchError, setFetchError] = useState(null);
+  const panelId = useId();
+  const headingId = useId();
+  const triggerRef = useRef(null);
 
   const fetchNotifications = useCallback(async () => {
     setFetchError(null);
@@ -54,6 +57,18 @@ export default function NotificationBell() {
     };
   }, [fetchNotifications]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   const handleMarkRead = async (id) => {
     const ok = await markNotificationRead(id);
     if (ok) {
@@ -83,9 +98,13 @@ export default function NotificationBell() {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
+        type="button"
         className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
         onClick={() => setOpen((o) => !o)}
         aria-label="Notifications"
+        aria-expanded={open}
+        aria-controls={panelId}
       >
         <Bell className="size-5 text-muted-foreground" />
         {unreadCount > 0 && (
@@ -97,14 +116,21 @@ export default function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" aria-hidden onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-80 max-h-[min(24rem,70vh)] bg-card shadow-lg rounded-xl z-50 border border-border">
+          <div
+            id={panelId}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={headingId}
+            className="absolute right-0 mt-2 w-80 max-h-[min(24rem,70vh)] bg-card shadow-lg rounded-xl z-50 border border-border"
+          >
             <div className="p-3 border-b border-border flex items-center justify-between">
-              <span className="font-semibold text-foreground">Activity</span>
+              <span id={headingId} className="font-semibold text-foreground">Activity</span>
               {unreadCount > 0 && (
                 <button
                   type="button"
                   onClick={handleMarkAllRead}
                   className="text-xs text-primary hover:underline flex items-center gap-1"
+                  aria-label="Mark all notifications as read"
                 >
                   <CheckCheck className="size-3.5" /> Mark all read
                 </button>
@@ -121,19 +147,16 @@ export default function NotificationBell() {
                     key={n.id}
                     className={`p-3 border-b border-border last:border-b-0 ${n.read ? "bg-transparent" : "bg-primary/5"}`}
                   >
-                    <div
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       onClick={() => {
                         if (!n.read) handleMarkRead(n.id);
                       }}
-                      onKeyDown={(e) => {
-                        if ((e.key === "Enter" || e.key === " ") && !n.read) handleMarkRead(n.id);
-                      }}
-                      className="text-sm text-foreground cursor-default"
+                      className="text-sm text-foreground text-left w-full"
+                      aria-label={`${n.read ? "Read" : "Unread"} notification: ${n.message}`}
                     >
                       {n.message}
-                    </div>
+                    </button>
                     <div className="text-xs text-muted-foreground mt-1">{formatTime(n.created_at)}</div>
                   </li>
                 ))

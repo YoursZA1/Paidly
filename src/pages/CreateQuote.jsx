@@ -9,6 +9,7 @@ import { Eye, EyeOff, Save, Send, Check, Copy } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { useAuth } from "@/components/auth/AuthContext";
+import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
 import QuoteDetails from "../components/quote/QuoteDetails";
 import QuotePreview from "../components/quote/QuotePreview";
@@ -96,11 +97,16 @@ export default function CreateQuote() {
 
   const loadData = async () => {
     try {
-      const [clientsData, servicesData, templatesData] = await Promise.all([
-        Client.list("-created_date"),
-        Service.list("-created_date"),
-        QuoteTemplate.list("-created_date"),
-      ]);
+      const [clientsData, servicesData, templatesData] = await withTimeoutRetry(
+        () =>
+          Promise.all([
+            Client.list("-created_date"),
+            Service.list("-created_date"),
+            QuoteTemplate.list("-created_date"),
+          ]),
+        45000,
+        2
+      );
       setClients(clientsData || []);
       setServices(servicesData || []);
       setTemplates(templatesData || []);
@@ -245,7 +251,7 @@ export default function CreateQuote() {
         })),
       };
 
-      await Quote.create(quoteToCreate);
+      await withTimeoutRetry(() => Quote.create(quoteToCreate), 45000, 2);
       setLastSavedAt(Date.now());
 
       toast({

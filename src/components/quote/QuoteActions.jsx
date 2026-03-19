@@ -130,7 +130,7 @@ function QuoteActions({ quote, onActionSuccess }) {
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="quote-actions-trigger">
                         <MoreHorizontal className="w-4 h-4 text-slate-500" />
                     </Button>
                 </DropdownMenuTrigger>
@@ -149,7 +149,7 @@ function QuoteActions({ quote, onActionSuccess }) {
                             Edit Quote
                         </Link>
                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={handleConvertToInvoice}>
+                     <DropdownMenuItem onClick={handleConvertToInvoice} data-testid="quote-convert-to-invoice">
                         <ArrowRightSquare className="w-4 h-4 mr-2" />
                         Convert to Invoice
                     </DropdownMenuItem>

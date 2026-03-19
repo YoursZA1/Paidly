@@ -750,7 +750,11 @@ function PaymentMethodsSettings() {
                         <Download className="w-4 h-4" />
                         Export CSV
                     </Button>
-                    <Button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-lg shadow-orange-100 dark:shadow-orange-900/30">
+                    <Button
+                        onClick={() => setShowForm(true)}
+                        data-testid="bank-add-method"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-lg shadow-orange-100 dark:shadow-orange-900/30"
+                    >
                         <Plus className="w-5 h-5" />
                         Add Payment Method
                     </Button>
@@ -778,7 +782,7 @@ function PaymentMethodsSettings() {
                     </div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">No payment methods yet</h3>
                     <p className="text-slate-500 dark:text-slate-400 mb-6 text-center">Add your banking details to get paid.</p>
-                    <Button onClick={() => setShowForm(true)} className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100">
+                    <Button onClick={() => setShowForm(true)} data-testid="bank-add-method-empty" className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100">
                         <Plus className="w-4 h-4 mr-2" />
                         Add Your First Payment Method
                     </Button>

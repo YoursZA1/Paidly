@@ -25,11 +25,12 @@ export default function Notes() {
   const [showEditorOverlay, setShowEditorOverlay] = useState(false);
   const { toast } = useToast();
 
-  const loadNotes = useCallback(async () => {
-    setIsLoading(true);
+  const loadNotes = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setIsLoading(true);
     try {
       const data = await Note.list("-updated_date");
       setNotes(data || []);
+      return data || [];
     } catch (err) {
       console.error("Error loading notes:", err);
       toast({
@@ -37,8 +38,10 @@ export default function Notes() {
         description: err.message || "Please try again.",
         variant: "destructive",
       });
+      return [];
+    } finally {
+      if (!silent) setIsLoading(false);
     }
-    setIsLoading(false);
   }, [toast]);
 
   useEffect(() => {
@@ -116,12 +119,28 @@ export default function Notes() {
 
   const handleNewNote = async () => {
     try {
-      const newNote = await Note.create({ title: "New Note", content: "" });
-      await loadNotes();
+      const created = await Note.create({ title: "New Note", content: "" });
+      const newNote = {
+        title: "New Note",
+        content: "",
+        is_pinned: false,
+        ...created,
+      };
+      setNotes((prev) => [newNote, ...prev.filter((n) => n.id !== newNote.id)]);
       setSelectedNote(newNote);
-      setEditTitle("New Note");
-      setEditContent("");
+      setEditTitle(newNote.title || "New Note");
+      setEditContent(newNote.content || "");
+      setSaveStatus("Saved");
       setShowEditorOverlay(true);
+
+      // Reconcile with canonical server state (timestamps/defaults/hooks).
+      const canonicalNotes = await loadNotes({ silent: true });
+      const canonicalNewNote = canonicalNotes.find((n) => n.id === newNote.id);
+      if (canonicalNewNote) {
+        setSelectedNote(canonicalNewNote);
+        setEditTitle(canonicalNewNote.title || "New Note");
+        setEditContent(canonicalNewNote.content || "");
+      }
     } catch (err) {
       console.error("Error creating note:", err);
       toast({
@@ -299,6 +318,7 @@ export default function Notes() {
               <button
                 onClick={handleBack}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-400"
+                aria-label="Back to notes list"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -312,6 +332,7 @@ export default function Notes() {
                   onClick={() => handlePinNote(selectedNote)}
                   className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-500"
                   title={selectedNote.is_pinned ? "Unpin" : "Pin"}
+                  aria-label={selectedNote.is_pinned ? "Unpin note" : "Pin note"}
                 >
                   <Star
                     className={`w-5 h-5 ${
@@ -322,18 +343,24 @@ export default function Notes() {
                 <button
                   className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-500"
                   title="Archive (coming soon)"
+                  aria-label="Archive note (coming soon)"
                 >
                   <Archive className="w-5 h-5" />
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 min-w-[4rem] text-right">
+                <span
+                  className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 min-w-[4rem] text-right"
+                  role="status"
+                  aria-live="polite"
+                >
                   {saveStatus}
                 </span>
                 <button
                   onClick={handleDeleteNote}
                   data-testid="note-delete"
                   className="flex items-center gap-2 text-red-500 dark:text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-colors"
+                  aria-label="Delete note"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
@@ -343,14 +370,18 @@ export default function Notes() {
 
             {/* Editor Canvas */}
             <div className="flex-1 p-6 lg:p-12 max-w-4xl mx-auto w-full overflow-auto">
+              <label htmlFor="note-title-input" className="sr-only">Note title</label>
               <input
+                id="note-title-input"
                 value={editTitle}
                 onChange={handleTitleChange}
                 data-testid="note-title"
                 className="w-full text-4xl font-black text-slate-900 dark:text-slate-100 border-none bg-transparent focus:ring-0 mb-6 placeholder-slate-300 dark:placeholder-slate-500"
                 placeholder="Title"
               />
+              <label htmlFor="note-body-input" className="sr-only">Note content</label>
               <textarea
+                id="note-body-input"
                 value={editContent}
                 onChange={handleContentChange}
                 data-testid="note-body"

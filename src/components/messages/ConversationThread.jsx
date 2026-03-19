@@ -46,7 +46,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
         <div className="flex flex-col h-full">
             {/* Header */}
             <div className="bg-card border-b border-border p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-                <Button variant="ghost" size="icon" onClick={onBack}>
+                <Button variant="ghost" size="icon" onClick={onBack} aria-label="Go back to conversations">
                     <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div className="flex-1 min-w-0">
@@ -119,6 +119,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                                             onClick={() => setMessageToDelete(message)}
                                             className="text-muted-foreground hover:text-destructive transition-colors p-1"
                                             title="Delete message"
+                                            aria-label="Delete message"
                                         >
                                             <Trash2 className="w-3 h-3" />
                                         </button>
@@ -155,6 +156,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                             key={index}
                             onClick={() => setReplyContent(reply)}
                             className="whitespace-nowrap px-3 py-1 bg-muted hover:bg-muted/80 text-muted-foreground text-xs rounded-full transition-colors"
+                            aria-label={`Use quick reply: ${reply}`}
                         >
                             {reply}
                         </button>
@@ -181,6 +183,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                         onClick={handleSendReply} 
                         disabled={isSending || !replyContent || replyContent === '<p><br></p>'}
                         className="bg-primary hover:bg-primary/90 self-end mb-2"
+                        aria-label="Send reply"
                     >
                         <Send className="w-4 h-4" />
                     </Button>
