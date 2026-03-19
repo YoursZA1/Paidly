@@ -12,6 +12,15 @@ function mapToInvoiceData(invoice, client, user) {
   const brand = user?.company_name || invoice?.owner_company_name || "Company";
   const address = user?.company_address || invoice?.owner_company_address || "";
   const number = invoice?.invoice_number || invoice?.reference_number || "—";
+  const logo_url =
+    user?.logo_url ||
+    user?.company_logo_url ||
+    invoice?.owner_logo_url ||
+    invoice?.owner_company_logo_url ||
+    invoice?.logo_url ||
+    invoice?.company?.logo_url ||
+    null;
+  const status = (invoice?.status || "draft").toString();
   const clientName = client?.name || "Client";
   const clientAddress =
     client?.address ||
@@ -65,18 +74,38 @@ function mapToInvoiceData(invoice, client, user) {
     currency,
   }).format(totalNum);
 
+  const issuedDateRaw = invoice?.created_date || invoice?.invoice_date || invoice?.created_at;
+  const issuedDateFormatted = issuedDateRaw
+    ? (() => {
+        const d =
+          typeof issuedDateRaw === "string" ? parseISO(issuedDateRaw) : new Date(issuedDateRaw);
+        return isValid(d) ? format(d, "d MMM yyyy") : "";
+      })()
+    : "";
+
   const dueDateRaw = invoice?.delivery_date || invoice?.due_date;
   const dueDateFormatted = dueDateRaw
     ? (() => {
         const d = typeof dueDateRaw === "string" ? parseISO(dueDateRaw) : new Date(dueDateRaw);
-        return isValid(d) ? format(d, "MMMM d, yyyy") : "";
+        return isValid(d) ? format(d, "d MMM yyyy") : "";
       })()
     : "";
+
+  const paymentInfo = invoice?.banking_detail_id
+    ? "Bank details provided"
+    : "Bank details not specified";
+
+  const paymentTerms =
+    invoice?.terms_conditions?.trim() ||
+    invoice?.payment_terms?.trim() ||
+    "Due within 15 days upon acceptance. Late payments may incur interest.";
 
   return {
     brand,
     address,
+    logo_url,
     number,
+    status,
     client: {
       name: clientName,
       address: clientAddress,
@@ -88,8 +117,11 @@ function mapToInvoiceData(invoice, client, user) {
     total,
     currency,
     formattedTotal,
+    issuedDateFormatted,
     due_date: dueDateRaw,
     dueDateFormatted,
+    paymentInfo,
+    paymentTerms,
   };
 }
 
