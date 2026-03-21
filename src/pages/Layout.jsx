@@ -628,6 +628,22 @@ MobileNav.propTypes = {
   resolvedTheme: PropTypes.string
 };
 
+/** Routes without app chrome use document scroll and hash sections (e.g. /Home#waitlist). */
+const STANDALONE_PAGE_NAMES = [
+  "PayslipPDF",
+  "InvoicePDF",
+  "CashFlowPDF",
+  "PublicInvoice",
+  "PublicQuote",
+  "PublicPayslip",
+  "Home",
+  "Login",
+  "Signup",
+  "ForgotPassword",
+  "ResetPassword",
+  "AcceptInvite",
+];
+
 export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -657,13 +673,18 @@ export default function Layout({ children, currentPageName }) {
     fetchAll();
   }, [user?.id, user?.role, fetchAll, lastFetchedAt, userProfile]);
 
-  // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
+  // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
+  // Skip standalone shells: they use window scroll; parent effects run after children and would undo
+  // hash scrolling (e.g. Join waitlist → /Home#waitlist).
   useEffect(() => {
+    if (STANDALONE_PAGE_NAMES.includes(currentPageName)) {
+      return;
+    }
     if (mainContentRef.current) {
       mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     }
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  }, [location.pathname]);
+  }, [location.pathname, currentPageName]);
 
   useEffect(() => {
     if (!user) return;
@@ -738,23 +759,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
 
-  // Pages that should display without the main application layout (sidebar/header)
-  const standalonePages = [
-    'PayslipPDF',
-    'InvoicePDF',
-    'CashFlowPDF',
-    'PublicInvoice',
-    'PublicQuote',
-    'PublicPayslip',
-    'Home',
-    'Login',
-    'Signup',
-    'ForgotPassword',
-    'ResetPassword',
-    'AcceptInvite'
-  ];
-
-  if (standalonePages.includes(currentPageName)) {
+  if (STANDALONE_PAGE_NAMES.includes(currentPageName)) {
     return (
       <motion.div
         initial={{ opacity: 0 }}

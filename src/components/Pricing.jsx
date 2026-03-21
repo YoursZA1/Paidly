@@ -75,7 +75,7 @@ export default function Pricing() {
               </ul>
               <Link
                 to={createWaitlistUrl()}
-                className={`mt-8 inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-semibold transition ${
+                className={`mt-8 inline-flex min-h-11 touch-manipulation items-center justify-center rounded-lg px-4 text-sm font-semibold transition ${
                   plan.highlighted
                     ? "bg-[#FF4F00] text-white hover:bg-[#E64700]"
                     : "border border-white/15 bg-transparent text-white hover:border-white/25 hover:bg-white/[0.05]"

@@ -12,14 +12,6 @@ function isAxiosTransportFailure(err) {
   return /network error/i.test(String(err.message || ""));
 }
 
-function humanizeTransportMessage(isSignUp) {
-  const verb = isSignUp ? "sign-up" : "sign-in";
-  return (
-    `Could not reach the ${verb} API (network). If you do not host a Node API, remove VITE_SERVER_URL from Vercel and redeploy so login uses Supabase directly. ` +
-    "If you do host an API, set VITE_SERVER_URL to a reachable URL (no trailing slash) with working DNS/TLS."
-  );
-}
-
 function humanizeSupabaseTransportMessage() {
   return (
     "Could not reach Supabase (auth). Check VITE_SUPABASE_URL (https://…supabase.co), VITE_SUPABASE_ANON_KEY (JWT anon key starting with eyJ, not sb_publishable_), VPN/ad blockers, then redeploy."
@@ -51,7 +43,7 @@ const normalizeSession = (session) => {
 const SupabaseAuthService = {
   /**
    * Sign-up via POST /api/auth/sign-up (IP rate limits + abuse tiers on the API).
-   * Dev: falls back to direct Supabase if the API is unavailable.
+   * Falls back to direct Supabase if the API is unreachable (network/DNS/TLS), including in production.
    */
   async signUpWithEmail(email, password, profile = {}) {
     const normalized = (email || "").trim().toLowerCase();
@@ -130,12 +122,11 @@ const SupabaseAuthService = {
 
       throw new Error(mapAuthError({ message: data?.error || "Sign up failed" }));
     } catch (err) {
-      if (isAxiosTransportFailure(err) && import.meta.env.DEV) {
-        console.warn("[auth] API sign-up unreachable; falling back to direct Supabase (development only).");
+      if (isAxiosTransportFailure(err)) {
+        console.warn(
+          "[auth] API sign-up unreachable (network). Falling back to direct Supabase. Remove or fix VITE_SERVER_URL on Vercel if you do not use the Node API."
+        );
         return signUpDirect();
-      }
-      if (isAxiosTransportFailure(err) && import.meta.env.PROD) {
-        throw new Error(humanizeTransportMessage(true));
       }
       if (err instanceof Error) {
         throw err;
@@ -156,8 +147,8 @@ const SupabaseAuthService = {
 
   /**
    * Password sign-in goes through POST /api/auth/sign-in so the API can rate-limit by IP.
-   * Production with missing VITE_SERVER_URL: direct Supabase (API URL would be localhost otherwise).
-   * Dev: falls back if the API is down or lacks SUPABASE_ANON_KEY.
+   * Production with missing/localhost VITE_SERVER_URL: direct Supabase only (see backendClient).
+   * If VITE_SERVER_URL is set but unreachable, falls back to direct Supabase after a console warning.
    */
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
@@ -230,12 +221,11 @@ const SupabaseAuthService = {
 
       throw new Error(data?.error || "Login failed");
     } catch (err) {
-      if (isAxiosTransportFailure(err) && import.meta.env.DEV) {
-        console.warn("[auth] API sign-in unreachable; falling back to direct Supabase (development only).");
+      if (isAxiosTransportFailure(err)) {
+        console.warn(
+          "[auth] API sign-in unreachable (network). Falling back to direct Supabase. Remove or fix VITE_SERVER_URL on Vercel if you do not use the Node API."
+        );
         return signInDirect();
-      }
-      if (isAxiosTransportFailure(err) && import.meta.env.PROD) {
-        throw new Error(humanizeTransportMessage(false));
       }
       if (err instanceof Error) {
         throw err;
