@@ -150,7 +150,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                       placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                      className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                       required
                     />
                   </div>
@@ -168,7 +168,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                      className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                       required
                     />
                     <button
@@ -209,7 +209,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                   <button
                     type="button"
                     onClick={() => closeAndNavigate(createPageUrl("ForgotPassword"))}
-                    className="text-sm font-medium text-[#FF8C42] hover:text-[#FF4F00] hover:underline"
+                    className="text-sm font-medium text-amber-300 hover:text-amber-200 hover:underline"
                   >
                     Forgot your password?
                   </button>

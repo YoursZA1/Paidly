@@ -45,7 +45,7 @@ export default function Hero({ onLoginClick }) {
             Log In
           </button>
         </div>
-        <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-400">
           No spam — one email before launch.
         </p>
       </div>

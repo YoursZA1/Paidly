@@ -22,7 +22,7 @@ export default function ProductPreview() {
             <span className="h-3 w-3 rounded-full bg-red-500/80" />
             <span className="h-3 w-3 rounded-full bg-amber-500/80" />
             <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-            <span className="ml-4 flex-1 truncate rounded-md bg-black/40 px-3 py-1 text-center text-xs text-zinc-500">
+            <span className="ml-4 flex-1 truncate rounded-md bg-black/40 px-3 py-1 text-center text-xs text-zinc-400">
               www.paidly.co.za/dashboard
             </span>
           </div>
@@ -33,7 +33,7 @@ export default function ProductPreview() {
               <p className="mt-1 text-xs text-emerald-400/90">+12% vs last month</p>
             </div>
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 sm:col-span-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Outstanding</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Outstanding</p>
               <div className="mt-4 flex h-24 items-end gap-1">
                 {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map((h, i) => (
                   <div
@@ -47,7 +47,7 @@ export default function ProductPreview() {
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 sm:col-span-3">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <p className="text-sm font-medium text-white">Recent invoices</p>
-                <span className="rounded-md bg-[#FF4F00]/15 px-2 py-0.5 text-xs font-medium text-[#FF8C42]">
+                <span className="rounded-md bg-[#FF4F00]/15 px-2 py-0.5 text-xs font-medium text-amber-200">
                   Paid
                 </span>
               </div>

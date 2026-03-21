@@ -9,7 +9,7 @@ export default function FeatureCard({ title, description, icon: Icon }) {
         </div>
       ) : null}
       <h3 className="text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-zinc-400">{description}</p>
+      <p className="mt-2 text-sm leading-relaxed text-zinc-300">{description}</p>
     </div>
   );
 }

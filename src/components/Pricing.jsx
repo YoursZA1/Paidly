@@ -56,10 +56,14 @@ export default function Pricing() {
                 </span>
               ) : null}
               <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
-              <p className="mt-1 text-sm text-zinc-400">{plan.description}</p>
+              <p
+                className={`mt-1 text-sm ${plan.highlighted ? "text-zinc-300" : "text-zinc-400"}`}
+              >
+                {plan.description}
+              </p>
               <p className="mt-6 flex items-baseline gap-1">
                 <span className="text-4xl font-bold text-white">{plan.price}</span>
-                <span className="text-zinc-500">{plan.period}</span>
+                <span className={plan.highlighted ? "text-zinc-300" : "text-zinc-400"}>{plan.period}</span>
               </p>
               <ul className="mt-8 flex-1 space-y-3 text-sm text-zinc-300">
                 {plan.features.map((f) => (

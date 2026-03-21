@@ -37,7 +37,7 @@ export default function ValueSection() {
               </div>
               <div>
                 <p className="font-semibold text-white">{title}</p>
-                <p className="mt-1 text-sm leading-relaxed text-zinc-400">{body}</p>
+                <p className="mt-1 text-sm leading-relaxed text-zinc-300">{body}</p>
               </div>
             </li>
           ))}

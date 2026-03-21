@@ -17,7 +17,8 @@ function App() {
     <>
       <Pages />
       <Toaster />
-      <Analytics />
+      {/* Vercel Web Analytics: production bundles only (avoids extra scripts/noise in local dev). */}
+      {import.meta.env.PROD ? <Analytics /> : null}
     </>
   )
 }

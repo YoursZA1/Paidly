@@ -26,17 +26,29 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-/** True if `Component` appears anywhere in the element tree (not only direct children). */
+/** True if `Component` appears anywhere under `children` (deep). Handles forwardRef + odd HMR duplicates via displayName. */
 const hasDialogChild = (children, Component) => {
   if (!Component) return false
+  const targetName = Component.displayName ?? Component.name
   let found = false
+  const matches = (node) => {
+    if (node.type === Component) return true
+    const n = node.type?.displayName ?? node.type?.name
+    return Boolean(targetName && n && n === targetName)
+  }
   const walk = (node) => {
-    if (found || !React.isValidElement(node)) return
-    if (node.type === Component) {
+    if (found || node == null) return
+    if (Array.isArray(node)) {
+      node.forEach(walk)
+      return
+    }
+    if (!React.isValidElement(node)) return
+    if (matches(node)) {
       found = true
       return
     }
-    React.Children.forEach(node.props?.children, walk)
+    const ch = node.props?.children
+    if (ch != null) React.Children.forEach(ch, walk)
   }
   React.Children.forEach(children, walk)
   return found
@@ -68,7 +80,7 @@ const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
     className={cn("text-lg font-semibold leading-none tracking-tight", className)}
     {...props} />
 ))
-DialogTitle.displayName = DialogPrimitive.Title.displayName
+DialogTitle.displayName = DialogPrimitive.Title.displayName || "DialogTitle"
 
 const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
@@ -76,7 +88,7 @@ const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
     className={cn("text-sm text-muted-foreground", className)}
     {...props} />
 ))
-DialogDescription.displayName = DialogPrimitive.Description.displayName
+DialogDescription.displayName = DialogPrimitive.Description.displayName || "DialogDescription"
 
 const DialogContent = React.forwardRef((allProps, ref) => {
   const {

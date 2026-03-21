@@ -386,14 +386,14 @@ export default function Signup() {
               <div className="space-y-2">
                 <Label htmlFor="fullName" className="text-zinc-200">Full name</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="fullName"
                     type="text"
                     placeholder="Jane Doe"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                 </div>
@@ -402,14 +402,14 @@ export default function Signup() {
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-zinc-200">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                 </div>
@@ -418,20 +418,20 @@ export default function Signup() {
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-zinc-200">Password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-500 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#FF4F00]/30"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#FF4F00]/30"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -442,20 +442,20 @@ export default function Signup() {
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword" className="text-zinc-200">Confirm password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="********"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-500 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#FF4F00]/30"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#FF4F00]/30"
                     aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -513,20 +513,20 @@ export default function Signup() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-zinc-500">Your 7-day trial starts after this step.</p>
+                <p className="text-xs text-zinc-400">Your 7-day trial starts after this step.</p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="companyName" className="text-zinc-200">Company (optional)</Label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="companyName"
                     type="text"
                     placeholder="Acme Inc"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                   />
                 </div>
               </div>
@@ -539,21 +539,21 @@ export default function Signup() {
                   placeholder="123 Main St, City, Country"
                   value={companyAddress}
                   onChange={(e) => setCompanyAddress(e.target.value)}
-                  className="rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                  className="rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-zinc-200">Phone</Label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input
                     id="phone"
                     type="tel"
                     placeholder="+27 123 456 7890"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-500"
+                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                   />
                 </div>
               </div>

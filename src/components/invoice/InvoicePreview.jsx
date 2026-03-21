@@ -174,7 +174,7 @@ function InvoicePreview({
       console.error("Send invoice error:", error);
       const isNetworkError = error?.message === "Failed to fetch" || error?.name === "TypeError";
       const description = isNetworkError
-        ? "Could not reach the server. Ensure VITE_SERVER_URL points to your backend (e.g. https://api.paidly.co.za) when using www.paidly.co.za."
+        ? "Could not reach the server. Ensure VITE_SERVER_URL points to your backend (e.g. https://paidly.co.za) when using www.paidly.co.za."
         : error?.message || "Could not send email";
       toast({ title: "Send failed", description, variant: "destructive" });
     } finally {

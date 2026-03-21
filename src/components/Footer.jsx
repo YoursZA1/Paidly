@@ -25,13 +25,13 @@ export default function Footer({ onLoginClick }) {
             </div>
             <span className="font-semibold text-white">Paidly</span>
           </div>
-          <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+          <p className="mt-4 text-sm leading-relaxed text-zinc-400">
             Invoicing and cash flow for teams who want less admin and faster payments.
           </p>
         </div>
         {Object.entries(LINKS).map(([heading, items]) => (
           <div key={heading}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{heading}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{heading}</p>
             <ul className="mt-4 space-y-2 text-sm">
               {items.map((item) => (
                 <li key={item.label}>
@@ -58,7 +58,7 @@ export default function Footer({ onLoginClick }) {
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-12 max-w-6xl border-t border-white/[0.06] pt-8 text-center text-xs text-zinc-600">
+      <div className="mx-auto mt-12 max-w-6xl border-t border-white/[0.06] pt-8 text-center text-xs text-zinc-500">
         © {new Date().getFullYear()} Paidly. All rights reserved.
       </div>
     </footer>

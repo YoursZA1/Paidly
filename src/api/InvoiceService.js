@@ -135,7 +135,7 @@ class InvoiceService {
         throw new Error('Request was interrupted. Please try again.');
       }
       if (error?.message === 'Failed to fetch' || error?.name === 'TypeError') {
-        throw new Error('Could not reach the server. Ensure VITE_SERVER_URL is set to your backend URL (e.g. https://api.paidly.co.za).');
+        throw new Error('Could not reach the server. Ensure VITE_SERVER_URL is set to your backend URL (e.g. https://paidly.co.za).');
       }
       throw new Error(`Failed to send invoice email: ${error.message}`);
     }

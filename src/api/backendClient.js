@@ -17,7 +17,7 @@ const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY
 
 /**
  * Backend base URL for production Axios calls.
- * We do not infer https://api.paidly.co.za from the page host: that breaks sign-in when DNS for api.* is missing
+ * We do not infer a default API host from the page URL: misconfigured DNS breaks sign-in. Set VITE_SERVER_URL explicitly (e.g. https://paidly.co.za).
  * (browser shows hostname not found / bogus CORS). Set VITE_SERVER_URL explicitly when the Node API is deployed.
  */
 const rawServerUrl = String(import.meta.env.VITE_SERVER_URL ?? "").trim();

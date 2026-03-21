@@ -48,10 +48,10 @@ export default function LaunchCountdownFloat() {
       aria-label={`Countdown to launch on ${PRODUCT_LAUNCH_DATE_LABEL}`}
     >
       <div className="pointer-events-auto w-full rounded-2xl border border-white/[0.12] bg-[#0a0a0a]/92 px-4 py-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:w-auto sm:min-w-[280px]">
-        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-[#FF8C42]">
+        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-amber-200">
           Launch · {PRODUCT_LAUNCH_DATE_LABEL}
         </p>
-        <p className="mt-1 text-center text-xs text-zinc-500">Time left</p>
+        <p className="mt-1 text-center text-xs text-zinc-400">Time left</p>
         <div
           className="mt-2 flex items-start justify-center gap-1.5 sm:gap-2"
           role="timer"
@@ -64,15 +64,15 @@ export default function LaunchCountdownFloat() {
           </div>
           <div className={UNIT}>
             <span className="font-mono text-lg font-bold tabular-nums text-white sm:text-xl">{pad2(hours)}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Hrs</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-300">Hrs</span>
           </div>
           <div className={UNIT}>
             <span className="font-mono text-lg font-bold tabular-nums text-white sm:text-xl">{pad2(minutes)}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Min</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-300">Min</span>
           </div>
           <div className={UNIT}>
             <span className="font-mono text-lg font-bold tabular-nums text-[#FF4F00] sm:text-xl">{pad2(seconds)}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Sec</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-300">Sec</span>
           </div>
         </div>
       </div>

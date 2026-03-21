@@ -51,7 +51,7 @@ export default function WaitlistSection() {
       className="scroll-mt-28 border-t border-white/[0.06] bg-[#080808] px-4 py-14 sm:px-6 sm:py-20"
     >
       <div className="mx-auto max-w-lg text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#FF8C42]">
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">
           {PRODUCT_LAUNCH_BADGE}
         </p>
         <h2 className="mt-3 font-sans text-2xl font-bold tracking-tight text-white sm:text-3xl">
@@ -63,10 +63,10 @@ export default function WaitlistSection() {
         <form onSubmit={handleSubmit} className="mt-8 space-y-4 text-left">
           <div className="space-y-2">
             <Label htmlFor="waitlist-name" className="text-zinc-200">
-              Name <span className="text-zinc-500 font-normal">(optional)</span>
+              Name <span className="text-zinc-400 font-normal">(optional)</span>
             </Label>
             <div className="relative">
-              <User className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+              <User className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 id="waitlist-name"
                 type="text"
@@ -74,7 +74,7 @@ export default function WaitlistSection() {
                 placeholder="Jane Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="rounded-xl border-zinc-600/80 bg-zinc-950/50 pl-10 text-zinc-100 placeholder:text-zinc-500"
+                className="rounded-xl border-zinc-600/80 bg-zinc-950/50 pl-10 text-zinc-100 placeholder:text-zinc-400"
               />
             </div>
           </div>
@@ -83,7 +83,7 @@ export default function WaitlistSection() {
               Email
             </Label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+              <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 id="waitlist-email"
                 type="email"
@@ -91,7 +91,7 @@ export default function WaitlistSection() {
                 placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="rounded-xl border-zinc-600/80 bg-zinc-950/50 pl-10 text-zinc-100 placeholder:text-zinc-500"
+                className="rounded-xl border-zinc-600/80 bg-zinc-950/50 pl-10 text-zinc-100 placeholder:text-zinc-400"
                 required
               />
             </div>

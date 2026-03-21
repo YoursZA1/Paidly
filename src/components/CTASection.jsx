@@ -6,7 +6,7 @@ export default function CTASection() {
   return (
     <section className="border-t border-white/[0.06] px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
       <div className="mx-auto max-w-3xl rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.05] to-transparent px-6 py-16 text-center sm:px-10">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#FF8C42]">{PRODUCT_LAUNCH_BADGE}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">{PRODUCT_LAUNCH_BADGE}</p>
         <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
           Be first in line when we open the doors
         </h2>

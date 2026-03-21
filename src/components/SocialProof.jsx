@@ -26,7 +26,7 @@ export default function SocialProof() {
               key={p.title}
               className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 text-left"
             >
-              <p className="text-sm font-semibold text-[#FF4F00]">{p.title}</p>
+              <p className="text-sm font-semibold text-orange-400">{p.title}</p>
               <p className="mt-3 text-sm leading-relaxed text-zinc-400">{p.copy}</p>
             </div>
           ))}
