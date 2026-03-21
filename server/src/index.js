@@ -119,13 +119,55 @@ const getAdminFromRequest = async (req, res) => {
   return user;
 };
 
+/**
+ * Browsers reject Access-Control-Allow-Origin: * together with Access-Control-Allow-Credentials: true.
+ * Axios uses withCredentials: true, so the API must echo a specific allowed Origin.
+ */
+const LOCAL_VITE_ORIGINS = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+]);
+
+function isPaidlyPublicOrigin(origin) {
+  if (!origin || typeof origin !== "string") return false;
+  try {
+    const u = new URL(origin);
+    const host = u.hostname.toLowerCase();
+    if (host === "app.paidly.co.za" || host === "paidly.co.za" || host === "www.paidly.co.za") {
+      return u.protocol === "https:" || u.protocol === "http:";
+    }
+    if (host.endsWith(".vercel.app") && u.protocol === "https:") return true;
+    if (LOCAL_VITE_ORIGINS.has(origin)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function createCorsOriginHandler() {
+  const raw = (process.env.CLIENT_ORIGIN || "").trim();
+  if (raw && raw !== "*") {
+    const allowed = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    return (origin, callback) => {
+      if (!origin) return callback(null, true);
+      callback(null, allowed.includes(origin));
+    };
+  }
+  return (origin, callback) => {
+    if (!origin) return callback(null, true);
+    callback(null, isPaidlyPublicOrigin(origin));
+  };
+}
+
 app.use(enforceHttps());
 app.use(securityHeaders());
 app.use(auditHttpResponses(getClientIp));
 
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || "*",
-  credentials: true
+  origin: createCorsOriginHandler(),
+  credentials: true,
 }));
 
 app.use(express.json({ limit: "15mb" }));
@@ -1640,10 +1682,10 @@ app.listen(port, "0.0.0.0", () => {
   console.log(`Backend running at ${url}`);
   console.log(`  Health check: ${url}/api/health`);
   if (process.env.NODE_ENV === "production") {
-    const origin = process.env.CLIENT_ORIGIN || "";
-    if (!origin || origin === "*") {
-      console.warn(
-        "[security] Production: set CLIENT_ORIGIN to your real web app origin (not *) for safer CORS."
+    const co = (process.env.CLIENT_ORIGIN || "").trim();
+    if (!co || co === "*") {
+      console.log(
+        "[cors] CLIENT_ORIGIN unset: using default allowlist (app.paidly.co.za, paidly.co.za, *.vercel.app, local Vite). Set CLIENT_ORIGIN=comma,separated,origins to override."
       );
     }
   }
