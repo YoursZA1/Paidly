@@ -9,9 +9,14 @@ const isDev = import.meta.env.DEV;
 const serverUrl = (import.meta.env.VITE_SERVER_URL || "http://localhost:5179").replace(/\/$/, "");
 const baseURL = isDev ? "" : serverUrl;
 
-if (import.meta.env.PROD && /localhost|127\.0\.0\.1/i.test(serverUrl)) {
-  console.error(
-    "[Paidly] API base URL is localhost in production. Set VITE_SERVER_URL in Vercel (or your host) to your live backend URL and redeploy, or login/waitlist/currency calls will show Network Error."
+/** Production bundle still points at localhost — email/password auth uses Supabase directly (see SupabaseAuthService). */
+export function isProductionBackendUrlLocalhost() {
+  return import.meta.env.PROD && /localhost|127\.0\.0\.1/i.test(serverUrl);
+}
+
+if (isProductionBackendUrlLocalhost()) {
+  console.warn(
+    "[Paidly] VITE_SERVER_URL is missing or points to localhost in production. Email/password sign-in uses Supabase directly. Set VITE_SERVER_URL to your API for server rate limits, waitlist, and currency features."
   );
 }
 

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { backendApi } from "@/api/backendClient";
+import { backendApi, isProductionBackendUrlLocalhost } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
@@ -34,6 +34,10 @@ const SupabaseAuthService = {
         user: data.user ?? null,
       };
     };
+
+    if (isProductionBackendUrlLocalhost()) {
+      return signUpDirect();
+    }
 
     try {
       const { data, status, headers } = await backendApi.post(
@@ -110,7 +114,8 @@ const SupabaseAuthService = {
 
   /**
    * Password sign-in goes through POST /api/auth/sign-in so the API can rate-limit by IP.
-   * Production: no fallback to direct Supabase (bypasses server limits). Dev: falls back if the API is down or lacks SUPABASE_ANON_KEY.
+   * Production with missing VITE_SERVER_URL: direct Supabase (API URL would be localhost otherwise).
+   * Dev: falls back if the API is down or lacks SUPABASE_ANON_KEY.
    */
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
@@ -123,6 +128,10 @@ const SupabaseAuthService = {
       if (error) throw new Error(mapAuthError(error));
       return normalizeSession(data.session);
     };
+
+    if (isProductionBackendUrlLocalhost()) {
+      return signInDirect();
+    }
 
     try {
       const { data, status, headers } = await backendApi.post(
