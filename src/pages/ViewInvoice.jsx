@@ -11,9 +11,9 @@ import PaymentHistory from '@/components/payments/PaymentHistory';
 import PaymentSchedule from '@/components/payments/PaymentSchedule';
 import PaymentScheduleDialog from '@/components/payments/PaymentScheduleDialog';
 import InvoicePreviewSkeleton from '@/components/invoice/InvoicePreviewSkeleton';
+import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
-import { formatCurrency } from '@/utils/currencyCalculations';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
@@ -22,6 +22,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
+import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
 
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
 async function fetchPaymentsForInvoice(invoiceId) {
@@ -291,7 +292,25 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         return <div className="p-8 text-center text-red-500">Error: Invoice not found</div>;
     }
 
-    const userCurrency = company?.currency || 'USD';
+    const userCurrency = invoice?.currency || invoice?.owner_currency || company?.currency || 'ZAR';
+
+    const templateKey =
+        normalizeInvoiceTemplateKey(invoice.invoice_template) ||
+        normalizeInvoiceTemplateKey(company?.invoice_template) ||
+        'classic';
+
+    const userForTemplate =
+        invoice &&
+        ({
+            ...(company || {}),
+            logo_url: invoice.owner_logo_url || company?.logo_url || '',
+            company_name: invoice.owner_company_name || company?.company_name || '',
+            company_address: invoice.owner_company_address || company?.company_address || '',
+            email: invoice.owner_email || company?.email || '',
+            currency: userCurrency,
+            invoice_template: templateKey,
+            invoice_header: company?.invoice_header || '',
+        });
     const history = Array.isArray(invoice?.version_history) ? invoice.version_history : [];
 
     return (
@@ -412,135 +431,19 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Invoice Preview Column */}
                     <div className="lg:col-span-2">
-                         <Card id="invoice-preview" className="shadow-lg print:shadow-none print:border-none bg-white">
-                            <CardContent className="p-8">
-                                {/* Agency-style: INVOICE left, company beige box right */}
-                                <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
-                                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 uppercase tracking-tight">Invoice</h1>
-                                    <div className="text-right">
-                                        <div className="inline-block rounded-lg px-4 py-3 bg-[#f5f0e8] border border-[#e8e0d5]">
-                                            {company?.logo_url ? (
-                                                <div className="flex items-center gap-3">
-                                                    <img
-                                                        src={company.logo_url}
-                                                        alt="Company Logo"
-                                                        className="w-auto"
-                                                        style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
-                                                    />
-                                                    <span className="font-semibold text-gray-800">{company?.company_name}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="font-semibold text-gray-800">{company?.company_name}</span>
-                                            )}
-                                        </div>
-                                        <div className="mt-3 text-sm text-gray-600">
-                                            <p>Invoice No: {invoice.invoice_number}</p>
-                                            <p>Date: {format(new Date(invoice.created_date), "dd/MM/yyyy")}</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Payable To | Bank Details */}
-                                <div className="grid md:grid-cols-2 gap-8 mb-8">
-                                    <div>
-                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Payable To</h3>
-                                        <p className="font-medium text-gray-900">{client?.name ?? '—'}</p>
-                                        {client?.address && <p className="text-sm text-gray-600 mt-0.5">{client.address}</p>}
-                                        {client?.email && <p className="text-sm text-gray-600">{client.email}</p>}
-                                    </div>
-                                    <div className="text-right md:text-right">
-                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
-                                        {bankingDetail ? (
-                                            <>
-                                                <p className="font-medium text-gray-900">{bankingDetail.account_name || bankingDetail.bank_name}</p>
-                                                {bankingDetail.account_number && <p className="text-sm text-gray-600">{bankingDetail.account_number}</p>}
-                                                {bankingDetail.bank_name && bankingDetail.account_name && <p className="text-sm text-gray-600">{bankingDetail.bank_name}</p>}
-                                            </>
-                                        ) : (
-                                            <p className="text-sm text-gray-500">—</p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Itemized table: beige header, 4 columns */}
-                                <div className="overflow-x-auto rounded-t-lg overflow-hidden mb-6">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="bg-[#f5f0e8] border border-[#e8e0d5]">
-                                                <th className="px-4 py-3.5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Item Description</th>
-                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-20">Qty</th>
-                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-28">Price</th>
-                                                <th className="px-4 py-3.5 text-right text-xs font-bold text-gray-800 uppercase tracking-wider w-28">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
-                                                invoice.items.map((item, index) => {
-                                                    const name = item.service_name || item.name || "Item";
-                                                    const qty = Number(item.quantity ?? item.qty ?? 1);
-                                                    const unitPrice = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
-                                                    const lineTotal = Number(item.total_price ?? item.total ?? qty * unitPrice);
-                                                    return (
-                                                        <tr key={index} className="border-b border-gray-100">
-                                                            <td className="px-4 py-4 text-gray-900">{name}</td>
-                                                            <td className="px-4 py-4 text-right text-gray-700 tabular-nums">{qty}</td>
-                                                            <td className="px-4 py-4 text-right text-gray-700 tabular-nums">{formatCurrency(unitPrice, userCurrency)}</td>
-                                                            <td className="px-4 py-4 text-right font-medium text-gray-900 tabular-nums">{formatCurrency(lineTotal, userCurrency)}</td>
-                                                        </tr>
-                                                    );
-                                                })
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500">No items added</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {/* Notes */}
-                                {invoice.notes && (
-                                    <div className="mb-8">
-                                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Notes</h3>
-                                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
-                                    </div>
-                                )}
-
-                                {/* Totals: right-aligned beige box */}
-                                <div className="flex justify-end">
-                                    <div className="w-full max-w-xs rounded-lg border border-[#e8e0d5] bg-[#f5f0e8] px-5 py-4">
-                                        <div className="flex justify-between py-2 text-sm text-gray-700">
-                                            <span>Sub Total</span>
-                                            <span className="tabular-nums">{formatCurrency(invoice.subtotal ?? 0, userCurrency)}</span>
-                                        </div>
-                                        {invoice.tax_amount > 0 && (
-                                            <div className="flex justify-between py-2 text-sm text-gray-700">
-                                                <span>Tax ({invoice.tax_rate}%)</span>
-                                                <span className="tabular-nums">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
-                                            </div>
-                                        )}
-                                        <div className="border-t border-gray-300 mt-2 pt-3 flex justify-between text-base font-bold text-gray-900">
-                                            <span>Grand Total</span>
-                                            <span
-                                                className="tabular-nums tracking-tighter whitespace-nowrap min-w-0"
-                                                style={{ fontSize: 'clamp(1.125rem, 3vw + 0.75rem, 2rem)' }}
-                                            >
-                                                {formatCurrency(invoice.total_amount, userCurrency)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Payment details (extra) */}
-                                {bankingDetail && (bankingDetail.routing_number || bankingDetail.swift_code) && (
-                                    <div className="mt-8 pt-6 border-t border-gray-200">
-                                        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Payment Reference</h4>
-                                        <div className="text-sm text-gray-600 space-y-0.5">
-                                            {bankingDetail.routing_number && <p>Routing: {bankingDetail.routing_number}</p>}
-                                            {bankingDetail.swift_code && <p>SWIFT/BIC: {bankingDetail.swift_code}</p>}
-                                        </div>
-                                    </div>
-                                )}
+                         <Card id="invoice-preview" className="shadow-lg print:shadow-none print:border-none bg-white overflow-hidden">
+                            <CardContent className="p-4 sm:p-6 lg:p-8">
+                                <InvoicePreview
+                                    embedded
+                                    invoiceData={invoice}
+                                    client={client}
+                                    clients={[]}
+                                    user={userForTemplate}
+                                    bankingDetail={bankingDetail}
+                                    previewOnly={false}
+                                    showBack={false}
+                                    loading={false}
+                                />
                             </CardContent>
                         </Card>
                     </div>

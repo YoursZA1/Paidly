@@ -10,10 +10,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { createPageUrl } from "@/utils";
 import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
+import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import {
-  mapToInvoiceData,
-  effectiveBankingDetail,
-} from "@/components/pdf/InvoicePDFDownloadLink";
+  mapInvoiceDataForTemplate,
+  normalizeInvoiceTemplateKey,
+} from "@/utils/invoiceTemplateData";
 import ClassicTemplate from "@/components/invoice/templates/ClassicTemplate";
 import ModernTemplate from "@/components/invoice/templates/ModernTemplate";
 import MinimalTemplate from "@/components/invoice/templates/MinimalTemplate";
@@ -39,38 +40,6 @@ function safeFormatDate(dateStr) {
   return isValid(date) ? format(date, "MMMM d, yyyy") : "N/A";
 }
 
-/** Same shape as `InvoicePDF` draft mapping so preview matches PDF/download page. */
-function mapFormInvoiceToTemplateInvoice(invoiceData) {
-  const items = Array.isArray(invoiceData?.items) ? invoiceData.items : [];
-  return {
-    invoice_number: invoiceData.invoice_number || invoiceData.reference_number || "Draft",
-    delivery_date: invoiceData.delivery_date,
-    created_date: invoiceData.invoice_date || invoiceData.delivery_date,
-    status: invoiceData.status || "draft",
-    items: items.map((item) => ({
-      service_name: item.name || item.service_name || "Item",
-      name: item.name || item.service_name,
-      description: item.description ?? "",
-      quantity: Number(item.quantity ?? item.qty ?? 1),
-      unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
-      total_price: Number(
-        item.total_price ?? item.total ?? Number(item.quantity ?? item.qty ?? 1) * Number(item.unit_price ?? item.rate ?? item.price ?? 0)
-      ),
-    })),
-    subtotal: Number(invoiceData.subtotal ?? 0),
-    tax_rate: Number(invoiceData.tax_rate ?? 0),
-    tax_amount: Number(invoiceData.tax_amount ?? 0),
-    total_amount: Number(invoiceData.total_amount ?? 0),
-    discount_amount: Number(invoiceData.discount_amount ?? 0),
-    discount_type: invoiceData.discount_type,
-    discount_value: invoiceData.discount_value,
-    notes: invoiceData.notes || "",
-    terms_conditions: invoiceData.terms_conditions || "",
-    project_title: invoiceData.project_title || "",
-    project_description: invoiceData.project_description || "",
-  };
-}
-
 function normalizeClientForTemplate(client) {
   if (!client || typeof client !== "object") {
     return { name: "—", address: "", email: "" };
@@ -93,6 +62,8 @@ function InvoicePreview({
   loading = false,
   previewOnly = false,
   bankingDetail = null,
+  /** Skip outer card chrome — use inside View Invoice / public link so layout matches create preview. */
+  embedded = false,
 }) {
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
@@ -111,9 +82,10 @@ function InvoicePreview({
   const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
   const client = normalizeClientForTemplate(clientProp ?? clientResolved);
 
-  const templateKey = user?.invoice_template || "classic";
+  const templateKey =
+    normalizeInvoiceTemplateKey(user?.invoice_template) || "classic";
   const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
-  const templateInvoice = mapFormInvoiceToTemplateInvoice(invoiceData);
+  const templateInvoice = mapInvoiceDataForTemplate(invoiceData);
   const bankingForTemplate = effectiveBankingDetail(bankingDetail, user);
   const userCurrency =
     (invoiceData?.currency || user?.currency || "ZAR").toString().trim() || "ZAR";
@@ -164,8 +136,12 @@ function InvoicePreview({
     setIsSending(true);
     try {
       const bank = effectiveBankingDetail(bankingDetail, user);
-      const pdfPayload = mapToInvoiceData(invoiceData, clientProp ?? clientResolved ?? {}, user, bank);
-      const blob = await generateInvoicePDF(pdfPayload);
+      const blob = await generateInvoicePDF({
+        invoice: invoiceData,
+        client: clientProp ?? clientResolved ?? {},
+        user: user || {},
+        bankingDetail: bank,
+      });
       const base64PDF = await blobToDataURI(blob);
 
       const { data: sessionData } = await supabase.auth.getSession();
@@ -230,6 +206,25 @@ function InvoicePreview({
     }
   };
 
+  const templateDocument = (
+    <div className="w-full min-w-0 max-w-[210mm] mx-auto rounded-lg border border-border bg-white shadow-sm overflow-x-auto print-container">
+      <div className="pdf-content invoice-container min-w-0 p-4 sm:p-6 md:p-8">
+        <TemplateComponent
+          invoice={templateInvoice}
+          client={client}
+          user={user}
+          bankingDetail={bankingForTemplate}
+          userCurrency={userCurrency}
+          safeFormatDate={safeFormatDate}
+        />
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return <div className="w-full min-w-0 text-card-foreground">{templateDocument}</div>;
+  }
+
   return (
     <div style={{ opacity: 1 }}>
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-x-auto overflow-y-visible rounded-fintech text-card-foreground min-w-0">
@@ -290,18 +285,7 @@ function InvoicePreview({
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6 lg:p-8 pt-4">
-          <div className="w-full min-w-0 max-w-[210mm] mx-auto rounded-lg border border-border bg-white shadow-sm overflow-x-auto print-container">
-            <div className="pdf-content invoice-container min-w-0 p-4 sm:p-6 md:p-8">
-              <TemplateComponent
-                invoice={templateInvoice}
-                client={client}
-                user={user}
-                bankingDetail={bankingForTemplate}
-                userCurrency={userCurrency}
-                safeFormatDate={safeFormatDate}
-              />
-            </div>
-          </div>
+          {templateDocument}
 
           <section
             className={`flex flex-col-reverse sm:flex-row mt-6 sm:mt-8 gap-3 ${
@@ -369,6 +353,7 @@ InvoicePreview.propTypes = {
   loading: PropTypes.bool,
   previewOnly: PropTypes.bool,
   bankingDetail: PropTypes.object,
+  embedded: PropTypes.bool,
 };
 
 export default memo(InvoicePreview);

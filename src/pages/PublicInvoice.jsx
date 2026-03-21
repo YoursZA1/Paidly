@@ -4,13 +4,14 @@ import { useLocation, Link } from 'react-router-dom';
 import { Invoice, Client, BankingDetail } from '@/api/entities';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '../components/CurrencySelector';
-import { format } from 'date-fns';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import PayfastService from '@/services/PayfastService';
+import InvoicePreview from '@/components/invoice/InvoicePreview';
+import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -210,7 +211,17 @@ export default function PublicInvoice() {
     }
     
     const canPayOnline = bankingDetail && bankingDetail.payment_gateway_url;
-    const ownerCurrency = invoice.owner_currency || 'ZAR';
+    const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
+    const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || 'classic';
+    const publicUser = {
+        logo_url: invoice.owner_logo_url || invoice.company?.logo_url || '',
+        company_name: invoice.owner_company_name || invoice.company?.name || '',
+        company_address: invoice.owner_company_address || '',
+        email: invoice.owner_email || '',
+        currency: ownerCurrency,
+        invoice_template: templateKey,
+        invoice_header: '',
+    };
 
     const handlePayFast = async () => {
         if (!invoice) return;
@@ -276,111 +287,18 @@ export default function PublicInvoice() {
                     </div>
                 )}
 
-                <div className="bg-card border border-border shadow-xl rounded-lg p-6 sm:p-10">
-                    {/* Header */}
-                    <header className="border-b-2 border-border pb-6 mb-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start">
-                            <div className="mb-6 sm:mb-0">
-                                {(invoice.company?.logo_url || invoice.owner_logo_url) ? (
-                                    <img
-                                        src={invoice.company?.logo_url || invoice.owner_logo_url}
-                                        alt="Company Logo"
-                                        className="w-auto mb-4"
-                                        style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
-                                    />
-                                ) : (
-                                    <h1 className="text-2xl font-bold text-foreground mb-2">
-                                        {invoice.company?.name || invoice.owner_company_name || 'Your Company'}
-                                    </h1>
-                                )}
-                                {invoice.owner_company_address && (
-                                    <p className="text-muted-foreground mt-2 whitespace-pre-line text-sm max-w-xs">{invoice.owner_company_address}</p>
-                                )}
-                            </div>
-                            <div className="text-left sm:text-right w-full sm:w-auto">
-                                <h2 className="text-3xl font-bold text-primary mb-2">INVOICE</h2>
-                                <p className="text-muted-foreground text-sm"># {invoice.invoice_number}</p>
-                                <p className="text-muted-foreground text-sm mt-1">
-                                    Issued: {format(new Date(invoice.created_date), 'MMMM d, yyyy')}
-                                </p>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* Client Info */}
-                    <section className="mb-8">
-                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Bill To</h3>
-                        <p className="font-bold text-foreground">{client?.name || 'Client'}</p>
-                        <p className="text-muted-foreground">{client?.email || ''}</p>
-                        {client?.address && <p className="text-muted-foreground">{client.address}</p>}
-                        {client?.phone && <p className="text-muted-foreground">{client.phone}</p>}
-                    </section>
-
-                    {/* Items Table */}
-                    <section className="mb-8">
-                         <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-muted/60 text-muted-foreground text-sm uppercase">
-                                        <th className="p-3 font-semibold">Service</th>
-                                        <th className="p-3 font-semibold text-center">Qty</th>
-                                        <th className="p-3 font-semibold text-right">Price</th>
-                                        <th className="p-3 font-semibold text-right">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {Array.isArray(invoice.items) && invoice.items.length > 0 ? (
-                                        invoice.items.map((item, index) => (
-                                            <tr key={index} className="border-b border-border">
-                                                <td className="p-3">
-                                                    <p className="font-medium text-foreground">{item.service_name}</p>
-                                                    {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
-                                                </td>
-                                                <td className="p-3 text-center">{item.quantity}</td>
-                                                <td className="p-3 text-right">{formatCurrency(item.unit_price, ownerCurrency)}</td>
-                                                <td className="p-3 text-right font-medium">{formatCurrency(item.total_price, ownerCurrency)}</td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan="4" className="p-3 text-center text-muted-foreground">No items found</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    {/* Totals */}
-                    <section className="flex justify-end mb-8">
-                        <div className="w-full max-w-sm">
-                            <div className="flex justify-between py-2 border-b">
-                                <span className="text-muted-foreground">Subtotal</span>
-                                <span className="font-medium">{formatCurrency(invoice.subtotal, ownerCurrency)}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b">
-                                <span className="text-muted-foreground">Tax ({invoice.tax_rate}%)</span>
-                                <span className="font-medium">{formatCurrency(invoice.tax_amount, ownerCurrency)}</span>
-                            </div>
-                            <div className="flex justify-between py-3 bg-muted/60 -mx-4 px-4 rounded-md">
-                                <span className="text-xl font-bold text-foreground">Total</span>
-                                <span className="text-xl font-bold text-foreground">{formatCurrency(invoice.total_amount, ownerCurrency)}</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Notes & Footer */}
-                    <footer className="pt-6 border-t-2 border-border text-sm text-muted-foreground">
-                        {invoice.notes && (
-                            <div>
-                                <h4 className="font-semibold text-slate-800 mb-2">Notes</h4>
-                                <p className="whitespace-pre-line">{invoice.notes}</p>
-                            </div>
-                        )}
-                        <p className="mt-6 text-center text-xs text-slate-500">
-                            Thank you for your business! If you have any questions, please contact {invoice.owner_email || 'us'}.
-                        </p>
-                    </footer>
+                <div className="bg-card border border-border shadow-xl rounded-lg p-4 sm:p-6 overflow-x-auto">
+                    <InvoicePreview
+                        embedded
+                        invoiceData={invoice}
+                        client={client}
+                        clients={[]}
+                        user={publicUser}
+                        bankingDetail={bankingDetail}
+                        previewOnly={false}
+                        showBack={false}
+                        loading={false}
+                    />
                 </div>
             </div>
         </div>

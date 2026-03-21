@@ -43,6 +43,58 @@ function getSelectColumns(table) {
   return SUPABASE_SELECT_COLUMNS[table] || "id, created_at, updated_at";
 }
 
+/** Full list minus optional jsonb (scripts/add-profiles-business-jsonb.sql). */
+const PROFILES_SELECT_WITHOUT_BUSINESS =
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, created_at, updated_at";
+
+/** Older DBs without invoice_template / invoice_header. */
+const PROFILES_SELECT_LEGACY =
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, created_at, updated_at";
+
+/** Minimal read still useful for app shell (Settings merges defaults). */
+const PROFILES_SELECT_MINIMAL =
+  "id, full_name, email, logo_url, company_name, company_address, currency, timezone, created_at, updated_at";
+
+function shouldRetryProfileSelectOnSchemaError(error) {
+  const m = String(error?.message || error?.details || error?.hint || "").toLowerCase();
+  if (/jwt|permission|denied|rls|policy|unauthorized|forbidden|not found|0 rows/i.test(m)) return false;
+  return /column|does not exist|schema cache|pgrst204|could not find|unknown|bad request/i.test(m);
+}
+
+/**
+ * Load one profile row. Retries with fewer columns when PostgREST returns 400 (unknown column / schema drift).
+ * @returns {Promise<{ data: object | null, error: object | null }>}
+ */
+export async function selectProfileByUserId(supabase, authUserId) {
+  const attempts = [
+    getSelectColumns("profiles"),
+    PROFILES_SELECT_WITHOUT_BUSINESS,
+    PROFILES_SELECT_LEGACY,
+    PROFILES_SELECT_MINIMAL,
+  ];
+  let last = null;
+  for (const cols of attempts) {
+    const result = await supabase.from("profiles").select(cols).eq("id", authUserId).maybeSingle();
+    last = result;
+    if (!result.error) {
+      const d = result.data ? { ...result.data } : null;
+      if (d) {
+        if (d.business === undefined) d.business = null;
+        if (d.invoice_template === undefined) d.invoice_template = "classic";
+        if (d.invoice_header === undefined) d.invoice_header = "";
+        if (d.phone === undefined) d.phone = null;
+        if (d.subscription_plan === undefined) d.subscription_plan = null;
+        if (d.avatar_url === undefined) d.avatar_url = null;
+      }
+      return { data: d, error: null };
+    }
+    if (!shouldRetryProfileSelectOnSchemaError(result.error)) {
+      return result;
+    }
+  }
+  return last;
+}
+
 /** Default limit for list queries on large tables to avoid loading thousands of rows at once. */
 const DEFAULT_LIST_LIMIT = 100;
 
@@ -1483,11 +1535,10 @@ class AuthManager {
         console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
       } else if (sessionData?.session?.user?.id) {
         supabaseUserId = sessionData.session.user.id;
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select(getSelectColumns("profiles"))
-          .eq("id", sessionData.session.user.id)
-          .maybeSingle();
+        const { data: profile, error: profileError } = await selectProfileByUserId(
+          supabase,
+          sessionData.session.user.id
+        );
         if (profileError) {
           console.warn("Failed to load profile for login:", getSupabaseErrorMessage(profileError, "Load profile failed"));
         }
@@ -1569,11 +1620,7 @@ class AuthManager {
       } else if (sessionData?.session?.user?.id) {
         const authUserId = sessionData.session.user.id;
         const { data: profile, error } = await withLocalTimeout(
-          supabase
-            .from("profiles")
-            .select(getSelectColumns("profiles"))
-            .eq("id", authUserId)
-            .maybeSingle(),
+          selectProfileByUserId(supabase, authUserId),
           7000,
           "profiles.select"
         );
@@ -1643,7 +1690,13 @@ class AuthManager {
 
       let profileData = {};
       try {
-        const { data: profile } = await supabase.from("profiles").select(getSelectColumns("profiles")).eq("id", su.id).maybeSingle();
+        const { data: profile, error: profileErr } = await selectProfileByUserId(supabase, su.id);
+        if (profileErr) {
+          console.warn(
+            "Could not load profile in restoreFromSupabaseSession:",
+            getSupabaseErrorMessage(profileErr, "Profile load failed")
+          );
+        }
         profileData = profile || {};
       } catch (profileErr) {
         console.warn("Could not load profile in restoreFromSupabaseSession:", getSupabaseErrorMessage(profileErr, "Profile load failed"));

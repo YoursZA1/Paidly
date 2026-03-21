@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/components/auth/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { selectProfileByUserId } from "@/api/customClient";
 import LogoImage from "@/components/shared/LogoImage";
 
 import HelpTooltip from "@/components/shared/HelpTooltip";
@@ -64,9 +65,6 @@ const DOCUMENT_TEMPLATES = [
         colors: ["#0f766e", "#f0fdfa", "#14b8a6"]
     }
 ];
-
-const PROFILE_COLUMNS =
-    "full_name,email,company_name,company_address,logo_url,currency,timezone,invoice_template,invoice_header,business";
 
 function businessFieldsFromProfile(b) {
     if (!b || typeof b !== "object") {
@@ -170,11 +168,7 @@ function CompanyProfileSettings() {
         (async () => {
             setIsLoading(true);
             try {
-                const { data } = await supabase
-                    .from("profiles")
-                    .select(PROFILE_COLUMNS)
-                    .eq("id", authUser.id)
-                    .maybeSingle();
+                const { data } = await selectProfileByUserId(supabase, authUser.id);
 
                 if (cancelled) return;
                 if (data) {

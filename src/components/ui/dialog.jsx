@@ -15,27 +15,6 @@ const DialogPortal = DialogPrimitive.Portal
 
 const DialogClose = DialogPrimitive.Close
 
-const DIALOG_TITLE_DISPLAY_NAME = DialogPrimitive.Title.displayName || "DialogTitle"
-const DIALOG_DESCRIPTION_DISPLAY_NAME = DialogPrimitive.Description.displayName || "DialogDescription"
-
-const hasDialogChild = (children, targetDisplayNames) => {
-  const names = new Set(targetDisplayNames)
-  let found = false
-
-  const walk = (node) => {
-    if (found || !React.isValidElement(node)) return
-    const displayName = node.type?.displayName || node.type?.name
-    if (displayName && names.has(displayName)) {
-      found = true
-      return
-    }
-    React.Children.forEach(node.props?.children, walk)
-  }
-
-  React.Children.forEach(children, walk)
-  return found
-}
-
 const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
@@ -46,6 +25,58 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
     {...props} />
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+/** True if `Component` appears anywhere in the element tree (not only direct children). */
+const hasDialogChild = (children, Component) => {
+  if (!Component) return false
+  let found = false
+  const walk = (node) => {
+    if (found || !React.isValidElement(node)) return
+    if (node.type === Component) {
+      found = true
+      return
+    }
+    React.Children.forEach(node.props?.children, walk)
+  }
+  React.Children.forEach(children, walk)
+  return found
+}
+
+const DialogHeader = ({
+  className,
+  ...props
+}) => (
+  <div
+    className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}
+    {...props} />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogFooter = ({
+  className,
+  ...props
+}) => (
+  <div
+    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+    {...props} />
+)
+DialogFooter.displayName = "DialogFooter"
+
+const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+    {...props} />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props} />
+))
+DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 const DialogContent = React.forwardRef((allProps, ref) => {
   const {
@@ -64,8 +95,8 @@ const DialogContent = React.forwardRef((allProps, ref) => {
     typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
   const explicitAriaOptOut = hasAriaDescribedbyKey && rawAriaDescribedBy === undefined
 
-  const hasTitle = hasDialogChild(children, [DIALOG_TITLE_DISPLAY_NAME, "DialogTitle"])
-  const hasDescription = hasDialogChild(children, [DIALOG_DESCRIPTION_DISPLAY_NAME, "DialogDescription"])
+  const hasTitle = hasDialogChild(children, DialogTitle)
+  const hasDescription = hasDialogChild(children, DialogDescription)
   const injectFallbackDescription =
     !hasDescription && !hasNonEmptyAriaDescribedBy && !explicitAriaOptOut
 
@@ -107,7 +138,7 @@ const DialogContent = React.forwardRef((allProps, ref) => {
         {children}
         <DialogPrimitive.Close
           className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-          <X className="h-4 w-4" />
+          <X className="w-4 h-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
@@ -115,42 +146,6 @@ const DialogContent = React.forwardRef((allProps, ref) => {
   )
 })
 DialogContent.displayName = DialogPrimitive.Content.displayName
-
-const DialogHeader = ({
-  className,
-  ...props
-}) => (
-  <div
-    className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}
-    {...props} />
-)
-DialogHeader.displayName = "DialogHeader"
-
-const DialogFooter = ({
-  className,
-  ...props
-}) => (
-  <div
-    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
-    {...props} />
-)
-DialogFooter.displayName = "DialogFooter"
-
-const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
-  <DialogPrimitive.Title
-    ref={ref}
-    className={cn("text-lg font-semibold leading-none tracking-tight", className)}
-    {...props} />
-))
-DialogTitle.displayName = DialogPrimitive.Title.displayName
-
-const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description
-    ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props} />
-))
-DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 DialogOverlay.propTypes = {
   className: PropTypes.string

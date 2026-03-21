@@ -1,8 +1,9 @@
+import { useRef, useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import InvoicePDF from "./InvoicePDF";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
+import generatePdfFromElement from "@/utils/generatePdfFromElement";
+import InvoiceTemplatePdfCapture from "./InvoiceTemplatePdfCapture";
 
 function bankBlockFromBankingRow(bankingDetail, refNumber) {
   if (!bankingDetail) return null;
@@ -46,46 +47,7 @@ function bankBlockFromUserBusiness(business, refNumber) {
 }
 
 /**
- * Invoice-linked banking row, else profile `user.business`, as a banking-detail-shaped object for HTML templates.
- */
-export function effectiveBankingDetail(bankingDetail, user) {
-  if (
-    bankingDetail &&
-    (bankingDetail.bank_name ||
-      bankingDetail.account_name ||
-      bankingDetail.account_number ||
-      bankingDetail.routing_number ||
-      bankingDetail.branch_code ||
-      bankingDetail.swift_code)
-  ) {
-    return bankingDetail;
-  }
-  const biz = user?.business;
-  if (!biz || typeof biz !== "object") return null;
-  if (
-    !biz.bank_name &&
-    !biz.account_name &&
-    !biz.account_number &&
-    !biz.branch_code &&
-    !biz.routing_number &&
-    !biz.swift_code
-  ) {
-    return null;
-  }
-  return {
-    bank_name: biz.bank_name || "",
-    account_name: biz.account_name || "",
-    account_number: biz.account_number || "",
-    routing_number: biz.branch_code || biz.routing_number || "",
-    branch_code: biz.branch_code || "",
-    swift_code: biz.swift_code || "",
-    payment_method: biz.payment_method,
-    additional_info: biz.additional_info,
-  };
-}
-
-/**
- * Maps app invoice + client + user to the shape expected by InvoicePDF (React-PDF).
+ * Maps app invoice + client + user to a compact shape for email copy, server PDFs, and legacy tooling.
  * @param {object|null} bankingDetail — optional row from BankingDetail.get (bank_name, account_name, etc.)
  */
 export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
@@ -209,7 +171,7 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
 }
 
 /**
- * Download button that generates a PDF via @react-pdf/renderer using InvoicePDF.
+ * Download button: same HTML invoice templates as the preview (html2pdf.js).
  * Use when you have full invoice, client, and user (e.g. on InvoicePDF page).
  */
 export default function InvoicePDFDownloadLink({
@@ -221,30 +183,58 @@ export default function InvoicePDFDownloadLink({
   variant = "default",
   showIcon = true,
 }) {
+  const captureRef = useRef(null);
+  const [loading, setLoading] = useState(false);
+
   if (!invoice) return null;
 
-  const invoiceData = mapToInvoiceData(invoice, client, user, bankingDetail);
-  const fileName = `invoice-${invoiceData.number}.pdf`;
-  const currency = invoiceData.currency || "ZAR";
+  const fileName = `invoice-${invoice.invoice_number || invoice.reference_number || "invoice"}.pdf`;
+
+  const handleClick = async () => {
+    const el = captureRef.current;
+    if (!el || loading) return;
+    setLoading(true);
+    try {
+      await generatePdfFromElement(el, fileName);
+    } catch (e) {
+      console.error("Invoice PDF download failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <PDFDownloadLink
-      document={
-        <InvoicePDF invoice={invoiceData} currency={currency} />
-      }
-      fileName={fileName}
-    >
-      {({ loading }) => (
-        <Button
-          type="button"
-          variant={variant}
-          disabled={loading}
-          className={className}
-        >
-          {showIcon && <Download className="w-4 h-4 mr-2 shrink-0" />}
-          {loading ? "Generating PDF..." : "Download Invoice"}
-        </Button>
-      )}
-    </PDFDownloadLink>
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none"
+        style={{
+          position: "fixed",
+          left: -12000,
+          top: 0,
+          width: "210mm",
+          maxWidth: "210mm",
+          zIndex: -1,
+        }}
+      >
+        <InvoiceTemplatePdfCapture
+          ref={captureRef}
+          invoice={invoice}
+          client={client}
+          user={user}
+          bankingDetail={bankingDetail}
+        />
+      </div>
+      <Button
+        type="button"
+        variant={variant}
+        disabled={loading}
+        className={className}
+        onClick={handleClick}
+      >
+        {showIcon && <Download className="w-4 h-4 mr-2 shrink-0" />}
+        {loading ? "Generating PDF..." : "Download Invoice"}
+      </Button>
+    </>
   );
 }

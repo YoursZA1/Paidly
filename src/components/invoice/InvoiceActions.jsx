@@ -35,7 +35,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { supabase } from '@/lib/supabaseClient';
 import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
-import { mapToInvoiceData } from '@/components/pdf/InvoicePDFDownloadLink';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -247,7 +246,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) throw new Error('You must be logged in to send emails.');
 
-            // Generate the invoice PDF in the browser (React-PDF) and attach it via the Edge Function.
+            // Generate the invoice PDF in the browser (same HTML templates as preview) and attach via Edge Function.
             const userData = await User.me();
             let bankingForPdf = null;
             if (invoice?.banking_detail_id) {
@@ -257,8 +256,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                     bankingForPdf = null;
                 }
             }
-            const invoiceData = mapToInvoiceData(invoice, client, userData, bankingForPdf);
-            const pdfBlob = await generateInvoicePDF(invoiceData);
+            const pdfBlob = await generateInvoicePDF({
+                invoice,
+                client,
+                user: userData,
+                bankingDetail: bankingForPdf,
+            });
 
             const blobToBase64 = async (blob) =>
                 new Promise((resolve, reject) => {
@@ -274,7 +277,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
 
             const pdfBase64 = await blobToBase64(pdfBlob);
             const subject = `Invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'Us'}`;
-            const filename = `invoice-${invoiceData.number}.pdf`;
+            const filename = `invoice-${invoice.invoice_number || invoice.reference_number || 'invoice'}.pdf`;
 
             const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
                 method: 'POST',

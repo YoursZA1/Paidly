@@ -11,7 +11,22 @@ function viteEnvFlag(name) {
 }
 
 const isDev = import.meta.env.DEV;
-const serverUrl = (import.meta.env.VITE_SERVER_URL || "http://localhost:5179").replace(/\/$/, "");
+
+/** When VITE_SERVER_URL is unset in production, Paidly app hosts default to the production API (override with env). */
+function inferPaidlyProductionApiBase() {
+  if (typeof window === "undefined" || !import.meta.env.PROD) return "";
+  const h = (window.location.hostname || "").toLowerCase();
+  if (h === "www.app.paidly.co.za" || h === "app.paidly.co.za") return "https://api.paidly.co.za";
+  if (h.endsWith(".paidly.co.za")) return "https://api.paidly.co.za";
+  return "";
+}
+
+const rawServerUrl = String(import.meta.env.VITE_SERVER_URL ?? "").trim();
+const serverUrl = (
+  rawServerUrl ||
+  inferPaidlyProductionApiBase() ||
+  "http://localhost:5179"
+).replace(/\/$/, "");
 const baseURL = isDev ? "" : serverUrl;
 
 /** Intentional Supabase-only production (no Node API): suppress missing-URL warning; auth stays direct to Supabase. */
