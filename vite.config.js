@@ -5,16 +5,22 @@ import path from 'path'
 // https://vite.dev/config/
 // Environment: Vite loads .env, .env.local, .env.[mode] from project root.
 // Only variables prefixed with VITE_ are exposed to the client (e.g. import.meta.env.VITE_SUPABASE_URL).
+function envTruthy(v) {
+  const s = String(v ?? '').trim().toLowerCase()
+  return s === '1' || s === 'true' || s === 'yes'
+}
+
 export default defineConfig(({ mode }) => {
   const envDir = '.';
   const env = loadEnv(mode, envDir, '');
   if (
     mode === 'production' &&
     process.env.VERCEL === '1' &&
-    !String(env.VITE_SERVER_URL || '').trim()
+    !String(env.VITE_SERVER_URL || '').trim() &&
+    !envTruthy(env.VITE_SUPABASE_ONLY)
   ) {
     console.warn(
-      '[vite] VITE_SERVER_URL is unset for this Vercel production build. Email/password auth will use Supabase directly; set VITE_SERVER_URL for API rate limits, waitlist, and currency.'
+      '[vite] VITE_SERVER_URL is unset for this Vercel production build. Email/password auth will use Supabase directly; set VITE_SERVER_URL for API rate limits, waitlist, and currency — or VITE_SUPABASE_ONLY=1 if you omit the Node API.'
     );
   }
   const serverUrl = env.VITE_SERVER_URL || 'http://localhost:5179';

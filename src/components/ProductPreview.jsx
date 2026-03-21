@@ -23,7 +23,7 @@ export default function ProductPreview() {
             <span className="h-3 w-3 rounded-full bg-amber-500/80" />
             <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
             <span className="ml-4 flex-1 truncate rounded-md bg-black/40 px-3 py-1 text-center text-xs text-zinc-500">
-              app.paidly.co.za/dashboard
+              www.app.paidly.co.za/dashboard
             </span>
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-3 sm:p-6">

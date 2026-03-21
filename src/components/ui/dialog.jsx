@@ -47,19 +47,38 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const DialogContent = React.forwardRef(({ className, children, "aria-describedby": ariaDescribedBy, onOpenAutoFocus, ...props }, ref) => {
+const DialogContent = React.forwardRef((allProps, ref) => {
+  const {
+    className,
+    children,
+    onOpenAutoFocus,
+    ...rest
+  } = allProps
+
+  /** hasOwnProperty distinguishes explicit undefined (opt-out) from omitted; empty string matches legacy “not provided”. */
+  const hasAriaDescribedbyKey = Object.prototype.hasOwnProperty.call(allProps, "aria-describedby")
+  const rawAriaDescribedBy = hasAriaDescribedbyKey ? allProps["aria-describedby"] : undefined
+  const { "aria-describedby": _ariaOmit, ...props } = rest
+
+  const hasNonEmptyAriaDescribedBy =
+    typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
+  const explicitAriaOptOut = hasAriaDescribedbyKey && rawAriaDescribedBy === undefined
+
   const hasTitle = hasDialogChild(children, [DIALOG_TITLE_DISPLAY_NAME, "DialogTitle"])
   const hasDescription = hasDialogChild(children, [DIALOG_DESCRIPTION_DISPLAY_NAME, "DialogDescription"])
-  const injectFallbackDescription = !hasDescription
+  const injectFallbackDescription =
+    !hasDescription && !hasNonEmptyAriaDescribedBy && !explicitAriaOptOut
 
   /**
    * Radix sets aria-describedby → descriptionId; if no Description mounts, DescriptionWarning fires.
-   * Inject sr-only Description when absent (same idea as Title). Custom id: pass aria-describedby="my-id".
-   * Opt out of any description link: aria-describedby={undefined} on DialogContent (merged via ...props).
+   * Omit or aria-describedby="": inject sr-only Description when no DialogDescription (same as pre-refactor).
+   * Non-empty string: custom id, no fallback.
+   * Explicit undefined: opt out — no fallback; Radix link cleared via spread below.
    */
-  const ariaDescribedByProp =
-    typeof ariaDescribedBy === "string" && ariaDescribedBy.length > 0
-      ? { "aria-describedby": ariaDescribedBy }
+  const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
+    ? { "aria-describedby": rawAriaDescribedBy }
+    : explicitAriaOptOut
+      ? { "aria-describedby": undefined }
       : {}
 
   return (
@@ -140,6 +159,7 @@ DialogOverlay.propTypes = {
 DialogContent.propTypes = {
   className: PropTypes.string,
   children: PropTypes.node,
+  /** Omit or "" for auto fallback; non-empty string for custom id; explicit undefined to opt out (see source). */
   'aria-describedby': PropTypes.string,
   onOpenAutoFocus: PropTypes.func,
 }

@@ -643,6 +643,7 @@ export default function Layout({ children, currentPageName }) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fetchAll = useAppStore((s) => s.fetchAll);
   const lastFetchedAt = useAppStore((s) => s.lastFetchedAt);
+  const userProfile = useAppStore((s) => s.userProfile);
   const resetStore = useAppStore((s) => s.reset);
 
   // Fetch shared app data when user is present (non-admin). Skip if we have fresh data so navigation doesn't refetch.
@@ -651,9 +652,10 @@ export default function Layout({ children, currentPageName }) {
     if (!user?.id) return;
     if ((user?.role || "").toLowerCase() === "admin") return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
-    if (hasFreshData) return;
+    // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
+    if (hasFreshData && userProfile != null) return;
     fetchAll();
-  }, [user?.id, user?.role, fetchAll, lastFetchedAt]);
+  }, [user?.id, user?.role, fetchAll, lastFetchedAt, userProfile]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window)
   useEffect(() => {

@@ -63,11 +63,11 @@ export const useAppStore = create((set, get) => ({
       }
 
       const settled = await Promise.allSettled([
-        // Keep app shell responsive: short timeouts so pages can show store-first / best-effort quickly.
-        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
-        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
-        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 3000 }), [], 8000, 0),
-        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 4000 }), [], 8000, 0),
+        // Slightly longer caps so cold Supabase still returns rows; one retry on timeout.
+        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
+        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
+        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
+        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
       ]);
 
       const [invoicesData, clientsData, paymentsData, expensesData] = settled.map((r) =>

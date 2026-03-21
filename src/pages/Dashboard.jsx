@@ -251,6 +251,8 @@ export default function Dashboard() {
   const [userState, setUserState] = useState(null);
   const [userCurrencyPreference, setUserCurrencyPreference] = useState('ZAR');
   const [hasBankingDetails, setHasBankingDetails] = useState(false);
+  /** After first banking list attempt so we do not show “add banking” while the request is still in flight. */
+  const [bankingCheckResolved, setBankingCheckResolved] = useState(false);
   const [isLoadingState, setIsLoadingState] = useState(true);
   const [adminStats, setAdminStats] = useState({
     totalUsers: 0,
@@ -313,7 +315,7 @@ export default function Dashboard() {
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
   const payments = isAdmin ? paymentsState : storePayments;
-  const user = isAdmin ? userState : storeUser;
+  const user = isAdmin ? userState : storeUser ?? authUser;
   const isLoading = isAdmin ? isLoadingState : storeIsLoading;
 
   const openAccount = (user) => {
@@ -331,21 +333,36 @@ export default function Dashboard() {
       return () => { mountedRef.current = false; };
     }
     setIsLoadingState(false);
+    setBankingCheckResolved(false);
     let cancelled = false;
     (async () => {
       try {
-        const [bankingDetailsData, goalRow] = await Promise.all([
-          BankingDetail.list(),
-          getBusinessGoal(authUser.id, getBusinessGoalYear()).catch(() => null),
+        const [bankingSettled, goalSettled] = await Promise.allSettled([
+          withTimeoutRetry(
+            () => BankingDetail.list("-created_date", { limit: 50, maxWaitMs: 8000 }),
+            20000,
+            1
+          ),
+          withTimeoutRetry(
+            () => getBusinessGoal(authUser.id, getBusinessGoalYear()),
+            15000,
+            1
+          ).catch(() => null),
         ]);
         if (cancelled || !mountedRef.current) return;
+        const bankingDetailsData =
+          bankingSettled.status === "fulfilled" ? bankingSettled.value : [];
         const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
         setHasBankingDetails(bankingDetails.length > 0);
-        setBusinessGoal(goalRow ?? null);
+        const goalRow =
+          goalSettled.status === "fulfilled" ? goalSettled.value ?? null : null;
+        setBusinessGoal(goalRow);
         const profile = useAppStore.getState().userProfile;
         if (profile?.currency) setUserCurrencyPreference(profile.currency);
       } catch (err) {
         if (!cancelled && mountedRef.current) console.warn("Dashboard banking/goal fetch failed:", err);
+      } finally {
+        if (!cancelled && mountedRef.current) setBankingCheckResolved(true);
       }
     })();
     return () => { cancelled = true; mountedRef.current = false; };
@@ -1429,7 +1446,8 @@ export default function Dashboard() {
   };
 
   const isProfileComplete = Boolean(user?.company_name && user?.company_address && user?.logo_url);
-  const showWelcomeBanner = !isProfileComplete || !hasBankingDetails;
+  const showWelcomeBanner =
+    !isProfileComplete || (bankingCheckResolved && !hasBankingDetails);
   const today = startOfDay(new Date());
   const endOfThisWeek = new Date(today);
   endOfThisWeek.setDate(endOfThisWeek.getDate() + 7);
@@ -1706,7 +1724,10 @@ export default function Dashboard() {
         
         {user && !isLoading && showWelcomeBanner && (
           <div className="glass-card rounded-fintech border border-border mb-6 overflow-hidden">
-            <WelcomeGuide user={user} hasBankingDetails={hasBankingDetails} />
+            <WelcomeGuide
+              user={user}
+              hasBankingDetails={bankingCheckResolved ? hasBankingDetails : true}
+            />
           </div>
         )}
 

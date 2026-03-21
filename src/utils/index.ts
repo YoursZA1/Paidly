@@ -29,8 +29,8 @@ export function createWaitlistUrl(): string {
 }
 
 /**
- * When the main site (e.g. www.paidly.co.za) and app (e.g. app.paidly.co.za) share the same DB,
- * set VITE_APP_URL=https://app.paidly.co.za on the main site build so sign-in/sign-up redirect to the app dashboard.
+ * When the main site (e.g. www.paidly.co.za) and app share the same DB,
+ * set VITE_APP_URL to your canonical app origin on the marketing build (e.g. https://www.app.paidly.co.za) so post-login redirects match where users land (see vercel.json host redirect app → www.app).
  */
 export function getAppDashboardUrl(): string {
     const base = (import.meta.env.VITE_APP_URL || '').toString().replace(/\/$/, '');

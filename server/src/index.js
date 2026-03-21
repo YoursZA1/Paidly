@@ -135,7 +135,12 @@ function isPaidlyPublicOrigin(origin) {
   try {
     const u = new URL(origin);
     const host = u.hostname.toLowerCase();
-    if (host === "app.paidly.co.za" || host === "paidly.co.za" || host === "www.paidly.co.za") {
+    if (
+      host === "app.paidly.co.za" ||
+      host === "www.app.paidly.co.za" ||
+      host === "paidly.co.za" ||
+      host === "www.paidly.co.za"
+    ) {
       return u.protocol === "https:" || u.protocol === "http:";
     }
     if (host.endsWith(".vercel.app") && u.protocol === "https:") return true;
@@ -1685,7 +1690,7 @@ app.listen(port, "0.0.0.0", () => {
     const co = (process.env.CLIENT_ORIGIN || "").trim();
     if (!co || co === "*") {
       console.log(
-        "[cors] CLIENT_ORIGIN unset: using default allowlist (app.paidly.co.za, paidly.co.za, *.vercel.app, local Vite). Set CLIENT_ORIGIN=comma,separated,origins to override."
+        "[cors] CLIENT_ORIGIN unset: using default allowlist (app.paidly.co.za, www.app.paidly.co.za, paidly.co.za, www.paidly.co.za, *.vercel.app, local Vite). Set CLIENT_ORIGIN=comma,separated,origins to override."
       );
     }
   }
