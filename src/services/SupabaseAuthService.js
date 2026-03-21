@@ -95,6 +95,11 @@ const SupabaseAuthService = {
         console.warn("[auth] API sign-up unreachable; falling back to direct Supabase (development only).");
         return signUpDirect();
       }
+      if (isAxios && !err.response && import.meta.env.PROD) {
+        throw new Error(
+          "Could not reach the sign-up service. Check VITE_SERVER_URL and API DNS, or set VITE_SUPABASE_ONLY=1 if you omit the Node API."
+        );
+      }
       if (err instanceof Error) {
         throw err;
       }
@@ -186,6 +191,11 @@ const SupabaseAuthService = {
       if (isAxios && !err.response && import.meta.env.DEV) {
         console.warn("[auth] API sign-in unreachable; falling back to direct Supabase (development only).");
         return signInDirect();
+      }
+      if (isAxios && !err.response && import.meta.env.PROD) {
+        throw new Error(
+          "Could not reach the authentication API. Check VITE_SERVER_URL and API DNS, or set VITE_SUPABASE_ONLY=1 if you omit the Node API."
+        );
       }
       if (err instanceof Error) {
         throw err;

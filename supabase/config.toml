@@ -1,5 +1,5 @@
 # Supabase project configuration (used by Supabase CLI).
-# Link your project: supabase link --project-ref YOUR_PROJECT_REF
+# Remote project (link): npx supabase@latest link --project-ref fvxtsbnzadvuttoqcipo
 # Then deploy functions: supabase functions deploy payfast-itn
 
 project_id = "paidly"

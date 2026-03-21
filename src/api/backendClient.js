@@ -12,9 +12,13 @@ function viteEnvFlag(name) {
 
 const isDev = import.meta.env.DEV;
 
+/** Intentional Supabase-only production (no Node API): do not assume api.paidly.co.za exists; auth uses Supabase directly. */
+const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY");
+
 /** When VITE_SERVER_URL is unset in production, Paidly app hosts default to the production API (override with env). */
 function inferPaidlyProductionApiBase() {
   if (typeof window === "undefined" || !import.meta.env.PROD) return "";
+  if (supabaseOnlyProd) return "";
   const h = (window.location.hostname || "").toLowerCase();
   if (h === "www.app.paidly.co.za" || h === "app.paidly.co.za") return "https://api.paidly.co.za";
   if (h.endsWith(".paidly.co.za")) return "https://api.paidly.co.za";
@@ -28,9 +32,6 @@ const serverUrl = (
   "http://localhost:5179"
 ).replace(/\/$/, "");
 const baseURL = isDev ? "" : serverUrl;
-
-/** Intentional Supabase-only production (no Node API): suppress missing-URL warning; auth stays direct to Supabase. */
-const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY");
 
 /** Production bundle still points at localhost — email/password auth uses Supabase directly (see SupabaseAuthService). */
 export function isProductionBackendUrlLocalhost() {
