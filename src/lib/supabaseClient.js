@@ -22,6 +22,13 @@ if (supabaseUrl && /\.supabase\.com(\/|$)/i.test(supabaseUrl)) {
 }
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+/** Realtime WebSocket and older stacks expect the JWT `anon` `public` key (`eyJ…`), not `sb_publishable_…`. */
+if (supabaseAnonKey && /^sb_publishable_/i.test(String(supabaseAnonKey).trim())) {
+  console.warn(
+    "[Supabase] VITE_SUPABASE_ANON_KEY looks like a publishable key (sb_publishable_…). If Realtime fails to connect, set the JWT anon public key from Dashboard → Settings → API → Project API keys (starts with eyJ)."
+  );
+}
+
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 // When not configured, use a resolvable hostname to avoid "server with specified hostname could not be found".
