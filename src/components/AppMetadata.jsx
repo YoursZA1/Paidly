@@ -95,51 +95,33 @@ export default function AppMetadata() {
     appleTouchIcon.href = '/icon.svg';
     document.head.appendChild(appleTouchIcon);
 
-    // Service Worker Registration
-    if ('serviceWorker' in navigator) {
-      // Create a simple service worker
-      const swCode = `
-        const CACHE_NAME = 'paidly-v1';
-        const urlsToCache = [
-          '/',
-          '/Dashboard',
-          '/CreateInvoice',
-          '/Clients',
-          '/Services',
-          '/Invoices',
-          '/Settings'
-        ];
-
-        self.addEventListener('install', event => {
-          event.waitUntil(
-            caches.open(CACHE_NAME)
-              .then(cache => cache.addAll(urlsToCache))
-          );
-        });
-
-        self.addEventListener('fetch', event => {
-          event.respondWith(
-            caches.match(event.request)
-              .then(response => {
-                if (response) {
-                  return response;
-                }
-                return fetch(event.request);
-              })
-          );
-        });
-      `;
-
-      const swBlob = new Blob([swCode], { type: 'application/javascript' });
-      const swUrl = URL.createObjectURL(swBlob);
-      
-      navigator.serviceWorker.register(swUrl)
-        .then(registration => {
-          console.log('SW registered: ', registration);
-        })
-        .catch(registrationError => {
-          console.log('SW registration failed: ', registrationError);
-        });
+    // Legacy cleanup: an earlier inline SW used cache-first for SPA routes, which served stale
+    // HTML (and old hashed JS) after deploys — so UI updates (e.g. invoices) never appeared.
+    const legacySwFlag = 'paidly_legacy_sw_cleared_v2';
+    if (
+      typeof window !== 'undefined' &&
+      !window.localStorage.getItem(legacySwFlag) &&
+      'serviceWorker' in navigator
+    ) {
+      void (async () => {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          const hadWorker = regs.length > 0;
+          await Promise.all(regs.map((r) => r.unregister()));
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter((k) => k.startsWith('paidly-')).map((k) => caches.delete(k))
+            );
+          }
+          window.localStorage.setItem(legacySwFlag, '1');
+          if (hadWorker) {
+            window.location.reload();
+          }
+        } catch (e) {
+          console.warn('Legacy service worker cleanup failed:', e);
+        }
+      })();
     }
 
     // Cleanup function
