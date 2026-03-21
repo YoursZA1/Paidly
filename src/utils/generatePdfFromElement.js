@@ -6,12 +6,26 @@ const PDF_PAGE_MARGIN_MM = [15, 18, 15, 18];
 
 /**
  * Generate a high-resolution PDF from an HTML element (invoice/quote).
- * Lazy-loads html2pdf.js to avoid circular chunk (pdf ↔ vendor).
+ * - Default: html2pdf.js in the browser.
+ * - Set `VITE_PDF_ENGINE=anvil` to use Anvil API via POST /api/generate-pdf-html (requires ANVIL_API_TOKEN on server).
+ *
  * @param {HTMLElement} element - The DOM node to capture (e.g. invoice container)
  * @param {string} filename - Output filename (e.g. 'INV-001.pdf')
+ * @param {{ css?: string, title?: string, page?: object }} [anvilOptions] - Passed when using Anvil
  */
-export default async function generatePdfFromElement(element, filename = 'document.pdf') {
+export default async function generatePdfFromElement(element, filename = 'document.pdf', anvilOptions = {}) {
   if (!element) throw new Error('No element provided to generate PDF');
+
+  const engine = (import.meta.env.VITE_PDF_ENGINE || 'html2pdf').toString().trim().toLowerCase();
+  if (engine === 'anvil') {
+    try {
+      const { default: generatePdfFromAnvil } = await import('./generatePdfFromAnvil.js');
+      await generatePdfFromAnvil(element, filename, anvilOptions);
+      return;
+    } catch (e) {
+      console.warn('[pdf] Anvil failed, falling back to html2pdf:', e?.message || e);
+    }
+  }
 
   const html2pdf = (await import('html2pdf.js')).default;
 

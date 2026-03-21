@@ -329,9 +329,9 @@ const integrations = SystemSettingsService.getSection('integrations');
 SystemSettingsService.updateSection('integrations', {
   stripe: {
     enabled: true,
-    publicKey: 'pk_test_...',
-    secretKey: 'sk_test_...',
-    webhookSecret: 'whsec_...'
+    publicKey: '<stripe-publishable-key>',
+    secretKey: '<server-side-only — do not use production secrets in localStorage>',
+    webhookSecret: '<configure on server / Stripe dashboard>'
   }
 }, userId);
 ```

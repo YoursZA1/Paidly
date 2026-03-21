@@ -731,7 +731,7 @@ export default function Layout({ children, currentPageName }) {
     try {
       await logout();
     } finally {
-      navigate(createPageUrl("Login"), { replace: true });
+      navigate(`${createPageUrl("Login")}#sign-in`, { replace: true });
     }
   };
 
@@ -744,6 +744,7 @@ export default function Layout({ children, currentPageName }) {
     'PublicInvoice',
     'PublicQuote',
     'PublicPayslip',
+    'Home',
     'Login',
     'Signup',
     'ForgotPassword',

@@ -39,25 +39,20 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                 </div>
             </div>
 
-            {/* Payable To | Bank Details — same structure as web, stack on mobile */}
-            <div className="client grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+            {/* Payable to | Dates — bank details move to footer */}
+            <div className="client invoice-grid-bill-dates mb-6 sm:mb-8">
                 <div>
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payable To</h3>
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payable to</h3>
                     <p className="font-medium text-foreground">{client?.name || '—'}</p>
                     {client?.address && <p className="text-sm text-muted-foreground mt-0.5">{client.address}</p>}
                     {client?.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
                 </div>
-                <div className="text-left sm:text-right">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Bank Details</h3>
-                    {bankingDetail ? (
-                        <>
-                            <p className="font-medium text-foreground">{bankingDetail.account_name || bankingDetail.bank_name}</p>
-                            {bankingDetail.account_number && <p className="text-sm text-muted-foreground">{bankingDetail.account_number}</p>}
-                            {bankingDetail.bank_name && bankingDetail.account_name && <p className="text-sm text-muted-foreground">{bankingDetail.bank_name}</p>}
-                        </>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">—</p>
-                    )}
+                <div className="invoice-grid-dates text-left sm:text-right">
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Dates</h3>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Date of issue</p>
+                    <p className="font-medium text-foreground">{issueDate}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-3 mb-1">Due date</p>
+                    <p className="font-medium text-foreground">{deliveryDate}</p>
                 </div>
             </div>
 
@@ -138,32 +133,52 @@ export default function MinimalTemplate({ invoice, client, user, bankingDetail, 
                 </div>
             </div>
 
-            {/* Notes: invoice notes + line-item notes */}
-            {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
-                <div className="notes mb-8">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Notes</h3>
-                    {invoice.notes && <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{invoice.notes}</p>}
-                    {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
-                        <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
-                            <ul className="text-sm text-muted-foreground list-none space-y-1">
-                                {invoice.items.filter((item) => item.description).map((item, idx) => (
-                                    <li key={idx}>
-                                        <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
-                                        <span className="whitespace-pre-line">{item.description}</span>
-                                    </li>
-                                ))}
-                            </ul>
+            {(bankingDetail ||
+                invoice.terms_conditions ||
+                invoice.notes ||
+                (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
+                <section className="invoice-notes-footer space-y-6">
+                    {bankingDetail && (
+                        <div className="pt-3 border-t border-border text-left">
+                            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Bank details</h3>
+                            <p className="font-medium text-foreground">{bankingDetail.account_name || bankingDetail.bank_name}</p>
+                            {bankingDetail.account_number && <p className="text-sm text-muted-foreground">{bankingDetail.account_number}</p>}
+                            {bankingDetail.bank_name && <p className="text-sm text-muted-foreground">{bankingDetail.bank_name}</p>}
+                            {bankingDetail.routing_number && <p className="text-sm text-muted-foreground">Branch: {bankingDetail.routing_number}</p>}
+                            {bankingDetail.swift_code && <p className="text-sm text-muted-foreground">SWIFT: {bankingDetail.swift_code}</p>}
+                            {bankingDetail.additional_info && <p className="text-sm text-muted-foreground whitespace-pre-line mt-2">{bankingDetail.additional_info}</p>}
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Please use your invoice number as payment reference.
+                            </p>
                         </div>
                     )}
-                </div>
-            )}
 
-            {/* Terms */}
-            {invoice.terms_conditions && (
-                <section className="pt-6 border-t border-border">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payment Terms</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-line">{invoice.terms_conditions}</p>
+                    {invoice.terms_conditions && (
+                        <div className="pt-2 border-t border-border">
+                            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Payment terms</h3>
+                            <p className="text-sm text-muted-foreground whitespace-pre-line">{invoice.terms_conditions}</p>
+                        </div>
+                    )}
+
+                    {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
+                        <div className="notes">
+                            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">Notes</h3>
+                            {invoice.notes && <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{invoice.notes}</p>}
+                            {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
+                                <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
+                                    <ul className="text-sm text-muted-foreground list-none space-y-1">
+                                        {invoice.items.filter((item) => item.description).map((item, idx) => (
+                                            <li key={idx}>
+                                                <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
+                                                <span className="whitespace-pre-line">{item.description}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
             )}
         </div>

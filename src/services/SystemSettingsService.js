@@ -1,9 +1,41 @@
 /**
  * System Settings Service
  * Manages platform-wide configuration and settings for system admins
+ *
+ * Security: persisted data lives in localStorage. The `integrations` section includes fields
+ * named like secretKey / clientSecret — these are for local/demo UI only. Do not put production
+ * API secrets here; use server environment variables or a secrets manager instead.
  */
 
 const STORAGE_KEY = 'breakapi_system_settings';
+
+/** Field names that must never be persisted to localStorage in production builds. */
+const INTEGRATION_SECRET_FIELDS = ['secretKey', 'webhookSecret', 'clientSecret', 'apiKey'];
+
+function isProductionBuild() {
+  return typeof import.meta !== 'undefined' && import.meta.env?.PROD === true;
+}
+
+/**
+ * Clears sensitive integration values (Stripe secret, PayPal secret, Mailgun key, etc.).
+ * In production, secrets must live in server env or a secrets manager — not the browser.
+ */
+function stripIntegrationSecrets(integrations) {
+  if (!integrations || typeof integrations !== 'object') return integrations;
+  const out = { ...integrations };
+  for (const provider of Object.keys(out)) {
+    const block = out[provider];
+    if (!block || typeof block !== 'object') continue;
+    const next = { ...block };
+    for (const field of INTEGRATION_SECRET_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(next, field) && next[field]) {
+        next[field] = '';
+      }
+    }
+    out[provider] = next;
+  }
+  return out;
+}
 
 // Default system settings
 const DEFAULT_SETTINGS = {
@@ -200,7 +232,7 @@ const DEFAULT_SETTINGS = {
     monthlyReportEnabled: true
   },
 
-  // Integration Settings
+  // Integration Settings (demo/local — never store production secrets in localStorage)
   integrations: {
     stripe: {
       enabled: false,
@@ -262,8 +294,14 @@ export class SystemSettingsService {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const settings = JSON.parse(stored);
-        // Merge with defaults to ensure new settings are included
-        return this.mergeWithDefaults(settings);
+        const merged = this.mergeWithDefaults(settings);
+        if (isProductionBuild() && merged.integrations) {
+          return {
+            ...merged,
+            integrations: stripIntegrationSecrets(merged.integrations),
+          };
+        }
+        return merged;
       }
       return { ...DEFAULT_SETTINGS };
     } catch (error) {
@@ -314,7 +352,15 @@ export class SystemSettingsService {
         lastUpdated: new Date().toISOString(),
         updatedBy: userId
       };
-      
+      if (isProductionBuild() && updated.integrations) {
+        if (updates.integrations) {
+          console.warn(
+            '[Paidly] Production: integration secret fields are not stored in localStorage. Use server environment variables or a secrets manager for Stripe, PayPal, etc.'
+          );
+        }
+        updated.integrations = stripIntegrationSecrets(updated.integrations);
+      }
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       
       console.log('✅ System settings updated:', Object.keys(updates));
@@ -335,16 +381,23 @@ export class SystemSettingsService {
   static updateSection(section, updates, userId = null) {
     try {
       const current = this.getSettings();
+      let mergedSection = {
+        ...current[section],
+        ...updates
+      };
+      if (section === 'integrations' && isProductionBuild()) {
+        console.warn(
+          '[Paidly] Production: integration secret fields are not stored in localStorage. Use server env or a secrets manager.'
+        );
+        mergedSection = stripIntegrationSecrets(mergedSection);
+      }
       const updated = {
         ...current,
-        [section]: {
-          ...current[section],
-          ...updates
-        },
+        [section]: mergedSection,
         lastUpdated: new Date().toISOString(),
         updatedBy: userId
       };
-      
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       
       console.log(`✅ System settings section '${section}' updated`);
@@ -544,7 +597,13 @@ export class SystemSettingsService {
       const imported = JSON.parse(jsonString);
       imported.lastUpdated = new Date().toISOString();
       imported.updatedBy = userId;
-      
+      if (isProductionBuild() && imported.integrations) {
+        console.warn(
+          '[Paidly] Production: stripped integration secrets from imported settings; configure providers via server env.'
+        );
+        imported.integrations = stripIntegrationSecrets(imported.integrations);
+      }
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
       console.log('✅ System settings imported successfully');
       return imported;

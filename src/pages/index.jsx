@@ -17,6 +17,7 @@ const AdminBusinesses = lazy(() => import("./AdminBusinesses"));
 const Dashboard = lazy(() => import("./Dashboard"));
 const Login = lazy(() => import("./Login"));
 const Signup = lazy(() => import("./Signup"));
+const Home = lazy(() => import("./Home"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
 const Clients = lazy(() => import("./Clients"));
 const Invoices = lazy(() => import("./Invoices"));
@@ -96,6 +97,8 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 // --- Auth & Public Pages ---
 // /Auth and /Auth.html allow sign-in from the marketing site (paidly.co.za/Auth.html) using the same Supabase DB; post-login redirect to app when VITE_APP_URL is set.
 const AUTH_ROUTES = [
+    { path: "/Home", element: <Home /> },
+    { path: "/home", element: <Home /> },
     { path: "/Auth", element: <Login /> },
     { path: "/Auth.html", element: <Login /> },
     { path: "/Login", element: <Login /> },

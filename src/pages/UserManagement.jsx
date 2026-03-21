@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { UserPlus, Shield, Mail, Copy, Check, AlertCircle, Eye, Ban, X, RefreshCw } from "lucide-react";
+import { UserPlus, Shield, Mail, AlertCircle, Eye, Ban, X, RefreshCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { PLANS, getActiveUserCount, getRemainingUserSlots, isUserLimitReached, getUserPlan, getPlanOrder } from "@/data/planLimits";
@@ -149,8 +149,7 @@ export default function UserManagement() {
     currency: 'ZAR'
   });
   const [inviteError, setInviteError] = useState("");
-  const [inviteLink, setInviteLink] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [inviteSuccessMessage, setInviteSuccessMessage] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
@@ -582,31 +581,23 @@ export default function UserManagement() {
         return;
       }
 
-      const link = await sendUserInvite(
+      const message = await sendUserInvite(
         inviteForm.email.toLowerCase(),
         inviteForm.full_name.trim(),
         inviteForm.role,
         inviteForm.plan
       );
 
-      setInviteLink(link);
-      console.log("Invite Link:", link);
+      setInviteSuccessMessage(message);
     } catch (err) {
       setInviteError(err?.message || "Failed to send invite");
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const resetInviteForm = () => {
     setInviteForm({ full_name: "", email: "", role: "user", plan: planKey });
-    setInviteLink("");
+    setInviteSuccessMessage("");
     setInviteError("");
-    setCopied(false);
   };
 
   return (
@@ -1340,37 +1331,10 @@ export default function UserManagement() {
               <CardTitle>Invite user</CardTitle>
             </CardHeader>
             <CardContent>
-              {inviteLink ? (
+              {inviteSuccessMessage ? (
                 <div className="space-y-4">
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                    Invite link generated! Share this link with the user to accept the invitation.
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Invite link</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={inviteLink}
-                        readOnly
-                        className="bg-slate-50"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={copyToClipboard}
-                        className="flex-shrink-0"
-                      >
-                        {copied ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                    <strong>Demo Note:</strong> The invite link is also logged in the browser console (F12).
+                    {inviteSuccessMessage}
                   </div>
 
                   <Button

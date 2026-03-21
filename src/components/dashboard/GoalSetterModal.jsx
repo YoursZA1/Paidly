@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  XMarkIcon,
   FlagIcon,
   RocketLaunchIcon,
   ArrowTrendingUpIcon,
@@ -10,8 +9,14 @@ import { getCurrencySymbol } from '@/utils/currencyCalculations';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { upsertBusinessGoal } from '@/api/businessGoals';
 import { useToast } from '@/components/ui/use-toast';
-
-const GOAL_YEAR = 2026;
+import { getBusinessGoalYear } from '@/constants/businessGoalYear';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 /**
  * Confidence: how realistic the goal is vs last year's revenue.
@@ -41,6 +46,7 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
   const { toast } = useToast();
   const currency = user?.currency || 'ZAR';
   const symbol = getCurrencySymbol(currency);
+  const year = getBusinessGoalYear();
 
   useEffect(() => {
     if (isOpen) {
@@ -60,13 +66,14 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
     }
     setLoading(true);
     try {
-      await upsertBusinessGoal(userId, GOAL_YEAR, {
+      const goalYear = getBusinessGoalYear();
+      await upsertBusinessGoal(userId, goalYear, {
         annual_target: Number(annualGoal) || 0,
         strategy_type: strategyType,
       });
       onSaved?.();
       onClose();
-      toast({ title: '2026 strategy saved', description: 'Your target is locked in.' });
+      toast({ title: `${goalYear} target saved`, description: 'Your annual revenue goal is updated.' });
     } catch (err) {
       const msg = err?.message || '';
       const isForbidden = msg.includes('policy') || msg.includes('row-level') || msg.includes('permission');
@@ -80,62 +87,60 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-      <div className="bg-card border border-border w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-        {/* Header */}
-        <div className="p-8 border-b border-border flex justify-between items-center bg-muted/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary rounded-xl">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-w-xl w-[calc(100%-2rem)] rounded-[32px] sm:rounded-[40px] p-0 gap-0 overflow-hidden border-border bg-card shadow-2xl sm:max-w-xl">
+        <DialogDescription className="sr-only">
+          Set your annual revenue goal and strategy for {year}. Monthly run rate and confidence hints update as you type.
+        </DialogDescription>
+
+        <DialogHeader className="p-6 sm:p-8 border-b border-border bg-muted/50 space-y-0 text-left flex flex-row items-center justify-between gap-4 pr-14">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 bg-primary rounded-xl shrink-0">
               <FlagIcon className="w-5 h-5 text-primary-foreground" />
             </div>
-            <h2 className="text-xl font-black text-foreground">Set 2026 Targets</h2>
+            <DialogTitle className="text-lg sm:text-xl font-black text-foreground tracking-tight">
+              Set {year} targets
+            </DialogTitle>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 hover:bg-muted rounded-full transition-colors"
-            aria-label="Close"
-          >
-            <XMarkIcon className="w-6 h-6 text-muted-foreground" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        <div className="p-10 space-y-10">
-          {/* Main Revenue Input */}
+        <div className="p-6 sm:p-10 space-y-8 sm:space-y-10">
           <div className="text-center space-y-4">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Annual Revenue Goal
+            <label htmlFor="goal-annual-revenue" className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+              Annual revenue goal
             </label>
             <div className="relative inline-block w-full">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-3xl font-black text-muted-foreground tabular-nums">
                 {symbol}
               </span>
               <input
+                id="goal-annual-revenue"
                 type="number"
                 min="0"
                 step="1000"
                 placeholder="0"
                 value={annualGoal > 0 ? annualGoal : ''}
                 onChange={(e) => setAnnualGoal(e.target.value === '' ? 0 : Number(e.target.value))}
-                className="w-full text-5xl font-black text-center border-none focus:ring-0 bg-transparent text-foreground placeholder:text-muted-foreground tabular-nums pl-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg"
+                className="w-full text-4xl sm:text-5xl font-black text-center border-none focus:ring-0 bg-transparent text-foreground placeholder:text-muted-foreground tabular-nums pl-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg"
               />
             </div>
             <div className="flex justify-center items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 rounded-full w-fit mx-auto">
-              <ArrowTrendingUpIcon className="w-4 h-4" />
+              <ArrowTrendingUpIcon className="w-4 h-4 shrink-0" />
               Target: {formatCurrency(monthlyAverage, currency)} / month
             </div>
-            {/* Confidence Meter */}
             <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${confidence.colorClass}`}>
               <span>Confidence: {confidence.label}</span>
               <span className="tabular-nums">{confidence.percent}%</span>
             </div>
           </div>
 
-          {/* Milestone Selection */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               type="button"
               onClick={() => setStrategyType('aggressive')}
@@ -148,7 +153,7 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
               <RocketLaunchIcon
                 className={`w-6 h-6 mb-2 ${strategyType === 'aggressive' ? 'text-primary' : 'text-muted-foreground'}`}
               />
-              <p className="text-sm font-bold text-foreground">Aggressive Growth</p>
+              <p className="text-sm font-bold text-foreground">Aggressive growth</p>
               <p className="text-[10px] text-primary font-medium">Focus on new acquisition</p>
             </button>
             <button
@@ -163,17 +168,16 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
               <BanknotesIcon
                 className={`w-6 h-6 mb-2 ${strategyType === 'steady' ? 'text-primary' : 'text-muted-foreground'}`}
               />
-              <p className="text-sm font-bold text-foreground">Steady Retention</p>
+              <p className="text-sm font-bold text-foreground">Steady retention</p>
               <p className="text-[10px] text-muted-foreground font-medium">Focus on recurring billing</p>
             </button>
           </div>
 
-          {/* Action Footer */}
-          <div className="pt-6 border-t border-border flex gap-4">
+          <div className="pt-6 border-t border-border flex flex-col-reverse sm:flex-row gap-3 sm:gap-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-4 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+              className="flex-1 py-4 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors rounded-2xl sm:rounded-none"
             >
               Cancel
             </button>
@@ -189,12 +193,12 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
                   aria-hidden
                 />
               ) : (
-                'Lock in 2026 Strategy'
+                `Save ${year} target`
               )}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

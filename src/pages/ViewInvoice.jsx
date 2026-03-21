@@ -16,7 +16,7 @@ import { formatCurrency } from '@/utils/currencyCalculations';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
-import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
+import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
@@ -59,7 +59,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         setIsLoading(true);
         setError(null);
         try {
-            const invoiceData = await withTimeoutRetry(() => Invoice.get(invoiceId), 45000, 2);
+            const invoiceData = await withTimeoutRetry(() => Invoice.get(invoiceId), ENTITY_GET_TIMEOUT_MS, 2);
             if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
             if (!invoiceData) throw new Error("Invoice not found");
 
@@ -76,7 +76,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                     User.me().catch(() => null),
                     invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
                     Payment.list('-payment_date').catch(() => [])
-                ]), 45000, 2);
+                ]), ENTITY_GET_TIMEOUT_MS, 2);
 
                 if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
 

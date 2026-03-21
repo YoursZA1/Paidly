@@ -1,3 +1,8 @@
+/** Single-record / PDF loads — allow extra time for cold Supabase or slow networks */
+export const ENTITY_GET_TIMEOUT_MS = 60_000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Wraps an async operation with a timeout and optional retry.
  * Use for data fetches to avoid long hangs (e.g. cold Supabase) and surface errors.
@@ -31,7 +36,11 @@ export async function withTimeoutRetry(fn, timeoutMs = 10000, retries = 2) {
     } catch (err) {
       lastError = err;
       if (attempt < retries) {
-        console.warn(`Fetch attempt ${attempt + 1} failed (${err?.message || err}), retrying...`);
+        const backoffMs = Math.min(2500, 400 * 2 ** attempt);
+        console.warn(
+          `Fetch attempt ${attempt + 1} failed (${err?.message || err}), retrying in ${backoffMs}ms…`
+        );
+        await sleep(backoffMs);
       } else {
         console.error("Fetch failed after retries:", err?.message || err);
       }

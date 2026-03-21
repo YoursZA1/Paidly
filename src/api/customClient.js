@@ -6,6 +6,13 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { getBackendBaseUrl } from "@/api/backendClient";
+import {
+  validateActivitiesUpload,
+  validateBankDetailsUpload,
+  validateBrandingUpload,
+  validatePrivateUpload,
+  validateReceiptUpload,
+} from "@/utils/fileUploadValidation";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -20,7 +27,7 @@ const SUPABASE_SELECT_COLUMNS = {
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
   services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
-  profiles: "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, created_at, updated_at",
+  profiles: "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, business, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
@@ -1496,6 +1503,7 @@ class AuthManager {
             timezone: profile.timezone,
             invoice_template: profile.invoice_template,
             invoice_header: profile.invoice_header,
+            business: profile.business && typeof profile.business === "object" ? profile.business : null,
           };
         }
       }
@@ -1519,6 +1527,7 @@ class AuthManager {
       timezone: companyProfile.timezone || credentials.timezone || 'UTC',
       invoice_template: companyProfile.invoice_template || 'classic',
       invoice_header: companyProfile.invoice_header || '',
+      business: companyProfile.business || null,
       plan: credentials.plan || 'free' // Default to free plan
     };
     this.saveUserToStorage();
@@ -1591,6 +1600,12 @@ class AuthManager {
             timezone: profile.timezone || this.user.timezone || 'UTC',
             invoice_template: profile.invoice_template || this.user.invoice_template || 'classic',
             invoice_header: profile.invoice_header || this.user.invoice_header || '',
+            business:
+              profile.business !== undefined && profile.business !== null && typeof profile.business === "object"
+                ? profile.business
+                : profile.business === null
+                  ? null
+                  : this.user.business ?? null,
           };
           this.saveUserToStorage();
         } else {
@@ -1653,6 +1668,10 @@ class AuthManager {
         timezone: profileData.timezone || "UTC",
         invoice_template: profileData.invoice_template || "classic",
         invoice_header: profileData.invoice_header || "",
+        business:
+          profileData.business !== undefined && profileData.business !== null && typeof profileData.business === "object"
+            ? profileData.business
+            : null,
         plan,
         subscription_plan: profileData.subscription_plan || plan,
       };
@@ -1693,6 +1712,9 @@ class AuthManager {
       id: authUserId ?? this.user.id,
       supabase_id: authUserId ?? this.user.supabase_id,
     };
+    if (data.business !== undefined) {
+      updatedUser.business = data.business;
+    }
     this.user = updatedUser;
     this.saveUserToStorage();
 
@@ -1712,6 +1734,7 @@ class AuthManager {
         timezone: data.timezone ?? updatedUser.timezone ?? 'UTC',
         invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? 'classic',
         invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
+        ...(data.business !== undefined ? { business: data.business } : {}),
         updated_at: new Date().toISOString(),
       };
 
@@ -1728,8 +1751,8 @@ class AuthManager {
 
       // If schema cache is missing a column (e.g. company_address not migrated), retry without it
       const errMsg = error?.message || '';
-      if (error && /company_address|schema cache|column.*of 'profiles'/i.test(errMsg)) {
-        const { company_address: _addr, ...rest } = profileData;
+      if (error && /company_address|business|schema cache|column.*of 'profiles'/i.test(errMsg)) {
+        const { company_address: _addr, business: _biz, ...rest } = profileData;
         const fallback = { id: authUserId, ...rest };
         Object.keys(fallback).forEach(key => {
           if (fallback[key] === undefined) delete fallback[key];
@@ -1738,7 +1761,9 @@ class AuthManager {
         if (retry.error) {
           console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(retry.error, "Save profile failed"));
         } else {
-          console.warn("Profile saved without company_address. Add column: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company_address text;");
+          console.warn(
+            "Profile saved without optional column(s). Run scripts/add-profiles-business-jsonb.sql if business failed; add company_address if needed."
+          );
         }
       } else if (error) {
         console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
@@ -1902,10 +1927,26 @@ class IntegrationManager {
       return null;
     };
 
+    const guardUploadByFolder = (file, folder) => {
+      const f = folder || "uploads";
+      if (f === "branding") {
+        validateBrandingUpload(file);
+      } else if (f === "activities") {
+        validateActivitiesUpload(file);
+      } else if (f === "bank-details") {
+        validateBankDetailsUpload(file);
+      } else if (f === "private") {
+        validatePrivateUpload(file);
+      } else {
+        validateActivitiesUpload(file);
+      }
+    };
+
     const uploadToStorage = async ({ file, folder, bucket: bucketOverride }) => {
       if (!file) {
         throw new Error("No file provided");
       }
+      guardUploadByFolder(file, folder);
       const bucket = bucketOverride || storageBucket;
 
       const sessionUser = await getSessionUser();
@@ -1996,6 +2037,7 @@ class IntegrationManager {
       /** Store receipt image in receipts bucket: receipt-{Date.now()}.{ext} under org_id */
       UploadToReceipts: async ({ file }) => {
         if (!file) throw new Error("No file provided");
+        validateReceiptUpload(file);
         const sessionUser = await getSessionUser();
         const orgId = sessionUser?.id
           ? await getOrgIdForUser(sessionUser.id)

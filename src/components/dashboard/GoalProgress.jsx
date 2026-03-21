@@ -1,6 +1,6 @@
 import { CheckBadgeIcon, ArrowTrendingUpIcon, FlagIcon, UserGroupIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCurrencySymbol } from "@/utils/currencyCalculations";
+import { getCurrencySymbol, formatCurrency } from "@/utils/currencyCalculations";
 
 const currentYear = () => new Date().getFullYear();
 
@@ -15,19 +15,22 @@ export default function GoalProgress({
   year = currentYear(),
   progress = 75,
   title,
-  revenueTarget = 2400000,
+  revenueTarget = 0,
   currentRevenue = 0,
   currency = "ZAR",
   onClick,
 }) {
-  const displayTitle = title ?? `${year} Strategy Plan`;
-  const isCompleted = progress >= 100;
-  const progressPercent = Math.min(100, Math.max(0, Number(progress)));
+  const displayTitle = title ?? `${year} revenue target`;
+  const numericTarget = Number(revenueTarget);
+  const hasTarget = Number.isFinite(numericTarget) && numericTarget > 0;
+  const isCompleted = hasTarget && progress >= 100;
+  const progressPercent = hasTarget ? Math.min(100, Math.max(0, Number(progress))) : 0;
   const symbol = getCurrencySymbol(currency);
-  const targetLabel =
-    revenueTarget >= 1e6
-      ? `${symbol}${(revenueTarget / 1e6).toFixed(1)}M`
-      : `${symbol}${(revenueTarget / 1e3).toFixed(0)}K`;
+  const targetLabel = !hasTarget
+    ? "Not set"
+    : numericTarget >= 1e6
+      ? `${symbol}${(numericTarget / 1e6).toFixed(1)}M`
+      : `${symbol}${(numericTarget / 1e3).toFixed(0)}K`;
 
   return (
     <Card
@@ -56,31 +59,51 @@ export default function GoalProgress({
           </div>
           <span
             className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border shrink-0 ${
-              isCompleted
-                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                : "bg-slate-700/80 text-slate-300 border-slate-600"
+              !hasTarget
+                ? "bg-slate-700/80 text-slate-400 border-slate-600"
+                : isCompleted
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                  : "bg-slate-700/80 text-slate-300 border-slate-600"
             }`}
           >
-            {isCompleted ? "Completed" : "In Progress"}
+            {!hasTarget ? "Not set" : isCompleted ? "Completed" : "In progress"}
           </span>
         </div>
 
         <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">
           {displayTitle}
         </h3>
-        <p className="text-slate-400 text-sm leading-relaxed mb-6 sm:mb-8 max-w-[280px]">
-          Your business roadmap is set. You&apos;ve mapped out targets for{" "}
-          {targetLabel} in annual revenue.
+        <p className="text-slate-400 text-sm leading-relaxed mb-6 sm:mb-8 max-w-[280px] text-left">
+          {hasTarget ? (
+            <>
+              Progress toward your {year} target of{" "}
+              <span className="text-slate-200 font-semibold tabular-nums">{targetLabel}</span> annual revenue
+              {currentRevenue > 0 ? (
+                <>
+                  . Collected so far:{" "}
+                  <span className="text-slate-200 font-semibold tabular-nums">
+                    {formatCurrency(currentRevenue, currency)}
+                  </span>
+                </>
+              ) : null}
+              .
+            </>
+          ) : (
+            <>
+              Set an annual revenue goal for {year} to track how paid invoices stack up.{" "}
+              {onClick ? <span className="text-slate-300">Tap this card to get started.</span> : null}
+            </>
+          )}
         </p>
 
         {/* Progress section */}
         <div className="space-y-3 sm:space-y-4">
           <div className="flex justify-between items-end">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              Yearly Target Reach
+              {hasTarget ? "Yearly target reach" : "Target not set"}
             </span>
             <span className="text-base sm:text-lg font-black text-white tabular-nums">
-              {Math.round(progressPercent)}%
+              {hasTarget ? `${Math.round(progressPercent)}%` : "—"}
             </span>
           </div>
           <div className="w-full h-2.5 sm:h-3 bg-slate-800 rounded-full overflow-hidden">

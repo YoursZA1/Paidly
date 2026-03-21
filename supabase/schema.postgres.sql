@@ -29,6 +29,7 @@ create table if not exists public.profiles (
   timezone text default 'UTC',
   invoice_template text default 'classic',
   invoice_header text,
+  business jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

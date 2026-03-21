@@ -5,6 +5,14 @@ import { X, Camera, Upload, Loader2, FileText, CheckCircle2 } from "lucide-react
 import { UploadToReceipts, ExtractDataFromUploadedFile } from "@/api/integrations";
 import { getReceiptExtractionSchema, parsedReceiptToExpenseForm } from "@/constants/receiptOcrExtractionSpec";
 import { extractReceiptDataWithTesseract } from "@/utils/receiptTesseractOcr";
+import {
+    getReceiptScanThrottleState,
+    recordReceiptScanAttempt,
+} from "@/utils/receiptOcrRateLimit";
+
+function formatRetryMinutes(ms) {
+    return Math.max(1, Math.ceil(ms / 60000));
+}
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -73,11 +81,20 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
             return;
         }
 
+        const throttle = getReceiptScanThrottleState();
+        if (throttle.blocked) {
+            setError(
+                `Too many receipt scans in this tab. Try again in about ${formatRetryMinutes(throttle.retryAfterMs)} minute(s).`
+            );
+            return;
+        }
+
         setLoading(true);
         setError(null);
         setResult(null);
 
         try {
+            recordReceiptScanAttempt();
             const { file_url } = await UploadToReceipts({ file });
 
             if (useBrowserOcr && isImage) {

@@ -44,7 +44,7 @@ export default function ForgotPassword() {
               If an account exists for <strong className="text-foreground">{email}</strong>, you will receive a password reset link shortly. Check your inbox and spam folder.
             </p>
             <Button
-              onClick={() => navigate(createPageUrl("Login"))}
+              onClick={() => navigate(`${createPageUrl("Login")}#sign-in`)}
               className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl touch-manipulation"
             >
               Back to Login
@@ -102,7 +102,7 @@ export default function ForgotPassword() {
           </form>
 
           <button
-            onClick={() => navigate(createPageUrl("Login"))}
+            onClick={() => navigate(`${createPageUrl("Login")}#sign-in`)}
             className="w-full mt-4 flex items-center justify-center text-sm text-primary hover:text-primary/90 font-medium min-h-10 touch-manipulation"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

@@ -18,6 +18,16 @@ export function createPageUrl(pageName: string) {
     return '/' + (slug.charAt(0).toUpperCase() + slug.slice(1));
 }
 
+/** Marketing signup URL; `#sign-up` scrolls to the create-account card on the Signup page. */
+export function createSignupUrl(): string {
+    return `${createPageUrl("Signup")}#sign-up`;
+}
+
+/** Waitlist section on the marketing home page. */
+export function createWaitlistUrl(): string {
+    return `${createPageUrl("Home")}#waitlist`;
+}
+
 /**
  * When the main site (e.g. www.paidly.co.za) and app (e.g. app.paidly.co.za) share the same DB,
  * set VITE_APP_URL=https://app.paidly.co.za on the main site build so sign-in/sign-up redirect to the app dashboard.

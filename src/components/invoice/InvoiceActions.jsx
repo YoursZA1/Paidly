@@ -16,7 +16,7 @@ import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle,
 import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Invoice, User } from '@/api/entities';
+import { Invoice, User, BankingDetail } from '@/api/entities';
 import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
@@ -249,7 +249,15 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
 
             // Generate the invoice PDF in the browser (React-PDF) and attach it via the Edge Function.
             const userData = await User.me();
-            const invoiceData = mapToInvoiceData(invoice, client, userData);
+            let bankingForPdf = null;
+            if (invoice?.banking_detail_id) {
+                try {
+                    bankingForPdf = await BankingDetail.get(invoice.banking_detail_id);
+                } catch {
+                    bankingForPdf = null;
+                }
+            }
+            const invoiceData = mapToInvoiceData(invoice, client, userData, bankingForPdf);
             const pdfBlob = await generateInvoicePDF(invoiceData);
 
             const blobToBase64 = async (blob) =>

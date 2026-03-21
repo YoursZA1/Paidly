@@ -47,6 +47,7 @@ import GoalProgress from '@/components/dashboard/GoalProgress';
 import { GoalSetterModal } from '@/components/dashboard/GoalSetterModal';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
 import { getBusinessGoal } from '@/api/businessGoals';
+import { getBusinessGoalYear } from '@/constants/businessGoalYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -289,7 +290,7 @@ export default function Dashboard() {
   });
   const [revenueRange, setRevenueRange] = useState(30);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
-  const [businessGoal2026, setBusinessGoal2026] = useState(null);
+  const [businessGoal, setBusinessGoal] = useState(null);
   const [goalSetterOpen, setGoalSetterOpen] = useState(false);
   const [alerts, setAlerts] = useState({
     planLimits: [],
@@ -333,14 +334,14 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const [bankingDetailsData, goal2026] = await Promise.all([
+        const [bankingDetailsData, goalRow] = await Promise.all([
           BankingDetail.list(),
-          getBusinessGoal(authUser.id, 2026).catch(() => null),
+          getBusinessGoal(authUser.id, getBusinessGoalYear()).catch(() => null),
         ]);
         if (cancelled || !mountedRef.current) return;
         const bankingDetails = Array.isArray(bankingDetailsData) ? bankingDetailsData : [];
         setHasBankingDetails(bankingDetails.length > 0);
-        setBusinessGoal2026(goal2026 ?? null);
+        setBusinessGoal(goalRow ?? null);
         const profile = useAppStore.getState().userProfile;
         if (profile?.currency) setUserCurrencyPreference(profile.currency);
       } catch (err) {
@@ -670,7 +671,7 @@ export default function Dashboard() {
     if (!hasCachedData) setIsLoadingState(true);
     try {
       // Fetch profile, invoices, clients, expenses, payments, banking details, and business goal in parallel
-      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goal2026] = await withTimeoutRetry(() => Promise.all([
+      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goalRow] = await withTimeoutRetry(() => Promise.all([
         (async () => {
           try {
             return await User.me();
@@ -683,7 +684,7 @@ export default function Dashboard() {
         Expense.list("-date", 100),
         Payment.list().catch(() => []),
         BankingDetail.list(),
-        authUserId ? getBusinessGoal(authUserId, 2026).catch(() => null) : Promise.resolve(null)
+        authUserId ? getBusinessGoal(authUserId, getBusinessGoalYear()).catch(() => null) : Promise.resolve(null)
       ]), 15000, 2);
 
       if (!userResult) {
@@ -702,7 +703,7 @@ export default function Dashboard() {
       setPaymentsState(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetails.length > 0);
       setUserCurrencyPreference(currencyFromProfile);
-      setBusinessGoal2026(goal2026 || null);
+      setBusinessGoal(goalRow || null);
 
       // Use userResult.id for the cache key (not authUserId from closure)
       setCachedDashboard(userResult.id, {
@@ -713,7 +714,7 @@ export default function Dashboard() {
         user: userResult,
         userCurrencyPreference: currencyFromProfile,
         hasBankingDetails: bankingDetails.length > 0,
-        businessGoal2026: goal2026 || null
+        businessGoal: goalRow || null
       });
     } catch (error) {
       if (!mountedRef.current) return;
@@ -728,10 +729,10 @@ export default function Dashboard() {
     }
   }, [toast]);
 
-  const refreshGoal2026 = useCallback(async () => {
+  const refreshBusinessGoal = useCallback(async () => {
     if (!user?.id) return;
-    const goal = await getBusinessGoal(user.id, 2026).catch(() => null);
-    setBusinessGoal2026(goal || null);
+    const goal = await getBusinessGoal(user.id, getBusinessGoalYear()).catch(() => null);
+    setBusinessGoal(goal || null);
   }, [user?.id]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
@@ -1402,10 +1403,12 @@ export default function Dashboard() {
   const userName = user?.display_name || user?.full_name || 'there';
   const userCurrency = userCurrencyPreference || 'ZAR';
 
-  const revenueTarget2026 = businessGoal2026?.annual_target ?? 2400000;
-  const goalProgress = revenueTarget2026 > 0
-    ? Math.min(100, (totalRevenue / revenueTarget2026) * 100)
-    : 0;
+  const rawAnnualTarget =
+    businessGoal?.annual_target != null ? Number(businessGoal.annual_target) : 0;
+  const revenueTarget =
+    Number.isFinite(rawAnnualTarget) && rawAnnualTarget > 0 ? rawAnnualTarget : 0;
+  const goalProgress =
+    revenueTarget > 0 ? Math.min(100, (totalRevenue / revenueTarget) * 100) : 0;
 
   const statusColors = {
     'paid': 'bg-status-paid/10 text-status-paid',
@@ -1707,7 +1710,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Recent Invoices), 30% right (Setup, Quick Creator, Plan 2026, Transactions) */}
+        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Recent Invoices), 30% right (Setup, Quick Creator, annual target card, Transactions) */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
           {/* Left Column (70%) — Revenue trend + Recent Invoices */}
           <motion.div
@@ -1871,7 +1874,7 @@ export default function Dashboard() {
 
           </motion.div>
 
-          {/* Right Column (30%) — Setup Progress, Quick Creator, Plan for 2026, Transactions */}
+          {/* Right Column (30%) — Setup Progress, Quick Creator, revenue target, Transactions */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -1930,9 +1933,9 @@ export default function Dashboard() {
             </div>
 
             <GoalProgress
-              year={2026}
+              year={getBusinessGoalYear()}
               progress={goalProgress}
-              revenueTarget={revenueTarget2026}
+              revenueTarget={revenueTarget}
               currentRevenue={totalRevenue}
               currency={userCurrency}
               onClick={() => setGoalSetterOpen(true)}
@@ -1940,9 +1943,9 @@ export default function Dashboard() {
             <GoalSetterModal
               isOpen={goalSetterOpen}
               onClose={() => setGoalSetterOpen(false)}
-              onSaved={refreshGoal2026}
+              onSaved={refreshBusinessGoal}
               user={user}
-              initialGoal={businessGoal2026}
+              initialGoal={businessGoal}
               lastYearRevenue={lastYearRevenue}
             />
 

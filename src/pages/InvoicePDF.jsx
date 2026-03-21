@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
-import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
+import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
-import InvoicePDFDownloadLink from '@/components/pdf/InvoicePDFDownloadLink';
+import InvoicePDFDownloadLink, { effectiveBankingDetail } from '@/components/pdf/InvoicePDFDownloadLink';
 
 // Import templates
 import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
@@ -50,8 +50,10 @@ export default function InvoicePDF() {
                             invoice_number: invoiceData.reference_number || invoiceData.invoice_number || 'Draft',
                             delivery_date: invoiceData.delivery_date,
                             created_date: invoiceData.invoice_date || invoiceData.delivery_date,
+                            status: invoiceData.status || 'draft',
                             items: (invoiceData.items || []).map((item) => ({
                                 service_name: item.name || item.service_name || 'Item',
+                                name: item.name || item.service_name,
                                 description: item.description || '',
                                 quantity: Number(item.quantity ?? item.qty ?? 1),
                                 unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
@@ -61,6 +63,9 @@ export default function InvoicePDF() {
                             tax_rate: Number(invoiceData.tax_rate ?? 0),
                             tax_amount: Number(invoiceData.tax_amount ?? 0),
                             total_amount: Number(invoiceData.total_amount ?? 0),
+                            discount_amount: Number(invoiceData.discount_amount ?? 0),
+                            discount_type: invoiceData.discount_type,
+                            discount_value: invoiceData.discount_value,
                             notes: invoiceData.notes || '',
                             terms_conditions: invoiceData.terms_conditions || '',
                             project_title: invoiceData.project_title || '',
@@ -113,7 +118,7 @@ export default function InvoicePDF() {
         setLoadError(null);
         setIsLoading(true);
         try {
-            const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), 45000, 2);
+            const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), ENTITY_GET_TIMEOUT_MS, 2);
             if (!invoiceRecord) {
                 setIsLoading(false);
                 return;
@@ -208,6 +213,7 @@ export default function InvoicePDF() {
     const templateKey = resolvedUser?.invoice_template || 'classic';
     const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
     const userCurrency = resolvedUser?.currency || invoice.owner_currency || 'ZAR';
+    const bankingForTemplates = effectiveBankingDetail(bankingDetail, resolvedUser);
 
     return (
         <>
@@ -217,12 +223,28 @@ export default function InvoicePDF() {
                     max-width: 210mm !important;
                     box-sizing: border-box !important;
                 }
+                /* Layout: [ HEADER ] [ BILL TO | DATES ] [ TABLE | SUMMARY ] [ NOTES ] */
+                .invoice-grid-bill-dates {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    gap: 1.5rem;
+                    align-items: start;
+                    margin-bottom: 1.5rem;
+                }
+                .invoice-grid-dates {
+                    text-align: right;
+                }
                 .invoice-layout {
                     display: grid;
                     grid-template-columns: minmax(0, 1fr) 320px;
                     gap: 24px;
                     align-items: start;
                     margin-bottom: 32px;
+                }
+                .invoice-notes-footer {
+                    margin-top: 2rem;
+                    padding-top: 1.25rem;
+                    border-top: 1px solid #e5e7eb;
                 }
                 .invoice > .header {
                     margin-bottom: 24px;
@@ -370,6 +392,12 @@ export default function InvoicePDF() {
                     margin: 0 auto;
                 }
                 @media print {
+                    .pdf-content .invoice-grid-bill-dates {
+                        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+                    }
+                    .pdf-content .invoice-layout {
+                        grid-template-columns: minmax(0, 1fr) 280px !important;
+                    }
                     .no-print { display: none !important; }
                     body {
                         margin: 0;
@@ -531,6 +559,13 @@ export default function InvoicePDF() {
                     .pdf-wrapper { padding: 12px 8px !important; }
                     .pdf-page { padding: 12px 16px !important; border-radius: 12px !important; }
                     .pdf-content { font-size: 14px; }
+                    .pdf-content .invoice-grid-bill-dates {
+                        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                        gap: 1rem;
+                    }
+                    .pdf-content .invoice-grid-dates {
+                        text-align: right;
+                    }
                     .header {
                         flex-direction: column;
                         gap: 12px;
@@ -575,6 +610,7 @@ export default function InvoicePDF() {
                             invoice={invoice}
                             client={client}
                             user={resolvedUser}
+                            bankingDetail={bankingDetail}
                             className="btn-download px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
                         />
                         <Button
@@ -600,12 +636,12 @@ export default function InvoicePDF() {
                     </div>
 
                     <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content invoice-container min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }}>
+                        <div className="pdf-content invoice-container invoice-pdf-export min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }}>
                             <TemplateComponent
                                 invoice={invoice}
                                 client={client || { name: invoice.client_name || 'Client' }}
                                 user={resolvedUser}
-                                bankingDetail={bankingDetail}
+                                bankingDetail={bankingForTemplates}
                                 userCurrency={userCurrency}
                                 safeFormatDate={safeFormatDate}
                             />

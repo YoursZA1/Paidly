@@ -39,7 +39,8 @@ enable_signup = true
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false
+# Require email confirmation before sign-in (use Inbucket in local CLI for test emails).
+enable_confirmations = true
 
 [auth.external.google]
 enabled = true

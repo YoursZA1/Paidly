@@ -65,7 +65,35 @@ const DOCUMENT_TEMPLATES = [
     }
 ];
 
-const PROFILE_COLUMNS = "full_name,email,company_name,company_address,logo_url,currency,timezone,invoice_template,invoice_header";
+const PROFILE_COLUMNS =
+    "full_name,email,company_name,company_address,logo_url,currency,timezone,invoice_template,invoice_header,business";
+
+function businessFieldsFromProfile(b) {
+    if (!b || typeof b !== "object") {
+        return { bank_name: "", account_name: "", account_number: "", branch_code: "" };
+    }
+    return {
+        bank_name: b.bank_name || "",
+        account_name: b.account_name || "",
+        account_number: b.account_number || "",
+        branch_code: b.branch_code || "",
+    };
+}
+
+function compactBusinessForProfile(fd) {
+    const o = {
+        bank_name: (fd.business_bank_name || "").trim(),
+        account_name: (fd.business_account_name || "").trim(),
+        account_number: (fd.business_account_number || "").trim(),
+        branch_code: (fd.business_branch_code || "").trim(),
+    };
+    const out = {};
+    if (o.bank_name) out.bank_name = o.bank_name;
+    if (o.account_name) out.account_name = o.account_name;
+    if (o.account_number) out.account_number = o.account_number;
+    if (o.branch_code) out.branch_code = o.branch_code;
+    return Object.keys(out).length ? out : null;
+}
 
 function CompanyProfileSettings() {
     const { user: authUser, refreshUser } = useAuth();
@@ -82,7 +110,11 @@ function CompanyProfileSettings() {
         country: "",
         timezone: "",
         invoice_template: "classic",
-        invoice_header: ""
+        invoice_header: "",
+        business_bank_name: "",
+        business_account_name: "",
+        business_account_number: "",
+        business_branch_code: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -101,6 +133,7 @@ function CompanyProfileSettings() {
     // Sync company fields when authUser updates (e.g. Realtime from another tab or after save)
     useEffect(() => {
         if (!authUser?.id) return;
+        const b = businessFieldsFromProfile(authUser.business);
         setFormData(prev => ({
             ...prev,
             company_name: authUser.company_name ?? prev.company_name,
@@ -109,7 +142,11 @@ function CompanyProfileSettings() {
             currency: authUser.currency || prev.currency || "USD",
             timezone: authUser.timezone ?? prev.timezone,
             invoice_template: authUser.invoice_template || prev.invoice_template || "classic",
-            invoice_header: authUser.invoice_header ?? prev.invoice_header
+            invoice_header: authUser.invoice_header ?? prev.invoice_header,
+            business_bank_name: b.bank_name,
+            business_account_name: b.account_name,
+            business_account_number: b.account_number,
+            business_branch_code: b.branch_code,
         }));
     }, [
         authUser?.id,
@@ -119,7 +156,8 @@ function CompanyProfileSettings() {
         authUser?.currency,
         authUser?.timezone,
         authUser?.invoice_template,
-        authUser?.invoice_header
+        authUser?.invoice_header,
+        authUser?.business,
     ]);
 
     // Load Company Profile fields from DB (select only needed columns to reduce payload)
@@ -140,6 +178,7 @@ function CompanyProfileSettings() {
 
                 if (cancelled) return;
                 if (data) {
+                    const b = businessFieldsFromProfile(data.business);
                     setFormData(prev => ({
                         ...prev,
                         display_name: data.full_name || prev.display_name,
@@ -150,7 +189,11 @@ function CompanyProfileSettings() {
                         currency: data.currency || "USD",
                         timezone: data.timezone || "",
                         invoice_template: data.invoice_template || "classic",
-                        invoice_header: data.invoice_header || ""
+                        invoice_header: data.invoice_header || "",
+                        business_bank_name: b.bank_name,
+                        business_account_name: b.account_name,
+                        business_account_number: b.account_number,
+                        business_branch_code: b.branch_code,
                     }));
                 }
                 // Upsert if profile empty but we have auth data
@@ -280,9 +323,18 @@ function CompanyProfileSettings() {
                 timezone: updatedData.timezone || "",
                 invoice_template: updatedData.invoice_template || "classic",
                 invoice_header: updatedData.invoice_header ?? "",
+                business: compactBusinessForProfile(updatedData),
             };
             await User.updateMyUserData(payload);
-            setFormData(prev => ({ ...prev, ...payload, display_name: payload.full_name }));
+            setFormData(prev => ({
+                ...prev,
+                ...payload,
+                display_name: payload.full_name,
+                business_bank_name: updatedData.business_bank_name,
+                business_account_name: updatedData.business_account_name,
+                business_account_number: updatedData.business_account_number,
+                business_branch_code: updatedData.business_branch_code,
+            }));
             setLogoFile(null);
             await refreshUser();
             toast({
@@ -317,6 +369,7 @@ function CompanyProfileSettings() {
     const isBrandingComplete = formData.company_name && formData.company_address && formData.logo_url;
 
     const handlePreviewTemplate = () => {
+        const previewBusiness = compactBusinessForProfile(formData);
         const draftUser = {
             id: authUser?.id,
             full_name: formData.display_name,
@@ -325,7 +378,8 @@ function CompanyProfileSettings() {
             logo_url: formData.logo_url || "",
             currency: formData.currency || "ZAR",
             invoice_template: formData.invoice_template || "classic",
-            invoice_header: formData.invoice_header || ""
+            invoice_header: formData.invoice_header || "",
+            ...(previewBusiness ? { business: previewBusiness } : {}),
         };
         const sampleDraft = {
             invoiceData: {
@@ -419,6 +473,56 @@ function CompanyProfileSettings() {
                             placeholder="123 Anderson Street, Cape Town, 8001"
                             className="min-h-24 rounded-lg resize-none text-sm border-slate-200 dark:border-slate-700"
                         />
+                    </div>
+                    <div className="md:col-span-2 space-y-4 text-left">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Default bank details</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Shown on PDFs when an invoice does not use a saved bank account. Invoice-specific accounts still take priority.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="business_bank_name" className="text-sm font-medium text-foreground">Bank</Label>
+                                <Input
+                                    id="business_bank_name"
+                                    value={formData.business_bank_name}
+                                    onChange={(e) => handleInputChange("business_bank_name", e.target.value)}
+                                    placeholder="e.g., FNB"
+                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="business_account_name" className="text-sm font-medium text-foreground">Account name</Label>
+                                <Input
+                                    id="business_account_name"
+                                    value={formData.business_account_name}
+                                    onChange={(e) => handleInputChange("business_account_name", e.target.value)}
+                                    placeholder="Business name on account"
+                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="business_account_number" className="text-sm font-medium text-foreground">Account number</Label>
+                                <Input
+                                    id="business_account_number"
+                                    value={formData.business_account_number}
+                                    onChange={(e) => handleInputChange("business_account_number", e.target.value)}
+                                    placeholder="Account number"
+                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="business_branch_code" className="text-sm font-medium text-foreground">Branch code</Label>
+                                <Input
+                                    id="business_branch_code"
+                                    value={formData.business_branch_code}
+                                    onChange={(e) => handleInputChange("business_branch_code", e.target.value)}
+                                    placeholder="e.g., 250655"
+                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                />
+                            </div>
+                        </div>
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-sm font-medium text-foreground">Default Currency</Label>

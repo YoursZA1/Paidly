@@ -37,8 +37,6 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                     <div className="invoice-meta text-left sm:text-right shrink-0">
                         <h2 className="text-2xl sm:text-4xl font-light tracking-wide mb-1 sm:mb-2">{resolvedTitle}</h2>
                         <p className="invoice-number text-white/80 text-sm">#{invoice.invoice_number}</p>
-                        <p className="text-white/80 text-xs sm:text-sm">Issued: {issueDate}</p>
-                        <p className="text-white/80 text-xs sm:text-sm">{dueLabel}: {deliveryDate}</p>
                     </div>
                 </div>
             </header>
@@ -50,10 +48,10 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 </div>
             )}
 
-            {/* Client Info — same structure as web: Bill To left, Payment Due right */}
-            <section className="client grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
+            {/* Bill to | Dates — totals stay in summary column */}
+            <section className="client invoice-grid-bill-dates mb-6 sm:mb-8">
                 <div className="bg-muted p-4 sm:p-5 rounded-xl">
-                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Bill To</h3>
+                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Bill to</h3>
                     <p className="font-semibold text-foreground text-base sm:text-lg">{client.name}</p>
                     {client.contact_person && <p className="text-muted-foreground text-xs sm:text-sm">Attn: {client.contact_person}</p>}
                     {client.address && <p className="text-muted-foreground text-xs sm:text-sm mt-1">{client.address}</p>}
@@ -68,10 +66,12 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                         </div>
                     )}
                 </div>
-                <div className="bg-muted p-4 sm:p-5 rounded-xl text-left sm:text-right">
-                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Payment Due</h3>
+                <div className="bg-muted p-4 sm:p-5 rounded-xl invoice-grid-dates text-left sm:text-right">
+                    <h3 className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-2 sm:mb-3">Dates</h3>
+                    <p className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mb-1">Date of issue</p>
+                    <p className="font-semibold text-foreground text-base sm:text-lg">{issueDate}</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-wide mt-3 mb-1">{dueLabel}</p>
                     <p className="font-semibold text-foreground text-base sm:text-lg">{deliveryDate}</p>
-                    <p className="text-xl sm:text-2xl font-bold text-primary mt-2 tabular-nums currency-value whitespace-nowrap">{formatCurrency(invoice.total_amount, userCurrency)}</p>
                 </div>
             </section>
             
@@ -156,73 +156,80 @@ export default function ModernTemplate({ invoice, client, user, bankingDetail, u
                 </section>
             </div>
             
-            {/* Payment Details */}
-            {bankingDetail && (
-                <section className="mb-8 p-5 bg-primary/10 rounded-xl border border-primary/20">
-                    <h3 className="font-bold text-primary mb-4 text-sm uppercase tracking-wide">Payment Information</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <p className="text-primary text-xs uppercase">Bank</p>
-                            <p className="font-medium text-foreground">{bankingDetail.bank_name}</p>
-                        </div>
-                        <div>
-                            <p className="text-primary text-xs uppercase">Account Name</p>
-                            <p className="font-medium text-foreground">{bankingDetail.account_name}</p>
-                        </div>
-                        {bankingDetail.account_number && (
-                            <div>
-                                <p className="text-primary text-xs uppercase">Account Number</p>
-                                <p className="font-medium text-foreground">{bankingDetail.account_number}</p>
+            {(bankingDetail ||
+                invoice.terms_conditions ||
+                invoice.notes ||
+                (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
+                <section className="invoice-notes-footer space-y-6">
+                    {bankingDetail && (
+                        <div className="pt-3 border-t border-border text-left">
+                            <h3 className="font-semibold text-foreground mb-3 text-sm">Bank details</h3>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Bank</p>
+                                    <p className="font-medium text-foreground">{bankingDetail.bank_name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Account Name</p>
+                                    <p className="font-medium text-foreground">{bankingDetail.account_name}</p>
+                                </div>
+                                {bankingDetail.account_number && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Account Number</p>
+                                        <p className="font-medium text-foreground">{bankingDetail.account_number}</p>
+                                    </div>
+                                )}
+                                {bankingDetail.routing_number && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Branch Code</p>
+                                        <p className="font-medium text-foreground">{bankingDetail.routing_number}</p>
+                                    </div>
+                                )}
+                                {bankingDetail.swift_code && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">SWIFT Code</p>
+                                        <p className="font-medium text-foreground">{bankingDetail.swift_code}</p>
+                                    </div>
+                                )}
+                                {bankingDetail.additional_info && (
+                                    <div className="col-span-2">
+                                        <p className="text-muted-foreground text-xs">Additional Info</p>
+                                        <p className="font-medium text-foreground whitespace-pre-line">{bankingDetail.additional_info}</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                        {bankingDetail.routing_number && (
-                            <div>
-                                <p className="text-primary text-xs uppercase">Branch Code</p>
-                                <p className="font-medium text-foreground">{bankingDetail.routing_number}</p>
-                            </div>
-                        )}
-                        {bankingDetail.swift_code && (
-                            <div>
-                                <p className="text-primary text-xs uppercase">SWIFT Code</p>
-                                <p className="font-medium text-foreground">{bankingDetail.swift_code}</p>
-                            </div>
-                        )}
-                        {bankingDetail.additional_info && (
-                            <div className="col-span-2">
-                                <p className="text-primary text-xs uppercase">Additional Info</p>
-                                <p className="font-medium text-foreground whitespace-pre-line">{bankingDetail.additional_info}</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {/* Notes: invoice notes + line-item notes */}
-            {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
-                <section className="notes p-4 bg-muted rounded-xl">
-                    <h3 className="font-bold text-foreground mb-2 text-sm">Notes</h3>
-                    {invoice.notes && <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>}
-                    {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
-                        <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
-                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
-                            <ul className="text-muted-foreground text-sm list-none space-y-1">
-                                {invoice.items.filter((item) => item.description).map((item, idx) => (
-                                    <li key={idx}>
-                                        <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
-                                        <span className="whitespace-pre-line">{item.description}</span>
-                                    </li>
-                                ))}
-                            </ul>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Please use your invoice number as payment reference.
+                            </p>
                         </div>
                     )}
-                </section>
-            )}
 
-            {/* Terms & Conditions */}
-            {invoice.terms_conditions && (
-                <section className="mt-6 p-4 bg-muted rounded-xl">
-                    <h3 className="font-bold text-foreground mb-2 text-sm">Payment Terms</h3>
-                    <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.terms_conditions}</p>
+                    {invoice.terms_conditions && (
+                        <div className="p-4 bg-muted rounded-xl">
+                            <h3 className="font-bold text-foreground mb-2 text-sm">Payment terms</h3>
+                            <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.terms_conditions}</p>
+                        </div>
+                    )}
+
+                    {(invoice.notes || (Array.isArray(invoice.items) && invoice.items.some((item) => item.description))) && (
+                        <div className="notes p-4 bg-muted rounded-xl">
+                            <h3 className="font-bold text-foreground mb-2 text-sm">Notes</h3>
+                            {invoice.notes && <p className="text-muted-foreground text-sm whitespace-pre-line">{invoice.notes}</p>}
+                            {Array.isArray(invoice.items) && invoice.items.filter((item) => item.description).length > 0 && (
+                                <div className={invoice.notes ? 'mt-3 pt-3 border-t border-border' : ''}>
+                                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Service / line item notes</p>
+                                    <ul className="text-muted-foreground text-sm list-none space-y-1">
+                                        {invoice.items.filter((item) => item.description).map((item, idx) => (
+                                            <li key={idx}>
+                                                <span className="font-medium text-foreground">{item.service_name || item.name || 'Item'}:</span>{' '}
+                                                <span className="whitespace-pre-line">{item.description}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
             )}
         </div>

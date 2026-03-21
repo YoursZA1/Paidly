@@ -10,32 +10,8 @@ import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { payslipsToCsv, parsePayslipCsv, csvRowToPayslipPayload } from "@/utils/payslipCsvMapping";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { format, parseISO, isValid } from "date-fns";
-import { Skeleton } from "@/components/ui/skeleton";
-import PayslipActions from "../components/payslips/PayslipActions";
-import { formatCurrency } from "../components/CurrencySelector";
+import PayslipList from "../components/payslips/PayslipList";
 import { useAppStore } from "@/stores/useAppStore";
-
-const statusStyles = {
-    draft: "bg-muted text-muted-foreground border-border",
-    sent: "bg-primary/15 text-primary border-primary/20",
-    paid: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
-};
-
-const safeFormatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    const date = parseISO(dateStr);
-    return isValid(date) ? format(date, 'MMM d, yyyy') : 'N/A';
-};
 
 export default function PayslipsPage() {
     const payslipsFromStore = useAppStore((s) => s.payslips);
@@ -43,7 +19,7 @@ export default function PayslipsPage() {
     const userProfile = useAppStore((s) => s.userProfile);
     const [searchTerm, setSearchTerm] = useState("");
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [isLoading, setIsLoading] = useState(true); // kept for existing skeleton UI
+    const [isLoading, setIsLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isExporting, setIsExporting] = useState(false);
@@ -125,267 +101,195 @@ export default function PayslipsPage() {
     };
 
     const payslips = payslipsFromStore ?? [];
-    // Keep skeleton behavior: show loading only if we have no cached data and we're refreshing.
     useEffect(() => {
         setIsLoading(payslips.length === 0 && isRefreshing);
     }, [payslips.length, isRefreshing]);
 
-    const userCurrency = userProfile?.currency || 'ZAR';
+    const userCurrency = userProfile?.currency || "ZAR";
 
-    const filteredPayslips = payslips.filter(payslip =>
-        payslip.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payslip.payslip_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payslip.position?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredPayslips = payslips.filter(
+        (payslip) =>
+            payslip.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            payslip.payslip_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            payslip.position?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Pagination logic
     const totalPages = Math.ceil(filteredPayslips.length / itemsPerPage);
     const paginatedPayslips = filteredPayslips.slice(
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
     );
 
-    // Reset to page 1 when search changes
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm]);
 
     return (
-        <div className="min-h-screen bg-background p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-background w-full min-w-0 mobile-page px-4 sm:px-6">
+            <div className="max-w-7xl mx-auto w-full min-w-0">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
+                    className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8"
                 >
-                    <div>
-                        <h1 className="text-2xl font-semibold text-foreground mb-2">
+                    <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
+                        <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">
                             Payslips
                         </h1>
-                        <p className="text-muted-foreground">
-                            Manage and distribute employee payslips
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Manage and distribute employee payslips.
                         </p>
                     </div>
-                    <Link to={createPageUrl("CreatePayslip")}>
-                        <Button className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create New Payslip
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
+                        <input
+                            type="file"
+                            name="payslips_import_csv"
+                            ref={payslipFileInputRef}
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportCsv}
+                        />
+                        <Link to={createPageUrl("CreatePayslip")} className="order-first sm:order-none w-full sm:w-auto">
+                            <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">
+                                <Plus className="w-4 h-4 shrink-0" />
+                                Create payslip
+                            </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" disabled={isImporting} onClick={() => payslipFileInputRef.current?.click()} className="rounded-xl h-10 sm:h-9">
+                            <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
+                            {isImporting ? "Importing…" : "Import CSV"}
                         </Button>
-                    </Link>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isExporting}
+                            onClick={handleExportCsv}
+                            className="rounded-xl h-10 sm:h-9"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            {isExporting ? "Exporting…" : "Export CSV"}
+                        </Button>
+                    </div>
                 </motion.div>
 
-                <Card className="bg-card border border-border">
-                    <CardHeader>
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                            <CardTitle>Payslip List</CardTitle>
-                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                <input
-                                    type="file"
-                                    name="payslips_import_csv"
-                                    ref={payslipFileInputRef}
-                                    accept=".csv"
-                                    className="hidden"
-                                    onChange={handleImportCsv}
+                <Card className="rounded-xl overflow-hidden w-full min-w-0 mobile-card-wrap">
+                    <CardHeader className="p-3 sm:p-4 md:p-6">
+                        <div className="space-y-4">
+                            <CardTitle className="text-base font-semibold text-foreground">Payslip list</CardTitle>
+                            <div className="relative w-full max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                                <Input
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Search by employee, number, or position…"
+                                    className="pl-10 h-10 rounded-xl w-full border-border"
                                 />
-                                <Button variant="outline" size="sm" disabled={isImporting} onClick={() => payslipFileInputRef.current?.click()}>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    {isImporting ? "Importing…" : "Import CSV"}
-                                </Button>
-                                <Button variant="outline" size="sm" disabled={isExporting} onClick={handleExportCsv}>
-                                    <Download className="w-4 h-4 mr-2" />
-                                    {isExporting ? "Exporting…" : "Export CSV"}
-                                </Button>
-                                <div className="relative w-full sm:max-w-xs">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder="Search payslips..."
-                                        className="pl-10 h-10 rounded-xl w-full"
-                                    />
-                                </div>
                             </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="p-0 sm:p-6 sm:pt-0">
-                        {/* Desktop Table View */}
-                        <div className="overflow-x-auto hidden md:block">
-                            <Table className="min-w-[800px]">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Payslip #</TableHead>
-                                        <TableHead>Employee Name</TableHead>
-                                        <TableHead>Position</TableHead>
-                                        <TableHead>Pay Period</TableHead>
-                                        <TableHead>Net Pay</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {isLoading ? (
-                                        Array(5).fill(0).map((_, i) => (
-                                            <TableRow key={i}>
-                                                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                                                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                                                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                                                <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                                                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                                                <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-                                                <TableCell><div className="flex justify-end"><Skeleton className="h-8 w-8 rounded-md" /></div></TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        paginatedPayslips.map(payslip => (
-                                            <TableRow key={payslip.id}>
-                                                <TableCell className="font-medium">{payslip.payslip_number}</TableCell>
-                                                <TableCell>{payslip.employee_name}</TableCell>
-                                                <TableCell>{payslip.position || 'N/A'}</TableCell>
-                                                <TableCell>
-                                                    {payslip.pay_period_start && payslip.pay_period_end 
-                                                        ? `${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`
-                                                        : 'N/A'}
-                                                </TableCell>
-                                                <TableCell>{formatCurrency(payslip.net_pay, userCurrency)}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary" className={`${statusStyles[payslip.status || 'draft']} border`}>
-                                                        {(payslip.status || 'draft')}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <PayslipActions 
-                                                        payslip={payslip}
-                                                        onActionSuccess={loadData}
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                        {/* Mobile Card View */}
-                        <div className="md:hidden space-y-4 p-4">
-                            {isLoading ? (
-                                Array(3).fill(0).map((_, i) => <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>)
-                            ) : filteredPayslips.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
-                                    <h3 className="mt-2 text-sm font-medium text-foreground">No payslips found</h3>
-                                    <p className="mt-1 text-sm text-muted-foreground">Create your first payslip to see it here.</p>
+                    <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
+                        {isLoading ? (
+                            <PayslipList payslips={[]} isLoading userCurrency={userCurrency} onActionSuccess={loadData} />
+                        ) : filteredPayslips.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">
+                                    <Receipt className="h-7 w-7 text-muted-foreground" />
+                                </div>
+                                <h3 className="mt-2 text-base font-semibold text-foreground font-display">No payslips yet</h3>
+                                <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">
+                                    {searchTerm
+                                        ? "Try a different search."
+                                        : "Create your first payslip to see it here."}
+                                </p>
+                                {!searchTerm && (
                                     <div className="mt-6">
                                         <Link to={createPageUrl("CreatePayslip")}>
-                                            <Button>
+                                            <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                                 <Plus className="-ml-1 mr-2 h-5 w-5" />
-                                                New Payslip
+                                                Create your first payslip
                                             </Button>
                                         </Link>
                                     </div>
-                                </div>
-                            ) : (
-                                paginatedPayslips.map(payslip => (
-                                    <Card key={payslip.id} className="bg-card border border-border">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1 space-y-1">
-                                                    <p className="font-semibold text-foreground">{payslip.employee_name}</p>
-                                                    <p className="text-sm text-muted-foreground">{payslip.payslip_number}</p>
-                                                    <p className="text-sm text-muted-foreground">{payslip.position || 'N/A'}</p>
-                                                </div>
-                                                <PayslipActions 
-                                                    payslip={payslip}
-                                                    onActionSuccess={loadData}
-                                                />
-                                            </div>
-                                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-border">
-                                                <div>
-                                                    <p className="text-sm font-bold text-foreground">{formatCurrency(payslip.net_pay, userCurrency)}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {payslip.pay_period_start && payslip.pay_period_end
-                                                            ? `${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`
-                                                            : 'N/A'}
-                                                    </p>
-                                                </div>
-                                                <Badge variant="secondary" className={`${statusStyles[payslip.status || 'draft']} border text-xs`}>
-                                                    {(payslip.status || 'draft')}
-                                                </Badge>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))
-                            )}
-                        </div>
-                        
-                        {/* Pagination Controls */}
-                        {totalPages > 1 && (
-                            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4 px-4">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Show</span>
-                                    <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                                        <SelectTrigger className="w-[70px] h-9">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="10">10</SelectItem>
-                                            <SelectItem value="25">25</SelectItem>
-                                            <SelectItem value="50">50</SelectItem>
-                                            <SelectItem value="100">100</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <span className="text-sm text-muted-foreground">
-                                        of {filteredPayslips.length} payslips
-                                    </span>
-                                </div>
-                                
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                    >
-                                        <ChevronLeft className="w-4 h-4 mr-1" />
-                                        Previous
-                                    </Button>
-                                    
-                                    <div className="flex items-center gap-1">
-                                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                            let pageNum;
-                                            if (totalPages <= 5) {
-                                                pageNum = i + 1;
-                                            } else if (currentPage <= 3) {
-                                                pageNum = i + 1;
-                                            } else if (currentPage >= totalPages - 2) {
-                                                pageNum = totalPages - 4 + i;
-                                            } else {
-                                                pageNum = currentPage - 2 + i;
-                                            }
-                                            return (
-                                                <Button
-                                                    key={i}
-                                                    variant={currentPage === pageNum ? "default" : "outline"}
-                                                    size="sm"
-                                                    onClick={() => setCurrentPage(pageNum)}
-                                                    className="w-9 h-9"
-                                                >
-                                                    {pageNum}
-                                                </Button>
-                                            );
-                                        })}
-                                    </div>
-                                    
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages}
-                                    >
-                                        Next
-                                        <ChevronRight className="w-4 h-4 ml-1" />
-                                    </Button>
-                                </div>
+                                )}
                             </div>
+                        ) : (
+                            <>
+                                <PayslipList
+                                    payslips={paginatedPayslips}
+                                    isLoading={false}
+                                    userCurrency={userCurrency}
+                                    onActionSuccess={loadData}
+                                />
+
+                                {totalPages > 1 && (
+                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <span>Show</span>
+                                            <Select
+                                                value={itemsPerPage.toString()}
+                                                onValueChange={(v) => {
+                                                    setItemsPerPage(Number(v));
+                                                    setCurrentPage(1);
+                                                }}
+                                            >
+                                                <SelectTrigger className="w-[70px] h-9 rounded-lg">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl">
+                                                    <SelectItem value="10">10</SelectItem>
+                                                    <SelectItem value="25">25</SelectItem>
+                                                    <SelectItem value="50">50</SelectItem>
+                                                    <SelectItem value="100">100</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <span>of {filteredPayslips.length} payslips</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-lg"
+                                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                                disabled={currentPage === 1}
+                                            >
+                                                <ChevronLeft className="w-4 h-4 mr-1" />
+                                                Previous
+                                            </Button>
+                                            <div className="flex items-center gap-1">
+                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                                    let pageNum;
+                                                    if (totalPages <= 5) pageNum = i + 1;
+                                                    else if (currentPage <= 3) pageNum = i + 1;
+                                                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                                    else pageNum = currentPage - 2 + i;
+                                                    return (
+                                                        <Button
+                                                            key={i}
+                                                            variant={currentPage === pageNum ? "default" : "outline"}
+                                                            size="sm"
+                                                            onClick={() => setCurrentPage(pageNum)}
+                                                            className="w-9 h-9 rounded-lg"
+                                                        >
+                                                            {pageNum}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-lg"
+                                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                                disabled={currentPage === totalPages}
+                                            >
+                                                Next
+                                                <ChevronRight className="w-4 h-4 ml-1" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </CardContent>
                 </Card>

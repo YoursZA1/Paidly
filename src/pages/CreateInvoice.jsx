@@ -376,7 +376,7 @@ export default function CreateInvoice() {
           variant: "destructive",
           duration: 6000,
         });
-        setTimeout(() => navigate(createPageUrl("Login")), 1500);
+        setTimeout(() => navigate(`${createPageUrl("Login")}#sign-in`), 1500);
         setLoading(false);
         return;
       }
@@ -512,12 +512,12 @@ export default function CreateInvoice() {
 
       {/* 2. Preview Column (Right) - sticky with actions */}
       {showPreview && (
-        <div className="lg:w-[450px] shrink-0">
+        <div className="w-full min-w-0 lg:max-w-xl xl:max-w-2xl shrink-0">
           <div className="sticky top-6">
             <div className="flex justify-between items-center mb-4">
               <p className="text-xs font-bold text-slate-400 uppercase">Live Preview</p>
             </div>
-            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden transform scale-95 origin-top">
+            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-x-auto overflow-y-visible p-3 sm:p-4">
               <InvoicePreview
                 invoiceData={invoiceData}
                 clients={clients}

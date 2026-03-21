@@ -4,11 +4,91 @@ import InvoicePDF from "./InvoicePDF";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 
+function bankBlockFromBankingRow(bankingDetail, refNumber) {
+  if (!bankingDetail) return null;
+  const hasRow =
+    bankingDetail.bank_name ||
+    bankingDetail.account_name ||
+    bankingDetail.account_number ||
+    bankingDetail.routing_number ||
+    bankingDetail.branch_code ||
+    bankingDetail.swift_code;
+  if (!hasRow) return null;
+  return {
+    bank: bankingDetail.bank_name || "",
+    accountName: bankingDetail.account_name || "",
+    accountNumber: bankingDetail.account_number || "",
+    branchCode: bankingDetail.routing_number || bankingDetail.branch_code || "",
+    swiftCode: bankingDetail.swift_code || "",
+    reference: refNumber,
+  };
+}
+
+/** Profile default: `user.business` with bank_name, account_name, account_number, branch_code. */
+function bankBlockFromUserBusiness(business, refNumber) {
+  if (!business || typeof business !== "object") return null;
+  const has =
+    business.bank_name ||
+    business.account_name ||
+    business.account_number ||
+    business.branch_code ||
+    business.routing_number ||
+    business.swift_code;
+  if (!has) return null;
+  return {
+    bank: business.bank_name || "",
+    accountName: business.account_name || "",
+    accountNumber: business.account_number || "",
+    branchCode: business.branch_code || business.routing_number || "",
+    swiftCode: business.swift_code || "",
+    reference: refNumber,
+  };
+}
+
+/**
+ * Invoice-linked banking row, else profile `user.business`, as a banking-detail-shaped object for HTML templates.
+ */
+export function effectiveBankingDetail(bankingDetail, user) {
+  if (
+    bankingDetail &&
+    (bankingDetail.bank_name ||
+      bankingDetail.account_name ||
+      bankingDetail.account_number ||
+      bankingDetail.routing_number ||
+      bankingDetail.branch_code ||
+      bankingDetail.swift_code)
+  ) {
+    return bankingDetail;
+  }
+  const biz = user?.business;
+  if (!biz || typeof biz !== "object") return null;
+  if (
+    !biz.bank_name &&
+    !biz.account_name &&
+    !biz.account_number &&
+    !biz.branch_code &&
+    !biz.routing_number &&
+    !biz.swift_code
+  ) {
+    return null;
+  }
+  return {
+    bank_name: biz.bank_name || "",
+    account_name: biz.account_name || "",
+    account_number: biz.account_number || "",
+    routing_number: biz.branch_code || biz.routing_number || "",
+    branch_code: biz.branch_code || "",
+    swift_code: biz.swift_code || "",
+    payment_method: biz.payment_method,
+    additional_info: biz.additional_info,
+  };
+}
+
 /**
  * Maps app invoice + client + user to the shape expected by InvoicePDF (React-PDF).
- * @param {{ invoice: object, client: object, user: object }} props
+ * @param {object|null} bankingDetail — optional row from BankingDetail.get (bank_name, account_name, etc.)
  */
-function mapToInvoiceData(invoice, client, user) {
+export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
   const brand = user?.company_name || invoice?.owner_company_name || "Company";
   const address = user?.company_address || invoice?.owner_company_address || "";
   const number = invoice?.invoice_number || invoice?.reference_number || "—";
@@ -91,14 +171,17 @@ function mapToInvoiceData(invoice, client, user) {
       })()
     : "";
 
-  const paymentInfo = invoice?.banking_detail_id
-    ? "Bank details provided"
-    : "Bank details not specified";
-
   const paymentTerms =
     invoice?.terms_conditions?.trim() ||
     invoice?.payment_terms?.trim() ||
     "Due within 15 days upon acceptance. Late payments may incur interest.";
+
+  const refNumber =
+    String(invoice?.invoice_number || invoice?.reference_number || number || "—").trim() || "—";
+
+  const bankDetails =
+    bankBlockFromBankingRow(bankingDetail, refNumber) ??
+    bankBlockFromUserBusiness(user?.business, refNumber);
 
   return {
     brand,
@@ -120,8 +203,8 @@ function mapToInvoiceData(invoice, client, user) {
     issuedDateFormatted,
     due_date: dueDateRaw,
     dueDateFormatted,
-    paymentInfo,
     paymentTerms,
+    bankDetails,
   };
 }
 
@@ -133,13 +216,14 @@ export default function InvoicePDFDownloadLink({
   invoice,
   client,
   user,
+  bankingDetail = null,
   className = "",
   variant = "default",
   showIcon = true,
 }) {
   if (!invoice) return null;
 
-  const invoiceData = mapToInvoiceData(invoice, client, user);
+  const invoiceData = mapToInvoiceData(invoice, client, user, bankingDetail);
   const fileName = `invoice-${invoiceData.number}.pdf`;
   const currency = invoiceData.currency || "ZAR";
 
@@ -164,5 +248,3 @@ export default function InvoicePDFDownloadLink({
     </PDFDownloadLink>
   );
 }
-
-export { mapToInvoiceData };

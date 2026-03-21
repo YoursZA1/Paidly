@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
+import { validatePasswordForSignup } from "@/utils/authPasswordPolicy";
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get("token");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,17 +18,14 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [tokenValid, setTokenValid] = useState(null);
-  const [isSupabaseRecovery, setIsSupabaseRecovery] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function validate() {
-      // 1) Supabase recovery: user landed from email link; hash is processed by Supabase and we have a session
       try {
         const session = await SupabaseAuthService.getSession();
         if (!cancelled && session?.user) {
-          setIsSupabaseRecovery(true);
           setTokenValid(true);
           if (typeof window !== "undefined" && window.location.hash) {
             window.history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -39,47 +35,19 @@ export default function ResetPassword() {
       } catch {
         // no session
       }
-
-      // 2) Legacy token in query (e.g. demo / old flow)
-      if (!token) {
-        if (!cancelled) {
-          setError("Invalid reset link");
-          setTokenValid(false);
-        }
-        return;
-      }
-
-      try {
-        const resetRequests = JSON.parse(
-          localStorage.getItem("breakapi_password_resets") || "{}"
+      if (!cancelled) {
+        setError(
+          "This link is invalid or has expired. Request a new reset link from the forgot password page."
         );
-        const request = resetRequests[token];
-        if (!request) {
-          if (!cancelled) {
-            setError("Reset link not found");
-            setTokenValid(false);
-          }
-          return;
-        }
-        if (request.expiresAt < Date.now()) {
-          if (!cancelled) {
-            setError("Reset link has expired");
-            setTokenValid(false);
-          }
-          return;
-        }
-        if (!cancelled) setTokenValid(true);
-      } catch {
-        if (!cancelled) {
-          setError("Invalid reset link");
-          setTokenValid(false);
-        }
+        setTokenValid(false);
       }
     }
 
     validate();
-    return () => { cancelled = true; };
-  }, [token]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -93,48 +61,16 @@ export default function ResetPassword() {
         return;
       }
 
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters");
+      const policy = validatePasswordForSignup(password);
+      if (!policy.ok) {
+        setError(policy.message);
         setIsLoading(false);
         return;
       }
 
-      if (isSupabaseRecovery) {
-        await SupabaseAuthService.updatePassword(password);
-        setSuccess(true);
-        setTimeout(() => navigate(createPageUrl("Login")), 2000);
-        return;
-      }
-
-      // Legacy token flow
-      const resetRequests = JSON.parse(
-        localStorage.getItem("breakapi_password_resets") || "{}"
-      );
-      const request = resetRequests[token];
-
-      if (!request) {
-        setError("Invalid reset request");
-        setIsLoading(false);
-        return;
-      }
-
-      const users = JSON.parse(localStorage.getItem("breakapi_users") || "[]");
-      const userIndex = users.findIndex((u) => u.email === request.email);
-
-      if (userIndex === -1) {
-        setError("User not found");
-        setIsLoading(false);
-        return;
-      }
-
-      users[userIndex].password = password;
-      localStorage.setItem("breakapi_users", JSON.stringify(users));
-
-      delete resetRequests[token];
-      localStorage.setItem("breakapi_password_resets", JSON.stringify(resetRequests));
-
+      await SupabaseAuthService.updatePassword(password);
       setSuccess(true);
-      setTimeout(() => navigate(createPageUrl("Login")), 2000);
+      setTimeout(() => navigate(`${createPageUrl("Login")}#sign-in`), 2000);
     } catch (err) {
       setError(err?.message || "Failed to reset password");
     } finally {

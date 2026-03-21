@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "vite",
     "server": "npm --prefix server run dev",
+    "react:generate-pdf": "npm --prefix server run react:generate-pdf",
     "build": "vite build",
     "start": "vite preview",
     "lint": "eslint .",
+    "scan-secrets": "node scripts/scan-secrets.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
