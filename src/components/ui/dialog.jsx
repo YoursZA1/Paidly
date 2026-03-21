@@ -50,14 +50,17 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const DialogContent = React.forwardRef(({ className, children, "aria-describedby": ariaDescribedBy, onOpenAutoFocus, ...props }, ref) => {
   const hasTitle = hasDialogChild(children, [DIALOG_TITLE_DISPLAY_NAME, "DialogTitle"])
   const hasDescription = hasDialogChild(children, [DIALOG_DESCRIPTION_DISPLAY_NAME, "DialogDescription"])
+  const injectFallbackDescription = !hasDescription
 
-  /** Radix: require DialogDescription, a string aria-describedby, or explicit undefined (no description). */
+  /**
+   * Radix sets aria-describedby → descriptionId; if no Description mounts, DescriptionWarning fires.
+   * Inject sr-only Description when absent (same idea as Title). Custom id: pass aria-describedby="my-id".
+   * Opt out of any description link: aria-describedby={undefined} on DialogContent (merged via ...props).
+   */
   const ariaDescribedByProp =
     typeof ariaDescribedBy === "string" && ariaDescribedBy.length > 0
       ? { "aria-describedby": ariaDescribedBy }
-      : hasDescription
-        ? {}
-        : { "aria-describedby": undefined }
+      : {}
 
   return (
     <DialogPortal>
@@ -79,6 +82,9 @@ const DialogContent = React.forwardRef(({ className, children, "aria-describedby
         {...ariaDescribedByProp}
         {...props}>
         {!hasTitle && <DialogPrimitive.Title className="sr-only">Dialog</DialogPrimitive.Title>}
+        {injectFallbackDescription && (
+          <DialogPrimitive.Description className="sr-only">Dialog content</DialogPrimitive.Description>
+        )}
         {children}
         <DialogPrimitive.Close
           className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
