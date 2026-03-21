@@ -12,25 +12,16 @@ function viteEnvFlag(name) {
 
 const isDev = import.meta.env.DEV;
 
-/** Intentional Supabase-only production (no Node API): do not assume api.paidly.co.za exists; auth uses Supabase directly. */
+/** Intentional Supabase-only production (no Node API): silence the missing-URL console warning. */
 const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY");
 
-/** When VITE_SERVER_URL is unset in production, Paidly app hosts default to the production API (override with env). */
-function inferPaidlyProductionApiBase() {
-  if (typeof window === "undefined" || !import.meta.env.PROD) return "";
-  if (supabaseOnlyProd) return "";
-  const h = (window.location.hostname || "").toLowerCase();
-  if (h === "www.app.paidly.co.za" || h === "app.paidly.co.za") return "https://api.paidly.co.za";
-  if (h.endsWith(".paidly.co.za")) return "https://api.paidly.co.za";
-  return "";
-}
-
+/**
+ * Backend base URL for production Axios calls.
+ * We do not infer https://api.paidly.co.za from the page host: that breaks sign-in when DNS for api.* is missing
+ * (browser shows hostname not found / bogus CORS). Set VITE_SERVER_URL explicitly when the Node API is deployed.
+ */
 const rawServerUrl = String(import.meta.env.VITE_SERVER_URL ?? "").trim();
-const serverUrl = (
-  rawServerUrl ||
-  inferPaidlyProductionApiBase() ||
-  "http://localhost:5179"
-).replace(/\/$/, "");
+const serverUrl = (rawServerUrl || "http://localhost:5179").replace(/\/$/, "");
 const baseURL = isDev ? "" : serverUrl;
 
 /** Production bundle still points at localhost — email/password auth uses Supabase directly (see SupabaseAuthService). */

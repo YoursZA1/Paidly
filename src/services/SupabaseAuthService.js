@@ -4,6 +4,40 @@ import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
+/** Axios: DNS failure, offline, CORS preflight abort, etc. Often surfaces as message "Network Error". */
+function isAxiosTransportFailure(err) {
+  if (!err || err.isAxiosError !== true) return false;
+  if (!err.response) return true;
+  if (err.code === "ERR_NETWORK") return true;
+  return /network error/i.test(String(err.message || ""));
+}
+
+function humanizeTransportMessage(isSignUp) {
+  const verb = isSignUp ? "sign-up" : "sign-in";
+  return (
+    `Could not reach the ${verb} API (network). If you do not host a Node API, remove VITE_SERVER_URL from Vercel and redeploy so login uses Supabase directly. ` +
+    "If you do host an API, set VITE_SERVER_URL to a reachable URL (no trailing slash) with working DNS/TLS."
+  );
+}
+
+function humanizeSupabaseTransportMessage() {
+  return (
+    "Could not reach Supabase (auth). Check VITE_SUPABASE_URL (https://…supabase.co), VITE_SUPABASE_ANON_KEY (JWT anon key starting with eyJ, not sb_publishable_), VPN/ad blockers, then redeploy."
+  );
+}
+
+function looksLikeNetworkFailureText(msg) {
+  const low = String(msg || "").toLowerCase();
+  return (
+    low.includes("network error") ||
+    low.includes("failed to fetch") ||
+    low.includes("load failed") ||
+    low.includes("err_name_not_resolved") ||
+    low.includes("could not connect") ||
+    low === "fetch failed"
+  );
+}
+
 const normalizeSession = (session) => {
   if (!session) return null;
   return {
@@ -28,7 +62,13 @@ const SupabaseAuthService = {
         password,
         options: { data: profile },
       });
-      if (error) throw new Error(mapAuthError(error));
+      if (error) {
+        const msg = mapAuthError(error);
+        if (looksLikeNetworkFailureText(msg)) {
+          throw new Error(humanizeSupabaseTransportMessage());
+        }
+        throw new Error(msg);
+      }
       return {
         session: normalizeSession(data.session),
         user: data.user ?? null,
@@ -90,15 +130,12 @@ const SupabaseAuthService = {
 
       throw new Error(mapAuthError({ message: data?.error || "Sign up failed" }));
     } catch (err) {
-      const isAxios = err?.isAxiosError === true;
-      if (isAxios && !err.response && import.meta.env.DEV) {
+      if (isAxiosTransportFailure(err) && import.meta.env.DEV) {
         console.warn("[auth] API sign-up unreachable; falling back to direct Supabase (development only).");
         return signUpDirect();
       }
-      if (isAxios && !err.response && import.meta.env.PROD) {
-        throw new Error(
-          "Could not reach the sign-up service. Check VITE_SERVER_URL and API DNS, or set VITE_SUPABASE_ONLY=1 if you omit the Node API."
-        );
+      if (isAxiosTransportFailure(err) && import.meta.env.PROD) {
+        throw new Error(humanizeTransportMessage(true));
       }
       if (err instanceof Error) {
         throw err;
@@ -130,7 +167,13 @@ const SupabaseAuthService = {
         email: normalized,
         password,
       });
-      if (error) throw new Error(mapAuthError(error));
+      if (error) {
+        const msg = mapAuthError(error);
+        if (looksLikeNetworkFailureText(msg)) {
+          throw new Error(humanizeSupabaseTransportMessage());
+        }
+        throw new Error(msg);
+      }
       return normalizeSession(data.session);
     };
 
@@ -187,15 +230,12 @@ const SupabaseAuthService = {
 
       throw new Error(data?.error || "Login failed");
     } catch (err) {
-      const isAxios = err?.isAxiosError === true;
-      if (isAxios && !err.response && import.meta.env.DEV) {
+      if (isAxiosTransportFailure(err) && import.meta.env.DEV) {
         console.warn("[auth] API sign-in unreachable; falling back to direct Supabase (development only).");
         return signInDirect();
       }
-      if (isAxios && !err.response && import.meta.env.PROD) {
-        throw new Error(
-          "Could not reach the authentication API. Check VITE_SERVER_URL and API DNS, or set VITE_SUPABASE_ONLY=1 if you omit the Node API."
-        );
+      if (isAxiosTransportFailure(err) && import.meta.env.PROD) {
+        throw new Error(humanizeTransportMessage(false));
       }
       if (err instanceof Error) {
         throw err;

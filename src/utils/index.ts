@@ -29,8 +29,9 @@ export function createWaitlistUrl(): string {
 }
 
 /**
- * When the main site (e.g. www.paidly.co.za) and app share the same DB,
- * set VITE_APP_URL to your canonical app origin on the marketing build (e.g. https://www.app.paidly.co.za) so post-login redirects match where users land (see vercel.json host redirect app → www.app).
+ * When sign-in runs on a different origin than the dashboard (e.g. legacy split marketing vs app hosts),
+ * set VITE_APP_URL to the dashboard origin. With a single deployment on https://www.paidly.co.za, leave unset
+ * so redirects stay same-origin (vercel.json still 308s legacy app.* / apex → www).
  */
 export function getAppDashboardUrl(): string {
     const base = (import.meta.env.VITE_APP_URL || '').toString().replace(/\/$/, '');

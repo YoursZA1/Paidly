@@ -46,27 +46,20 @@ Add to **`server/.env`** (same Supabase project as the app):
 
 1. **Redirect URLs**  
    In Supabase Dashboard → Authentication → URL Configuration, add:
-   - **App (canonical):** `https://www.app.paidly.co.za/**` (e.g. `/Login`, `/ResetPassword`)
-   - **Legacy host (optional):** `https://app.paidly.co.za/**` if that domain still points at the app until everyone uses `www.app` (Vercel **`vercel.json`** redirects `app` → `www.app` with 308).
-   - **Marketing site (same database):** so users can sign in from https://paidly.co.za/Auth.html and be redirected to the app after login, add:
-     - `https://paidly.co.za/**`
-     - `https://www.paidly.co.za/**` (if you use www)
+   - **Canonical:** `https://www.paidly.co.za/**` (e.g. `/Login`, `/ResetPassword`, `/Dashboard`)
+   - **Apex (optional):** `https://paidly.co.za/**` if the apex still serves the app before redirect to www (**`vercel.json`** 308s apex → `www`)
+   - **Legacy app subdomains (optional):** `https://app.paidly.co.za/**`, `https://www.app.paidly.co.za/**` until DNS is retired (**`vercel.json`** redirects both → `www.paidly.co.za`)
    - **Dev:** `http://localhost:5173/**` (or your Vite port)
 
 2. **SMTP (password reset emails)**  
    In Authentication → SMTP Settings, configure your provider so Supabase can send reset emails.
 
 3. **Site URL**  
-   Set Site URL to **`https://www.app.paidly.co.za`** (canonical). This is the default redirect after email confirmation; the marketing site uses **`VITE_APP_URL=https://www.app.paidly.co.za`** so post-login matches the same host.
+   Set Site URL to **`https://www.paidly.co.za`**. With a **single** deployment on www, leave **`VITE_APP_URL` unset** so post-login stays same-origin. Set **`VITE_APP_URL`** only when the sign-in page is on a different host than the dashboard.
 
-### Sign-in from the marketing site (paidly.co.za/Auth.html)
+### Sign-in from apex or legacy hosts
 
-So that users can sign in from https://paidly.co.za/Auth.html and use the **same database** as the app:
-
-- **Deploy the same app** (this codebase) to paidly.co.za so that `/Auth` and `/Auth.html` serve the Login page. The router defines these routes and renders the same Supabase-backed Login component.
-- **Use the same Supabase project** on the paidly.co.za deployment: set the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as on app.paidly.co.za.
-- **Redirect to the app after login:** on the paidly.co.za build, set **`VITE_APP_URL=https://www.app.paidly.co.za`** (must match canonical app host). After a successful login (or signup), the user is sent to the app dashboard and uses the same session.
-- **Allow the marketing origin in Supabase:** add `https://paidly.co.za` and `https://www.paidly.co.za` to Redirect URLs (see above) so OAuth and password-reset flows work from that origin.
+If users still open **`https://paidly.co.za`** or legacy **`app.paidly.co.za`** / **`www.app.paidly.co.za`**, point those hostnames at the same Vercel project; **`vercel.json`** redirects them to **`https://www.paidly.co.za`**. Use the **same** `VITE_SUPABASE_*` values everywhere. Add each origin you serve (or redirect from) under Supabase **Redirect URLs** until legacy DNS is removed.
 
 ## Files involved
 

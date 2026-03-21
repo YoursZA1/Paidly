@@ -3,7 +3,7 @@
 This app was created automatically by Paidly.
 It's a Vite+React app that communicates with the Paidly API.
 
-**Production app:** [https://www.app.paidly.co.za](https://www.app.paidly.co.za)
+**Production app:** [https://www.paidly.co.za](https://www.paidly.co.za)
 
 ## Development & Build
 
@@ -35,12 +35,12 @@ npm start
 
 ### Deployment (Vercel)
 
-The app is deployed at **https://www.app.paidly.co.za**. For Vercel (or similar):
+The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
 
 1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL, e.g. `https://api.paidly.co.za` — **no trailing slash**), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, **email/password sign-in still works** (via Supabase directly), but **waitlist, currency, and server rate limits** need the API URL set — **or** set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-only deploy and silence the production warning.
-2. **Supabase Auth:** Set **Site URL** to your **canonical** app origin (e.g. `https://www.app.paidly.co.za`). In **Redirect URLs**, include that origin with `/**` and any legacy host you still attach (e.g. `https://app.paidly.co.za/**`) until all traffic is redirected. Add any Vercel preview URLs you need. This repo’s **`vercel.json`** 308-redirects `app.paidly.co.za` → `www.app.paidly.co.za` so one host wins.
-3. **Marketing site (`paidly.co.za`):** Set **`VITE_APP_URL=https://www.app.paidly.co.za`** on that Vercel project so logins from the marketing site send users to the same canonical app host.
-4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` to your real front-end origins if you use an explicit allowlist; otherwise the server defaults allow `app.paidly.co.za`, `www.app.paidly.co.za`, `paidly.co.za`, `www.paidly.co.za`, and `*.vercel.app`.
+2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
+3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
+4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` if you use an explicit allowlist; otherwise defaults allow `www.paidly.co.za`, `paidly.co.za`, legacy app.* hosts, and `*.vercel.app`.
 
 The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
 

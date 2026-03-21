@@ -3,7 +3,19 @@
     {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "app.paidly.co.za" }],
-      "destination": "https://www.app.paidly.co.za/:path*",
+      "destination": "https://www.paidly.co.za/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.app.paidly.co.za" }],
+      "destination": "https://www.paidly.co.za/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "paidly.co.za" }],
+      "destination": "https://www.paidly.co.za/:path*",
       "permanent": true
     }
   ],
