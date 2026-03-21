@@ -53,8 +53,8 @@ export const useAppStore = create((set, get) => ({
           }
         },
         null,
-        10000,
-        0
+        25000,
+        1
       );
 
       if (!userData) {

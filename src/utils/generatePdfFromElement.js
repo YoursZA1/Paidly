@@ -52,6 +52,25 @@ export default async function generatePdfFromElement(element, filename = 'docume
         useCORS: true,
         letterRendering: true,
         logging: false,
+        /** html2canvas can throw "Invalid border radius: undefined" on some Tailwind/cloned nodes. */
+        onclone(clonedDoc) {
+          try {
+            const win = clonedDoc.defaultView;
+            if (!win) return;
+            clonedDoc.body.querySelectorAll("*").forEach((el) => {
+              try {
+                const br = win.getComputedStyle(el).borderRadius;
+                if (br == null || br === "" || br === "undefined" || /undefined/i.test(String(br))) {
+                  el.style.borderRadius = "0px";
+                }
+              } catch {
+                /* ignore per-node */
+              }
+            });
+          } catch {
+            /* ignore */
+          }
+        },
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },

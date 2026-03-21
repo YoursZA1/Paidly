@@ -283,10 +283,8 @@ class EntityManager {
       throw new Error(`${this.entityName} with id ${id} not found. The client may be from an older version. Please open them from the Clients list.`);
     }
 
-    // Try to fetch from Supabase first if not in local cache
-    if (!this.data[idStr]) {
-      await this.pullFromSupabase();
-    }
+    // Do not call pullFromSupabase() on a cache miss: without list limits it can load the entire org
+    // table (clients, payments, …) and hang the UI for tens of seconds. Single-row fetch below.
 
     const record = this.data[idStr];
     if (!record) {

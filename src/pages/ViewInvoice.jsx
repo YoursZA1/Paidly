@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { Invoice, Client, User, BankingDetail, Payment } from '@/api/entities';
+import { Invoice, Client, User, BankingDetail } from '@/api/entities';
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
@@ -21,6 +22,25 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
+
+/** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
+async function fetchPaymentsForInvoice(invoiceId) {
+    if (!invoiceId) return [];
+    const { data, error } = await supabase
+        .from('payments')
+        .select('id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at')
+        .eq('invoice_id', invoiceId)
+        .order('paid_at', { ascending: false })
+        .limit(200);
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => ({
+        ...row,
+        payment_date: row.paid_at,
+        payment_method: row.method,
+        reference_number: row.reference,
+        created_date: row.created_at,
+    }));
+}
 
 export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClose }) {
     const [invoice, setInvoice] = useState(null);
@@ -75,7 +95,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
                     Client.get(invoiceData.client_id).catch(() => null),
                     User.me().catch(() => null),
                     invoiceData.banking_detail_id ? BankingDetail.get(invoiceData.banking_detail_id).catch(() => null) : Promise.resolve(null),
-                    Payment.list('-payment_date').catch(() => [])
+                    fetchPaymentsForInvoice(invoiceId).catch(() => []),
                 ]), ENTITY_GET_TIMEOUT_MS, 2);
 
                 if (!mountedRef.current || loadIdRef.current !== thisLoadId) return;
