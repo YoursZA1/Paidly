@@ -534,4 +534,4 @@ For questions or issues with Platform Settings:
 
 **Last Updated**: February 5, 2024  
 **Version**: 1.0.0  
-**Author**: Invoice Breek Development Team
+**Author**: Paidly Development Team

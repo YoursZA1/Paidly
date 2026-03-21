@@ -18,7 +18,7 @@ Paidly is a comprehensive invoice management system featuring a **React frontend
 
 ### Main Repository Components
 - **Frontend (breakinvoice-app)**: User interface for managing invoicing workflows.
-- **Backend (invoicebreek-server)**: Express-based API for specialized server-side tasks.
+- **Backend (paidly-server)**: Express-based API for specialized server-side tasks.
 - **Database (Supabase)**: PostgreSQL-backed data store with RLS and storage buckets.
 
 ## Projects
@@ -74,7 +74,7 @@ npm run test:run
 
 ---
 
-### Backend (invoicebreek-server)
+### Backend (paidly-server)
 **Configuration File**: [./server/package.json](./server/package.json)
 
 #### Language & Runtime

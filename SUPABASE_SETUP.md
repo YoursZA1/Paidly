@@ -10,7 +10,7 @@
    - Server: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 3. **Apply schema:** Run `supabase/schema.postgres.sql` in SQL Editor.
 4. **Apply migrations:** Run `supabase/migrations/20240308120000_add_profiles_payfast_columns.sql` (or the SQL inside it).
-5. **Storage:** Create bucket `invoicebreek` if not created by schema.
+5. **Storage:** Create bucket `paidly` if not created by schema.
 6. **Auth:** Enable Email; optionally enable Google and Apple (see [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md#6-auth-providers)).
 7. **Verify:** `node scripts/verify-supabase-config.js`
 

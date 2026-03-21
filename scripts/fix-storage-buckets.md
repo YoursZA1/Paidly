@@ -12,7 +12,7 @@ Error: `Failed to upload logo: Bucket not found`
 
 2. **Create Main Bucket**
    - Click **"New bucket"** or **"Create bucket"**
-   - Name: `invoicebreek`
+   - Name: `paidly`
    - Public: **No** (Private)
    - File size limit: 50 MB
    - Click **Create**
@@ -48,7 +48,7 @@ Run this query in SQL Editor:
 ```sql
 SELECT id, name, public, file_size_limit
 FROM storage.buckets
-WHERE id IN ('invoicebreek', 'profile-logos');
+WHERE id IN ('paidly', 'profile-logos');
 ```
 
 **Expected:** Should return 1-2 rows showing the buckets.
@@ -64,7 +64,7 @@ CREATE POLICY "Users can upload own logos"
 ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 ```
@@ -76,7 +76,7 @@ CREATE POLICY "Users can read own logos"
 ON storage.objects FOR SELECT
 TO authenticated
 USING (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 ```
@@ -88,7 +88,7 @@ CREATE POLICY "Org members access assets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
@@ -96,7 +96,7 @@ USING (
   )
 )
 WITH CHECK (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
@@ -112,11 +112,11 @@ CREATE POLICY "Admin access storage buckets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   public.is_admin()
 )
 WITH CHECK (
-  bucket_id IN ('invoicebreek', 'profile-logos') AND
+  bucket_id IN ('paidly', 'profile-logos') AND
   public.is_admin()
 );
 ```
@@ -135,7 +135,7 @@ After creating buckets and policies:
 
 ### Still getting "Bucket not found"
 
-1. **Check bucket name**: Verify it's exactly `invoicebreek` (case-sensitive)
+1. **Check bucket name**: Verify it's exactly `paidly` (case-sensitive)
 2. **Refresh Supabase dashboard**: Sometimes UI needs refresh
 3. **Check environment variable**: Verify `VITE_SUPABASE_STORAGE_BUCKET` if set
 4. **Check Supabase project**: Make sure you're in the correct project
@@ -155,7 +155,7 @@ After creating buckets and policies:
 ## Updated Code
 
 The `SupabaseStorageService` has been updated to:
-- ✅ Try `profile-logos` bucket first, fallback to `invoicebreek`
+- ✅ Try `profile-logos` bucket first, fallback to `paidly`
 - ✅ Check if bucket exists before upload
 - ✅ Provide helpful error messages if bucket doesn't exist
 - ✅ Better error handling and logging

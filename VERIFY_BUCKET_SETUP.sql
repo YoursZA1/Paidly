@@ -11,7 +11,7 @@ SELECT
   file_size_limit,
   created_at
 FROM storage.buckets 
-WHERE id = 'invoicebreek';
+WHERE id = 'paidly';
 
 -- Expected: Should see 1 row with bucket details
 
@@ -28,7 +28,7 @@ SELECT
 FROM pg_policies
 WHERE schemaname = 'storage'
   AND tablename = 'objects'
-  AND bucket_id = 'invoicebreek'
+  AND bucket_id = 'paidly'
 ORDER BY policyname;
 
 -- Expected: Should see policies like:
@@ -54,7 +54,7 @@ CREATE POLICY "Users can upload own logos"
 ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 
@@ -63,7 +63,7 @@ CREATE POLICY "Users can read own logos"
 ON storage.objects FOR SELECT
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 
@@ -72,14 +72,14 @@ CREATE POLICY "org members access assets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND EXISTS (
+  bucket_id = 'paidly' AND EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
       AND (storage.foldername(name))[1] = m.org_id::text
   )
 )
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND EXISTS (
+  bucket_id = 'paidly' AND EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
       AND (storage.foldername(name))[1] = m.org_id::text
@@ -91,10 +91,10 @@ CREATE POLICY "admin access storage buckets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND public.is_admin()
+  bucket_id = 'paidly' AND public.is_admin()
 )
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND public.is_admin()
+  bucket_id = 'paidly' AND public.is_admin()
 );
 
 -- Verify policies were created

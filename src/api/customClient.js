@@ -6,6 +6,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { getBackendBaseUrl } from "@/api/backendClient";
+import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 import {
   validateActivitiesUpload,
   validateBankDetailsUpload,
@@ -1833,7 +1834,7 @@ class AuthManager {
 
 class IntegrationManager {
   constructor() {
-    const storageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "invoicebreek";
+    const storageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
 
     const getLocalUserId = () => {
       try {

@@ -1,7 +1,7 @@
 # Tax/VAT Configurable Handling - Implementation Summary
 
 ## Overview
-A comprehensive, configurable Tax/VAT system has been implemented for the Invoice Breek application. This allows users to manage multiple tax profiles, apply different tax rates to invoices and line items, and generate tax reports.
+A comprehensive, configurable Tax/VAT system has been implemented for the Paidly application. This allows users to manage multiple tax profiles, apply different tax rates to invoices and line items, and generate tax reports.
 
 ---
 
@@ -346,7 +346,7 @@ Tax Reports Updated
 
 ## 📋 Summary
 
-The Tax/VAT implementation provides a production-ready system for managing taxes in the Invoice Breek application. Users can:
+The Tax/VAT implementation provides a production-ready system for managing taxes in the Paidly application. Users can:
 
 ✅ Create and manage multiple tax profiles  
 ✅ Apply flexible tax rates to invoices  

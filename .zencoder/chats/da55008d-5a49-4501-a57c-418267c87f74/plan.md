@@ -13,7 +13,7 @@ Analyze the bug report and design a solution.
 5. Propose a fix based on the investigation
 6. Consider edge cases and potential side effects
 
-Save findings to `/Users/armandomavelele/Documents/invoice-breek (2)/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md` with:
+Save findings to `/Users/armandomavelele/Documents/Paidly/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md` with:
 
 - Bug summary
 - Root cause analysis
@@ -22,12 +22,12 @@ Save findings to `/Users/armandomavelele/Documents/invoice-breek (2)/.zencoder/c
 
 ### [ ] Step: Implementation
 
-Read `/Users/armandomavelele/Documents/invoice-breek (2)/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md`
+Read `/Users/armandomavelele/Documents/Paidly/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md`
 Implement the bug fix.
 
 1. Add/adjust regression test(s) that fail before the fix and pass after
 2. Implement the fix
 3. Run relevant tests
-4. Update `/Users/armandomavelele/Documents/invoice-breek (2)/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md` with implementation notes and test results
+4. Update `/Users/armandomavelele/Documents/Paidly/.zencoder/chats/da55008d-5a49-4501-a57c-418267c87f74/investigation.md` with implementation notes and test results
 
 If blocked or uncertain, ask the user for direction.

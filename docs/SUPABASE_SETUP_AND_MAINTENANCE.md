@@ -125,7 +125,7 @@ Variables are loaded from the project root. Vite loads (in order) **`.env`**, **
 | `VITE_SUPABASE_URL` | **Yes** | Supabase project URL. Get it: **Supabase Dashboard → Project → Settings → API → Project URL**. Must use **`.supabase.co`** (e.g. `https://YOUR_REF.supabase.co`). Using `.supabase.com` will cause `ERR_NAME_NOT_RESOLVED`. |
 | `VITE_SUPABASE_ANON_KEY` | **Yes** | Anonymous (public) key. Same place: **Settings → API → Project API keys → `anon` public**. |
 | `VITE_SERVER_URL` | No | Backend API base URL. DEV: e.g. `http://localhost:5179`. PROD: your API base URL. |
-| `VITE_SUPABASE_STORAGE_BUCKET` | No | Default storage bucket name (default: `invoicebreek`). |
+| `VITE_SUPABASE_STORAGE_BUCKET` | No | Default storage bucket name (default: `paidly`). |
 
 **Steps (development):**
 
@@ -164,7 +164,7 @@ Used for admin/sync and any server-only Supabase operations. Config lives in **`
 |----------|----------|-------------|
 | `SUPABASE_URL` | Yes (if using Supabase from server) | Same project URL as frontend for that environment. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes (if using admin/Supabase from server) | **Settings → API → `service_role`** key. Keep secret. |
-| `SUPABASE_STORAGE_BUCKET` | No | Default bucket (e.g. `invoicebreek`). |
+| `SUPABASE_STORAGE_BUCKET` | No | Default bucket (e.g. `paidly`). |
 | `ADMIN_BOOTSTRAP_TOKEN` | Optional | For admin bootstrap flows. |
 | `ADMIN_BYPASS_AUTH` | No | Set to `true` only in dev if you need to bypass auth. Must be `false` in production. |
 

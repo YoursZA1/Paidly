@@ -1,0 +1,194 @@
+/*
+ * Scoped invoice layout + PDF/table engine helpers only.
+ * Visual styling comes from templates (Tailwind / theme). Prevents preview vs download mismatch.
+ */
+.invoice-template-doc .invoice-grid-bill-dates {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+}
+.invoice-template-doc .invoice-grid-dates {
+    text-align: right;
+}
+.invoice-template-doc .invoice-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 32px;
+}
+.invoice-template-doc .invoice > .header {
+    margin-bottom: 24px;
+}
+.invoice-template-doc .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.invoice-template-doc .invoice-meta {
+    text-align: right;
+}
+.invoice-template-doc .invoice-meta .invoice-number {
+    display: block;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.invoice-template-doc .invoice-number {
+    white-space: nowrap;
+}
+.invoice-template-doc .currency-value {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+.invoice-template-doc .header,
+.invoice-template-doc .client,
+.invoice-template-doc .summary,
+.invoice-template-doc .notes {
+    page-break-inside: avoid;
+}
+.invoice-template-doc .invoice > .client {
+    margin-bottom: 24px;
+}
+.invoice-template-doc .invoice .items {
+    width: 100%;
+}
+.invoice-template-doc .invoice .summary {
+    align-self: start;
+}
+.invoice-template-doc .invoice-layout-main {
+    min-width: 0;
+}
+.invoice-template-doc .invoice-layout-sidebar {
+    width: 320px;
+    justify-self: end;
+}
+.invoice-template-doc .invoice-summary {
+    width: 320px;
+    max-width: 100%;
+    margin-left: auto;
+    margin-top: 0;
+}
+.invoice-template-doc .invoice-layout .invoice-summary {
+    width: 320px;
+    max-width: 100%;
+    margin-top: 0;
+    margin-left: auto;
+}
+.invoice-template-doc .pdf-content .invoice-table tbody {
+    min-height: 0;
+}
+/* html2canvas / print: real table roles */
+.invoice-template-doc .pdf-content table.invoice-table,
+.invoice-template-doc .pdf-content table.items {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.invoice-template-doc .pdf-content table.invoice-table thead,
+.invoice-template-doc .pdf-content table.items thead {
+    display: table-header-group;
+}
+.invoice-template-doc .pdf-content table.invoice-table tbody,
+.invoice-template-doc .pdf-content table.items tbody {
+    display: table-row-group;
+}
+.invoice-template-doc .pdf-content table.invoice-table tr,
+.invoice-template-doc .pdf-content table.items tr {
+    display: table-row;
+    page-break-inside: avoid;
+}
+.invoice-template-doc .pdf-content table.invoice-table th,
+.invoice-template-doc .pdf-content table.invoice-table td,
+.invoice-template-doc .pdf-content table.items th,
+.invoice-template-doc .pdf-content table.items td {
+    display: table-cell;
+    vertical-align: top;
+}
+.invoice-template-doc .pdf-content th,
+.invoice-template-doc .pdf-content td {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+@media print {
+    .invoice-template-doc .invoice-grid-bill-dates {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    }
+    .invoice-template-doc .invoice-layout {
+        grid-template-columns: minmax(0, 1fr) 280px !important;
+    }
+    .invoice-template-doc .pdf-content table.invoice-table,
+    .invoice-template-doc .pdf-content table.items {
+        display: table !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+    }
+    .invoice-template-doc .pdf-content table.invoice-table thead,
+    .invoice-template-doc .pdf-content table.items thead {
+        display: table-header-group !important;
+    }
+    .invoice-template-doc .pdf-content table.invoice-table tbody,
+    .invoice-template-doc .pdf-content table.items tbody {
+        display: table-row-group !important;
+    }
+    .invoice-template-doc .pdf-content table.invoice-table tr,
+    .invoice-template-doc .pdf-content table.items tr {
+        display: table-row !important;
+        page-break-inside: avoid !important;
+    }
+    .invoice-template-doc .pdf-content table.invoice-table th,
+    .invoice-template-doc .pdf-content table.invoice-table td,
+    .invoice-template-doc .pdf-content table.items th,
+    .invoice-template-doc .pdf-content table.items td {
+        display: table-cell !important;
+    }
+    .invoice-template-doc tr,
+    .invoice-template-doc td,
+    .invoice-template-doc th {
+        page-break-inside: avoid;
+        white-space: normal;
+        word-wrap: break-word;
+    }
+}
+@page {
+    size: A4;
+    margin: 20mm;
+}
+@media screen {
+    .invoice-template-doc .pdf-page {
+        max-width: 8.27in;
+        margin: 0 auto;
+    }
+}
+@media (max-width: 640px) {
+    .invoice-template-doc .invoice-grid-bill-dates {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+    }
+    .invoice-template-doc .header {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .invoice-template-doc .invoice-meta {
+        text-align: left;
+    }
+    .invoice-template-doc .invoice-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .invoice-template-doc .invoice-layout-sidebar {
+        width: 100%;
+        justify-self: stretch;
+    }
+    .invoice-template-doc .invoice-summary {
+        width: 100%;
+        max-width: none;
+    }
+}

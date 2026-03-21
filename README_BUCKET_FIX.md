@@ -25,7 +25,7 @@
 
 1. Supabase Dashboard → Storage
 2. Click "New bucket"
-3. Name: `invoicebreek`
+3. Name: `paidly`
 4. Public: No (unchecked)
 5. Create
 

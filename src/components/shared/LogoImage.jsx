@@ -3,7 +3,9 @@ import SupabaseStorageService from "@/services/SupabaseStorageService";
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
-const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "invoicebreek";
+import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
+
+const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
 
 /**
  * LogoImage component that handles Supabase signed URLs and auto-refreshes expired ones

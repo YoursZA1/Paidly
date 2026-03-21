@@ -11,21 +11,8 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 import { createPageUrl } from "@/utils";
 import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
-import {
-  mapInvoiceDataForTemplate,
-  normalizeInvoiceTemplateKey,
-} from "@/utils/invoiceTemplateData";
-import ClassicTemplate from "@/components/invoice/templates/ClassicTemplate";
-import ModernTemplate from "@/components/invoice/templates/ModernTemplate";
-import MinimalTemplate from "@/components/invoice/templates/MinimalTemplate";
-import BoldTemplate from "@/components/invoice/templates/BoldTemplate";
-
-const TEMPLATES = {
-  classic: ClassicTemplate,
-  modern: ModernTemplate,
-  minimal: MinimalTemplate,
-  bold: BoldTemplate,
-};
+import InvoiceTemplateDocument from "@/components/pdf/InvoiceTemplateDocument";
+import { buildInvoiceTemplatePdfCaptureProps } from "@/components/pdf/InvoiceTemplatePdfCapture";
 
 const DRAFT_STORAGE_KEY = "invoiceDraft";
 
@@ -38,16 +25,6 @@ function safeFormatDate(dateStr) {
         ? dateStr
         : new Date(dateStr);
   return isValid(date) ? format(date, "MMMM d, yyyy") : "N/A";
-}
-
-function normalizeClientForTemplate(client) {
-  if (!client || typeof client !== "object") {
-    return { name: "—", address: "", email: "" };
-  }
-  return {
-    ...client,
-    address: client.address || client.billing_address || "",
-  };
 }
 
 function InvoicePreview({
@@ -80,15 +57,13 @@ function InvoicePreview({
 
   const clientList = Array.isArray(clients) ? clients : [];
   const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
-  const client = normalizeClientForTemplate(clientProp ?? clientResolved);
-
-  const templateKey =
-    normalizeInvoiceTemplateKey(user?.invoice_template) || "classic";
-  const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
-  const templateInvoice = mapInvoiceDataForTemplate(invoiceData);
-  const bankingForTemplate = effectiveBankingDetail(bankingDetail, user);
-  const userCurrency =
-    (invoiceData?.currency || user?.currency || "ZAR").toString().trim() || "ZAR";
+  const pack = buildInvoiceTemplatePdfCaptureProps(
+    invoiceData,
+    clientProp ?? clientResolved ?? {},
+    user,
+    bankingDetail
+  );
+  const { clientForTemplate: client } = pack;
 
   const handleDownloadPDF = () => {
     try {
@@ -135,11 +110,11 @@ function InvoicePreview({
     }
     setIsSending(true);
     try {
-      const bank = effectiveBankingDetail(bankingDetail, user);
+      const bank = effectiveBankingDetail(bankingDetail, pack.resolvedUser);
       const blob = await generateInvoicePDF({
         invoice: invoiceData,
         client: clientProp ?? clientResolved ?? {},
-        user: user || {},
+        user: pack.resolvedUser || user || {},
         bankingDetail: bank,
       });
       const base64PDF = await blobToDataURI(blob);
@@ -151,7 +126,8 @@ function InvoicePreview({
         return;
       }
       const invoiceNum = invoiceData?.invoice_number || invoiceData?.reference_number || "Draft";
-      const currency = user?.currency || invoiceData?.owner_currency || "ZAR";
+      const currency =
+        pack.resolvedUser?.currency || invoiceData?.currency || invoiceData?.owner_currency || "ZAR";
       const amountDue = new Intl.NumberFormat("en-ZA", { style: "currency", currency }).format(
         Number(invoiceData?.total_amount ?? invoiceData?.total ?? 0)
       );
@@ -174,7 +150,7 @@ function InvoicePreview({
           base64PDF,
           clientEmail,
           invoiceNum,
-          fromName: user?.company_name || "Paidly",
+          fromName: pack.resolvedUser?.company_name || user?.company_name || "Paidly",
           clientName: client?.name?.trim() || undefined,
           amountDue: amountDue || undefined,
           dueDate: dueDate || undefined,
@@ -207,18 +183,16 @@ function InvoicePreview({
   };
 
   const templateDocument = (
-    <div className="w-full min-w-0 max-w-[210mm] mx-auto rounded-lg border border-border bg-white shadow-sm overflow-x-auto print-container">
-      <div className="pdf-content invoice-container min-w-0 p-4 sm:p-6 md:p-8">
-        <TemplateComponent
-          invoice={templateInvoice}
-          client={client}
-          user={user}
-          bankingDetail={bankingForTemplate}
-          userCurrency={userCurrency}
-          safeFormatDate={safeFormatDate}
-        />
-      </div>
-    </div>
+    <InvoiceTemplateDocument
+      TemplateComponent={pack.TemplateComponent}
+      invoice={pack.templateInvoice}
+      client={pack.clientForTemplate}
+      user={pack.resolvedUser}
+      bankingDetail={pack.bankingForTemplate}
+      userCurrency={pack.userCurrency}
+      safeFormatDate={safeFormatDate}
+      embeddedChrome={embedded}
+    />
   );
 
   if (embedded) {
@@ -229,10 +203,10 @@ function InvoicePreview({
     <div style={{ opacity: 1 }}>
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-x-auto overflow-y-visible rounded-fintech text-card-foreground min-w-0">
         <CardHeader className="border-b border-border pb-4 sm:pb-6 px-4 sm:px-6">
-          {user?.logo_url && (
+          {pack.resolvedUser?.logo_url && (
             <div className="mb-3 sm:mb-4 flex justify-center">
               <img
-                src={user.logo_url}
+                src={pack.resolvedUser.logo_url}
                 alt="Company Logo"
                 className="w-auto max-w-[200px] sm:max-w-xs rounded shadow"
                 style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}

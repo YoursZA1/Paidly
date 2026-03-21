@@ -52,7 +52,7 @@ Use this checklist to ensure Supabase is correctly integrated for the admin appl
   - **Required variables** (no defaults):
     - `VITE_SUPABASE_URL` – Supabase project URL (Dashboard → Settings → API → Project URL).
     - `VITE_SUPABASE_ANON_KEY` – Anonymous/public key (Dashboard → Settings → API → Project API keys → `anon` public).
-  - **Optional:** `VITE_SUPABASE_STORAGE_BUCKET` – Storage bucket name (default: `invoicebreek`).
+  - **Optional:** `VITE_SUPABASE_STORAGE_BUCKET` – Storage bucket name (default: `paidly`).
   - **Where to set:** Copy `.env.example` to `.env` in the project root and fill in the values. Never commit `.env` (it is in `.gitignore`).
   - **Production:** Use your host’s environment config or a secrets manager; do not hardcode credentials.
   - The client throws on load if `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, so misconfiguration fails fast.
@@ -156,19 +156,19 @@ Use this checklist to ensure Supabase is correctly integrated for the admin appl
 ## 4. Storage Integration
 
 - [x] **Use Supabase Storage for file uploads (e.g., logos, reports).**
-  - **Logos:** Profile/company logos are uploaded via **`src/services/SupabaseStorageService.js`** (`uploadProfileLogo`). Files go to the **`profile-logos`** bucket (or fallback **`invoicebreek`**), path **`{userId}/logo.{ext}`**. Used in **Settings** and **SetupWizard** (onboarding). **`LogoImage`** displays logos and refreshes expired signed URLs.
+  - **Logos:** Profile/company logos are uploaded via **`src/services/SupabaseStorageService.js`** (`uploadProfileLogo`). Files go to the **`profile-logos`** bucket (or fallback **`paidly`**), path **`{userId}/logo.{ext}`**. Used in **Settings** and **SetupWizard** (onboarding). **`LogoImage`** displays logos and refreshes expired signed URLs.
   - **Other uploads:** **`src/api/customClient.js`** **IntegrationManager** uses **Supabase Storage** for:
-    - **Branding/assets:** default bucket (e.g. **invoicebreek**), folder `org_id/branding`
+    - **Branding/assets:** default bucket (e.g. **paidly**), folder `org_id/branding`
     - **Activities:** bucket **`activities`** (receipts, attachments), path `org_id/activities/...`
     - **Bank details:** bucket **`bank-details`** (statements, imports), path `org_id/bank-details/...`
   - **Reports:** Report *exports* (e.g. CSV from **Reports.jsx**) are generated and downloaded in the browser; they are not uploaded to Storage. Any future “save report to Storage” feature would use the same buckets and policies below.
 
 - [x] **Set appropriate bucket policies for admin access.**
   - Buckets and policies are defined in **`supabase/schema.postgres.sql`**:
-    - **Buckets:** **`invoicebreek`**, **`profile-logos`**, **`activities`**, **`bank-details`** (with file size and MIME limits).
-    - **User-owned objects (logos):** Insert/select/update/delete on **`invoicebreek`** and **`profile-logos`** when path first segment equals **`auth.uid()::text`**.
+    - **Buckets:** **`paidly`**, **`profile-logos`**, **`activities`**, **`bank-details`** (with file size and MIME limits).
+    - **User-owned objects (logos):** Insert/select/update/delete on **`paidly`** and **`profile-logos`** when path first segment equals **`auth.uid()::text`**.
     - **Org-scoped objects:** Full access when path first segment equals the user’s **`org_id`** (via **memberships**) for all four buckets.
-    - **Admin access:** Policy **"admin access storage buckets"** on **`storage.objects`** grants **full access (all operations)** for **authenticated** users where **`public.is_admin()`** is true and **`bucket_id`** is one of **`invoicebreek`**, **`profile-logos`**, **`activities`**, **`bank-details`**. Admins can read, upload, update, and delete any object in these buckets for support and oversight.
+    - **Admin access:** Policy **"admin access storage buckets"** on **`storage.objects`** grants **full access (all operations)** for **authenticated** users where **`public.is_admin()`** is true and **`bucket_id`** is one of **`paidly`**, **`profile-logos`**, **`activities`**, **`bank-details`**. Admins can read, upload, update, and delete any object in these buckets for support and oversight.
 
 **Reference:** `supabase/schema.postgres.sql`, `src/services/SupabaseStorageService.js`, `src/api/customClient.js`, `src/components/shared/LogoImage.jsx`, `docs/SUPABASE_SECURITY.md`.
 
@@ -199,7 +199,7 @@ Review all admin workflows to ensure seamless Supabase integration. Use the tabl
 | **Invoices & quotes (admin list/edit)** | **AdminInvoicesQuotes:** direct `supabase.from('invoices').select('*')` and `supabase.from('quotes').select('*')`. Edit/update via **EntityManager** (`Invoice.update` / `Quote.update`) → `supabase.from('invoices'|'quotes').update(...)`. | RLS gives admins full access; no sync needed for this page. |
 | **Reporting & dashboard** | **Dashboard (admin):** `loadAdminData()` uses AdminDataService (Supabase-sourced after sync). **Realtime:** `useSupabaseRealtime` on invoices, payments (and expenses if table exists) refetches KPIs on change. **Reports/aggregates:** adminDataAggregator and AdminDataService read from sync cache (Supabase). | Sync before viewing reports so metrics match Supabase. |
 | **Platform settings** | **PlatformSettings** (System & branding tabs) use **SystemSettingsService** (localStorage). Not persisted in Supabase by design. | For cross-device or server-backed platform config, add a Supabase table and API later. |
-| **Storage (logos, files)** | Logos: **SupabaseStorageService.uploadProfileLogo** → `profile-logos` (or `invoicebreek`). Other uploads: **IntegrationManager** → `invoicebreek`, `activities`, `bank-details`. RLS: user/org policies + **admin access storage buckets** for admins. | Buckets and policies in `supabase/schema.postgres.sql`. |
+| **Storage (logos, files)** | Logos: **SupabaseStorageService.uploadProfileLogo** → `profile-logos` (or `paidly`). Other uploads: **IntegrationManager** → `paidly`, `activities`, `bank-details`. RLS: user/org policies + **admin access storage buckets** for admins. | Buckets and policies in `supabase/schema.postgres.sql`. |
 | **Notifications** | **NotificationBell** subscribes to `notifications` via Realtime; table `public.notifications` in schema and in `supabase_realtime` publication. | Insert/update rows in `notifications` (e.g. from server or Edge Function) to drive live bell updates. |
 | **Subscriptions / billing (AdminSubscriptions)** | Page uses `supabase.from('subscriptions')` and `supabase.from('users')`. | Ensure `public.subscriptions` and `public.users` (if used) exist in your project and have RLS; add to schema if missing. |
 

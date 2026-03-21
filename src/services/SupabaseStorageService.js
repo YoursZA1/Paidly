@@ -1,7 +1,9 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
-const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "invoicebreek";
+import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
+
+const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
 const PROFILE_LOGOS_BUCKET = "profile-logos";
 
 /**
@@ -21,7 +23,7 @@ async function resolveAuthUserId(userId) {
 
 const SupabaseStorageService = {
   /**
-   * Uploads a file to the main storage bucket (invoicebreek) and returns a signed URL.
+   * Uploads a file to the main storage bucket (default: paidly) and returns a signed URL.
    * Uses the main bucket first so it works without listBuckets permission; path must be userId/logo.* for RLS.
    * @param {File} file
    * @param {string} [userId] - Supabase auth user id (optional; resolved from session if missing)
@@ -32,7 +34,7 @@ const SupabaseStorageService = {
     const fileExt = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "png");
     const filePath = `${authUserId}/logo.${fileExt}`;
 
-    // Use main bucket first (invoicebreek) — matches CREATE_BUCKET_NOW.sql and avoids listBuckets
+    // Use main bucket first (default paidly) — matches storage setup SQL and avoids listBuckets
     let bucketToUse = BUCKET;
     let uploadError = null;
     let uploadData = null;

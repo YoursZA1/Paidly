@@ -293,7 +293,7 @@ export default function SystemStatus() {
                 </li>
                 <li className="flex items-center gap-2">
                   <HardDrive className="h-4 w-4 text-slate-500 shrink-0" />
-                  <span>Storage: profile-logos, invoicebreek, activities, bank-details</span>
+                  <span>Storage: profile-logos, paidly, activities, bank-details</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Radio className="h-4 w-4 text-slate-500 shrink-0" />

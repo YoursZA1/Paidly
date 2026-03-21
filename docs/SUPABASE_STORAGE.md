@@ -6,7 +6,7 @@ This app uses Supabase Storage for file uploads and downloads (logos, invoices, 
 
 | Bucket | Public | Use case | Path convention | Size limit |
 |--------|--------|----------|-----------------|------------|
-| **invoicebreek** | No | General files, branding, invoices, PDFs | `org_id/folder/filename` or `user_id/logo.*` | 50 MB |
+| **paidly** | No | General files, branding, invoices, PDFs | `org_id/folder/filename` or `user_id/logo.*` | 50 MB |
 | **profile-logos** | No | User/company logos | `user_id/logo.{ext}` | 5 MB |
 | **activities** | No | Receipts, attachments, exports | `org_id/...` (e.g. `org_id/receipts/...`) | 50 MB |
 | **bank-details** | No | Bank statements, import files | `org_id/...` (e.g. `org_id/imports/...`) | 50 MB |
@@ -19,11 +19,11 @@ This app uses Supabase Storage for file uploads and downloads (logos, invoices, 
 Defined in `supabase/schema.postgres.sql` on `storage.objects`:
 
 1. **User-owned (logos)**  
-   - **Insert / Select**: `bucket_id IN ('invoicebreek', 'profile-logos')` and first path segment = `auth.uid()::text`.  
+   - **Insert / Select**: `bucket_id IN ('paidly', 'profile-logos')` and first path segment = `auth.uid()::text`.  
    - **Update / Delete**: Same buckets and path rule so users can replace or remove their own logos.
 
 2. **Org-scoped (assets, activities, bank-details)**  
-   - **All** (select, insert, update, delete): `bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details')` and first path segment = `org_id` for a membership of the current user.  
+   - **All** (select, insert, update, delete): `bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details')` and first path segment = `org_id` for a membership of the current user.  
    - Use paths like `org_id/activities/...` or `org_id/bank-details/...` so org members can access.
 
 3. **Admin**  
@@ -31,8 +31,8 @@ Defined in `supabase/schema.postgres.sql` on `storage.objects`:
 
 ## App integration
 
-- **Logos**: `SupabaseStorageService.uploadProfileLogo(file, userId)` → uploads to `profile-logos` (or `invoicebreek`) at `userId/logo.{ext}`, returns a signed URL. Used by Settings, SetupWizard, onboarding.
-- **General uploads (branding, private)**: `breakApi.integrations.Core.UploadFile({ file })` uses `invoicebreek` with path `orgId/branding/...` or `orgId/private/...` (see `customClient.js` IntegrationManager).
+- **Logos**: `SupabaseStorageService.uploadProfileLogo(file, userId)` → uploads to `profile-logos` (or `paidly`) at `userId/logo.{ext}`, returns a signed URL. Used by Settings, SetupWizard, onboarding.
+- **General uploads (branding, private)**: `breakApi.integrations.Core.UploadFile({ file })` uses `paidly` with path `orgId/branding/...` or `orgId/private/...` (see `customClient.js` IntegrationManager).
 - **Activities / bank-details**: `uploadToBucket(file, 'activities', path)` and `uploadToBucket(file, 'bank-details', path)` from `SupabaseMultiBucketService`. Use **org_id** as the first path segment (e.g. `orgId/receipts/filename`) so RLS allows access.
 - **Download**: Use `supabase.storage.from(bucket).createSignedUrl(path, expiresIn)` for private buckets, or `getPublicUrl(path)` only if the bucket were public (current buckets are private).
 

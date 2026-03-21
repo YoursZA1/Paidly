@@ -2,13 +2,13 @@
 -- CREATE STORAGE BUCKET FOR LOGO UPLOADS
 -- ============================================
 -- Copy this entire file and run in Supabase SQL Editor
--- This will create the 'invoicebreek' bucket needed for logo uploads
+-- This will create the 'paidly' bucket needed for logo uploads
 
 -- Create the main storage bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
-  'invoicebreek',
-  'invoicebreek',
+  'paidly',
+  'paidly',
   false, -- Private bucket (use signed URLs)
   52428800, -- 50MB file size limit
   ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf']
@@ -27,7 +27,7 @@ SELECT
   file_size_limit,
   created_at
 FROM storage.buckets 
-WHERE id = 'invoicebreek';
+WHERE id = 'paidly';
 
 -- Expected result: Should see 1 row with the bucket details
 
@@ -46,7 +46,7 @@ CREATE POLICY "Users can upload own logos"
 ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 
@@ -55,7 +55,7 @@ CREATE POLICY "Users can read own logos"
 ON storage.objects FOR SELECT
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 
@@ -64,14 +64,14 @@ CREATE POLICY "org members access assets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND EXISTS (
+  bucket_id = 'paidly' AND EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
       AND (storage.foldername(name))[1] = m.org_id::text
   )
 )
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND EXISTS (
+  bucket_id = 'paidly' AND EXISTS (
     SELECT 1 FROM public.memberships m
     WHERE m.user_id = auth.uid()
       AND (storage.foldername(name))[1] = m.org_id::text
@@ -83,10 +83,10 @@ CREATE POLICY "admin access storage buckets"
 ON storage.objects FOR ALL
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND public.is_admin()
+  bucket_id = 'paidly' AND public.is_admin()
 )
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND public.is_admin()
+  bucket_id = 'paidly' AND public.is_admin()
 );
 
 -- Verify policies were created

@@ -4,8 +4,8 @@
 -- Main bucket for general files (invoices, documents, etc.)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
-  'invoicebreek',
-  'invoicebreek',
+  'paidly',
+  'paidly',
   false, -- Private bucket
   52428800, -- 50MB limit
   ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf']
@@ -64,4 +64,4 @@ ON CONFLICT (id) DO UPDATE SET
 -- Verify buckets were created
 SELECT id, name, public, file_size_limit, allowed_mime_types
 FROM storage.buckets
-WHERE id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details');
+WHERE id IN ('paidly', 'profile-logos', 'activities', 'bank-details');

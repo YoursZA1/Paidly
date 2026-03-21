@@ -65,7 +65,7 @@ See **[SUPABASE_SETUP_AND_MAINTENANCE.md](SUPABASE_SETUP_AND_MAINTENANCE.md)** f
 
 ### 2.4 Storage
 
-- **Buckets:** `invoicebreek`, `profile-logos`, `activities`, `bank-details` (created in schema with size/MIME limits).
+- **Buckets:** `paidly`, `profile-logos`, `activities`, `bank-details` (created in schema with size/MIME limits).
 - **Policies:** User-owned (path first segment = `auth.uid()`), org-scoped (first segment = `org_id` via membership), and **admin access storage buckets** for full access when `is_admin()`. See schema and **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_CHECKLIST.md)** § Storage.
 
 ### 2.5 Realtime

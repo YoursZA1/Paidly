@@ -6,22 +6,9 @@ import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
 import InvoicePDFDownloadLink from '@/components/pdf/InvoicePDFDownloadLink';
-import { effectiveBankingDetail } from '@/utils/effectiveBankingDetail';
-import invoiceTemplatePdfCaptureCss from '@/components/pdf/invoiceTemplatePdfCapture.css?raw';
-import { mapInvoiceDataForTemplate, normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
-
-// Import templates
-import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
-import ModernTemplate from '@/components/invoice/templates/ModernTemplate';
-import MinimalTemplate from '@/components/invoice/templates/MinimalTemplate';
-import BoldTemplate from '@/components/invoice/templates/BoldTemplate';
-
-const TEMPLATES = {
-    classic: ClassicTemplate,
-    modern: ModernTemplate,
-    minimal: MinimalTemplate,
-    bold: BoldTemplate
-};
+import InvoiceTemplateDocument from '@/components/pdf/InvoiceTemplateDocument';
+import { buildInvoiceTemplatePdfCaptureProps } from '@/components/pdf/InvoiceTemplatePdfCapture';
+import { mapInvoiceDataForTemplate } from '@/utils/invoiceTemplateData';
 
 const DRAFT_STORAGE_KEY = 'invoiceDraft';
 const OPTIONAL_FETCH_TIMEOUT_MS = 15000;
@@ -176,42 +163,15 @@ export default function InvoicePDF() {
         );
     }
 
-    const templateKey =
-        normalizeInvoiceTemplateKey(invoice.invoice_template) ||
-        normalizeInvoiceTemplateKey(user?.invoice_template) ||
-        'classic';
-
-    // Prefer snapshot fields on the invoice so print/PDF matches the saved document and create preview.
-    const resolvedUser = user
-        ? {
-              ...user,
-              logo_url:
-                  invoice.owner_logo_url ||
-                  user.logo_url ||
-                  user.company_logo_url ||
-                  invoice.company?.logo_url ||
-                  null,
-              company_name: invoice.owner_company_name || user.company_name,
-              company_address: invoice.owner_company_address || user.company_address,
-              currency: invoice.currency || invoice.owner_currency || user.currency || 'ZAR',
-              invoice_template: templateKey,
-          }
-        : {
-              company_name: invoice.owner_company_name || 'Company',
-              logo_url: invoice.company?.logo_url || invoice.owner_logo_url || null,
-              company_address: invoice.owner_company_address || '',
-              currency: invoice.currency || invoice.owner_currency || 'ZAR',
-              invoice_template: templateKey,
-              invoice_header: '',
-          };
-    const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
-    const userCurrency = resolvedUser?.currency || invoice.currency || invoice.owner_currency || 'ZAR';
-    const bankingForTemplates = effectiveBankingDetail(bankingDetail, resolvedUser);
+    const pdfPack = buildInvoiceTemplatePdfCaptureProps(
+        invoice,
+        client || { name: invoice.client_name || 'Client' },
+        user,
+        bankingDetail
+    );
 
     return (
         <>
-            <style>{invoiceTemplatePdfCaptureCss}</style>
-
             <div className="min-h-screen bg-gray-100 py-4 sm:py-8 print:bg-white print:py-0">
                 <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
                     <div className="no-print invoice-pdf-actions mb-4 flex flex-col sm:flex-row justify-end gap-2">
@@ -225,7 +185,7 @@ export default function InvoicePDF() {
                         <InvoicePDFDownloadLink
                             invoice={invoice}
                             client={client}
-                            user={resolvedUser}
+                            user={pdfPack.resolvedUser}
                             bankingDetail={bankingDetail}
                             className="btn-download px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
                         />
@@ -252,16 +212,15 @@ export default function InvoicePDF() {
                     </div>
 
                     <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <div className="pdf-content invoice-container invoice-pdf-export min-w-0 w-full max-w-full" style={{ maxWidth: '210mm' }}>
-                            <TemplateComponent
-                                invoice={invoice}
-                                client={client || { name: invoice.client_name || 'Client' }}
-                                user={resolvedUser}
-                                bankingDetail={bankingForTemplates}
-                                userCurrency={userCurrency}
-                                safeFormatDate={safeFormatDate}
-                            />
-                        </div>
+                        <InvoiceTemplateDocument
+                            TemplateComponent={pdfPack.TemplateComponent}
+                            invoice={pdfPack.templateInvoice}
+                            client={pdfPack.clientForTemplate}
+                            user={pdfPack.resolvedUser}
+                            bankingDetail={pdfPack.bankingForTemplate}
+                            userCurrency={pdfPack.userCurrency}
+                            safeFormatDate={safeFormatDate}
+                        />
                     </div>
                 </div>
             </div>

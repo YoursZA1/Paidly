@@ -63,7 +63,7 @@ if (process.env.TRUST_PROXY === "false") {
   app.set("trust proxy", Number.isFinite(hops) && hops >= 0 ? hops : 1);
 }
 const port = Number(process.env.PORT) || 5179;
-const storageBucket = process.env.SUPABASE_STORAGE_BUCKET || "invoicebreek";
+const storageBucket = process.env.SUPABASE_STORAGE_BUCKET || "paidly";
 // Parse ADMIN_BYPASS_AUTH: accept "true", "1", "yes", "on" (case-insensitive)
 const adminBypassEnv = (process.env.ADMIN_BYPASS_AUTH || "").toLowerCase().trim();
 const adminBypassEnabled = ["true", "1", "yes", "on"].includes(adminBypassEnv);

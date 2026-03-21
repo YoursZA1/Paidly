@@ -39,8 +39,8 @@ VITE_SERVER_URL=http://localhost:5179
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
 
-# Storage bucket name (optional; default invoicebreek)
-VITE_SUPABASE_STORAGE_BUCKET=invoicebreek
+# Storage bucket name (optional; default paidly)
+VITE_SUPABASE_STORAGE_BUCKET=paidly
 ```
 
 Use `.env.production` (or your host’s env) for production and set the same keys for the **production** Supabase project.
@@ -72,7 +72,7 @@ This creates:
 - Tables: `organizations`, `profiles`, `memberships`, `clients`, `invoices`, `invoice_items`, `payments`, `quotes`, `quote_items`, `services`, `banking_details`, `recurring_invoices`, `invoice_views`, `payslips`, `expenses`, `tasks`, `notifications`, `packages`, etc.
 - RLS policies
 - Triggers (e.g. `handle_new_user` for signup)
-- Storage bucket entry for `invoicebreek`
+- Storage bucket entry for `paidly`
 
 ### 4.2 PayFast subscription columns (profiles)
 
@@ -96,7 +96,7 @@ Or run that SQL directly in the SQL Editor.
 If the bucket was not created by the schema:
 
 1. **Storage → Buckets → New bucket**
-2. Name: **`invoicebreek`**
+2. Name: **`paidly`**
 3. Keep it **private** (app uses signed URLs).
 
 ---
@@ -211,7 +211,7 @@ Fix any missing or incorrect env vars, then restart the app:
 | 3 | Copy Project URL and service_role key → `server/.env` |
 | 4 | Run `supabase/schema.postgres.sql` in SQL Editor |
 | 5 | Run `supabase/migrations/20240308120000_add_profiles_payfast_columns.sql` (or the SQL inside it) |
-| 6 | Create storage bucket `invoicebreek` if missing |
+| 6 | Create storage bucket `paidly` if missing |
 | 7 | Enable Email provider; configure Google and Apple if used |
 | 8 | Set Site URL and Redirect URLs in Auth URL configuration |
 | 9 | Deploy `payfast-itn`, set `PAYFAST_PASSPHRASE`, configure PayFast ITN URL |

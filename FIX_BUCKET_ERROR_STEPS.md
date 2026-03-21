@@ -38,7 +38,7 @@ If SQL doesn't work, use the dashboard:
 1. **Supabase Dashboard** → **Storage**
 2. Click **"New bucket"** or **"Create bucket"**
 3. Fill in:
-   - **Name**: `invoicebreek` (exactly this, case-sensitive)
+   - **Name**: `paidly` (exactly this, case-sensitive)
    - **Public**: **No** (unchecked/private)
    - **File size limit**: 50 MB (optional)
 4. Click **Create**
@@ -46,7 +46,7 @@ If SQL doesn't work, use the dashboard:
 
 ## ✅ What the SQL Script Does
 
-1. **Creates bucket** `invoicebreek` if it doesn't exist
+1. **Creates bucket** `paidly` if it doesn't exist
 2. **Sets bucket as private** (uses signed URLs)
 3. **Sets file size limit** to 50MB
 4. **Allows image types**: jpeg, png, gif, webp, svg, pdf
@@ -61,16 +61,16 @@ If SQL doesn't work, use the dashboard:
 Run this query in SQL Editor:
 
 ```sql
-SELECT id, name, public FROM storage.buckets WHERE id = 'invoicebreek';
+SELECT id, name, public FROM storage.buckets WHERE id = 'paidly';
 ```
 
-**Expected:** Should return 1 row with `id = 'invoicebreek'`
+**Expected:** Should return 1 row with `id = 'paidly'`
 
 ## 🆘 Still Not Working?
 
 ### Check These:
 
-1. **Bucket name**: Must be exactly `invoicebreek` (lowercase, no spaces)
+1. **Bucket name**: Must be exactly `paidly` (lowercase, no spaces)
 2. **Project**: Make sure you're in the correct Supabase project
 3. **Refresh**: Refresh your app after creating bucket
 4. **Console errors**: Check browser console for other errors
@@ -81,7 +81,7 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'invoicebreek';
 **"Bucket still not found"**
 - Wait 5 seconds and try again (sometimes takes a moment)
 - Refresh Supabase dashboard
-- Double-check bucket name is exactly `invoicebreek`
+- Double-check bucket name is exactly `paidly`
 
 **"Permission denied"**
 - Make sure you ran the RLS policies part of the SQL
@@ -103,7 +103,7 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'invoicebreek';
 ## 🎉 Success!
 
 Once the bucket is created, logo uploads will work immediately. The app will:
-- Upload logo to `invoicebreek` bucket
+- Upload logo to `paidly` bucket
 - Generate signed URL (valid 1 year)
 - Save URL to user profile
 - Display logo in invoices, quotes, and settings

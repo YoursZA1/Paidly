@@ -26,7 +26,7 @@
 | **VITE_SUPABASE_URL** | Host env (Vercel, Netlify, etc.) or `.env.production` | Must be your **production** Supabase project URL, e.g. `https://YOUR_REF.supabase.co`. Never deploy with empty or `YOUR_PROJECT_REF` placeholder. |
 | **VITE_SUPABASE_ANON_KEY** | Host env or `.env.production` | Must be the **anon (public)** key from that project (Settings → API). Never use service role key on frontend. Never deploy with `your_production_anon_key_here` or similar. |
 | **VITE_SERVER_URL** | Host env or `.env.production` | Production backend API URL if you use the separate backend. |
-| **VITE_SUPABASE_STORAGE_BUCKET** | Optional | Defaults to `invoicebreek` if unset. |
+| **VITE_SUPABASE_STORAGE_BUCKET** | Optional | Defaults to `paidly` if unset. |
 
 **File references:**
 - **Example (placeholders only):** `.env.production.example` — copy to `.env.production` and replace all placeholders with real values before `npm run build`, or set variables in your host’s dashboard so they are injected at build time.

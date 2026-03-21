@@ -967,7 +967,7 @@ create policy "org members write payments" on public.payments
 -- Create storage buckets if they don't exist
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values 
-  ('invoicebreek', 'invoicebreek', false, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'])
+  ('paidly', 'paidly', false, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'])
 on conflict (id) do update set
   name = excluded.name,
   public = excluded.public,
@@ -1010,7 +1010,7 @@ create policy "Users can upload own logos" on storage.objects
   for insert
   to authenticated
   with check (
-    bucket_id IN ('invoicebreek', 'profile-logos') AND
+    bucket_id IN ('paidly', 'profile-logos') AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1019,7 +1019,7 @@ create policy "Users can read own logos" on storage.objects
   for select
   to authenticated
   using (
-    bucket_id IN ('invoicebreek', 'profile-logos') AND
+    bucket_id IN ('paidly', 'profile-logos') AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1029,11 +1029,11 @@ create policy "Users can update delete own storage" on storage.objects
   for update
   to authenticated
   using (
-    bucket_id IN ('invoicebreek', 'profile-logos') AND
+    bucket_id IN ('paidly', 'profile-logos') AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   )
   with check (
-    bucket_id IN ('invoicebreek', 'profile-logos') AND
+    bucket_id IN ('paidly', 'profile-logos') AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1042,7 +1042,7 @@ create policy "Users can delete own storage" on storage.objects
   for delete
   to authenticated
   using (
-    bucket_id IN ('invoicebreek', 'profile-logos') AND
+    bucket_id IN ('paidly', 'profile-logos') AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1051,14 +1051,14 @@ drop policy if exists "org members access assets" on storage.objects;
 create policy "org members access assets" on storage.objects
   for all
   using (
-    bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND exists (
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND exists (
       select 1 from public.memberships m
       where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
     )
   )
   with check (
-    bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND exists (
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND exists (
       select 1 from public.memberships m
       where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
@@ -1070,10 +1070,10 @@ drop policy if exists "admin access storage buckets" on storage.objects;
 create policy "admin access storage buckets" on storage.objects
   for all
   using (
-    bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
   )
   with check (
-    bucket_id IN ('invoicebreek', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
   );
 
 -- Indexes for better query performance

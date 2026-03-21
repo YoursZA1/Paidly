@@ -101,7 +101,7 @@ Replaced `<img>` tags with `<LogoImage>` component in:
 
 ### Upload Flow:
 1. User selects logo file in Settings
-2. File is uploaded to Supabase Storage bucket (`invoicebreek`) at path `{userId}/logo.{ext}`
+2. File is uploaded to Supabase Storage bucket (`paidly`) at path `{userId}/logo.{ext}`
 3. Signed URL is generated (valid for 1 year)
 4. Signed URL is saved to `profiles.logo_url` in Supabase
 5. User data is refreshed to show new logo
@@ -129,7 +129,7 @@ Replaced `<img>` tags with `<LogoImage>` component in:
 
 ## Storage Bucket Configuration
 
-Ensure your Supabase Storage bucket (`invoicebreek`) has:
+Ensure your Supabase Storage bucket (`paidly`) has:
 - **Public read access** OR **Signed URL access** enabled
 - RLS policies allowing authenticated users to upload/read their own files
 
@@ -140,7 +140,7 @@ CREATE POLICY "Users can upload own logos"
 ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 
@@ -149,7 +149,7 @@ CREATE POLICY "Users can read own logos"
 ON storage.objects FOR SELECT
 TO authenticated
 USING (
-  bucket_id = 'invoicebreek' AND
+  bucket_id = 'paidly' AND
   (storage.foldername(name))[1] = auth.uid()::text
 );
 ```

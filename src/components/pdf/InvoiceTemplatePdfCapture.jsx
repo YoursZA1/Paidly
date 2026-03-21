@@ -1,4 +1,4 @@
-import { forwardRef, Fragment } from "react";
+import { forwardRef } from "react";
 import { format, isValid, parseISO } from "date-fns";
 import ClassicTemplate from "@/components/invoice/templates/ClassicTemplate";
 import ModernTemplate from "@/components/invoice/templates/ModernTemplate";
@@ -9,7 +9,7 @@ import {
   normalizeInvoiceTemplateKey,
 } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
-import invoiceTemplatePdfCaptureCss from "./invoiceTemplatePdfCapture.css?raw";
+import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
 
 const TEMPLATES = {
   classic: ClassicTemplate,
@@ -40,7 +40,7 @@ function normalizeClientForTemplate(client) {
 }
 
 /**
- * Props for Classic / Modern / Minimal / Bold — same resolution as the Invoice PDF page and preview.
+ * Props for Classic / Modern / Minimal / Bold — same resolution as preview and Invoice PDF page.
  */
 export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, bankingDetail) {
   const templateKey =
@@ -93,35 +93,20 @@ const InvoiceTemplatePdfCapture = forwardRef(function InvoiceTemplatePdfCapture(
   { invoice, client, user, bankingDetail },
   ref
 ) {
-  const {
-    TemplateComponent,
-    templateInvoice,
-    resolvedUser,
-    userCurrency,
-    bankingForTemplate,
-    clientForTemplate,
-    invoice: inv,
-  } = buildInvoiceTemplatePdfCaptureProps(invoice, client, user, bankingDetail);
+  const pack = buildInvoiceTemplatePdfCaptureProps(invoice, client, user, bankingDetail);
 
   return (
-    <Fragment>
-      <style>{invoiceTemplatePdfCaptureCss}</style>
-      <div
-        ref={ref}
-        data-invoice-pdf-capture="true"
-        className="pdf-content invoice-container invoice-pdf-export min-w-0 w-full max-w-full"
-        style={{ maxWidth: "210mm" }}
-      >
-        <TemplateComponent
-          invoice={templateInvoice}
-          client={clientForTemplate || { name: inv?.client_name || "Client" }}
-          user={resolvedUser}
-          bankingDetail={bankingForTemplate}
-          userCurrency={userCurrency}
-          safeFormatDate={safeFormatDate}
-        />
-      </div>
-    </Fragment>
+    <InvoiceTemplateDocument
+      ref={ref}
+      TemplateComponent={pack.TemplateComponent}
+      invoice={pack.templateInvoice}
+      client={pack.clientForTemplate || { name: pack.invoice?.client_name || "Client" }}
+      user={pack.resolvedUser}
+      bankingDetail={pack.bankingForTemplate}
+      userCurrency={pack.userCurrency}
+      safeFormatDate={safeFormatDate}
+      embeddedChrome={false}
+    />
   );
 });
 

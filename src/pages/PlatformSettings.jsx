@@ -838,7 +838,7 @@ function SystemSettingsTab({ settings, onSave, saving }) {
                 id="siteName"
                 value={formData.siteName || ''}
                 onChange={(e) => setFormData({ ...formData, siteName: e.target.value })}
-                placeholder="Invoice Breek"
+                placeholder="Paidly"
               />
             </div>
 
@@ -2086,7 +2086,7 @@ function BrandingTab({ branding, onSave, saving }) {
               id="footerText"
               value={formData.footerText || ''}
               onChange={(e) => setFormData({ ...formData, footerText: e.target.value })}
-              placeholder="© 2024 Invoice Breek. All rights reserved."
+              placeholder="© 2024 Paidly. All rights reserved."
             />
           </div>
 

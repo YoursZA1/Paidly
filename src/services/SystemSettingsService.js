@@ -274,7 +274,7 @@ const DEFAULT_SETTINGS = {
     logoUrl: '',
     faviconUrl: '',
     customCss: '',
-    footerText: '© 2024 Invoice Breek. All rights reserved.',
+    footerText: '© 2024 Paidly. All rights reserved.',
     termsOfServiceUrl: '',
     privacyPolicyUrl: ''
   },

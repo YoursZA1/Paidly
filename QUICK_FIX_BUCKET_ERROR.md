@@ -14,7 +14,7 @@ When uploading a logo, you get: `Failed to upload logo: Bucket not found`
 
 2. **Create Bucket**
    - Click **"New bucket"** button
-   - Name: `invoicebreek` (exactly this, case-sensitive)
+   - Name: `paidly` (exactly this, case-sensitive)
    - Public: **No** (keep it private)
    - Click **Create**
 
@@ -28,7 +28,7 @@ When uploading a logo, you get: `Failed to upload logo: Bucket not found`
 2. **Run This SQL:**
    ```sql
    INSERT INTO storage.buckets (id, name, public, file_size_limit)
-   VALUES ('invoicebreek', 'invoicebreek', false, 52428800)
+   VALUES ('paidly', 'paidly', false, 52428800)
    ON CONFLICT (id) DO NOTHING;
    ```
 
@@ -51,10 +51,10 @@ If you haven't run the database migration yet:
 Run this query in SQL Editor:
 
 ```sql
-SELECT id, name, public FROM storage.buckets WHERE id = 'invoicebreek';
+SELECT id, name, public FROM storage.buckets WHERE id = 'paidly';
 ```
 
-**Expected:** Should return 1 row with `id = 'invoicebreek'`
+**Expected:** Should return 1 row with `id = 'paidly'`
 
 ## 🧪 Test Logo Upload
 
@@ -69,13 +69,13 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'invoicebreek';
 1. ✅ **Schema updated** - Buckets are created automatically in migration
 2. ✅ **Storage service improved** - Better error messages and bucket checking
 3. ✅ **Policies added** - Users can upload their own logos
-4. ✅ **Fallback bucket** - Tries `profile-logos` first, then `invoicebreek`
+4. ✅ **Fallback bucket** - Tries `profile-logos` first, then `paidly`
 
 ## 🆘 Still Not Working?
 
 ### Check These:
 
-1. **Bucket name**: Must be exactly `invoicebreek` (case-sensitive)
+1. **Bucket name**: Must be exactly `paidly` (case-sensitive)
 2. **Project**: Make sure you're in the correct Supabase project
 3. **Environment variable**: Check `.env` for `VITE_SUPABASE_STORAGE_BUCKET`
 4. **Browser console**: Check for other errors

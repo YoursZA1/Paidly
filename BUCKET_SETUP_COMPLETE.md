@@ -1,6 +1,6 @@
 # ✅ Bucket Created Successfully!
 
-Great! The `invoicebreek` bucket has been created. Now let's make sure everything is set up correctly for logo uploads.
+Great! The `paidly` bucket has been created. Now let's make sure everything is set up correctly for logo uploads.
 
 ## 🔍 Verify Setup (Optional but Recommended)
 
@@ -11,7 +11,7 @@ SELECT policyname, cmd
 FROM pg_policies
 WHERE schemaname = 'storage'
   AND tablename = 'objects'
-  AND bucket_id = 'invoicebreek';
+  AND bucket_id = 'paidly';
 ```
 
 **Expected:** Should see 4 policies:
@@ -38,7 +38,7 @@ If you don't see the policies above, run the policy creation section from `VERIF
 ## 🎯 What Should Happen
 
 When you upload a logo:
-1. ✅ File uploads to `invoicebreek` bucket
+1. ✅ File uploads to `paidly` bucket
 2. ✅ Path: `{userId}/logo.{ext}`
 3. ✅ Signed URL generated (valid 1 year)
 4. ✅ URL saved to `profiles.logo_url`
@@ -63,7 +63,7 @@ When you upload a logo:
 **"Bucket not found" (still)**
 - Refresh Supabase dashboard
 - Wait 5 seconds and try again
-- Double-check bucket name is exactly `invoicebreek`
+- Double-check bucket name is exactly `paidly`
 
 **"File too large"**
 - Bucket limit is 50MB
@@ -71,7 +71,7 @@ When you upload a logo:
 
 ## 📋 Quick Checklist
 
-- [x] Bucket `invoicebreek` created ✅
+- [x] Bucket `paidly` created ✅
 - [ ] RLS policies created (run SQL if missing)
 - [ ] Test logo upload in app
 - [ ] Verify logo displays correctly
