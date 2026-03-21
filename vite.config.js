@@ -7,7 +7,19 @@ import path from 'path'
 // Only variables prefixed with VITE_ are exposed to the client (e.g. import.meta.env.VITE_SUPABASE_URL).
 export default defineConfig(({ mode }) => {
   const envDir = '.';
-  const serverUrl = loadEnv(mode, envDir, '').VITE_SERVER_URL || 'http://localhost:5179';
+  const env = loadEnv(mode, envDir, '');
+  // Shipments from Vercel without this embed localhost in the bundle → login hits the user's machine and fails CORS.
+  if (
+    mode === 'production' &&
+    process.env.VERCEL === '1' &&
+    !String(env.VITE_SERVER_URL || '').trim()
+  ) {
+    throw new Error(
+      'Production build on Vercel requires VITE_SERVER_URL (your Node API base URL, no trailing slash). ' +
+        'Vercel → Project → Settings → Environment Variables → add VITE_SERVER_URL for Production (and Preview if you use it), then redeploy.'
+    );
+  }
+  const serverUrl = env.VITE_SERVER_URL || 'http://localhost:5179';
   const backendTarget = serverUrl.replace(/\/$/, '');
 
   return {

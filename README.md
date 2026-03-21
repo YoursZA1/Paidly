@@ -37,9 +37,9 @@ npm start
 
 The app is deployed at **https://invoicebreekapp2.vercel.app**. For Vercel (or similar):
 
-1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_SERVER_URL` (your backend API URL) and `VITE_SUPABASE_STORAGE_BUCKET`. Use **Production** (and Preview if needed).
-2. **Supabase Auth:** In Supabase Dashboard → **Authentication → URL Configuration**, add `https://invoicebreekapp2.vercel.app` to **Site URL** and **Redirect URLs** so sign-in, password reset, and OAuth work.
-3. **Backend CORS:** If you run the API server separately, set `CLIENT_ORIGIN=https://invoicebreekapp2.vercel.app` so the server allows requests from the frontend.
+1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL, e.g. `https://api.paidly.co.za` — **no trailing slash**; required for password login, waitlist, and currency on the deployed site), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, the client bundle falls back to `http://localhost:5179` and sign-in fails in the browser.
+2. **Supabase Auth:** In Supabase Dashboard → **Authentication → URL Configuration**, add your production origin (e.g. `https://app.paidly.co.za`) and any Vercel URLs to **Site URL** and **Redirect URLs** so sign-in, password reset, and OAuth work.
+3. **Backend CORS:** Deploy the latest `server` (see recent CORS fix) and set `CLIENT_ORIGIN` to your real front-end origins if you use an explicit allowlist; otherwise the server defaults allow `app.paidly.co.za` and `*.vercel.app`.
 
 The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
 
@@ -58,7 +58,7 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    |----------|----------|-------------|
    | `VITE_SUPABASE_URL` | Yes | Supabase project URL (Settings → API). |
    | `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (Settings → API). |
-   | `VITE_SERVER_URL` | No | Backend API base URL (default: `http://localhost:5179`). |
+   | `VITE_SERVER_URL` | Yes on Vercel prod | Backend API base URL. Dev default: `http://localhost:5179`. **Production:** must be your public API URL or login uses localhost and breaks. |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `invoicebreek`). |
 
 If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Don't expose keys:** Never commit `.env` or paste API keys in code, issues, or chat. Use `.env.*.example` as templates; keep real values only in local `.env` (gitignored) and in your host's environment (e.g. Vercel). The repo uses `.cursorignore` so env and auth state are not included in AI context. If a key was ever exposed, rotate it in Supabase and update env. Never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production. Run **`npm run scan-secrets`** before releases; GitHub Actions runs it plus **TruffleHog** on every push/PR to `main`/`master` (see **`.github/workflows/security-secrets.yml`**). See **`docs/SECRETS_AND_ENV.md`** for browser vs server variables, CI, and enabling **GitHub secret scanning** in repo settings. For HTTPS, CORS, monitoring, and database exposure in production, see **`docs/DEPLOYMENT_SECURITY.md`**. For API/auth rate limits and bot resistance, see **`docs/ABUSE_PROTECTION.md`**.
