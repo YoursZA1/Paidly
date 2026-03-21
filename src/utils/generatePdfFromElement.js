@@ -36,7 +36,8 @@ function buildHtml2PdfOptions(filename) {
       onclone: html2CanvasOnClone,
     },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+    /* Omit avoid-all so long invoices can span multiple A4 pages (css + legacy pagebreak). */
+    pagebreak: { mode: ["css", "legacy"] },
   };
 }
 

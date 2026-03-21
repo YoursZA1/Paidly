@@ -63,6 +63,12 @@ const DOCUMENT_TEMPLATES = [
         name: "Bold",
         description: "Strong contrast with confident headings",
         colors: ["#0f766e", "#f0fdfa", "#14b8a6"]
+    },
+    {
+        id: "paidlypro",
+        name: "Paidly Pro",
+        description: "Future nostalgic — Geist, cards, refined footer",
+        colors: ["#ea580c", "#f8fafc", "#0f172a"]
     }
 ];
 
@@ -618,7 +624,7 @@ function CompanyProfileSettings() {
                             Document Template
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" role="radiogroup" aria-label="Document templates">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="radiogroup" aria-label="Document templates">
                             {DOCUMENT_TEMPLATES.map((template) => (
                                 <button
                                     type="button"

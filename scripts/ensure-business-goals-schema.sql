@@ -1,4 +1,4 @@
--- Business goals: one row per user per year. Only the workspace owner can insert/update/delete.
+-- Business goals: one row per user per year. Any signed-in user may manage their own row (user_id = auth.uid()).
 -- Run in Supabase SQL Editor.
 
 create table if not exists public.business_goals (
@@ -19,46 +19,25 @@ drop policy if exists "users select own business_goals" on public.business_goals
 create policy "users select own business_goals" on public.business_goals
   for select using (user_id = auth.uid());
 
--- Only the workspace owner can insert/update/delete (their own row)
 drop policy if exists "owner insert business_goals" on public.business_goals;
-create policy "owner insert business_goals" on public.business_goals
-  for insert with check (
-    user_id = auth.uid()
-    and exists (
-      select 1 from public.memberships m
-      join public.organizations o on o.id = m.org_id
-      where m.user_id = auth.uid() and o.owner_id = auth.uid()
-    )
-  );
-
 drop policy if exists "owner update business_goals" on public.business_goals;
-create policy "owner update business_goals" on public.business_goals
-  for update using (
-    user_id = auth.uid()
-    and exists (
-      select 1 from public.memberships m
-      join public.organizations o on o.id = m.org_id
-      where m.user_id = auth.uid() and o.owner_id = auth.uid()
-    )
-  ) with check (
-    user_id = auth.uid()
-    and exists (
-      select 1 from public.memberships m
-      join public.organizations o on o.id = m.org_id
-      where m.user_id = auth.uid() and o.owner_id = auth.uid()
-    )
-  );
-
 drop policy if exists "owner delete business_goals" on public.business_goals;
-create policy "owner delete business_goals" on public.business_goals
-  for delete using (
-    user_id = auth.uid()
-    and exists (
-      select 1 from public.memberships m
-      join public.organizations o on o.id = m.org_id
-      where m.user_id = auth.uid() and o.owner_id = auth.uid()
-    )
-  );
+drop policy if exists "users insert own business_goals" on public.business_goals;
+drop policy if exists "users update own business_goals" on public.business_goals;
+drop policy if exists "users delete own business_goals" on public.business_goals;
+
+create policy "users insert own business_goals" on public.business_goals
+  for insert
+  with check (user_id = (select auth.uid()));
+
+create policy "users update own business_goals" on public.business_goals
+  for update
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+create policy "users delete own business_goals" on public.business_goals
+  for delete
+  using (user_id = (select auth.uid()));
 
 -- Keep updated_at in sync
 create or replace function public.set_business_goals_updated_at()

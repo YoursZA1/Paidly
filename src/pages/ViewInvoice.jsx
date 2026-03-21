@@ -303,7 +303,12 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
         invoice &&
         ({
             ...(company || {}),
-            logo_url: invoice.owner_logo_url || company?.logo_url || '',
+            // `company` is User.me() profile — prefer profile logo over stale owner_logo_url snapshot.
+            logo_url:
+                company?.logo_url ||
+                company?.company_logo_url ||
+                invoice.owner_logo_url ||
+                '',
             company_name: invoice.owner_company_name || company?.company_name || '',
             company_address: invoice.owner_company_address || company?.company_address || '',
             email: invoice.owner_email || company?.email || '',

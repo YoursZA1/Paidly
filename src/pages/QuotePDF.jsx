@@ -13,12 +13,15 @@ import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
 import ModernTemplate from '@/components/invoice/templates/ModernTemplate';
 import MinimalTemplate from '@/components/invoice/templates/MinimalTemplate';
 import BoldTemplate from '../components/invoice/templates/BoldTemplate';
+import PaidlyProTemplate from '@/components/invoice/templates/PaidlyProTemplate';
+import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
 
 const TEMPLATES = {
     classic: ClassicTemplate,
     modern: ModernTemplate,
     minimal: MinimalTemplate,
-    bold: BoldTemplate
+    bold: BoldTemplate,
+    paidlypro: PaidlyProTemplate,
 };
 
 const DRAFT_STORAGE_KEY = 'quoteDraft';
@@ -56,6 +59,7 @@ export default function QuotePDF() {
                                 quantity: Number(item.quantity ?? item.qty ?? 1),
                                 unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
                                 total_price: Number(item.total_price ?? item.total ?? 0),
+                                item_type: item.item_type || 'service',
                             })),
                             subtotal: Number(quoteData.subtotal ?? 0),
                             tax_rate: Number(quoteData.tax_rate ?? 0),
@@ -142,7 +146,7 @@ export default function QuotePDF() {
     }
 
     const userCurrency = user?.currency || 'ZAR';
-    const templateKey = user?.invoice_template || 'classic';
+    const templateKey = normalizeInvoiceTemplateKey(user?.invoice_template) || 'classic';
     const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
 
     // Map quote data to invoice structure for template compatibility

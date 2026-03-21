@@ -106,18 +106,10 @@ const SupabaseAuthService = {
         throw new Error(msg);
       }
 
-      if (import.meta.env.DEV && (status === 503 || status >= 500)) {
-        console.warn(
-          `[auth] API sign-up returned ${status}; falling back to direct Supabase (development only).`
-        );
+      // API down or misconfigured (502/503/504/5xx): still allow auth via Supabase (IP rate-limit on API is skipped for this attempt).
+      if (status >= 500) {
+        console.warn(`[auth] API sign-up returned ${status}; falling back to direct Supabase.`);
         return signUpDirect();
-      }
-
-      if (status === 503) {
-        throw new Error(
-          data?.error ||
-            "Sign-up service is not available. Configure SUPABASE_ANON_KEY on the API server."
-        );
       }
 
       throw new Error(mapAuthError({ message: data?.error || "Sign up failed" }));
@@ -205,18 +197,10 @@ const SupabaseAuthService = {
         throw new Error(mapAuthError({ message: data?.error || "Invalid login credentials" }));
       }
 
-      if (import.meta.env.DEV && (status === 503 || status >= 500)) {
-        console.warn(
-          `[auth] API sign-in returned ${status}; falling back to direct Supabase (development only).`
-        );
+      // API unavailable (503, cold start, missing env): fall back so users can still sign in via Supabase.
+      if (status >= 500) {
+        console.warn(`[auth] API sign-in returned ${status}; falling back to direct Supabase.`);
         return signInDirect();
-      }
-
-      if (status === 503) {
-        throw new Error(
-          data?.error ||
-            "Sign-in service is not available. Configure SUPABASE_ANON_KEY on the API server."
-        );
       }
 
       throw new Error(data?.error || "Login failed");

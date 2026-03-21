@@ -1597,73 +1597,93 @@ class AuthManager {
       throw new Error('Not authenticated');
     }
 
-    try {
-      const withLocalTimeout = async (promise, ms, label) => {
-        let timer;
-        const timeout = new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-        });
-        try {
-          return await Promise.race([promise, timeout]);
-        } finally {
-          clearTimeout(timer);
-        }
-      };
+    const cachedAuthId = this.user.supabase_id || this.user.id;
 
-      // Do not block the UI on slow auth/profile round-trips.
+    const withLocalTimeout = async (promise, ms, label) => {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      });
+      try {
+        return await Promise.race([promise, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // getSession can block on refresh; fail fast and still merge profile using cached id.
+    const GET_SESSION_MS = 6000;
+    const PROFILE_MS = 15000;
+
+    let authUserId = null;
+    try {
       const { data: sessionData, error: sessionError } = await withLocalTimeout(
         supabase.auth.getSession(),
-        5000,
+        GET_SESSION_MS,
         "auth.getSession"
       );
       if (sessionError) {
         console.warn("Failed to get session in me():", getSupabaseErrorMessage(sessionError, "Session failed"));
       } else if (sessionData?.session?.user?.id) {
-        const authUserId = sessionData.session.user.id;
-        const { data: profile, error } = await withLocalTimeout(
-          selectProfileByUserId(supabase, authUserId),
-          7000,
-          "profiles.select"
-        );
-        if (error) {
-          console.warn("Failed to load profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
-        }
-        if (!error && profile) {
-          // Merge Supabase profile (one row per user, id = auth.users.id) into local user
-          const fullName = profile.full_name || this.user.full_name;
-          this.user = {
-            ...this.user,
-            id: authUserId,
-            supabase_id: authUserId,
-            full_name: fullName,
-            display_name: fullName,
-            email: profile.email || this.user.email,
-            avatar_url: profile.avatar_url || this.user.avatar_url,
-            logo_url: profile.logo_url || this.user.logo_url || '',
-            company_name: profile.company_name || this.user.company_name || '',
-            company_address: profile.company_address || this.user.company_address || '',
-            currency: profile.currency || this.user.currency || 'USD',
-            timezone: profile.timezone || this.user.timezone || 'UTC',
-            invoice_template: profile.invoice_template || this.user.invoice_template || 'classic',
-            invoice_header: profile.invoice_header || this.user.invoice_header || '',
-            business:
-              profile.business !== undefined && profile.business !== null && typeof profile.business === "object"
-                ? profile.business
-                : profile.business === null
-                  ? null
-                  : this.user.business ?? null,
-          };
-          this.saveUserToStorage();
-        } else {
-          // Session exists but no profile row yet: ensure local user has correct id
-          this.user = { ...this.user, id: authUserId, supabase_id: authUserId };
-          this.saveUserToStorage();
-        }
+        authUserId = sessionData.session.user.id;
       }
-    } catch (error) {
-      // If session/profile refresh is slow or fails, keep cached user so pages don't hang.
+    } catch (e) {
       if (import.meta.env?.DEV) {
-        console.warn("Failed to refresh session/profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
+        console.warn(
+          "me(): getSession slow or failed; continuing with cached user id for profile refresh:",
+          e?.message || e
+        );
+      }
+    }
+
+    const effectiveId = authUserId || cachedAuthId;
+    if (!effectiveId) {
+      return this.user;
+    }
+
+    try {
+      const { data: profile, error } = await withLocalTimeout(
+        selectProfileByUserId(supabase, effectiveId),
+        PROFILE_MS,
+        "profiles.select"
+      );
+      if (error) {
+        console.warn("Failed to load profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
+      }
+      if (!error && profile) {
+        // Merge Supabase profile (one row per user, id = auth.users.id) into local user
+        const fullName = profile.full_name || this.user.full_name;
+        this.user = {
+          ...this.user,
+          id: effectiveId,
+          supabase_id: effectiveId,
+          full_name: fullName,
+          display_name: fullName,
+          email: profile.email || this.user.email,
+          avatar_url: profile.avatar_url || this.user.avatar_url,
+          logo_url: profile.logo_url || this.user.logo_url || '',
+          company_name: profile.company_name || this.user.company_name || '',
+          company_address: profile.company_address || this.user.company_address || '',
+          currency: profile.currency || this.user.currency || 'USD',
+          timezone: profile.timezone || this.user.timezone || 'UTC',
+          invoice_template: profile.invoice_template || this.user.invoice_template || 'classic',
+          invoice_header: profile.invoice_header || this.user.invoice_header || '',
+          business:
+            profile.business !== undefined && profile.business !== null && typeof profile.business === "object"
+              ? profile.business
+              : profile.business === null
+                ? null
+                : this.user.business ?? null,
+        };
+        this.saveUserToStorage();
+      } else if (!error && !profile) {
+        // No profile row yet: ensure local user has correct id
+        this.user = { ...this.user, id: effectiveId, supabase_id: effectiveId };
+        this.saveUserToStorage();
+      }
+    } catch (e) {
+      if (import.meta.env?.DEV) {
+        console.warn("Failed to refresh profile in me():", getSupabaseErrorMessage(e, "Load profile failed"));
       }
     }
     return this.user;
@@ -1755,7 +1775,9 @@ class AuthManager {
     }
 
     const { data: sessionData } = await supabase.auth.getSession();
-    const authUserId = sessionData?.session?.user?.id ?? null;
+    // Same fallback as me(): avoid skipping DB writes when getSession is slow/empty but we already have the auth id.
+    const authUserId =
+      sessionData?.session?.user?.id ?? this.user?.supabase_id ?? this.user?.id ?? null;
 
     // Keep id as auth user id when available so all consumers get the real user id
     const updatedUser = {
@@ -1772,56 +1794,76 @@ class AuthManager {
 
     // Persist to Supabase profiles table (per-user row keyed by auth user id)
     if (!authUserId) {
-      return this.user;
+      throw new Error("Not signed in — cannot save profile. Sign in again and retry.");
     }
+
+    const profileColumnMissing = (msg, columnName) => {
+      const m = String(msg || "");
+      if (!m) return false;
+      const esc = columnName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(
+        `(column|field)[^a-z0-9_]*${esc}|${esc}[^a-z0-9_]*(of relation|does not exist|unknown)|schema cache[^\\n']*${esc}|'${esc}'`,
+        "i"
+      ).test(m);
+    };
+
+    const profileData = {
+      full_name: data.full_name ?? data.display_name ?? updatedUser.full_name,
+      email: data.email ?? updatedUser.email,
+      avatar_url: data.avatar_url ?? updatedUser.avatar_url,
+      logo_url: data.logo_url !== undefined ? data.logo_url : updatedUser.logo_url,
+      company_name: data.company_name !== undefined ? data.company_name : updatedUser.company_name,
+      company_address: data.company_address !== undefined ? data.company_address : updatedUser.company_address,
+      currency: data.currency ?? updatedUser.currency ?? "USD",
+      timezone: data.timezone ?? updatedUser.timezone ?? "UTC",
+      invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? "classic",
+      invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
+      ...(data.business !== undefined ? { business: data.business } : {}),
+      updated_at: new Date().toISOString(),
+    };
+
+    Object.keys(profileData).forEach((key) => {
+      if (profileData[key] === undefined) delete profileData[key];
+    });
+
     try {
-      const profileData = {
-        full_name: data.full_name ?? data.display_name ?? updatedUser.full_name,
-        email: data.email ?? updatedUser.email,
-        avatar_url: data.avatar_url ?? updatedUser.avatar_url,
-        logo_url: data.logo_url !== undefined ? data.logo_url : updatedUser.logo_url,
-        company_name: data.company_name !== undefined ? data.company_name : updatedUser.company_name,
-        company_address: data.company_address !== undefined ? data.company_address : updatedUser.company_address,
-        currency: data.currency ?? updatedUser.currency ?? 'USD',
-        timezone: data.timezone ?? updatedUser.timezone ?? 'UTC',
-        invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? 'classic',
-        invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
-        ...(data.business !== undefined ? { business: data.business } : {}),
-        updated_at: new Date().toISOString(),
-      };
+      let { error } = await supabase.from("profiles").upsert({ id: authUserId, ...profileData }, { onConflict: "id" });
 
-      Object.keys(profileData).forEach(key => {
-        if (profileData[key] === undefined) delete profileData[key];
-      });
+      const errMsg = error?.message || "";
+      const stripBusiness =
+        !!error && Object.prototype.hasOwnProperty.call(profileData, "business") && profileColumnMissing(errMsg, "business");
+      const stripCompanyAddress =
+        !!error &&
+        Object.prototype.hasOwnProperty.call(profileData, "company_address") &&
+        profileColumnMissing(errMsg, "company_address");
 
-      let { error } = await supabase
-        .from('profiles')
-        .upsert(
-          { id: authUserId, ...profileData },
-          { onConflict: 'id' }
-        );
-
-      // If schema cache is missing a column (e.g. company_address not migrated), retry without it
-      const errMsg = error?.message || '';
-      if (error && /company_address|business|schema cache|column.*of 'profiles'/i.test(errMsg)) {
-        const { company_address: _addr, business: _biz, ...rest } = profileData;
-        const fallback = { id: authUserId, ...rest };
-        Object.keys(fallback).forEach(key => {
+      if (error && (stripBusiness || stripCompanyAddress)) {
+        const fallback = { ...profileData };
+        if (stripBusiness) delete fallback.business;
+        if (stripCompanyAddress) delete fallback.company_address;
+        Object.keys(fallback).forEach((key) => {
           if (fallback[key] === undefined) delete fallback[key];
         });
-        const retry = await supabase.from('profiles').upsert(fallback, { onConflict: 'id' });
-        if (retry.error) {
-          console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(retry.error, "Save profile failed"));
-        } else {
-          console.warn(
-            "Profile saved without optional column(s). Run scripts/add-profiles-business-jsonb.sql if business failed; add company_address if needed."
-          );
+        const retry = await supabase.from("profiles").upsert({ id: authUserId, ...fallback }, { onConflict: "id" });
+        error = retry.error;
+        if (!error) {
+          if (stripBusiness) {
+            console.warn(
+              "Profile saved without business column. Run scripts/add-profiles-business-jsonb.sql on your database."
+            );
+          }
+          if (stripCompanyAddress) {
+            console.warn("Profile saved without company_address (column missing on profiles table).");
+          }
         }
-      } else if (error) {
-        console.error("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
       }
-    } catch (error) {
-      console.warn("Failed to save profile to Supabase:", getSupabaseErrorMessage(error, "Save profile failed"));
+
+      if (error) {
+        throw new Error(getSupabaseErrorMessage(error, "Save profile failed"));
+      }
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error(getSupabaseErrorMessage(e, "Save profile failed"));
     }
 
     return this.user;

@@ -1,7 +1,11 @@
 /*
  * Scoped invoice layout + PDF/table engine helpers only.
  * Visual styling comes from templates (Tailwind / theme). Prevents preview vs download mismatch.
+ * A4 width (210mm) + @page A4; long content flows to multiple pages in print/PDF when breaks are not forbidden.
  */
+.invoice-template-doc.invoice-a4-root {
+    box-sizing: border-box;
+}
 .invoice-template-doc .invoice-grid-bill-dates {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -10,6 +14,20 @@
     margin-bottom: 1.5rem;
 }
 .invoice-template-doc .invoice-grid-dates {
+    text-align: right;
+}
+
+/* INVOICE + #: number — explicit right alignment for preview, print, and html2pdf (avoids heading/prose overrides). */
+.invoice-template-doc .invoice-doc-title-block {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    text-align: right;
+}
+.invoice-template-doc .invoice-doc-title-block h1,
+.invoice-template-doc .invoice-doc-title-block h2,
+.invoice-template-doc .invoice-doc-title-block p,
+.invoice-template-doc .invoice-doc-title-block .invoice-number {
     text-align: right;
 }
 .invoice-template-doc .invoice-layout {
@@ -39,16 +57,40 @@
 .invoice-template-doc .invoice-number {
     white-space: nowrap;
 }
+/* Paidly Pro — html2pdf-friendly table semantics */
+.invoice-template-doc .paidly-pro-template table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.invoice-template-doc .paidly-pro-template th,
+.invoice-template-doc .paidly-pro-template td {
+    vertical-align: top;
+}
+/* Unified invoice layout (all template variants) */
+.invoice-template-doc .unified-invoice-template table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.invoice-template-doc .unified-invoice-template th,
+.invoice-template-doc .unified-invoice-template td {
+    vertical-align: top;
+}
+.invoice-template-doc .unified-invoice-totals {
+    align-items: start;
+}
+.invoice-template-doc .unified-invoice-line-table {
+    table-layout: fixed;
+}
 .invoice-template-doc .currency-value {
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums lining-nums;
     font-feature-settings: 'tnum' 1, 'lnum' 1;
 }
+/* Keep compact legacy blocks together; long notes may span pages */
 .invoice-template-doc .header,
 .invoice-template-doc .client,
-.invoice-template-doc .summary,
-.invoice-template-doc .notes {
+.invoice-template-doc .summary {
     page-break-inside: avoid;
 }
 .invoice-template-doc .invoice > .client {
@@ -101,7 +143,9 @@
 .invoice-template-doc .pdf-content table.invoice-table tr,
 .invoice-template-doc .pdf-content table.items tr {
     display: table-row;
-    page-break-inside: avoid;
+    /* allow rows to split across pages for long line-item lists */
+    page-break-inside: auto;
+    break-inside: auto;
 }
 .invoice-template-doc .pdf-content table.invoice-table th,
 .invoice-template-doc .pdf-content table.invoice-table td,
@@ -148,34 +192,70 @@
     .invoice-template-doc .pdf-content table.items td {
         display: table-cell !important;
     }
-    .invoice-template-doc tr,
-    .invoice-template-doc td,
-    .invoice-template-doc th {
-        page-break-inside: avoid;
+    .invoice-template-doc .pdf-content td,
+    .invoice-template-doc .pdf-content th {
+        page-break-inside: auto;
+        break-inside: auto;
         white-space: normal;
         word-wrap: break-word;
     }
 }
 @page {
-    size: A4;
+    size: A4 portrait;
     margin: 20mm;
+}
+@media print {
+    .invoice-template-doc.invoice-a4-root {
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        background: #fff !important;
+    }
+    .invoice-template-doc.invoice-a4-root .pdf-content {
+        padding: 0 !important;
+    }
 }
 @media screen {
     .invoice-template-doc .pdf-page {
         max-width: 8.27in;
         margin: 0 auto;
     }
+    .invoice-template-doc.invoice-a4-root {
+        width: 100%;
+        max-width: 210mm;
+    }
 }
-@media (max-width: 640px) {
+/*
+ * Narrow screens only (not print): stack grid rows like the old flex-col layout — company / bill-to full width,
+ * then title + # / dates below, left-aligned to match body text. Desktop + print keep 2-col + right-aligned dates.
+ */
+@media screen and (max-width: 640px) {
     .invoice-template-doc .invoice-grid-bill-dates {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: 1rem;
     }
     .invoice-template-doc .header {
         flex-direction: column;
         gap: 12px;
     }
-    .invoice-template-doc .invoice-meta {
+    /* Match company + bill-to column: start-aligned on small viewports */
+    .invoice-template-doc .invoice-doc-title-block {
+        text-align: left;
+        justify-self: stretch;
+    }
+    .invoice-template-doc .invoice-doc-title-block h1,
+    .invoice-template-doc .invoice-doc-title-block h2,
+    .invoice-template-doc .invoice-doc-title-block p,
+    .invoice-template-doc .invoice-doc-title-block .invoice-number {
+        text-align: left;
+    }
+    .invoice-template-doc .invoice-grid-dates {
+        text-align: left;
+    }
+    .invoice-template-doc .invoice-meta:not(.invoice-doc-title-block) {
         text-align: left;
     }
     .invoice-template-doc .invoice-layout {

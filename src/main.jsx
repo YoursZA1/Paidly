@@ -6,6 +6,20 @@ import App from '@/App.jsx'
 import '@/index.css'
 import { logUnhandledError, getCurrentPage } from '@/utils/apiLogger'
 
+// WebKit/Chromium often emit this during layout (Radix, tables); it is harmless and floods the console.
+const RESIZE_OBSERVER_LOOP_RE = /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)/i
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'error',
+    (event) => {
+      if (RESIZE_OBSERVER_LOOP_RE.test(String(event?.message || ''))) {
+        event.stopImmediatePropagation()
+      }
+    },
+    true
+  )
+}
+
 class AppErrorBoundary extends React.Component {
     constructor(props) {
         super(props);

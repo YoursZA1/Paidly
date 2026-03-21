@@ -19,8 +19,8 @@ const InvoiceTemplateDocument = forwardRef(function InvoiceTemplateDocument(
   ref
 ) {
   const outerClass = embeddedChrome
-    ? "invoice-template-doc w-full min-w-0 text-card-foreground"
-    : "invoice-template-doc w-full min-w-0 max-w-[210mm] mx-auto rounded-lg border border-border bg-white shadow-sm overflow-x-auto print-container";
+    ? "invoice-template-doc invoice-a4-root w-full min-w-0 text-card-foreground"
+    : "invoice-template-doc invoice-a4-root w-full min-w-0 max-w-[210mm] mx-auto rounded-lg border border-border bg-white shadow-sm overflow-x-auto print-container";
 
   return (
     <Fragment>

@@ -4,6 +4,7 @@ import ClassicTemplate from "@/components/invoice/templates/ClassicTemplate";
 import ModernTemplate from "@/components/invoice/templates/ModernTemplate";
 import MinimalTemplate from "@/components/invoice/templates/MinimalTemplate";
 import BoldTemplate from "@/components/invoice/templates/BoldTemplate";
+import PaidlyProTemplate from "@/components/invoice/templates/PaidlyProTemplate";
 import {
   mapInvoiceDataForTemplate,
   normalizeInvoiceTemplateKey,
@@ -16,6 +17,7 @@ const TEMPLATES = {
   modern: ModernTemplate,
   minimal: MinimalTemplate,
   bold: BoldTemplate,
+  paidlypro: PaidlyProTemplate,
 };
 
 function safeFormatDate(dateStr) {
@@ -51,10 +53,11 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
   const resolvedUser = user
     ? {
         ...user,
+        // Profile / live branding first so Settings logo appears on invoices; snapshot as fallback.
         logo_url:
-          invoice?.owner_logo_url ||
           user.logo_url ||
           user.company_logo_url ||
+          invoice?.owner_logo_url ||
           invoice?.company?.logo_url ||
           null,
         company_name: invoice?.owner_company_name || user.company_name,

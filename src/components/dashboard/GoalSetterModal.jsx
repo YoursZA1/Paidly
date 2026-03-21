@@ -7,7 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { getCurrencySymbol } from '@/utils/currencyCalculations';
 import { formatCurrency } from '@/utils/currencyCalculations';
-import { upsertBusinessGoal } from '@/api/businessGoals';
+import { upsertBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
 import { useToast } from '@/components/ui/use-toast';
 import { getBusinessGoalYear } from '@/constants/businessGoalYear';
 import {
@@ -59,7 +59,7 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
   const confidence = getConfidence(Number(annualGoal), lastYearRevenue);
 
   const handleSave = async () => {
-    const userId = user?.id;
+    const userId = resolveBusinessGoalsUserId(user);
     if (!userId) {
       toast({ title: 'Not signed in', description: 'Sign in to set goals.', variant: 'destructive' });
       return;

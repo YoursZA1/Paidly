@@ -46,7 +46,7 @@ import KPICarousel from '@/components/dashboard/KPICarousel';
 import GoalProgress from '@/components/dashboard/GoalProgress';
 import { GoalSetterModal } from '@/components/dashboard/GoalSetterModal';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
-import { getBusinessGoal } from '@/api/businessGoals';
+import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
 import { getBusinessGoalYear } from '@/constants/businessGoalYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
@@ -337,17 +337,20 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       try {
+        const goalUserId = resolveBusinessGoalsUserId(authUser) || authUser.id;
         const [bankingSettled, goalSettled] = await Promise.allSettled([
           withTimeoutRetry(
             () => BankingDetail.list("-created_date", { limit: 50, maxWaitMs: 8000 }),
             20000,
             1
           ),
-          withTimeoutRetry(
-            () => getBusinessGoal(authUser.id, getBusinessGoalYear()),
-            15000,
-            1
-          ).catch(() => null),
+          goalUserId
+            ? withTimeoutRetry(
+                () => getBusinessGoal(goalUserId, getBusinessGoalYear()),
+                15000,
+                1
+              ).catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (cancelled || !mountedRef.current) return;
         const bankingDetailsData =
@@ -684,29 +687,37 @@ export default function Dashboard() {
     }
   }, [toast]); // useCallback
 
-  const loadUserData = useCallback(async (hasCachedData = false, authUserId = null) => {
+  const loadUserData = useCallback(async (hasCachedData = false, _authUserId = null) => {
     if (!hasCachedData) setIsLoadingState(true);
     try {
-      // Fetch profile, invoices, clients, expenses, payments, banking details, and business goal in parallel
-      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData, goalRow] = await withTimeoutRetry(() => Promise.all([
-        (async () => {
-          try {
-            return await User.me();
-          } catch {
-            return await User.restoreFromSupabaseSession();
-          }
-        })(),
-        Invoice.list("-created_date"),
-        Client.list("-created_date"),
-        Expense.list("-date", 100),
-        Payment.list().catch(() => []),
-        BankingDetail.list(),
-        authUserId ? getBusinessGoal(authUserId, getBusinessGoalYear()).catch(() => null) : Promise.resolve(null)
-      ]), 15000, 2);
+      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await withTimeoutRetry(
+        () =>
+          Promise.all([
+            (async () => {
+              try {
+                return await User.me();
+              } catch {
+                return await User.restoreFromSupabaseSession();
+              }
+            })(),
+            Invoice.list("-created_date"),
+            Client.list("-created_date"),
+            Expense.list("-date", 100),
+            Payment.list().catch(() => []),
+            BankingDetail.list(),
+          ]),
+        15000,
+        2
+      );
 
       if (!userResult) {
         throw new Error("Not authenticated");
       }
+
+      const goalUid = resolveBusinessGoalsUserId(userResult) || userResult.id;
+      const goalRow = goalUid
+        ? await getBusinessGoal(goalUid, getBusinessGoalYear()).catch(() => null)
+        : null;
 
       if (!mountedRef.current) return;
 
@@ -747,10 +758,11 @@ export default function Dashboard() {
   }, [toast]);
 
   const refreshBusinessGoal = useCallback(async () => {
-    if (!user?.id) return;
-    const goal = await getBusinessGoal(user.id, getBusinessGoalYear()).catch(() => null);
+    const uid = resolveBusinessGoalsUserId(user) || user?.id;
+    if (!uid) return;
+    const goal = await getBusinessGoal(uid, getBusinessGoalYear()).catch(() => null);
     setBusinessGoal(goal || null);
-  }, [user?.id]);
+  }, [user]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
   useSupabaseRealtime(
@@ -1409,6 +1421,16 @@ export default function Dashboard() {
     return sum;
   }, 0);
 
+  const goalYear = getBusinessGoalYear();
+  const revenueForGoalYear = invoices.reduce((sum, inv) => {
+    if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
+    const raw = inv.invoice_date || inv.created_date || inv.created_at;
+    if (!raw) return sum;
+    const y = new Date(raw).getFullYear();
+    if (Number.isNaN(y) || y !== goalYear) return sum;
+    return sum + (Number(inv.total_amount) || 0);
+  }, 0);
+
   const lastYear = new Date().getFullYear() - 1;
   const lastYearRevenue = invoices.reduce((sum, inv) => {
     if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
@@ -1425,7 +1447,7 @@ export default function Dashboard() {
   const revenueTarget =
     Number.isFinite(rawAnnualTarget) && rawAnnualTarget > 0 ? rawAnnualTarget : 0;
   const goalProgress =
-    revenueTarget > 0 ? Math.min(100, (totalRevenue / revenueTarget) * 100) : 0;
+    revenueTarget > 0 ? Math.min(100, (revenueForGoalYear / revenueTarget) * 100) : 0;
 
   const statusColors = {
     'paid': 'bg-status-paid/10 text-status-paid',
@@ -1957,7 +1979,7 @@ export default function Dashboard() {
               year={getBusinessGoalYear()}
               progress={goalProgress}
               revenueTarget={revenueTarget}
-              currentRevenue={totalRevenue}
+              currentRevenue={revenueForGoalYear}
               currency={userCurrency}
               onClick={() => setGoalSetterOpen(true)}
             />

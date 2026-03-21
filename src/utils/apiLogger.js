@@ -1,9 +1,9 @@
 /**
  * Central API logging: failed requests, slow responses, and unhandled errors.
  * Logs include page/endpoint context for easier debugging.
- * SLOW_MS: list/auth often hit maxWaitMs or cold Supabase (3–5s); only log when truly slow.
+ * SLOW_MS: cold Supabase / parallel list queries often 5–9s; log only above this to reduce noise.
  */
-const SLOW_MS = 6000;
+const SLOW_MS = 12000;
 
 export function getCurrentPage() {
   if (typeof window === "undefined" || !window.location) return "unknown";

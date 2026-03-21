@@ -24,13 +24,30 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 25
+  },
+
+  headerRight: {
+    width: "48%",
+    flexDirection: "column",
+    alignItems: "flex-end"
   },
 
   title: {
     fontSize: 24,
     color: "#F15A24",
-    fontWeight: "bold"
+    fontWeight: "bold",
+    textAlign: "right",
+    width: "100%"
+  },
+
+  invoiceNumberEmail: {
+    marginTop: 6,
+    fontSize: 10,
+    color: "#374151",
+    textAlign: "right",
+    width: "100%"
   },
 
   tableHeader: {
@@ -101,9 +118,9 @@ export default function InvoiceEmailPDF({ invoice, currency = "ZAR" }) {
             <Text>{invoice.address}</Text>
           </View>
 
-          <View>
+          <View style={styles.headerRight}>
             <Text style={styles.title}>INVOICE</Text>
-            <Text>#: {invoice.number}</Text>
+            <Text style={styles.invoiceNumberEmail}>{`#: ${invoice.number ?? ""}`}</Text>
           </View>
         </View>
 

@@ -78,6 +78,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#f97316",
+    textAlign: "right",
+    width: "100%",
   },
 
   invoiceNumber: {
@@ -86,6 +88,7 @@ const styles = StyleSheet.create({
     fontWeight: "normal",
     color: "#6b7280",
     textAlign: "right",
+    width: "100%",
   },
 
   brand: {

@@ -8,6 +8,8 @@ module.exports = {
   			sans: ['Inter', 'system-ui', 'sans-serif'],
   			mono: ['JetBrains Mono', 'monospace'],
   			display: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+  			/** Paidly Pro invoice — pairs with Inter fallbacks for “future nostalgic” UI */
+  			geist: ['"Geist Sans"', 'Inter', 'system-ui', 'sans-serif'],
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

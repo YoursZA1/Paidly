@@ -98,6 +98,9 @@ const DialogContent = React.forwardRef((allProps, ref) => {
     ...rest
   } = allProps
 
+  /** Stable id so Content `aria-describedby` always points at the injected sr-only Description (Radix may not merge when Content props were touched). */
+  const fallbackDescriptionId = React.useId()
+
   /** hasOwnProperty distinguishes explicit undefined (opt-out) from omitted; empty string matches legacy “not provided”. */
   const hasAriaDescribedbyKey = Object.prototype.hasOwnProperty.call(allProps, "aria-describedby")
   const rawAriaDescribedBy = hasAriaDescribedbyKey ? allProps["aria-describedby"] : undefined
@@ -105,23 +108,22 @@ const DialogContent = React.forwardRef((allProps, ref) => {
 
   const hasNonEmptyAriaDescribedBy =
     typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
-  const explicitAriaOptOut = hasAriaDescribedbyKey && rawAriaDescribedBy === undefined
 
   const hasTitle = hasDialogChild(children, DialogTitle)
   const hasDescription = hasDialogChild(children, DialogDescription)
+  /** Always inject sr-only description when missing — including when callers pass aria-describedby={undefined} (Radix still expects a Description node or it warns). */
   const injectFallbackDescription =
-    !hasDescription && !hasNonEmptyAriaDescribedBy && !explicitAriaOptOut
+    !hasDescription && !hasNonEmptyAriaDescribedBy
 
   /**
-   * Radix sets aria-describedby → descriptionId; if no Description mounts, DescriptionWarning fires.
-   * Omit or aria-describedby="": inject sr-only Description when no DialogDescription (same as pre-refactor).
-   * Non-empty string: custom id, no fallback.
-   * Explicit undefined: opt out — no fallback; Radix link cleared via spread below.
+   * Non-empty aria-describedby: caller controls the id.
+   * Fallback Description: wire explicitly — do not pass aria-describedby={undefined} (that clears the link).
+   * Otherwise omit the prop and let Radix handle Description supplied by the caller.
    */
   const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
     ? { "aria-describedby": rawAriaDescribedBy }
-    : explicitAriaOptOut
-      ? { "aria-describedby": undefined }
+    : injectFallbackDescription
+      ? { "aria-describedby": fallbackDescriptionId }
       : {}
 
   return (
@@ -145,7 +147,9 @@ const DialogContent = React.forwardRef((allProps, ref) => {
         {...props}>
         {!hasTitle && <DialogPrimitive.Title className="sr-only">Dialog</DialogPrimitive.Title>}
         {injectFallbackDescription && (
-          <DialogPrimitive.Description className="sr-only">Dialog content</DialogPrimitive.Description>
+          <DialogPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+            Dialog content
+          </DialogPrimitive.Description>
         )}
         {children}
         <DialogPrimitive.Close
