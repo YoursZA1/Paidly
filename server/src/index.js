@@ -120,60 +120,105 @@ const getAdminFromRequest = async (req, res) => {
 };
 
 /**
- * Browsers reject Access-Control-Allow-Origin: * together with Access-Control-Allow-Credentials: true.
- * Axios uses withCredentials: true, so the API must echo a specific allowed Origin.
+ * Browser → API: frontend (e.g. https://www.paidly.co.za) calls the API on another host (e.g. api.paidly.co.za).
+ * With credentials, CORS must echo a concrete Access-Control-Allow-Origin (never *).
+ *
+ * Default: strict allowlist only (no *.vercel.app / legacy app.* / :4173). Add staging or previews via CLIENT_ORIGIN
+ * (comma-separated full Origin strings, e.g. https://paidly-git-main.vercel.app,http://127.0.0.1:5173).
  */
-const LOCAL_VITE_ORIGINS = new Set([
+const SAAS_CORS_ORIGINS = [
+  "https://paidly.co.za",
+  "https://www.paidly.co.za",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-]);
+];
 
-function isPaidlyPublicOrigin(origin) {
-  if (!origin || typeof origin !== "string") return false;
-  try {
-    const u = new URL(origin);
-    const host = u.hostname.toLowerCase();
-    if (
-      host === "paidly.co.za" ||
-      host === "www.paidly.co.za" ||
-      host === "app.paidly.co.za" ||
-      host === "www.app.paidly.co.za"
-    ) {
-      return u.protocol === "https:" || u.protocol === "http:";
-    }
-    if (host.endsWith(".vercel.app") && u.protocol === "https:") return true;
-    if (LOCAL_VITE_ORIGINS.has(origin)) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
+const DEFAULT_CORS_ALLOW_SET = new Set(SAAS_CORS_ORIGINS);
+
+/** Temporary debug: Access-Control-Allow-Origin: * (cannot be combined with credentials; unset after testing). */
+const CORS_DEBUG_ALLOW_ALL = /^(1|true|yes)$/i.test(
+  String(process.env.CORS_DEBUG_ALLOW_ALL ?? "").trim()
+);
 
 function createCorsOriginHandler() {
   const raw = (process.env.CLIENT_ORIGIN || "").trim();
   if (raw && raw !== "*") {
-    const allowed = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const allowed = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
     return (origin, callback) => {
       if (!origin) return callback(null, true);
-      callback(null, allowed.includes(origin));
+      callback(null, allowed.has(origin));
     };
   }
   return (origin, callback) => {
     if (!origin) return callback(null, true);
-    callback(null, isPaidlyPublicOrigin(origin));
+    callback(null, DEFAULT_CORS_ALLOW_SET.has(origin));
   };
 }
+
+/** Sync mirror of createCorsOriginHandler (for early OPTIONS replies). */
+function isCorsOriginAllowed(origin) {
+  if (!origin) return true;
+  if (typeof origin !== "string") return false;
+  const raw = (process.env.CLIENT_ORIGIN || "").trim();
+  if (raw && raw !== "*") {
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .includes(origin);
+  }
+  return DEFAULT_CORS_ALLOW_SET.has(origin);
+}
+
+/** Must stay aligned with cors({ methods }) below; credentialed clients need a concrete Allow-Origin. */
+const CORS_ALLOW_METHODS =
+  "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD";
 
 app.use(enforceHttps());
 app.use(securityHeaders());
 app.use(auditHttpResponses(getClientIp));
 
-app.use(cors({
-  origin: createCorsOriginHandler(),
-  credentials: true,
-}));
+// Browsers send OPTIONS first (preflight). Respond before route handlers; echo Origin when credentials are used.
+app.use((req, res, next) => {
+  if (req.method !== "OPTIONS") return next();
+  if (CORS_DEBUG_ALLOW_ALL) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+    const requested = req.headers["access-control-request-headers"];
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      requested || "content-type, authorization, accept"
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    return res.status(204).end();
+  }
+  const origin = req.headers.origin;
+  if (origin) {
+    if (!isCorsOriginAllowed(origin)) {
+      return res.sendStatus(403);
+    }
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+    const requested = req.headers["access-control-request-headers"];
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      requested || "content-type, authorization, accept"
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    return res.status(204).end();
+  }
+  return next();
+});
+
+app.use(
+  cors({
+    origin: CORS_DEBUG_ALLOW_ALL ? "*" : createCorsOriginHandler(),
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    // * and Access-Control-Allow-Credentials: true cannot both be sent (browser will reject).
+    credentials: !CORS_DEBUG_ALLOW_ALL,
+  })
+);
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({
@@ -1686,11 +1731,17 @@ app.listen(port, "0.0.0.0", () => {
   const url = `http://localhost:${port}`;
   console.log(`Backend running at ${url}`);
   console.log(`  Health check: ${url}/api/health`);
+  if (CORS_DEBUG_ALLOW_ALL) {
+    console.warn(
+      "[cors] CORS_DEBUG_ALLOW_ALL is on: Access-Control-Allow-Origin: * and credentials disabled. Remove for production."
+    );
+  }
   if (process.env.NODE_ENV === "production") {
     const co = (process.env.CLIENT_ORIGIN || "").trim();
     if (!co || co === "*") {
       console.log(
-        "[cors] CLIENT_ORIGIN unset: default allowlist (www.paidly.co.za, paidly.co.za, legacy app.* hosts, *.vercel.app, local Vite). Set CLIENT_ORIGIN=comma,separated,origins to override."
+        "[cors] Strict default allowlist (unset CLIENT_ORIGIN): %s. For Vercel preview / :4173 / app host, set CLIENT_ORIGIN=comma-separated full Origin URLs.",
+        JSON.stringify(SAAS_CORS_ORIGINS)
       );
     }
   }
