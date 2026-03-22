@@ -1,7 +1,12 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('ERROR HANDLING', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Empty states render without crashing', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 

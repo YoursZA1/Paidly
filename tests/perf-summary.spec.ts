@@ -1,7 +1,12 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('PERFORMANCE SUMMARY (smoke)', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Measure domcontentloaded times for key pages', async ({ page, baseURL }, testInfo) => {
     test.skip(!baseURL, 'baseURL not set');
 

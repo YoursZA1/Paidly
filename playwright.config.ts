@@ -1,17 +1,35 @@
 import { defineConfig, devices } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
-const chromiumExecutablePath =
-  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
-  '.playwright-browsers/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+
+/** Optional pinned Chromium (e.g. PLAYWRIGHT_BROWSERS_PATH). Omit when missing so @playwright/test uses its bundled browser. */
+function resolveChromiumExecutable(): string | undefined {
+  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?.trim();
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+  const fallback = path.join(
+    process.cwd(),
+    '.playwright-browsers/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
+  );
+  if (fs.existsSync(fallback)) return fallback;
+  return undefined;
+}
+
+const chromiumExecutablePath = resolveChromiumExecutable();
+
+/** Default headless (CI-friendly). Run headed locally: `PLAYWRIGHT_HEADED=1 npx playwright test`. */
+const headless = process.env.PLAYWRIGHT_HEADED === '1' ? false : true;
+
+const launchOptions = chromiumExecutablePath
+  ? { executablePath: chromiumExecutablePath }
+  : {};
 
 /**
- * Stability-focused config:
- * - 30s timeouts
- * - retries in CI
- * - trace/video/screenshot on failure
- * - HTML reporter
- * - global auth via a setup project + storageState
+ * Product-style E2E defaults:
+ * - Strict timeouts, retries in CI, traces on retry
+ * - Optional webServer (Vite) unless PLAYWRIGHT_SKIP_WEBSERVER=1
+ * - Global auth: tests/auth.setup.ts → playwright/.auth/user.json
  */
 export default defineConfig({
   testDir: './tests',
@@ -32,14 +50,39 @@ export default defineConfig({
     baseURL,
     actionTimeout: 30_000,
     navigationTimeout: 30_000,
-    headless: false,
-    launchOptions: {
-      executablePath: chromiumExecutablePath,
-    },
+    headless,
+    launchOptions,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // Video needs ffmpeg; keep off unless PLAYWRIGHT_VIDEO=1 (run `playwright install` for full deps).
+    video: process.env.PLAYWRIGHT_VIDEO === '1' ? 'retain-on-failure' : 'off',
   },
+  ...(process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1'
+    ? {}
+    : {
+        webServer:
+          process.env.PLAYWRIGHT_START_API === '1'
+            ? [
+                {
+                  command: 'npm run dev',
+                  url: baseURL,
+                  reuseExistingServer: true,
+                  timeout: 120_000,
+                },
+                {
+                  command: 'npm run server',
+                  url: 'http://localhost:5179/api/health',
+                  reuseExistingServer: true,
+                  timeout: 90_000,
+                },
+              ]
+            : {
+                command: 'npm run dev',
+                url: baseURL,
+                reuseExistingServer: true,
+                timeout: 120_000,
+              },
+      }),
   projects: [
     {
       name: 'setup',
@@ -79,4 +122,3 @@ export default defineConfig({
   ],
   outputDir: 'playwright/test-results',
 });
-

@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
 import { attachConsoleGuards, expectNoConsoleErrors } from './utils/assertions';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('CASH FLOW', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Income vs expenses display and charts render', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 

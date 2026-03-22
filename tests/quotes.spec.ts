@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
 import { uniqueName } from './utils/data';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('QUOTES', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Create quote, validate calculations, convert to invoice', async ({ page, baseURL, sidebar }) => {
     test.skip(!baseURL, 'baseURL not set');
 
@@ -21,7 +26,7 @@ test.describe('QUOTES', () => {
     }
 
     const heading = page.getByRole('heading', { name: /new quote|create quote|quote/i }).first();
-    await expect(heading).toBeVisible({ timeout: 30_000 }).catch(() => {});
+    await expect(heading).toBeVisible({ timeout: 30_000 });
 
     const clientTrigger = page.getByTestId('quote-client').or(page.getByText(/choose a client/i).first());
     if (await clientTrigger.isVisible().catch(() => false)) {
@@ -41,8 +46,8 @@ test.describe('QUOTES', () => {
     if (await qtyInput.isVisible().catch(() => false)) await qtyInput.fill('2');
     if (await priceInput.isVisible().catch(() => false)) await priceInput.fill('50');
 
-    // Calculation sanity: total should include 100 somewhere.
-    await expect(page.getByText(/\b100\b/).first()).toBeVisible({ timeout: 30_000 }).catch(() => {});
+    // Calculation sanity: 2 × 50 = 100 (when line items are visible).
+    await expect(page.getByText(/\b100\b/).first()).toBeVisible({ timeout: 30_000 });
 
     const save = page.getByTestId('quote-save').or(page.getByRole('button', { name: /save|create/i })).first();
     if (await save.isVisible().catch(() => false)) await save.click();

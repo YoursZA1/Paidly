@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS, SIDEBAR_LABELS } from './utils/testConfig';
 import { attachConsoleGuards, expectNoConsoleErrors } from './utils/assertions';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('NAVIGATION', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Sidebar navigation routes and loads for all pages', async ({ page, baseURL, sidebar }) => {
     test.skip(!baseURL, 'baseURL not set');
     test.slow();

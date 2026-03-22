@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { APP_PATHS } from './utils/testConfig';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 type StepResult = { name: string; ok: boolean; details?: string };
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing ${name}`);
-  return v;
+function pickE2ECredentials(): { email: string; password: string } {
+  const email = (process.env.E2E_EMAIL || process.env.E2E_USER_EMAIL || '').trim();
+  const password = (process.env.E2E_PASSWORD || process.env.E2E_USER_PASSWORD || '').trim();
+  if (!email || !password) {
+    throw new Error('Missing E2E_EMAIL / E2E_PASSWORD (or E2E_USER_EMAIL / E2E_USER_PASSWORD)');
+  }
+  return { email, password };
 }
 
 async function runStep(results: StepResult[], name: string, fn: () => Promise<void>) {
@@ -23,12 +27,16 @@ async function runStep(results: StepResult[], name: string, fn: () => Promise<vo
   }
 }
 
-test('MANUAL FLOW: bank -> service -> quote -> invoice preview/download -> note', async ({ page, baseURL }) => {
+test.describe('MANUAL FLOW', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
+  test('bank -> service -> quote -> invoice preview/download -> note', async ({ page, baseURL }) => {
   test.setTimeout(8 * 60_000);
   test.skip(!baseURL, 'baseURL not set');
 
-  const email = requireEnv('E2E_EMAIL');
-  const password = requireEnv('E2E_PASSWORD');
+  const { email, password } = pickE2ECredentials();
   const results: StepResult[] = [];
 
   const ts = Date.now();
@@ -40,8 +48,8 @@ test('MANUAL FLOW: bank -> service -> quote -> invoice preview/download -> note'
   await page.goto(`${baseURL}${APP_PATHS.dashboard}`, { waitUntil: 'domcontentloaded' });
   if (/\/Login/i.test(page.url())) {
     await runStep(results, '0) Login fallback', async () => {
-      await page.locator('input[type="email"]').fill(email);
-      await page.locator('input[type="password"]').fill(password);
+      await page.locator('#landing-login-email').fill(email);
+      await page.locator('#landing-login-password').fill(password);
       await page.getByRole('button', { name: /^sign in$/i }).click();
       await page.waitForURL((u) => !/\/Login/i.test(u.toString()), { timeout: 45_000 });
     });
@@ -212,5 +220,6 @@ test('MANUAL FLOW: bank -> service -> quote -> invoice preview/download -> note'
   const passCount = results.filter((r) => r.ok).length;
   const failCount = results.length - passCount;
   console.log(`TOTAL: ${passCount} passed, ${failCount} failed`);
+  });
 });
 

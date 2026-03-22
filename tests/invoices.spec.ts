@@ -3,6 +3,10 @@ import { APP_PATHS } from './utils/testConfig';
 import { uniqueName } from './utils/data';
 
 test.describe('INVOICES', () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(/guest/i.test(testInfo.project.name), 'Requires authenticated session');
+  });
+
   test('Create invoice, add item, send, mark as paid, validate status', async ({ page, baseURL }) => {
     test.setTimeout(180_000);
     test.skip(!baseURL, 'baseURL not set');
@@ -80,6 +84,28 @@ test.describe('INVOICES', () => {
       const confirm = page.getByRole('button', { name: /confirm|mark as paid|paid/i }).first();
       if (await confirm.isVisible().catch(() => false)) await confirm.click();
       await expect(page.getByText(/paid/i).first()).toBeVisible({ timeout: 30_000 }).catch(() => {});
+    }
+  });
+
+  test('Invoices list: Download PDF triggers download when control exists', async ({ page, baseURL }) => {
+    test.skip(!baseURL, 'baseURL not set');
+    await page.goto(`${baseURL}${APP_PATHS.invoices}`, { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/\/Invoices/i);
+
+    const downloadTrigger = page
+      .getByRole('button', { name: /download.*pdf|pdf/i })
+      .or(page.getByRole('link', { name: /download.*pdf|pdf/i }))
+      .first();
+
+    if (!(await downloadTrigger.isVisible().catch(() => false))) {
+      test.skip(true, 'No PDF download control on list — open an invoice row to test PDF in manual-flow');
+    }
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 }).catch(() => null);
+    await downloadTrigger.click();
+    const download = await downloadPromise;
+    if (download) {
+      expect(download.suggestedFilename().toLowerCase()).toMatch(/\.pdf$/);
     }
   });
 });

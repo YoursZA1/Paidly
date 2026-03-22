@@ -1,7 +1,12 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('BONUS: Performance + Mobile', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Dashboard loads under 2s (best-effort, local)', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 

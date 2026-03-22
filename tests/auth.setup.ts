@@ -5,19 +5,21 @@ import path from 'node:path';
 const AUTH_DIR = path.join(process.cwd(), 'playwright', '.auth');
 const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'user.json');
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) {
-    throw new Error(
-      `Missing ${name}. Set it in your shell or CI secrets (do not hardcode credentials in the repo).`
-    );
-  }
-  return v;
+function pickEnv(primary: string, alias: string): string | undefined {
+  const a = process.env[primary]?.trim();
+  if (a) return a;
+  const b = process.env[alias]?.trim();
+  return b || undefined;
 }
 
 setup('authenticate (global)', async ({ page, baseURL }) => {
-  const email = requireEnv('E2E_EMAIL');
-  const password = requireEnv('E2E_PASSWORD');
+  const email = pickEnv('E2E_EMAIL', 'E2E_USER_EMAIL');
+  const password = pickEnv('E2E_PASSWORD', 'E2E_USER_PASSWORD');
+  if (!email || !password) {
+    throw new Error(
+      'Missing E2E_EMAIL / E2E_PASSWORD (or E2E_USER_EMAIL / E2E_USER_PASSWORD). Set in shell or CI secrets — never commit real passwords.'
+    );
+  }
 
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 
@@ -27,9 +29,9 @@ setup('authenticate (global)', async ({ page, baseURL }) => {
   await expect(page).toHaveURL(/\/Login/i);
   await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
 
-  // Use accessible roles when possible; fall back to type=password locator.
-  await page.locator('input[type="email"]').fill(email);
-  const passwordInput = page.locator('input[type="password"]');
+  // /Login shows waitlist + login modal; avoid ambiguous input[type="email"].
+  await page.locator('#landing-login-email').fill(email);
+  const passwordInput = page.locator('#landing-login-password');
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(password);
 

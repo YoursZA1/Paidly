@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
 import path from 'node:path';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('SETTINGS', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Update company profile, upload logo, change preferences (best-effort)', async ({ page, baseURL }, testInfo) => {
     test.skip(!baseURL, 'baseURL not set');
 

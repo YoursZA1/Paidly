@@ -4,10 +4,8 @@ import { AppShell } from './pages/AppShell';
 
 test.describe('Paidly deep dive', () => {
   test.describe('Unauthenticated smoke', () => {
-    test.beforeEach(async ({}, testInfo) => {
-      if (!testInfo.project.name.includes('guest')) {
-        testInfo.skip(true, 'Run unauthenticated smoke only on *-guest projects');
-      }
+    test.beforeEach(({}, testInfo) => {
+      test.skip(!/guest/i.test(testInfo.project.name), 'Run unauthenticated smoke only on *-guest projects');
     });
 
     // Project defaults use an authenticated storageState; force logged-out for these tests.
@@ -71,10 +69,8 @@ test.describe('Paidly deep dive', () => {
   });
 
   test.describe('Authenticated happy path', () => {
-    test.beforeEach(async ({}, testInfo) => {
-      if (testInfo.project.name.includes('guest')) {
-        testInfo.skip(true, 'Run authenticated tests only on auth projects');
-      }
+    test.beforeEach(({}, testInfo) => {
+      test.skip(/guest/i.test(testInfo.project.name), 'Run authenticated tests only on auth projects');
     });
 
     test('Dashboard loads', async ({ page, baseURL }) => {

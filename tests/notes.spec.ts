@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
 import { uniqueName } from './utils/data';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('NOTES', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Create, edit, delete note', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 

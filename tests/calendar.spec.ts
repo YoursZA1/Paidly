@@ -1,8 +1,12 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
-import { uniqueName } from './utils/data';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('CALENDAR', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Calendar loads and is usable (smoke)', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 
@@ -20,8 +24,3 @@ test.describe('CALENDAR', () => {
     }
   });
 });
-
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-

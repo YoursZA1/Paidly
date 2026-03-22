@@ -3,6 +3,21 @@ import { APP_PATHS } from './utils/testConfig';
 import { attachConsoleGuards, expectNoConsoleErrors } from './utils/assertions';
 
 test.describe('DASHBOARD', () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      /guest/i.test(testInfo.project.name),
+      'Dashboard requires auth (non-guest projects use playwright/.auth/user.json)'
+    );
+  });
+
+  test('shows Total Revenue and Invoices-related content', async ({ page, baseURL }) => {
+    test.skip(!baseURL, 'baseURL not set');
+    await page.goto(`${baseURL}${APP_PATHS.dashboard}`, { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/\/Dashboard/i);
+    await expect(page.getByText('Total Revenue').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/invoices/i).first()).toBeVisible({ timeout: 30_000 });
+  });
+
   test('Dashboard loads stats/cards and shows no console errors', async ({ page, baseURL }) => {
     test.skip(!baseURL, 'baseURL not set');
 

@@ -13,9 +13,9 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    // On localhost the Email label is not reliably wired to the input; prefer type=email.
-    this.email = page.locator('input[type="email"]');
-    this.password = page.locator('input[type="password"]');
+    // Login page also renders waitlist email — use modal-specific ids.
+    this.email = page.locator('#landing-login-email');
+    this.password = page.locator('#landing-login-password');
     this.signInButton = page.getByRole('button', { name: /^sign in$/i });
     this.showPasswordButton = page.getByRole('button', { name: /show password/i });
     this.forgotPasswordButton = page.getByRole('button', { name: /forgot your password/i });

@@ -1,14 +1,18 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('AUTHENTICATION', () => {
   test.describe('Login', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
 
     test('valid credentials redirect to Dashboard', async ({ page, baseURL, loginPage }, testInfo) => {
-      const email = process.env.E2E_EMAIL;
-      const password = process.env.E2E_PASSWORD;
-      test.skip(!email || !password, 'E2E_EMAIL/E2E_PASSWORD not set');
+      const email = process.env.E2E_EMAIL || process.env.E2E_USER_EMAIL;
+      const password = process.env.E2E_PASSWORD || process.env.E2E_USER_PASSWORD;
+      test.skip(
+        !email || !password,
+        'E2E_EMAIL / E2E_PASSWORD (or E2E_USER_EMAIL / E2E_USER_PASSWORD) not set'
+      );
 
       await loginPage.goto(baseURL!);
       await loginPage.login(email!, password!);
@@ -30,6 +34,10 @@ test.describe('AUTHENTICATION', () => {
   });
 
   test.describe('Session persistence', () => {
+    test.beforeEach(({}, testInfo) => {
+      skipGuestProject(testInfo);
+    });
+
     test('session persists across pages (auth storageState)', async ({ page, baseURL, sidebar }) => {
       test.skip(!baseURL, 'baseURL not set');
 

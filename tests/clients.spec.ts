@@ -1,8 +1,13 @@
 import { test, expect } from './utils/fixtures';
 import { APP_PATHS } from './utils/testConfig';
 import { uniqueName } from './utils/data';
+import { skipGuestProject } from './utils/skipGuestProject';
 
 test.describe('CLIENTS', () => {
+  test.beforeEach(({}, testInfo) => {
+    skipGuestProject(testInfo);
+  });
+
   test('Create client (with input validation)', async ({ page, baseURL }) => {
     test.setTimeout(180_000);
     test.skip(!baseURL, 'baseURL not set');
