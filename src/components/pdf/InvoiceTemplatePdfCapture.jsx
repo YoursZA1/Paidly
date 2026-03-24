@@ -7,7 +7,8 @@ import BoldTemplate from "@/components/invoice/templates/BoldTemplate";
 import PaidlyProTemplate from "@/components/invoice/templates/PaidlyProTemplate";
 import {
   mapInvoiceDataForTemplate,
-  normalizeInvoiceTemplateKey,
+  resolveInvoiceTemplateKey,
+  DOCUMENT_TEMPLATE_KEY,
 } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
@@ -45,10 +46,7 @@ function normalizeClientForTemplate(client) {
  * Props for Classic / Modern / Minimal / Bold — same resolution as preview and Invoice PDF page.
  */
 export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, bankingDetail) {
-  const templateKey =
-    normalizeInvoiceTemplateKey(invoice?.invoice_template) ||
-    normalizeInvoiceTemplateKey(user?.invoice_template) ||
-    "classic";
+  const templateKey = resolveInvoiceTemplateKey(invoice?.invoice_template, user?.invoice_template);
 
   const resolvedUser = user
     ? {
@@ -59,6 +57,7 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
           user.company_logo_url ||
           invoice?.owner_logo_url ||
           invoice?.company?.logo_url ||
+          invoice?.company?.company_logo_url ||
           null,
         company_name: invoice?.owner_company_name || user.company_name,
         company_address: invoice?.owner_company_address || user.company_address,
@@ -67,14 +66,19 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
       }
     : {
         company_name: invoice?.owner_company_name || "Company",
-        logo_url: invoice?.company?.logo_url || invoice?.owner_logo_url || null,
+        logo_url:
+          invoice?.owner_logo_url ||
+          invoice?.company?.logo_url ||
+          invoice?.company?.company_logo_url ||
+          null,
         company_address: invoice?.owner_company_address || "",
         currency: invoice?.currency || invoice?.owner_currency || "ZAR",
         invoice_template: templateKey,
         invoice_header: "",
       };
 
-  const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
+  const TemplateComponent =
+    templateKey === DOCUMENT_TEMPLATE_KEY ? TEMPLATES.classic : TEMPLATES[templateKey] || TEMPLATES.classic;
   const templateInvoice = mapInvoiceDataForTemplate(invoice);
   const userCurrency =
     resolvedUser?.currency || invoice?.currency || invoice?.owner_currency || "ZAR";

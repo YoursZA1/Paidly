@@ -1,118 +1,38 @@
 import PropTypes from "prop-types";
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, DollarSign, Calendar, Plus, Trash2, Check, ChevronsUpDown, Save, Calculator } from "lucide-react";
+import { ArrowRight, DollarSign, Calendar, Plus, Trash2, Save, Calculator, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { cn } from "@/lib/utils";
 import { formatCurrency } from "../CurrencySelector";
-import { User, Service } from "@/api/entities";
+import { Service } from "@/api/entities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "../services/ServiceForm";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
-
-// Mock User object for demonstration purposes
-const MockUser = {
-    me: async () => {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        return {
-            id: 'user123',
-            name: 'John Doe',
-            currency: 'USD',
-            location: 'USA'
-        };
-    }
-};
-
-const ServiceCombobox = ({ services, value, onSelect, onAddNew }) => {
-    const [open, setOpen] = useState(false)
-    const selectedService = services.find(s => s.name.toLowerCase() === value?.toLowerCase());
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between h-10 rounded-lg font-normal"
-                >
-                    {value
-                        ? services.find((s) => s.name.toLowerCase() === value.toLowerCase())?.name
-                        : "Select a service..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command>
-                    <CommandInput placeholder="Search service..." />
-                    <CommandEmpty>No service found.</CommandEmpty>
-                    <CommandList>
-                        <CommandGroup>
-                            {services.map((service) => (
-                                <CommandItem
-                                    key={service.id}
-                                    value={service.name}
-                                    onSelect={(currentValue) => {
-                                        const selected = services.find(s => s.name.toLowerCase() === currentValue.toLowerCase());
-                                        onSelect(selected);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            value === service.name ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {service.name}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                        <CommandGroup>
-                            <CommandItem
-                                onSelect={() => {
-                                    onAddNew();
-                                    setOpen(false);
-                                }}
-                                className="cursor-pointer"
-                            >
-                                <Plus className="mr-2 h-4 w-4" />
-                                <span>Add new service</span>
-                            </CommandItem>
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    )
-}
+import { useAuth } from "@/components/auth/AuthContext";
+import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
+import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
+import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 
 export default function QuoteDetails({ 
     quoteData, 
     setQuoteData, 
     clients, 
     services,
-    setServices, 
     onNext,
     isEditing = false,
     showNextButton = true,
     taxRateInputRef,
+    onRefreshCatalog,
 }) {
-    const [user, setUser] = useState(null);
+    const queryClient = useQueryClient();
+    const { user: authUser } = useAuth();
     const [expandedItems, setExpandedItems] = useState([]); // Track which items show optional fields
     const [isAddingService, setIsAddingService] = useState(false);
     const [currentServiceItemIndex, setCurrentServiceItemIndex] = useState(null);
@@ -121,6 +41,7 @@ export default function QuoteDetails({
     const [quickItemRate, setQuickItemRate] = useState('');
     const [quickAddLine, setQuickAddLine] = useState('');
     const quickItemInputRef = useRef(null);
+    const [quickSavedOpen, setQuickSavedOpen] = useState(false);
 
     /** Parse single-line input like "3x Graphic Design R500" or "Logo Design 100" */
     const parseQuickAddLine = (line) => {
@@ -145,16 +66,10 @@ export default function QuoteDetails({
     };
     
     useEffect(() => {
-        const loadUser = async () => {
-            try {
-                const userData = await User.me();
-                setUser(userData);
-            } catch (error) {
-                console.error("Error loading user:", error);
-            }
-        };
-        loadUser();
-    }, []);
+        if (authUser?.default_tax_rate && !quoteData.tax_rate) {
+            setQuoteData((prev) => ({ ...prev, tax_rate: authUser.default_tax_rate }));
+        }
+    }, [authUser?.default_tax_rate, authUser?.id, quoteData.tax_rate, setQuoteData]);
 
     useEffect(() => {
         if (quickItemInputRef.current) {
@@ -170,8 +85,9 @@ export default function QuoteDetails({
             (service) => service.name?.toLowerCase() === name
         );
 
-        if (matchedService?.rate !== undefined && matchedService?.rate !== null) {
-            setQuickItemRate(String(matchedService.rate));
+        const autoRate = getCatalogItemRate(matchedService);
+        if (autoRate > 0 && quickItemRate === "") {
+            setQuickItemRate(String(autoRate));
         }
     }, [quickItemName, quickItemRate, services]);
 
@@ -203,7 +119,7 @@ export default function QuoteDetails({
         
         // ===== RATE ADJUSTMENT VALIDATION =====
         if (field === 'unit_price') {
-            const editCheck = canEditLineItemRate(updatedItems[index], user);
+            const editCheck = canEditLineItemRate(updatedItems[index], authUser);
             if (!editCheck.canEdit) {
                 alert(editCheck.reason || 'Your plan does not allow editing rates. Please upgrade to modify line item prices.');
                 return;
@@ -215,7 +131,7 @@ export default function QuoteDetails({
                 updatedItems[index],
                 originalRate,
                 newRate,
-                user
+                authUser
             );
             
             if (!validation.allowed) {
@@ -241,42 +157,49 @@ export default function QuoteDetails({
     const handleServiceSelect = (index, service) => {
         const updatedItems = [...(quoteData.items || [])];
         const currentItem = updatedItems[index];
-        
-        // Use CatalogSyncService to map catalog item to line item
-        const mappedResult = mapCatalogToLineItem(
-            service,
-            currentItem.quantity || 1,
-            {
-                existingTaxRate: currentItem.item_tax_rate || 0,
-                userId: user?.id || null
-            }
-        );
-        
-        if (!mappedResult?.success) {
-            console.error('Error mapping catalog item:', mappedResult?.error);
-            alert(mappedResult?.error || 'Unable to select this item. Please try again.');
-            return;
+        const normalized = normalizeCatalogItemForMap(service);
+        if (!normalized) return;
+
+        const qty = Math.max(1, Number(currentItem.quantity) || 1);
+        const mappedResult = mapCatalogToLineItem(normalized, qty, {
+            existingTaxRate: parseFloat(currentItem.item_tax_rate) || 0,
+            userId: authUser?.id || null,
+        });
+
+        if (mappedResult?.success) {
+            updatedItems[index] = {
+                ...currentItem,
+                ...mappedResult.lineItem,
+            };
+        } else {
+            const rate = getCatalogItemRate(normalized);
+            const itemTaxRate = parseFloat(currentItem.item_tax_rate) || 0;
+            const totalPrice = qty * rate;
+            updatedItems[index] = {
+                ...currentItem,
+                service_name: normalized.name,
+                description: normalized.description || currentItem.description || "",
+                quantity: qty,
+                unit_price: rate,
+                total_price: totalPrice,
+                item_type: normalized.item_type || currentItem.item_type,
+                catalog_item_id: normalized.id,
+                item_tax_rate: itemTaxRate,
+                item_tax_amount: totalPrice * (itemTaxRate / 100),
+            };
         }
-        
-        // Auto-expand description if service has one
+
         if (service.description && !expandedItems.includes(index)) {
             setExpandedItems([...expandedItems, index]);
         }
-        
-        // Merge mapped fields with existing item (preserves any user-set values)
-        updatedItems[index] = {
-            ...currentItem,
-            ...mappedResult.lineItem
-        };
-        
+
         updateTotals(updatedItems);
     };
     
     const handleSaveNewService = async (serviceData) => {
         try {
             const newService = await Service.create(serviceData);
-            const updatedServices = await Service.list("-created_date");
-            if (setServices) setServices(updatedServices);
+            await invalidateServicesCatalog(queryClient);
             if (currentServiceItemIndex !== null) {
                 handleServiceSelect(currentServiceItemIndex, newService);
             }
@@ -317,13 +240,15 @@ export default function QuoteDetails({
         let nextItem = null;
 
         if (matchedService) {
-            const mappedResult = mapCatalogToLineItem(matchedService, quantity, {
-                existingTaxRate: 0,
-                userId: user?.id || null
-            });
-
-            if (mappedResult?.success) {
-                nextItem = { ...mappedResult.lineItem };
+            const normalized = normalizeCatalogItemForMap(matchedService);
+            if (normalized) {
+                const mappedResult = mapCatalogToLineItem(normalized, quantity, {
+                    existingTaxRate: 0,
+                    userId: authUser?.id || null,
+                });
+                if (mappedResult?.success) {
+                    nextItem = { ...mappedResult.lineItem };
+                }
             }
         }
 
@@ -423,7 +348,47 @@ export default function QuoteDetails({
                    items.every(item => item.service_name && item.quantity > 0 && item.unit_price >= 0) &&
                    quoteData.valid_until;
     
-    const userCurrency = user?.currency || 'USD';
+    const userCurrency = quoteData?.currency || authUser?.currency || "USD";
+
+    const appendLineFromSavedCatalog = (catalogItem) => {
+        const normalized = normalizeCatalogItemForMap(catalogItem);
+        if (!normalized) return;
+        const quantity = Math.max(1, Number(quickItemQuantity) > 0 ? Number(quickItemQuantity) : 1);
+        const mappedResult = mapCatalogToLineItem(normalized, quantity, {
+            existingTaxRate: 0,
+            userId: authUser?.id || null,
+        });
+
+        let nextItem;
+        if (mappedResult?.success) {
+            nextItem = { ...mappedResult.lineItem };
+        } else {
+            const rate = getCatalogItemRate(normalized);
+            nextItem = {
+                service_name: normalized.name,
+                description: normalized.description || "",
+                quantity,
+                unit_price: rate,
+                total_price: quantity * rate,
+                item_tax_rate: 0,
+                item_tax_amount: 0,
+            };
+        }
+
+        nextItem.total_price = (Number(nextItem.quantity) || 0) * (Number(nextItem.unit_price) || 0);
+        nextItem.item_tax_rate = nextItem.item_tax_rate || 0;
+        nextItem.item_tax_amount = nextItem.total_price * (Number(nextItem.item_tax_rate) / 100);
+
+        const updatedItems = [...(quoteData.items || []), nextItem];
+        updateTotals(updatedItems);
+
+        if (normalized.description) {
+            const nextIndex = updatedItems.length - 1;
+            setExpandedItems((prev) => (prev.includes(nextIndex) ? prev : [...prev, nextIndex]));
+        }
+        setQuickSavedOpen(false);
+        if (typeof onRefreshCatalog === "function") void onRefreshCatalog();
+    };
 
     return (
         <>
@@ -485,7 +450,39 @@ export default function QuoteDetails({
 
                 {/* Quick Add - Single line parser */}
                 <div className="bg-slate-50 rounded-2xl p-4 mb-6">
-                    <p className="text-xs font-bold uppercase text-slate-400 mb-3">Quick Add</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                        <p className="text-xs font-bold uppercase text-slate-400">Quick Add</p>
+                        <Popover
+                            open={quickSavedOpen}
+                            onOpenChange={(open) => {
+                                if (open && typeof onRefreshCatalog === "function") void onRefreshCatalog();
+                                setQuickSavedOpen(open);
+                            }}
+                        >
+                            <PopoverTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-8 text-xs rounded-xl shrink-0"
+                                >
+                                    <Package className="w-3.5 h-3.5 mr-1.5" />
+                                    From saved catalog
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[min(100vw-2rem,24rem)] p-0" align="end">
+                                <SavedCatalogCommand
+                                    catalog={services}
+                                    currencyCode={userCurrency}
+                                    onPick={appendLineFromSavedCatalog}
+                                    onAddNew={() => {
+                                        setQuickSavedOpen(false);
+                                        setIsAddingService(true);
+                                    }}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
                     <div className="flex gap-2 mb-3">
                         <Input
                             value={quickAddLine}
@@ -564,14 +561,17 @@ export default function QuoteDetails({
                         >
                             <span className="text-slate-300 font-bold text-xs w-6">#{index + 1}</span>
                             <div className="flex-1 min-w-[140px]">
-                                <ServiceCombobox
-                                    services={services}
+                                <CatalogCombobox
+                                    catalog={services}
                                     value={item.service_name}
-                                    onSelect={(service) => handleServiceSelect(index, service)}
+                                    onSelect={(svc) => handleServiceSelect(index, svc)}
                                     onAddNew={() => {
                                         setCurrentServiceItemIndex(index);
                                         setIsAddingService(true);
                                     }}
+                                    currencyCode={userCurrency}
+                                    onRefreshCatalog={onRefreshCatalog}
+                                    placeholder="Choose saved product or service…"
                                 />
                             </div>
                             <Input
@@ -792,9 +792,9 @@ QuoteDetails.propTypes = {
         description: PropTypes.string,
         rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     })).isRequired,
-    setServices: PropTypes.func,
     onNext: PropTypes.func,
     isEditing: PropTypes.bool,
     showNextButton: PropTypes.bool,
     taxRateInputRef: PropTypes.oneOfType([PropTypes.func, PropTypes.shape({ current: PropTypes.any })]),
+    onRefreshCatalog: PropTypes.func,
 };

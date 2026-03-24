@@ -47,7 +47,7 @@ import GoalProgress from '@/components/dashboard/GoalProgress';
 import { GoalSetterModal } from '@/components/dashboard/GoalSetterModal';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
 import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
-import { getBusinessGoalYear } from '@/constants/businessGoalYear';
+import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -187,6 +187,13 @@ const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color:
   );
 };
 
+/** Drop in-memory goal rows when the dashboard year changes (e.g. New Year) or legacy rows lack `year`. */
+function businessGoalMatchesYear(goal, calendarYear) {
+  if (!goal || calendarYear == null) return false;
+  const y = Number(goal.year);
+  return Number.isFinite(y) && y === Number(calendarYear);
+}
+
 StatCard.propTypes = {
   title: PropTypes.string.isRequired,
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
@@ -208,6 +215,7 @@ StatCard.propTypes = {
 export default function Dashboard() {
   const { user: authUser } = useAuth();
   const { toast } = useToast();
+  const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
@@ -325,6 +333,12 @@ export default function Dashboard() {
     navigate(`/admin/accounts-management?${params.toString()}`);
   };
 
+  // Clear stale goal immediately when the calendar year advances (before refetch completes).
+  useEffect(() => {
+    if (isAdmin) return;
+    setBusinessGoal((prev) => (businessGoalMatchesYear(prev, calendarYear) ? prev : null));
+  }, [calendarYear, isAdmin]);
+
   useEffect(() => {
     mountedRef.current = true;
     if (!authUser?.id) return () => { mountedRef.current = false; };
@@ -346,7 +360,7 @@ export default function Dashboard() {
           ),
           goalUserId
             ? withTimeoutRetry(
-                () => getBusinessGoal(goalUserId, getBusinessGoalYear()),
+                () => getBusinessGoal(goalUserId, calendarYear),
                 15000,
                 1
               ).catch(() => null)
@@ -359,7 +373,7 @@ export default function Dashboard() {
         setHasBankingDetails(bankingDetails.length > 0);
         const goalRow =
           goalSettled.status === "fulfilled" ? goalSettled.value ?? null : null;
-        setBusinessGoal(goalRow);
+        setBusinessGoal(businessGoalMatchesYear(goalRow, calendarYear) ? goalRow : null);
         const profile = useAppStore.getState().userProfile;
         if (profile?.currency) setUserCurrencyPreference(profile.currency);
       } catch (err) {
@@ -369,7 +383,7 @@ export default function Dashboard() {
       }
     })();
     return () => { cancelled = true; mountedRef.current = false; };
-  }, [isAdmin, authUser?.id]);
+  }, [isAdmin, authUser?.id, calendarYear]);
 
   // Removed calculateFinancialMetrics (no longer used)
 
@@ -716,7 +730,7 @@ export default function Dashboard() {
 
       const goalUid = resolveBusinessGoalsUserId(userResult) || userResult.id;
       const goalRow = goalUid
-        ? await getBusinessGoal(goalUid, getBusinessGoalYear()).catch(() => null)
+        ? await getBusinessGoal(goalUid, calendarYear).catch(() => null)
         : null;
 
       if (!mountedRef.current) return;
@@ -731,7 +745,8 @@ export default function Dashboard() {
       setPaymentsState(Array.isArray(paymentsData) ? paymentsData : []);
       setHasBankingDetails(bankingDetails.length > 0);
       setUserCurrencyPreference(currencyFromProfile);
-      setBusinessGoal(goalRow || null);
+      const normalizedGoal = businessGoalMatchesYear(goalRow, calendarYear) ? goalRow : null;
+      setBusinessGoal(normalizedGoal);
 
       // Use userResult.id for the cache key (not authUserId from closure)
       setCachedDashboard(userResult.id, {
@@ -742,7 +757,7 @@ export default function Dashboard() {
         user: userResult,
         userCurrencyPreference: currencyFromProfile,
         hasBankingDetails: bankingDetails.length > 0,
-        businessGoal: goalRow || null
+        businessGoal: normalizedGoal
       });
     } catch (error) {
       if (!mountedRef.current) return;
@@ -755,14 +770,14 @@ export default function Dashboard() {
     } finally {
       if (mountedRef.current) setIsLoadingState(false);
     }
-  }, [toast]);
+  }, [toast, calendarYear]);
 
   const refreshBusinessGoal = useCallback(async () => {
     const uid = resolveBusinessGoalsUserId(user) || user?.id;
     if (!uid) return;
-    const goal = await getBusinessGoal(uid, getBusinessGoalYear()).catch(() => null);
-    setBusinessGoal(goal || null);
-  }, [user]);
+    const goal = await getBusinessGoal(uid, calendarYear).catch(() => null);
+    setBusinessGoal(businessGoalMatchesYear(goal, calendarYear) ? goal : null);
+  }, [user, calendarYear]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
   useSupabaseRealtime(
@@ -772,6 +787,7 @@ export default function Dashboard() {
         loadAdminData();
       } else {
         fetchAll(); // refresh store in background
+        refreshBusinessGoal();
       }
     },
     { channelName: "dashboard-kpis" }
@@ -1421,7 +1437,7 @@ export default function Dashboard() {
     return sum;
   }, 0);
 
-  const goalYear = getBusinessGoalYear();
+  const goalYear = calendarYear;
   const revenueForGoalYear = invoices.reduce((sum, inv) => {
     if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
     const raw = inv.invoice_date || inv.created_date || inv.created_at;
@@ -1431,7 +1447,7 @@ export default function Dashboard() {
     return sum + (Number(inv.total_amount) || 0);
   }, 0);
 
-  const lastYear = new Date().getFullYear() - 1;
+  const lastYear = calendarYear - 1;
   const lastYearRevenue = invoices.reduce((sum, inv) => {
     if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
     const created = inv.created_date || inv.created_at;
@@ -1450,15 +1466,15 @@ export default function Dashboard() {
     revenueTarget > 0 ? Math.min(100, (revenueForGoalYear / revenueTarget) * 100) : 0;
 
   const statusColors = {
-    'paid': 'bg-status-paid/10 text-status-paid',
-    'sent': 'bg-primary/20 text-primary',
-    'sending': 'bg-primary/15 text-primary animate-pulse',
-    'preparing': 'bg-primary/10 text-primary animate-pulse',
-    'viewed': 'bg-primary/20 text-primary',
-    'draft': 'bg-muted text-muted-foreground',
-    'overdue': 'bg-status-overdue/10 text-status-overdue',
-    'partial_paid': 'bg-status-pending/10 text-status-pending',
-    'cancelled': 'bg-muted text-muted-foreground'
+    paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
+    sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
+    sending: "bg-primary/15 text-primary border border-primary/25 animate-pulse",
+    preparing: "bg-primary/12 text-primary border border-primary/20 animate-pulse",
+    viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
+    draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border border-status-draft/30",
+    overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
+    partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
   };
 
   const getStatusLabel = (status) => {
@@ -1976,7 +1992,7 @@ export default function Dashboard() {
             </div>
 
             <GoalProgress
-              year={getBusinessGoalYear()}
+              year={calendarYear}
               progress={goalProgress}
               revenueTarget={revenueTarget}
               currentRevenue={revenueForGoalYear}
@@ -1988,6 +2004,7 @@ export default function Dashboard() {
               onClose={() => setGoalSetterOpen(false)}
               onSaved={refreshBusinessGoal}
               user={user}
+              year={calendarYear}
               initialGoal={businessGoal}
               lastYearRevenue={lastYearRevenue}
             />
@@ -2076,13 +2093,14 @@ export default function Dashboard() {
       <Sheet open={!!selectedInvoiceId} onOpenChange={(open) => !open && setSelectedInvoiceId(null)}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-2xl lg:max-w-3xl p-0 overflow-hidden flex flex-col [&>button]:z-10"
+          className="inset-0 left-0 h-[100dvh] w-full max-w-full sm:max-w-full rounded-none border-0 p-0 overflow-hidden flex flex-col [&>button]:z-10"
         >
-          <div className="flex-1 overflow-auto pt-14 px-4 sm:px-6 pb-6">
+          <div className="flex-1 min-h-0 overflow-auto pt-14 pb-4 px-0 sm:px-2">
             {selectedInvoiceId && (
               <ViewInvoice
                 invoiceId={selectedInvoiceId}
                 embedded
+                embeddedFullWidth
                 onClose={() => setSelectedInvoiceId(null)}
               />
             )}

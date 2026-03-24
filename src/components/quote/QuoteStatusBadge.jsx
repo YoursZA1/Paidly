@@ -7,6 +7,7 @@ const statusConfig = {
   viewed: { label: "Viewed" },
   accepted: { label: "Accepted" },
   rejected: { label: "Rejected" },
+  declined: { label: "Declined" },
   expired: { label: "Expired" },
 };
 

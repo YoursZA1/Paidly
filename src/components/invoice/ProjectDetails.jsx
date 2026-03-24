@@ -1,13 +1,14 @@
 
 import PropTypes from "prop-types";
-import { useState, Fragment, useEffect, useRef } from "react";
+import { useState, Fragment, useEffect, useRef, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Check, ChevronsUpDown } from "lucide-react";
+import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -28,140 +29,11 @@ import { ItemTypeSelector, UnitTypeSelector } from "../invoice/ItemTypeSelector"
 import { getItemTypeIcon, getUnitLabel } from "../invoice/itemTypeHelpers";
 import TaxService from "@/services/TaxService";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
-// Mock entities for demonstration. In a real app, these would be from an API or ORM.
-// The outline implies these are imported from "@/api/entities", but for a self-contained, runnable file,
-// we'll provide simple mocks similar to the User mock.
-const Client = {
-    _clients: [],
-    async create(data) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const newClient = { id: `client_${Date.now()}`, ...data };
-        this._clients.push(newClient);
-        return newClient;
-    },
-    async list(sort) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        let sortedClients = [...this._clients];
-        if (sort === "-created_date") {
-            sortedClients.sort((a, b) => b.id.localeCompare(a.id)); // Assuming ID is creation-time based for simplicity
-        }
-        return sortedClients;
-    }
-};
-
-const BankingDetail = {
-    _details: [],
-    async create(data) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const newDetail = { id: `banking_${Date.now()}`, ...data };
-        this._details.push(newDetail);
-        return newDetail;
-    },
-    async list(sort) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        let sortedDetails = [...this._details];
-        if (sort === "-created_date") {
-            sortedDetails.sort((a, b) => b.id.localeCompare(a.id));
-        }
-        return sortedDetails;
-    }
-};
-
-const Service = {
-    _services: [],
-    async create(data) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const newService = { id: `service_${Date.now()}`, ...data };
-        this._services.push(newService);
-        return newService;
-    },
-    async list(sort) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        let sortedServices = [...this._services];
-        if (sort === "-created_date") {
-            sortedServices.sort((a, b) => b.id.localeCompare(a.id));
-        }
-        return sortedServices;
-    }
-};
-
-// Mock User object for demonstration purposes. In a real application, this would likely be an API call or context.
-const User = {
-    me: async () => {
-        // Simulate an API call delay
-        await new Promise(resolve => setTimeout(resolve, 100));
-        return {
-            id: 'user123',
-            name: 'John Doe',
-            currency: 'USD', // Example currency, could be 'EUR', 'GBP', etc.
-            location: 'USA'
-        };
-    }
-};
-
-const ServiceCombobox = ({ services, value, onSelect, onAddNew }) => {
-    const [open, setOpen] = useState(false)
-    const selectedService = services.find(s => s.name.toLowerCase() === value?.toLowerCase());
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between h-10 rounded-lg font-normal"
-                >
-                    {value
-                        ? services.find((s) => s.name.toLowerCase() === value.toLowerCase())?.name
-                        : "Select a service..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command>
-                    <CommandInput placeholder="Search service..." />
-                    <CommandList>
-                        <CommandEmpty>No service found.</CommandEmpty>
-                        <CommandGroup>
-                            {services.map((service) => (
-                                <CommandItem
-                                    key={service.id}
-                                    value={service.name}
-                                    onSelect={(currentValue) => {
-                                        const selected = services.find(s => s.name.toLowerCase() === currentValue.toLowerCase());
-                                        onSelect(selected);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            value === service.name ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {service.name}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                        <CommandGroup>
-                             <CommandItem
-                                onSelect={() => {
-                                    onAddNew();
-                                    setOpen(false);
-                                }}
-                                className="cursor-pointer"
-                            >
-                                <Plus className="mr-2 h-4 w-4" />
-                                <span>Add new service</span>
-                            </CommandItem>
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    )
-}
+import { Client, BankingDetail, Service } from "@/api/entities";
+import { useAuth } from "@/components/auth/AuthContext";
+import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
+import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
+import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 
 export default function ProjectDetails({ 
     invoiceData, 
@@ -174,9 +46,11 @@ export default function ProjectDetails({
     setServices,
     onNext,
     isRecurring = false,
-    showNextButton = true
+    showNextButton = true,
+    onRefreshCatalog
 }) {
-    const [user, setUser] = useState(null);
+    const queryClient = useQueryClient();
+    const { user: authUser } = useAuth();
     const [isAddingClient, setIsAddingClient] = useState(false);
     const [isAddingBankingDetail, setIsAddingBankingDetail] = useState(false);
     const [isAddingService, setIsAddingService] = useState(false);
@@ -190,6 +64,7 @@ export default function ProjectDetails({
     const [quickItemQuantity, setQuickItemQuantity] = useState(1);
     const [quickItemRate, setQuickItemRate] = useState('');
     const quickItemInputRef = useRef(null);
+    const [quickSavedOpen, setQuickSavedOpen] = useState(false);
 
     // Industry Preset Configurations
     const INDUSTRY_PRESETS = {
@@ -236,24 +111,13 @@ export default function ProjectDetails({
     };
     
     useEffect(() => {
-        const loadUser = async () => {
-            try {
-                const userData = await User.me();
-                setUser(userData);
-                
-                // Load default tax rate from user settings
-                if (userData?.default_tax_rate && !invoiceData.tax_rate) {
-                    setInvoiceData(prev => ({
-                        ...prev,
-                        tax_rate: userData.default_tax_rate
-                    }));
-                }
-            } catch (error) {
-                console.error("Error loading user:", error);
-            }
-        };
-        loadUser();
-    }, []);
+        if (authUser?.default_tax_rate && !invoiceData.tax_rate) {
+            setInvoiceData((prev) => ({
+                ...prev,
+                tax_rate: authUser.default_tax_rate,
+            }));
+        }
+    }, [authUser?.default_tax_rate, authUser?.id, invoiceData.tax_rate, setInvoiceData]);
 
     useEffect(() => {
         if (quickItemInputRef.current) {
@@ -269,8 +133,9 @@ export default function ProjectDetails({
             (service) => service.name?.toLowerCase() === name
         );
 
-        if (matchedService?.rate !== undefined && matchedService?.rate !== null) {
-            setQuickItemRate(String(matchedService.rate));
+        const autoRate = getCatalogItemRate(matchedService);
+        if (autoRate > 0 && quickItemRate === "") {
+            setQuickItemRate(String(autoRate));
         }
     }, [quickItemName, quickItemRate, services]);
 
@@ -278,7 +143,7 @@ export default function ProjectDetails({
         try {
             const newClient = await Client.create(clientData);
             const updatedClients = await Client.list("-created_date");
-            setClients(updatedClients);
+            if (setClients) setClients(updatedClients);
             handleInputChange('client_id', newClient.id);
             setIsAddingClient(false);
         } catch (error) {
@@ -291,7 +156,7 @@ export default function ProjectDetails({
         try {
             const newDetail = await BankingDetail.create(detailData);
             const updatedDetails = await BankingDetail.list("-created_date");
-            setBankingDetails(updatedDetails);
+            if (setBankingDetails) setBankingDetails(updatedDetails);
             handleInputChange('banking_detail_id', newDetail.id);
             setIsAddingBankingDetail(false);
         } catch (error) {
@@ -303,8 +168,7 @@ export default function ProjectDetails({
     const handleSaveNewService = async (serviceData) => {
         try {
             const newService = await Service.create(serviceData);
-            const updatedServices = await Service.list("-created_date");
-            setServices(updatedServices);
+            await invalidateServicesCatalog(queryClient);
             if (currentServiceItemIndex !== null) {
                 handleServiceSelect(currentServiceItemIndex, newService);
             }
@@ -373,7 +237,7 @@ export default function ProjectDetails({
         // ===== RATE ADJUSTMENT VALIDATION =====
         // Check if user can edit the rate based on their plan
         if (field === 'unit_price') {
-            const editCheck = canEditLineItemRate(updatedItems[index], user);
+            const editCheck = canEditLineItemRate(updatedItems[index], authUser);
             if (!editCheck.canEdit) {
                 alert(editCheck.reason || 'Your plan does not allow editing rates. Please upgrade to modify line item prices.');
                 return;
@@ -386,7 +250,7 @@ export default function ProjectDetails({
                 updatedItems[index],
                 originalRate,
                 newRate,
-                user
+                authUser
             );
             
             if (!validation.allowed) {
@@ -420,34 +284,42 @@ export default function ProjectDetails({
     const handleServiceSelect = (index, service) => {
         const updatedItems = [...(invoiceData.items || [])];
         const currentItem = updatedItems[index];
-        
-        // Use CatalogSyncService to map catalog item to line item
-        const mappedResult = mapCatalogToLineItem(
-            service,
-            currentItem.quantity || 1,
-            {
-                existingTaxRate: currentItem.item_tax_rate || 0,
-                userId: user?.id || null
-            }
-        );
-        
-        if (!mappedResult?.success) {
-            console.error('Error mapping catalog item:', mappedResult?.error);
-            alert(mappedResult?.error || 'Unable to select this item. Please try again.');
-            return;
+        const normalized = normalizeCatalogItemForMap(service);
+        if (!normalized) return;
+
+        const qty = Math.max(1, Number(currentItem.quantity) || 1);
+        const mappedResult = mapCatalogToLineItem(normalized, qty, {
+            existingTaxRate: parseFloat(currentItem.item_tax_rate) || 0,
+            userId: authUser?.id || null,
+        });
+
+        if (mappedResult?.success) {
+            updatedItems[index] = {
+                ...currentItem,
+                ...mappedResult.lineItem,
+            };
+        } else {
+            const rate = getCatalogItemRate(normalized);
+            const itemTaxRate = parseFloat(currentItem.item_tax_rate) || 0;
+            const totalPrice = qty * rate;
+            updatedItems[index] = {
+                ...currentItem,
+                service_name: normalized.name,
+                description: normalized.description || currentItem.description || "",
+                quantity: qty,
+                unit_price: rate,
+                total_price: totalPrice,
+                item_type: normalized.item_type || currentItem.item_type,
+                catalog_item_id: normalized.id,
+                item_tax_rate: itemTaxRate,
+                item_tax_amount: totalPrice * (itemTaxRate / 100),
+            };
         }
-        
-        // Auto-expand description if service has one
+
         if (service.description && !expandedItems.includes(index)) {
             setExpandedItems([...expandedItems, index]);
         }
-        
-        // Merge mapped fields with existing item (preserves any user-set values)
-        updatedItems[index] = {
-            ...currentItem,
-            ...mappedResult.lineItem
-        };
-        
+
         updateTotals(updatedItems);
     };
 
@@ -511,13 +383,15 @@ export default function ProjectDetails({
         let nextItem = null;
 
         if (matchedService) {
-            const mappedResult = mapCatalogToLineItem(matchedService, quantity, {
-                existingTaxRate: 0,
-                userId: user?.id || null
-            });
-
-            if (mappedResult?.success) {
-                nextItem = { ...mappedResult.lineItem };
+            const normalized = normalizeCatalogItemForMap(matchedService);
+            if (normalized) {
+                const mappedResult = mapCatalogToLineItem(normalized, quantity, {
+                    existingTaxRate: 0,
+                    userId: authUser?.id || null,
+                });
+                if (mappedResult?.success) {
+                    nextItem = { ...mappedResult.lineItem };
+                }
             }
         }
 
@@ -648,7 +522,54 @@ export default function ProjectDetails({
         ? invoiceData.project_title && items.length > 0 && items.every(item => item.service_name && item.quantity > 0 && item.unit_price >= 0)
         : invoiceData.client_id && invoiceData.project_title && items.length > 0 && items.every(item => item.service_name && item.quantity > 0 && item.unit_price >= 0) && invoiceData.invoice_date && invoiceData.delivery_date;
     
-    const userCurrency = user?.currency || 'USD';
+    const userCurrency = invoiceData?.currency || authUser?.currency || "USD";
+
+    const appendLineFromSavedCatalog = (catalogItem) => {
+        const normalized = normalizeCatalogItemForMap(catalogItem);
+        if (!normalized) return;
+        const quantity = Math.max(1, Number(quickItemQuantity) > 0 ? Number(quickItemQuantity) : 1);
+        const preset = selectedPreset !== "none" ? INDUSTRY_PRESETS[selectedPreset] : null;
+        const mappedResult = mapCatalogToLineItem(normalized, quantity, {
+            existingTaxRate: 0,
+            userId: authUser?.id || null,
+        });
+
+        let nextItem;
+        if (mappedResult?.success) {
+            nextItem = { ...mappedResult.lineItem };
+        } else {
+            const rate = getCatalogItemRate(normalized);
+            nextItem = {
+                service_name: normalized.name,
+                description: normalized.description || "",
+                quantity,
+                unit_price: rate,
+                total_price: quantity * rate,
+                item_type: normalized.item_type || (preset ? preset.defaultItemType : "service"),
+                unit_type: preset ? preset.defaultUnitType : normalized.item_type === "product" ? "piece" : "unit",
+                part_number: "",
+                sku: normalized.sku || "",
+                details: "",
+                group_id: null,
+                item_tax_rate: 0,
+                item_tax_amount: 0,
+            };
+        }
+
+        nextItem.total_price = (Number(nextItem.quantity) || 0) * (Number(nextItem.unit_price) || 0);
+        nextItem.item_tax_rate = nextItem.item_tax_rate || 0;
+        nextItem.item_tax_amount = nextItem.total_price * (Number(nextItem.item_tax_rate) / 100);
+
+        const nextIndex = (invoiceData.items || []).length;
+        const updatedItems = [...(invoiceData.items || []), nextItem];
+        updateTotals(updatedItems);
+
+        if (normalized.description) {
+            setExpandedItems((prev) => (prev.includes(nextIndex) ? prev : [...prev, nextIndex]));
+        }
+        setQuickSavedOpen(false);
+        if (typeof onRefreshCatalog === "function") void onRefreshCatalog();
+    };
 
     return (
         <motion.div
@@ -857,7 +778,46 @@ export default function ProjectDetails({
                             </div>
 
                             <div className="bg-white border border-slate-200 rounded-xl p-4">
-                                <p className="text-sm font-semibold text-slate-800 mb-3">Quick Add</p>
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800">Quick Add</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Type a line manually or add from your saved catalog (name, price, and details fill automatically).
+                                        </p>
+                                    </div>
+                                    <Popover
+                                        open={quickSavedOpen}
+                                        onOpenChange={(open) => {
+                                            if (open && typeof onRefreshCatalog === "function") {
+                                                void onRefreshCatalog();
+                                            }
+                                            setQuickSavedOpen(open);
+                                        }}
+                                    >
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                className="shrink-0 rounded-lg"
+                                            >
+                                                <Package className="w-4 h-4 mr-2" />
+                                                From saved catalog
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[min(100vw-2rem,24rem)] p-0" align="end">
+                                            <SavedCatalogCommand
+                                                catalog={services}
+                                                currencyCode={userCurrency}
+                                                onPick={appendLineFromSavedCatalog}
+                                                onAddNew={() => {
+                                                    setQuickSavedOpen(false);
+                                                    setIsAddingService(true);
+                                                }}
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                     <Input
                                         ref={quickItemInputRef}
@@ -1047,14 +1007,17 @@ export default function ProjectDetails({
                                                 {/* Service Name */}
                                                 <div className="space-y-2 md:col-span-2">
                                                     <Label className="text-sm font-semibold text-slate-700">Service Name *</Label>
-                                                    <ServiceCombobox
-                                                        services={services}
+                                                    <CatalogCombobox
+                                                        catalog={services}
                                                         value={item.service_name}
-                                                        onSelect={(service) => handleServiceSelect(index, service)}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
                                                         onAddNew={() => {
                                                             setCurrentServiceItemIndex(index);
                                                             setIsAddingService(true);
                                                         }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
                                                     />
                                                 </div>
 
@@ -1153,14 +1116,17 @@ export default function ProjectDetails({
                                             {/* Product Name */}
                                             <div className="space-y-2 md:col-span-2">
                                                 <Label className="text-sm font-semibold text-slate-700">Product Name *</Label>
-                                                <ServiceCombobox
-                                                    services={services}
+                                                <CatalogCombobox
+                                                    catalog={services}
                                                     value={item.service_name}
-                                                    onSelect={(service) => handleServiceSelect(index, service)}
+                                                    onSelect={(svc) => handleServiceSelect(index, svc)}
                                                     onAddNew={() => {
                                                         setCurrentServiceItemIndex(index);
                                                         setIsAddingService(true);
                                                     }}
+                                                    currencyCode={userCurrency}
+                                                    onRefreshCatalog={onRefreshCatalog}
+                                                    placeholder="Choose saved product or service…"
                                                 />
                                             </div>
 
@@ -1273,14 +1239,17 @@ export default function ProjectDetails({
                                                 {/* Role / Labor Type */}
                                                 <div className="space-y-2 md:col-span-2">
                                                     <Label className="text-sm font-semibold text-slate-700">Role / Labor Type *</Label>
-                                                    <ServiceCombobox
-                                                        services={services}
+                                                    <CatalogCombobox
+                                                        catalog={services}
                                                         value={item.service_name}
-                                                        onSelect={(service) => handleServiceSelect(index, service)}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
                                                         onAddNew={() => {
                                                             setCurrentServiceItemIndex(index);
                                                             setIsAddingService(true);
                                                         }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
                                                     />
                                                     <p className="text-xs text-slate-500">e.g., Technician, Electrician, Plumber, Mechanic</p>
                                                 </div>
@@ -1372,14 +1341,17 @@ export default function ProjectDetails({
                                                 {/* Material Name */}
                                                 <div className="space-y-2 md:col-span-2">
                                                     <Label>Material Name *</Label>
-                                                    <ServiceCombobox
-                                                        services={services}
+                                                    <CatalogCombobox
+                                                        catalog={services}
                                                         value={item.service_name}
-                                                        onSelect={(service) => handleServiceSelect(index, service)}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
                                                         onAddNew={() => {
                                                             setCurrentServiceItemIndex(index);
                                                             setIsAddingService(true);
                                                         }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
                                                     />
                                                     <p className="text-xs text-slate-600">e.g., Concrete Mix, Steel Rebar, Lumber, Paint, Piping</p>
                                                 </div>
@@ -1488,14 +1460,17 @@ export default function ProjectDetails({
                                                 {/* Expense Name */}
                                                 <div className="space-y-2 md:col-span-2">
                                                     <Label>Expense Name *</Label>
-                                                    <ServiceCombobox
-                                                        services={services}
+                                                    <CatalogCombobox
+                                                        catalog={services}
                                                         value={item.service_name}
-                                                        onSelect={(service) => handleServiceSelect(index, service)}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
                                                         onAddNew={() => {
                                                             setCurrentServiceItemIndex(index);
                                                             setIsAddingService(true);
                                                         }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
                                                     />
                                                     <p className="text-xs text-slate-600">e.g., Airfare, Hotel Accommodation, Equipment Rental, Subcontractor Fee</p>
                                                 </div>
@@ -1573,14 +1548,17 @@ export default function ProjectDetails({
                                             {/* Item Name */}
                                             <div className="space-y-2 md:col-span-2">
                                                 <Label className="text-sm font-semibold text-slate-700">Item Name *</Label>
-                                                <ServiceCombobox
-                                                    services={services}
+                                                <CatalogCombobox
+                                                    catalog={services}
                                                     value={item.service_name}
-                                                    onSelect={(service) => handleServiceSelect(index, service)}
+                                                    onSelect={(svc) => handleServiceSelect(index, svc)}
                                                     onAddNew={() => {
                                                         setCurrentServiceItemIndex(index);
                                                         setIsAddingService(true);
                                                     }}
+                                                    currencyCode={userCurrency}
+                                                    onRefreshCatalog={onRefreshCatalog}
+                                                    placeholder="Choose saved product or service…"
                                                 />
                                             </div>
 
@@ -2187,21 +2165,22 @@ ProjectDetails.propTypes = {
         name: PropTypes.string,
         email: PropTypes.string
     })).isRequired,
-    setClients: PropTypes.func.isRequired,
+    setClients: PropTypes.func,
     bankingDetails: PropTypes.arrayOf(PropTypes.shape({
         id: PropTypes.string,
         bank_name: PropTypes.string,
         payment_method: PropTypes.string
     })).isRequired,
-    setBankingDetails: PropTypes.func.isRequired,
+    setBankingDetails: PropTypes.func,
     services: PropTypes.arrayOf(PropTypes.shape({
         id: PropTypes.string,
         name: PropTypes.string,
         description: PropTypes.string,
         rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     })).isRequired,
-    setServices: PropTypes.func.isRequired,
+    setServices: PropTypes.func,
     onNext: PropTypes.func,
+    onRefreshCatalog: PropTypes.func,
     isRecurring: PropTypes.bool,
     showNextButton: PropTypes.bool
 };

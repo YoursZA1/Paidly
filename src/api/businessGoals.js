@@ -21,17 +21,20 @@ export function resolveBusinessGoalsUserId(user) {
 /**
  * @param {string} userId - auth user id
  * @param {number} year - e.g. 2026
- * @returns {Promise<{ id: string, annual_target: number, strategy_type: string } | null>}
+ * @returns {Promise<{ id: string, year: number, annual_target: number, strategy_type: string } | null>}
  */
 export async function getBusinessGoal(userId, year) {
   if (!userId || !year) return null;
   const { data, error } = await supabase
     .from(TABLE)
-    .select('id, annual_target, strategy_type')
-    .eq('user_id', userId)
-    .eq('year', Number(year))
+    .select("id, year, annual_target, strategy_type")
+    .eq("user_id", userId)
+    .eq("year", Number(year))
     .maybeSingle();
   if (error) throw error;
+  if (!data) return null;
+  const rowYear = Number(data.year);
+  if (Number(year) !== rowYear) return null;
   return data;
 }
 

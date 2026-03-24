@@ -149,9 +149,9 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                     <DialogHeader>
                         <DialogTitle>Email Preview</DialogTitle>
                     </DialogHeader>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
-                        <p className="font-medium">⚠️ {error}</p>
-                        <p className="text-sm mt-2">You can still send the email, but some company or banking details may not be included.</p>
+                    <div className="rounded-lg border border-border bg-muted/80 p-4 text-foreground">
+                        <p className="font-medium text-status-pending">⚠️ {error}</p>
+                        <p className="text-sm mt-2 text-muted-foreground">You can still send the email, but some company or banking details may not be included.</p>
                     </div>
                     <div className="flex justify-end gap-3 mt-4">
                         <Button variant="outline" onClick={onClose}>
@@ -316,9 +316,9 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                                     )}
 
                                     {invoice.notes && (
-                                        <div className="bg-yellow-50 p-4 rounded mb-6">
-                                            <h3 className="font-bold text-yellow-800 mb-2">Additional Notes:</h3>
-                                            <p>{invoice.notes}</p>
+                                        <div className="mb-6 rounded-lg border border-primary/15 bg-primary/5 p-4">
+                                            <h3 className="mb-2 font-bold text-primary">Additional Notes:</h3>
+                                            <p className="text-foreground">{invoice.notes}</p>
                                         </div>
                                     )}
 

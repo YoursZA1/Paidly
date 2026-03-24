@@ -1,6 +1,7 @@
 import PropTypes from "prop-types";
 
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, Plus, Trash2, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ import { Service } from "@/api/entities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "@/components/services/ServiceForm";
 import { formatCurrency } from "@/components/CurrencySelector";
+import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 
 /** Get rate from catalog item (same order as Quote / services table: default_rate, rate, price) */
 function getCatalogRate(catalogItem) {
@@ -41,6 +43,7 @@ export default function InvoiceDetails({
   onNext,
   showNextButton = true
 }) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [itemHistory, setItemHistory] = useState([]);
   const [expandedItems, setExpandedItems] = useState([]);
@@ -116,8 +119,7 @@ export default function InvoiceDetails({
   const handleSaveNewService = async (serviceData) => {
     try {
       const newService = await Service.create(serviceData);
-      const updatedServices = await Service.list("-created_date");
-      if (setServices) setServices(updatedServices || []);
+      await invalidateServicesCatalog(queryClient);
       if (currentServiceItemIndex !== null) {
         handleServiceSelect(currentServiceItemIndex, newService);
       }

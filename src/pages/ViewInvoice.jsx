@@ -22,8 +22,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
-import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
-
+import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
 async function fetchPaymentsForInvoice(invoiceId) {
     if (!invoiceId) return [];
@@ -43,7 +42,7 @@ async function fetchPaymentsForInvoice(invoiceId) {
     }));
 }
 
-export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClose }) {
+export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embeddedFullWidth, onClose }) {
     const [invoice, setInvoice] = useState(null);
     const [client, setClient] = useState(null);
     const [company, setCompany] = useState(null);
@@ -297,7 +296,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
     const templateKey =
         normalizeInvoiceTemplateKey(invoice.invoice_template) ||
         normalizeInvoiceTemplateKey(company?.invoice_template) ||
-        'classic';
+        DEFAULT_INVOICE_TEMPLATE;
 
     const userForTemplate =
         invoice &&
@@ -337,8 +336,8 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
             </div>
             )}
             {/* Action Bar — white rounded bar, fits + mobile-friendly */}
-            <div className="no-print px-4 sm:px-6 pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <div className="max-w-5xl mx-auto bg-white rounded-xl border border-slate-100 shadow-sm p-3 sm:p-4">
+            <div className={`no-print pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 ${embedded && embeddedFullWidth ? 'px-2 sm:px-4' : 'px-4 sm:px-6'}`}>
+                <div className={`${embedded && embeddedFullWidth ? 'max-w-none w-full' : 'max-w-5xl mx-auto'} bg-white rounded-xl border border-slate-100 shadow-sm p-3 sm:p-4`}>
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                         <Button
                             variant="outline"
@@ -432,7 +431,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, onClos
             </div>
             
             {/* Main Content Area (Invoice and potential Sidebar) */}
-            <div className="p-4 sm:p-8 max-w-5xl mx-auto">
+            <div className={`${embedded && embeddedFullWidth ? 'p-3 sm:p-4 max-w-none w-full' : 'p-4 sm:p-8 max-w-5xl mx-auto'}`}>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Invoice Preview Column */}
                     <div className="lg:col-span-2">

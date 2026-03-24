@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Invoice, Client, BankingDetail, Service, User } from "@/api/entities";
+import { Invoice, Client, BankingDetail, User } from "@/api/entities";
+import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -10,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { appendHistory, createHistoryEntry, diffInvoiceFields } from "@/utils/invoiceHistory";
 import { logInvoiceUpdated, logStatusChanged } from "@/utils/auditLogger";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import PaymentBreakdown from "../components/invoice/PaymentBreakdown";
@@ -28,7 +30,7 @@ export default function EditInvoice() {
     const [currentStep, setCurrentStep] = useState(1);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
-    const [services, setServices] = useState([]);
+    const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
     const [isLoading, setIsLoading] = useState(true);
     const [invoiceData, setInvoiceData] = useState(null);
     const [originalStatus, setOriginalStatus] = useState(null);
@@ -53,11 +55,10 @@ export default function EditInvoice() {
     const loadInitialData = async (id) => {
         setIsLoading(true);
         try {
-            const [invoice, clientsData, bankingData, servicesData, userData] = await withTimeoutRetry(() => Promise.all([
+            const [invoice, clientsData, bankingData, userData] = await withTimeoutRetry(() => Promise.all([
                 Invoice.get(id),
                 Client.list("-created_date"),
                 BankingDetail.list("-created_date"),
-                Service.list("-created_date"),
                 User.me().catch(() => null)
             ]), 15000, 2);
             if (!mountedRef.current) return;
@@ -65,7 +66,10 @@ export default function EditInvoice() {
             // Ensure invoice_date is set from created_date if not present
             const invoiceWithDate = {
                 ...invoice,
-                invoice_date: invoice.invoice_date || invoice.created_date || new Date().toISOString().split('T')[0]
+                invoice_date: invoice.invoice_date || invoice.created_date || new Date().toISOString().split('T')[0],
+                terms_conditions: (invoice.terms_conditions || "").trim()
+                    ? invoice.terms_conditions
+                    : DEFAULT_INVOICE_TERMS_BODY,
             };
             
             // Restrict editing for paid, partially paid, or cancelled invoices
@@ -85,7 +89,6 @@ export default function EditInvoice() {
             setOriginalInvoiceData(invoiceWithDate);
             setClients(clientsData);
             setBankingDetails(bankingData);
-            setServices(servicesData);
             setUser(userData || null);
         } catch (error) {
             if (!mountedRef.current) return;
@@ -323,9 +326,12 @@ export default function EditInvoice() {
                             invoiceData={invoiceData}
                             setInvoiceData={setInvoiceData}
                             clients={clients}
+                            setClients={setClients}
                             bankingDetails={bankingDetails}
+                            setBankingDetails={setBankingDetails}
                             services={services}
                             onNext={handleNext}
+                            onRefreshCatalog={refetchCatalog}
                         />
                     )}
                     

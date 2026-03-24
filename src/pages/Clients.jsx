@@ -26,12 +26,12 @@ import { useAppStore } from "@/stores/useAppStore";
 import { format, parseISO, isValid } from "date-fns";
 
 const statusStyles = {
-  draft: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
-  sent: "bg-primary/15 dark:bg-primary/25 text-primary",
-  viewed: "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300",
-  partial_paid: "bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300",
-  paid: "bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300",
-  overdue: "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300",
+  draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border border-status-draft/25 dark:border-status-draft/35",
+  sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
+  viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
+  partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+  paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
+  overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
 };
 
 function safeFormatDate(dateStr) {

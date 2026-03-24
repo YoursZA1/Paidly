@@ -19,6 +19,8 @@ const Login = lazy(() => import("./Login"));
 const Signup = lazy(() => import("./Signup"));
 const Home = lazy(() => import("./Home"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
+const CreateDocument = lazy(() => import("./CreateDocument"));
+const ViewDocument = lazy(() => import("./ViewDocument"));
 const Clients = lazy(() => import("./Clients"));
 const Invoices = lazy(() => import("./Invoices"));
 const InvoicePDF = lazy(() => import("./InvoicePDF"));
@@ -150,6 +152,12 @@ const INVOICE_ROUTES = [
     { path: "/invoices", element: <RequireAuth><Invoices /></RequireAuth> },
     { path: "/CreateInvoice", element: <RequireAuth><CreateInvoice /></RequireAuth> },
     { path: "/createinvoice", element: <RequireAuth><CreateInvoice /></RequireAuth> },
+    { path: "/CreateDocument", element: <RequireAuth><Navigate to="/CreateDocument/invoice" replace /></RequireAuth> },
+    { path: "/CreateDocument/:type", element: <RequireAuth><CreateDocument /></RequireAuth> },
+    { path: "/createdocument", element: <RequireAuth><Navigate to="/CreateDocument/invoice" replace /></RequireAuth> },
+    { path: "/createdocument/:type", element: <RequireAuth><CreateDocument /></RequireAuth> },
+    { path: "/ViewDocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
+    { path: "/viewdocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
     { path: "/ViewInvoice", element: <RequireAuth><ViewInvoice /></RequireAuth> },
     { path: "/EditInvoice", element: <RequireAuth><EditInvoice /></RequireAuth> },
     { path: "/InvoicePDF", element: <RequireAuth><InvoicePDF /></RequireAuth> },
@@ -269,7 +277,7 @@ const ADMIN_ROUTES = [
 
 
 
-import { useLocation } from "react-router-dom";
+import { useLocation, Navigate } from "react-router-dom";
 
 function getPageName(pathname) {
   // Remove leading slash and query params

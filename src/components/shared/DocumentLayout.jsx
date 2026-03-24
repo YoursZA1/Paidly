@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import LogoImage from '@/components/shared/LogoImage';
 
 export default function DocumentLayout({ user, title, documentNumber, date, children, downloadUrl, autoDownload = false }) {
     const printPDF = () => {
@@ -65,8 +66,12 @@ export default function DocumentLayout({ user, title, documentNumber, date, chil
                         <header className="border-b-2 border-border pb-4 sm:pb-6 mb-4 sm:mb-6">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                                 <div>
-                                    {user?.logo_url ? (
-                                        <img src={user.logo_url} alt="Company Logo" className="h-12 sm:h-16 w-auto mb-2 sm:mb-4 object-contain" />
+                                    {(user?.logo_url || user?.company_logo_url) ? (
+                                        <LogoImage
+                                            src={user.logo_url || user.company_logo_url}
+                                            alt="Company Logo"
+                                            className="h-12 sm:h-16 w-auto mb-2 sm:mb-4 object-contain"
+                                        />
                                     ) : (
                                         <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-2">
                                             {user?.company_name || 'Your Company'}

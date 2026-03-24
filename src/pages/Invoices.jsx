@@ -441,9 +441,9 @@ export default function InvoicesPage() {
                                 </div>
                                 <h3 className="mt-2 text-base font-semibold text-foreground font-display">No invoices yet</h3>
                                 <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">Create and send invoices in ZAR or any currency. Get paid faster.</p>
-                                <div className="mt-6">
+                                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
                                     <Link to={createPageUrl("CreateInvoice")}>
-                                        <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+                                        <Button className="w-full sm:w-auto rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />
                                             Create your first invoice
                                         </Button>

@@ -128,28 +128,99 @@ body {
   font-weight: 500;
   border: 1px solid transparent;
 }
-/* Invoice status variants */
-.status-pill.draft,
+/* Invoice / quote status variants — brand-aligned palette */
+.status-pill.draft {
+  background: color-mix(in srgb, var(--status-draft) 18%, white);
+  color: #475569;
+  border-color: color-mix(in srgb, var(--status-draft) 35%, white);
+}
+.dark .status-pill.draft {
+  background: color-mix(in srgb, var(--status-draft) 22%, #0f172a);
+  color: #cbd5e1;
+  border-color: color-mix(in srgb, var(--status-draft) 40%, #334155);
+}
 .status-pill.sending,
-.status-pill.preparing { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
-.status-pill.sent { background: hsl(var(--primary) / 0.15); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.3); }
-.status-pill.viewed { background: hsl(263 70% 95%); color: hsl(263 70% 35%); border-color: hsl(263 60% 85%); }
-.dark .status-pill.viewed { background: hsl(263 40% 20%); color: hsl(263 70% 75%); border-color: hsl(263 40% 30%); }
-.status-pill.pending { background: hsl(38 92% 95%); color: hsl(38 92% 35%); border-color: hsl(38 90% 85%); }
-.dark .status-pill.pending { background: hsl(38 50% 20%); color: hsl(38 90% 75%); border-color: hsl(38 50% 30%); }
+.status-pill.preparing {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.28);
+}
+.dark .status-pill.sending,
+.dark .status-pill.preparing {
+  background: hsl(var(--primary) / 0.22);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.35);
+}
+.status-pill.sent,
+.status-pill.viewed {
+  background: color-mix(in srgb, var(--status-sent) 14%, white);
+  color: var(--status-sent);
+  border-color: color-mix(in srgb, var(--status-sent) 28%, white);
+}
+.dark .status-pill.sent,
+.dark .status-pill.viewed {
+  background: color-mix(in srgb, var(--status-sent) 22%, #0f172a);
+  color: #93c5fd;
+  border-color: color-mix(in srgb, var(--status-sent) 40%, #1e293b);
+}
+.status-pill.pending {
+  background: color-mix(in srgb, var(--status-pending) 14%, white);
+  color: #b45309;
+  border-color: color-mix(in srgb, var(--status-pending) 30%, white);
+}
+.dark .status-pill.pending {
+  background: color-mix(in srgb, var(--status-pending) 20%, #0f172a);
+  color: #fcd34d;
+  border-color: color-mix(in srgb, var(--status-pending) 35%, #334155);
+}
 .status-pill.paid,
-.status-pill.accepted { background: hsl(142 71% 95%); color: hsl(142 71% 30%); border-color: hsl(142 65% 85%); }
+.status-pill.accepted {
+  background: color-mix(in srgb, var(--status-paid) 14%, white);
+  color: var(--status-paid);
+  border-color: color-mix(in srgb, var(--status-paid) 28%, white);
+}
 .dark .status-pill.paid,
-.dark .status-pill.accepted { background: hsl(142 45% 18%); color: hsl(142 70% 70%); border-color: hsl(142 45% 28%); }
-.status-pill.partial_paid { background: hsl(25 95% 95%); color: hsl(25 95% 35%); border-color: hsl(25 90% 85%); }
-.dark .status-pill.partial_paid { background: hsl(25 50% 18%); color: hsl(25 95% 75%); border-color: hsl(25 50% 28%); }
-.status-pill.overdue,
-.status-pill.rejected { background: hsl(0 84% 95%); color: hsl(0 84% 35%); border-color: hsl(0 80% 85%); }
-.dark .status-pill.overdue,
-.dark .status-pill.rejected { background: hsl(0 45% 18%); color: hsl(0 80% 75%); border-color: hsl(0 45% 28%); }
-.status-pill.cancelled,
-.status-pill.expired { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
-.dark .status-pill.expired { background: hsl(25 50% 18%); color: hsl(25 95% 75%); border-color: hsl(25 50% 28%); }
+.dark .status-pill.accepted {
+  background: color-mix(in srgb, var(--status-paid) 22%, #0f172a);
+  color: #6ee7b7;
+  border-color: color-mix(in srgb, var(--status-paid) 38%, #1e293b);
+}
+.status-pill.partial_paid {
+  background: color-mix(in srgb, var(--status-pending) 14%, white);
+  color: #b45309;
+  border-color: color-mix(in srgb, var(--status-pending) 30%, white);
+}
+.dark .status-pill.partial_paid {
+  background: color-mix(in srgb, var(--status-pending) 20%, #0f172a);
+  color: #fcd34d;
+  border-color: color-mix(in srgb, var(--status-pending) 35%, #334155);
+}
+.status-pill.overdue {
+  background: color-mix(in srgb, var(--status-overdue) 14%, white);
+  color: var(--status-overdue);
+  border-color: color-mix(in srgb, var(--status-overdue) 28%, white);
+}
+.dark .status-pill.overdue {
+  background: color-mix(in srgb, var(--status-overdue) 22%, #0f172a);
+  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--status-overdue) 38%, #1e293b);
+}
+.status-pill.rejected,
+.status-pill.declined,
+.status-pill.expired,
+.status-pill.cancelled {
+  background: color-mix(in srgb, var(--status-declined) 16%, white);
+  color: #4b5563;
+  border-color: color-mix(in srgb, var(--status-declined) 32%, white);
+}
+.dark .status-pill.rejected,
+.dark .status-pill.declined,
+.dark .status-pill.expired,
+.dark .status-pill.cancelled {
+  background: color-mix(in srgb, var(--status-declined) 24%, #0f172a);
+  color: #d1d5db;
+  border-color: color-mix(in srgb, var(--status-declined) 40%, #334155);
+}
 
 /* Invoice list rows: fixed height and vertical alignment (works with both Grid & Table) */
 .table-header,
@@ -312,7 +383,7 @@ body {
  * - Backgrounds: bg-background (page), bg-card (cards), bg-muted (subtle areas)
  * - Borders: border-border
  * - Primary actions: bg-primary, text-primary-foreground
- * - Status: status-paid, status-overdue, status-pending
+ * - Status: status-paid, status-sent, status-overdue, status-pending, status-draft, status-declined
  */
 @layer base {
   :root {
@@ -323,9 +394,14 @@ body {
     --brand-primary: #f24e00;
     --brand-secondary: #ff7c00;
     --accent-blue: #ffa600;
-    --status-paid: #27AE60;
-    --status-overdue: #EB5757;
-    --status-pending: #F2994A;
+    /* Invoice / quote status accents (aligned with list badges & DocumentPreview) */
+    --status-paid: #10b981;
+    --status-accepted: #10b981;
+    --status-sent: #3b82f6;
+    --status-overdue: #ef4444;
+    --status-declined: #6b7280;
+    --status-draft: #9ca3af;
+    --status-pending: #f59e0b;
     /* Higher-contrast typography (Slate/Charcoal) */
     --text-main: #0f172a; /* slate-900 */
     --text-muted: #475569; /* slate-600 */

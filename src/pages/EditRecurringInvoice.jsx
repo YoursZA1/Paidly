@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { RecurringInvoice, Client, BankingDetail, Service } from "@/api/entities";
+import { RecurringInvoice, Client, BankingDetail } from "@/api/entities";
+import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -35,7 +36,7 @@ export default function EditRecurringInvoice() {
     const [isSaving, setIsSaving] = useState(false);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
-    const [services, setServices] = useState([]);
+    const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
     const [currentStep, setCurrentStep] = useState("details");
     const [originalStatus, setOriginalStatus] = useState("draft");
 
@@ -60,11 +61,10 @@ export default function EditRecurringInvoice() {
                 return;
             }
 
-            const [template, clientsData, bankingDetailsData, servicesData] = await Promise.all([
+            const [template, clientsData, bankingDetailsData] = await Promise.all([
                 RecurringInvoice.get(templateId),
                 Client.list(),
                 BankingDetail.list(),
-                Service.list(),
             ]);
 
             if (!template) {
@@ -81,7 +81,6 @@ export default function EditRecurringInvoice() {
             setOriginalStatus(template.status);
             setClients(clientsData || []);
             setBankingDetails(bankingDetailsData || []);
-            setServices(servicesData || []);
 
             // Map template data to invoice form
             setInvoiceData({
@@ -225,6 +224,7 @@ export default function EditRecurringInvoice() {
                             bankingDetails={bankingDetails}
                             services={services}
                             isRecurring={true}
+                            onRefreshCatalog={refetchCatalog}
                         />
                         <div className="flex justify-end mt-6">
                             <Button

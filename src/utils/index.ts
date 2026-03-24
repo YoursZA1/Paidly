@@ -18,6 +18,12 @@ export function createPageUrl(pageName: string) {
     return '/' + (slug.charAt(0).toUpperCase() + slug.slice(1));
 }
 
+/** Canonical document view: /ViewDocument/quote/:id or /ViewDocument/invoice/:id */
+export function createViewDocumentUrl(docType: 'invoice' | 'quote', id: string) {
+    const d = docType === 'invoice' ? 'invoice' : 'quote';
+    return `${createPageUrl('ViewDocument')}/${d}/${encodeURIComponent(id)}`;
+}
+
 /** Marketing signup URL; `#sign-up` scrolls to the create-account card on the Signup page. */
 export function createSignupUrl(): string {
     return `${createPageUrl("Signup")}#sign-up`;

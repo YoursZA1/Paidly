@@ -14,6 +14,7 @@ import {
   validatePrivateUpload,
   validateReceiptUpload,
 } from "@/utils/fileUploadValidation";
+import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -28,7 +29,8 @@ const SUPABASE_SELECT_COLUMNS = {
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
   services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
-  profiles: "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, business, created_at, updated_at",
+  profiles:
+    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
@@ -81,9 +83,12 @@ export async function selectProfileByUserId(supabase, authUserId) {
       const d = result.data ? { ...result.data } : null;
       if (d) {
         if (d.business === undefined) d.business = null;
-        if (d.invoice_template === undefined) d.invoice_template = "classic";
+        if (d.invoice_template === undefined) d.invoice_template = DEFAULT_INVOICE_TEMPLATE;
         if (d.invoice_header === undefined) d.invoice_header = "";
+        if (d.document_brand_primary === undefined) d.document_brand_primary = null;
+        if (d.document_brand_secondary === undefined) d.document_brand_secondary = null;
         if (d.phone === undefined) d.phone = null;
+        if (d.company_website === undefined) d.company_website = null;
         if (d.subscription_plan === undefined) d.subscription_plan = null;
         if (d.avatar_url === undefined) d.avatar_url = null;
       }
@@ -1553,6 +1558,10 @@ class AuthManager {
             timezone: profile.timezone,
             invoice_template: profile.invoice_template,
             invoice_header: profile.invoice_header,
+            document_brand_primary: profile.document_brand_primary ?? null,
+            document_brand_secondary: profile.document_brand_secondary ?? null,
+            phone: profile.phone ?? null,
+            company_website: profile.company_website ?? null,
             business: profile.business && typeof profile.business === "object" ? profile.business : null,
           };
         }
@@ -1575,8 +1584,12 @@ class AuthManager {
       currency: companyProfile.currency || credentials.currency || 'ZAR',
       logo_url: companyProfile.logo_url || '',
       timezone: companyProfile.timezone || credentials.timezone || 'UTC',
-      invoice_template: companyProfile.invoice_template || 'classic',
+      invoice_template: companyProfile.invoice_template || DEFAULT_INVOICE_TEMPLATE,
       invoice_header: companyProfile.invoice_header || '',
+      document_brand_primary: companyProfile.document_brand_primary ?? null,
+      document_brand_secondary: companyProfile.document_brand_secondary ?? null,
+      phone: companyProfile.phone ?? "",
+      company_website: companyProfile.company_website ?? null,
       business: companyProfile.business || null,
       plan: credentials.plan || 'free' // Default to free plan
     };
@@ -1666,8 +1679,12 @@ class AuthManager {
           company_address: profile.company_address || this.user.company_address || '',
           currency: profile.currency || this.user.currency || 'USD',
           timezone: profile.timezone || this.user.timezone || 'UTC',
-          invoice_template: profile.invoice_template || this.user.invoice_template || 'classic',
+          invoice_template: profile.invoice_template || this.user.invoice_template || DEFAULT_INVOICE_TEMPLATE,
           invoice_header: profile.invoice_header || this.user.invoice_header || '',
+          document_brand_primary: profile.document_brand_primary ?? this.user.document_brand_primary ?? null,
+          document_brand_secondary: profile.document_brand_secondary ?? this.user.document_brand_secondary ?? null,
+          phone: profile.phone ?? this.user.phone ?? "",
+          company_website: profile.company_website ?? this.user.company_website ?? null,
           business:
             profile.business !== undefined && profile.business !== null && typeof profile.business === "object"
               ? profile.business
@@ -1738,8 +1755,12 @@ class AuthManager {
         currency: profileData.currency || "ZAR",
         logo_url: profileData.logo_url || "",
         timezone: profileData.timezone || "UTC",
-        invoice_template: profileData.invoice_template || "classic",
+        invoice_template: profileData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
         invoice_header: profileData.invoice_header || "",
+        document_brand_primary: profileData.document_brand_primary ?? null,
+        document_brand_secondary: profileData.document_brand_secondary ?? null,
+        phone: profileData.phone ?? "",
+        company_website: profileData.company_website ?? null,
         business:
           profileData.business !== undefined && profileData.business !== null && typeof profileData.business === "object"
             ? profileData.business
@@ -1814,11 +1835,15 @@ class AuthManager {
       logo_url: data.logo_url !== undefined ? data.logo_url : updatedUser.logo_url,
       company_name: data.company_name !== undefined ? data.company_name : updatedUser.company_name,
       company_address: data.company_address !== undefined ? data.company_address : updatedUser.company_address,
+      phone: data.phone !== undefined ? data.phone : updatedUser.phone,
+      company_website: data.company_website !== undefined ? data.company_website : updatedUser.company_website,
       currency: data.currency ?? updatedUser.currency ?? "USD",
       timezone: data.timezone ?? updatedUser.timezone ?? "UTC",
-      invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? "classic",
+      invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? DEFAULT_INVOICE_TEMPLATE,
       invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
       ...(data.business !== undefined ? { business: data.business } : {}),
+      ...(data.document_brand_primary !== undefined ? { document_brand_primary: data.document_brand_primary } : {}),
+      ...(data.document_brand_secondary !== undefined ? { document_brand_secondary: data.document_brand_secondary } : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -1836,11 +1861,26 @@ class AuthManager {
         !!error &&
         Object.prototype.hasOwnProperty.call(profileData, "company_address") &&
         profileColumnMissing(errMsg, "company_address");
+      const stripDocumentBrand =
+        !!error &&
+        (Object.prototype.hasOwnProperty.call(profileData, "document_brand_primary") ||
+          Object.prototype.hasOwnProperty.call(profileData, "document_brand_secondary")) &&
+        (profileColumnMissing(errMsg, "document_brand_primary") ||
+          profileColumnMissing(errMsg, "document_brand_secondary"));
+      const stripCompanyWebsite =
+        !!error &&
+        Object.prototype.hasOwnProperty.call(profileData, "company_website") &&
+        profileColumnMissing(errMsg, "company_website");
 
-      if (error && (stripBusiness || stripCompanyAddress)) {
+      if (error && (stripBusiness || stripCompanyAddress || stripDocumentBrand || stripCompanyWebsite)) {
         const fallback = { ...profileData };
         if (stripBusiness) delete fallback.business;
         if (stripCompanyAddress) delete fallback.company_address;
+        if (stripDocumentBrand) {
+          delete fallback.document_brand_primary;
+          delete fallback.document_brand_secondary;
+        }
+        if (stripCompanyWebsite) delete fallback.company_website;
         Object.keys(fallback).forEach((key) => {
           if (fallback[key] === undefined) delete fallback[key];
         });
@@ -1854,6 +1894,16 @@ class AuthManager {
           }
           if (stripCompanyAddress) {
             console.warn("Profile saved without company_address (column missing on profiles table).");
+          }
+          if (stripDocumentBrand) {
+            console.warn(
+              "Profile saved without document brand color columns. Run scripts/add-profiles-document-brand-colors.sql on your database."
+            );
+          }
+          if (stripCompanyWebsite) {
+            console.warn(
+              "Profile saved without company_website column. Run scripts/add-profiles-company-website.sql on your database."
+            );
           }
         }
       }

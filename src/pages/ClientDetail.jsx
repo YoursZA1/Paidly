@@ -24,12 +24,12 @@ import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 const INVOICES_PER_PAGE = 5;
 
 const statusStyles = {
-    draft: "bg-gray-100 text-gray-700",
-    sent: "bg-primary/15 text-primary",
-    viewed: "bg-purple-100 text-purple-700",
-    partial_paid: "bg-yellow-100 text-yellow-700",
-    paid: "bg-green-100 text-green-700",
-    overdue: "bg-red-100 text-red-700"
+    draft: "bg-status-draft/15 text-slate-600 border border-status-draft/25",
+    sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
+    viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
+    partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
+    overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
 };
 
 const getPaymentTermsText = (terms, days) => {

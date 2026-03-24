@@ -1,5 +1,7 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
+import { createPageUrl } from "@/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -7,14 +9,14 @@ import { formatCurrency } from "../CurrencySelector";
 import InvoiceActions from "./InvoiceActions";
 
 const statusStyles = {
-    draft: "bg-slate-100 text-slate-700 border-slate-200",
-    sending: "bg-primary/15 text-primary border-primary/20 animate-pulse",
-    preparing: "bg-primary/10 text-primary border-primary/20 animate-pulse",
-    sent: "bg-primary/15 text-primary border-primary/20",
-    viewed: "bg-purple-100 text-purple-700 border-purple-200",
-    partial_paid: "bg-amber-100 text-amber-700 border-amber-200",
-    paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    overdue: "bg-rose-100 text-rose-700 border-rose-200"
+    draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border-status-draft/30",
+    sending: "bg-primary/15 text-primary border-primary/25 animate-pulse",
+    preparing: "bg-primary/12 text-primary border-primary/20 animate-pulse",
+    sent: "bg-status-sent/12 text-status-sent border-status-sent/25",
+    viewed: "bg-status-sent/10 text-status-sent border-status-sent/20",
+    partial_paid: "bg-status-pending/12 text-status-pending border-status-pending/25",
+    paid: "bg-status-paid/12 text-status-paid border-status-paid/25",
+    overdue: "bg-status-overdue/12 text-status-overdue border-status-overdue/25",
 };
 
 const getStatusLabel = (status) => {
@@ -59,7 +61,12 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                                     {getClientName(invoice.client_id)}
                                 </p>
                                 <div className="flex items-center gap-2">
-                                    <p className="text-sm text-slate-600">{invoice.invoice_number}</p>
+                                    <Link
+                                        to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
+                                        className="text-sm text-primary font-medium hover:underline"
+                                    >
+                                        {invoice.invoice_number}
+                                    </Link>
                                     <Badge variant="secondary" className={`${statusStyles[invoice.status || 'draft'] || statusStyles.draft} border text-[10px] px-1.5 py-0 h-5`}>
                                         {getStatusLabel(invoice.status)}
                                     </Badge>

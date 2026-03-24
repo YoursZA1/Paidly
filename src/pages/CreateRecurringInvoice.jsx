@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RecurringInvoice, Client, BankingDetail, Service } from '@/api/entities';
+import { RecurringInvoice, Client, BankingDetail } from '@/api/entities';
+import { useServicesCatalogQuery } from '@/hooks/useServicesCatalogQuery';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,7 @@ export default function CreateRecurringInvoice() {
     const navigate = useNavigate();
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
-    const [services, setServices] = useState([]);
+    const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
     
     const [profileName, setProfileName] = useState('');
     const [clientId, setClientId] = useState('');
@@ -36,14 +37,12 @@ export default function CreateRecurringInvoice() {
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const [clientsData, bankingData, servicesData] = await Promise.all([
+                const [clientsData, bankingData] = await Promise.all([
                     Client.list("-created_date"),
                     BankingDetail.list("-created_date"),
-                    Service.list("-created_date")
                 ]);
                 setClients(clientsData);
                 setBankingDetails(bankingData);
-                setServices(servicesData);
             } catch (error) {
                 console.error("Error loading data:", error);
             }
@@ -147,9 +146,12 @@ export default function CreateRecurringInvoice() {
                         invoiceData={invoiceTemplate}
                         setInvoiceData={setInvoiceTemplate}
                         clients={clients}
+                        setClients={setClients}
                         bankingDetails={bankingDetails}
+                        setBankingDetails={setBankingDetails}
                         services={services}
-                        onNext={() => {}} // We don't need the 'Next' button functionality here
+                        onNext={() => {}}
+                        onRefreshCatalog={refetchCatalog}
                     />
 
                     <div className="flex justify-end">

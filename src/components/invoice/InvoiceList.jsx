@@ -30,8 +30,13 @@ const InvoiceRow = React.memo(function InvoiceRow({ invoice, virtualRow, getClie
                 top: 0,
             }}
         >
-            <TableCell className="invoice-col-num text-left font-medium text-foreground text-xs sm:text-sm whitespace-nowrap truncate">
-                {invoice.invoice_number}
+            <TableCell className="invoice-col-num text-left font-medium text-xs sm:text-sm whitespace-nowrap truncate">
+                <Link
+                    to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
+                    className="text-primary hover:underline font-medium"
+                >
+                    {invoice.invoice_number}
+                </Link>
             </TableCell>
             <TableCell className="invoice-col-client text-left text-muted-foreground text-xs sm:text-sm truncate">
                 {getClientName(invoice.client_id)}
@@ -81,7 +86,7 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
     return (
         <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0">
             <Link
-                to={createPageUrl(`ViewInvoice?id=${invoice.id}`)}
+                to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
                 className="flex-1 min-w-0 flex justify-between items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"
             >
                 <div className="flex flex-col gap-0.5 min-w-0">
@@ -160,15 +165,6 @@ const VirtualizedTableBody = React.memo(function VirtualizedTableBody({
         </>
     );
 });
-
-const statusStyles = {
-    draft: "bg-muted text-muted-foreground border-border",
-    sent: "bg-primary/15 text-primary border-primary/20",
-    viewed: "bg-purple-100 text-purple-700 border-purple-200",
-    partial_paid: "bg-amber-100 text-amber-700 border-amber-200",
-    paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    overdue: "bg-red-100 text-red-700 border-red-200"
-};
 
 function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate }) {
     const parentRef = useRef(null);

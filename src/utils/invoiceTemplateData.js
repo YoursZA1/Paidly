@@ -1,4 +1,14 @@
-const VALID_TEMPLATE_KEYS = ["classic", "modern", "minimal", "bold", "paidlypro"];
+import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
+
+/** Classic / Modern / Minimal / Bold / Paidly Pro — HTML templates (e.g. legacy PDF). */
+const LEGACY_HTML_TEMPLATE_KEYS = ["classic", "modern", "minimal", "bold", "paidlypro"];
+
+/** Paidly document layout (Create / View document, DocumentPreview, PDF). */
+export const DOCUMENT_TEMPLATE_KEY = "document";
+
+export const DEFAULT_INVOICE_TEMPLATE = DOCUMENT_TEMPLATE_KEY;
+
+const VALID_TEMPLATE_KEYS = [DOCUMENT_TEMPLATE_KEY, ...LEGACY_HTML_TEMPLATE_KEYS];
 
 /** Truncated UI labels (e.g. table ellipsis) → full line item titles for Paidly Pro / display polish */
 const LINE_ITEM_DISPLAY_OVERRIDES = [
@@ -20,10 +30,27 @@ export function formatLineItemDisplayName(raw) {
   return s;
 }
 
-/** Resolves stored template id to a key Classic / Modern / Minimal / Bold components understand. */
+/** Resolves stored template id to document or a legacy HTML template key. */
 export function normalizeInvoiceTemplateKey(value) {
   const k = typeof value === "string" ? value.trim().toLowerCase() : "";
   return VALID_TEMPLATE_KEYS.includes(k) ? k : null;
+}
+
+/**
+ * First valid template from sources, else {@link DEFAULT_INVOICE_TEMPLATE}.
+ * @param {...unknown} sources — invoice_template, user.invoice_template, etc.
+ */
+export function resolveInvoiceTemplateKey(...sources) {
+  for (const s of sources) {
+    const k = normalizeInvoiceTemplateKey(s);
+    if (k) return k;
+  }
+  return DEFAULT_INVOICE_TEMPLATE;
+}
+
+/** True when the stored key is the Paidly document layout (not Classic/Modern/etc.). */
+export function isDocumentStyleTemplateKey(key) {
+  return normalizeInvoiceTemplateKey(key) === DOCUMENT_TEMPLATE_KEY;
 }
 
 /** Line types that imply physical delivery / a traditional "ship to" address on the invoice. */
@@ -80,7 +107,7 @@ export function mapInvoiceDataForTemplate(invoiceData) {
     discount_type: invoiceData.discount_type,
     discount_value: invoiceData.discount_value,
     notes: invoiceData.notes || "",
-    terms_conditions: invoiceData.terms_conditions || "",
+    terms_conditions: effectiveInvoiceTermsForDisplay(invoiceData.terms_conditions),
     project_title: invoiceData.project_title || "",
     project_description: invoiceData.project_description || "",
   };

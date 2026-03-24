@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Quote, Client, Service } from '@/api/entities';
+import { Quote, Client } from '@/api/entities';
+import { useServicesCatalogQuery } from '@/hooks/useServicesCatalogQuery';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Save } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { createPageUrl } from '@/utils';
+import { createViewDocumentUrl } from '@/utils';
 import { motion } from 'framer-motion';
 import QuoteDetails from '../components/quote/QuoteDetails';
 
 export default function EditQuote() {
     const [quoteData, setQuoteData] = useState(null);
     const [clients, setClients] = useState([]);
-    const [services, setServices] = useState([]);
+    const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const location = useLocation();
@@ -31,17 +32,15 @@ export default function EditQuote() {
     const loadInitialData = async (id) => {
         setIsLoading(true);
         try {
-            const [quote, clientsData, servicesData] = await Promise.all([
+            const [quote, clientsData] = await Promise.all([
                 Quote.get(id),
                 Client.list("-created_date"),
-                Service.list("-created_date")
             ]);
 
             if (!quote) throw new Error("Quote not found");
             
             setQuoteData(quote);
             setClients(clientsData);
-            setServices(servicesData);
         } catch (err) {
             console.error("Error loading data:", err);
             setError(err.message || "Failed to load data");
@@ -53,7 +52,7 @@ export default function EditQuote() {
         if (!quoteData) return;
         try {
             await Quote.update(quoteId, quoteData);
-            navigate(createPageUrl(`ViewQuote?id=${quoteId}`));
+            navigate(createViewDocumentUrl("quote", quoteId));
         } catch (error) {
             console.error("Error saving quote:", error);
             setError("Failed to save changes.");
@@ -80,7 +79,7 @@ export default function EditQuote() {
                     <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => navigate(createPageUrl(`ViewQuote?id=${quoteId}`))}
+                        onClick={() => navigate(createViewDocumentUrl("quote", quoteId))}
                         className="rounded-lg border-gray-200 hover:bg-gray-50"
                     >
                         <ArrowLeft className="w-4 h-4" />
@@ -98,8 +97,9 @@ export default function EditQuote() {
                     setQuoteData={setQuoteData}
                     clients={clients}
                     services={services}
-                    onNext={handleSaveChanges} // Re-using the onNext prop for saving
+                    onNext={handleSaveChanges}
                     isEditing={true}
+                    onRefreshCatalog={refetchCatalog}
                 />
             </div>
         </div>

@@ -28,6 +28,13 @@ import SubscriptionSettings from "@/components/subscription/SubscriptionSettings
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 import { createPageUrl } from "@/utils";
+import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
+import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
+import {
+  parseDocumentBrandHex,
+  DEFAULT_DOCUMENT_BRAND_PRIMARY,
+  DEFAULT_DOCUMENT_BRAND_SECONDARY,
+} from "@/utils/documentBrandColors";
 
 const SettingsCard = ({ title, description, children }) => (
     <section className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-3xl p-8 mb-6 shadow-sm">
@@ -40,6 +47,12 @@ const SettingsCard = ({ title, description, children }) => (
 );
 
 const DOCUMENT_TEMPLATES = [
+    {
+        id: "document",
+        name: "Paidly Document",
+        description: "Current invoice & quote layout — PDF and on-screen",
+        colors: ["#0f172a", "#ffffff", "#f24e00"],
+    },
     {
         id: "classic",
         name: "Classic",
@@ -109,12 +122,16 @@ function CompanyProfileSettings() {
         email: authUser?.email || "",
         company_name: "",
         company_address: "",
+        phone: "",
+        company_website: "",
         logo_url: "",
         currency: "USD",
         country: "",
         timezone: "",
-        invoice_template: "classic",
+        invoice_template: DEFAULT_INVOICE_TEMPLATE,
         invoice_header: "",
+        document_brand_primary: "",
+        document_brand_secondary: "",
         business_bank_name: "",
         business_account_name: "",
         business_account_number: "",
@@ -142,11 +159,15 @@ function CompanyProfileSettings() {
             ...prev,
             company_name: authUser.company_name ?? prev.company_name,
             company_address: authUser.company_address ?? prev.company_address,
+            phone: authUser.phone ?? prev.phone ?? "",
+            company_website: authUser.company_website ?? prev.company_website ?? "",
             logo_url: authUser.logo_url ?? prev.logo_url,
             currency: authUser.currency || prev.currency || "USD",
             timezone: authUser.timezone ?? prev.timezone,
-            invoice_template: authUser.invoice_template || prev.invoice_template || "classic",
+            invoice_template: authUser.invoice_template || prev.invoice_template || DEFAULT_INVOICE_TEMPLATE,
             invoice_header: authUser.invoice_header ?? prev.invoice_header,
+            document_brand_primary: authUser.document_brand_primary ?? prev.document_brand_primary ?? "",
+            document_brand_secondary: authUser.document_brand_secondary ?? prev.document_brand_secondary ?? "",
             business_bank_name: b.bank_name,
             business_account_name: b.account_name,
             business_account_number: b.account_number,
@@ -156,11 +177,15 @@ function CompanyProfileSettings() {
         authUser?.id,
         authUser?.company_name,
         authUser?.company_address,
+        authUser?.phone,
+        authUser?.company_website,
         authUser?.logo_url,
         authUser?.currency,
         authUser?.timezone,
         authUser?.invoice_template,
         authUser?.invoice_header,
+        authUser?.document_brand_primary,
+        authUser?.document_brand_secondary,
         authUser?.business,
     ]);
 
@@ -185,11 +210,15 @@ function CompanyProfileSettings() {
                         email: data.email || prev.email,
                         company_name: data.company_name || "",
                         company_address: data.company_address || "",
+                        phone: data.phone || "",
+                        company_website: data.company_website || "",
                         logo_url: data.logo_url || "",
                         currency: data.currency || "USD",
                         timezone: data.timezone || "",
-                        invoice_template: data.invoice_template || "classic",
+                        invoice_template: data.invoice_template || DEFAULT_INVOICE_TEMPLATE,
                         invoice_header: data.invoice_header || "",
+                        document_brand_primary: data.document_brand_primary || "",
+                        document_brand_secondary: data.document_brand_secondary || "",
                         business_bank_name: b.bank_name,
                         business_account_name: b.account_name,
                         business_account_number: b.account_number,
@@ -318,18 +347,30 @@ function CompanyProfileSettings() {
                 full_name: updatedData.display_name ?? updatedData.full_name,
                 company_name: updatedData.company_name,
                 company_address: updatedData.company_address,
+                phone: (updatedData.phone || "").trim(),
+                company_website: (updatedData.company_website || "").trim(),
                 logo_url: updatedData.logo_url,
                 currency: updatedData.currency || "USD",
                 timezone: updatedData.timezone || "",
-                invoice_template: updatedData.invoice_template || "classic",
+                invoice_template: updatedData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
                 invoice_header: updatedData.invoice_header ?? "",
+                document_brand_primary:
+                  updatedData.document_brand_primary?.trim?.() === ""
+                    ? null
+                    : parseDocumentBrandHex(updatedData.document_brand_primary) ?? null,
+                document_brand_secondary:
+                  updatedData.document_brand_secondary?.trim?.() === ""
+                    ? null
+                    : parseDocumentBrandHex(updatedData.document_brand_secondary) ?? null,
                 business: compactBusinessForProfile(updatedData),
             };
             await User.updateMyUserData(payload);
-            setFormData(prev => ({
+            setFormData((prev) => ({
                 ...prev,
                 ...payload,
                 display_name: payload.full_name,
+                document_brand_primary: payload.document_brand_primary || "",
+                document_brand_secondary: payload.document_brand_secondary || "",
                 business_bank_name: updatedData.business_bank_name,
                 business_account_name: updatedData.business_account_name,
                 business_account_number: updatedData.business_account_number,
@@ -375,10 +416,15 @@ function CompanyProfileSettings() {
             full_name: formData.display_name,
             company_name: formData.company_name || "Your Company",
             company_address: formData.company_address || "",
+            email: formData.email || authUser?.email || "",
+            phone: (formData.phone || "").trim(),
+            company_website: (formData.company_website || "").trim(),
             logo_url: formData.logo_url || "",
             currency: formData.currency || "ZAR",
-            invoice_template: formData.invoice_template || "classic",
+            invoice_template: formData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
             invoice_header: formData.invoice_header || "",
+            document_brand_primary: parseDocumentBrandHex(formData.document_brand_primary) ?? null,
+            document_brand_secondary: parseDocumentBrandHex(formData.document_brand_secondary) ?? null,
             ...(previewBusiness ? { business: previewBusiness } : {}),
         };
         const sampleDraft = {
@@ -400,7 +446,7 @@ function CompanyProfileSettings() {
             bankingDetail: null
         };
         try {
-            sessionStorage.setItem("invoiceDraft", JSON.stringify(sampleDraft));
+            writeInvoiceDraft(sampleDraft);
             window.open(createPageUrl("InvoicePDF") + "?draft=1", "_blank", "noopener,noreferrer");
         } catch (e) {
             console.error("Preview failed:", e);
@@ -472,6 +518,36 @@ function CompanyProfileSettings() {
                             onChange={(e) => handleInputChange("company_address", e.target.value)}
                             placeholder="123 Anderson Street, Cape Town, 8001"
                             className="min-h-24 rounded-lg resize-none text-sm border-slate-200 dark:border-slate-700"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="company_phone" className="text-sm font-medium text-foreground flex items-center gap-2">
+                            Business phone
+                            <HelpTooltip content="Shown on invoice and quote documents under From." />
+                        </Label>
+                        <Input
+                            id="company_phone"
+                            value={formData.phone}
+                            onChange={(e) => handleInputChange("phone", e.target.value)}
+                            placeholder="e.g., +27 21 123 4567"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            inputMode="tel"
+                            autoComplete="tel"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="company_website" className="text-sm font-medium text-foreground flex items-center gap-2">
+                            Company website
+                            <HelpTooltip content="Optional. Shown on documents when set. You can enter example.com or https://example.com" />
+                        </Label>
+                        <Input
+                            id="company_website"
+                            value={formData.company_website}
+                            onChange={(e) => handleInputChange("company_website", e.target.value)}
+                            placeholder="https://yourcompany.com"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            inputMode="url"
+                            autoComplete="url"
                         />
                     </div>
                     <div className="md:col-span-2 space-y-4 text-left">
@@ -586,9 +662,16 @@ function CompanyProfileSettings() {
                                 </Button>
                             )}
                         </div>
-                        <input id="logo-upload" name="logo-upload" type="file" accept="image/png,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                        <input
+                          id="logo-upload"
+                          name="logo-upload"
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                          className="hidden"
+                          onChange={handleLogoChange}
+                        />
                         <p className="text-xs text-slate-400 dark:text-slate-500">
-                            PNG or SVG (SVG preferred for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
+                            JPEG, PNG, or SVG (SVG scales best in PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
                         {logoFile && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-500 flex items-center gap-1 justify-center md:justify-start">
@@ -624,7 +707,7 @@ function CompanyProfileSettings() {
                             Document Template
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="radiogroup" aria-label="Document templates">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3" role="radiogroup" aria-label="Document templates">
                             {DOCUMENT_TEMPLATES.map((template) => (
                                 <button
                                     type="button"
@@ -669,6 +752,72 @@ function CompanyProfileSettings() {
                                 </button>
                             ))}
                         </div>
+
+                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4 space-y-3">
+                            <div>
+                                <Label className="text-sm font-medium text-foreground">Document accent colours</Label>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    Used for the Paidly Document layout (bars, highlights, totals). Leave as default for Paidly orange, or pick your brand hex colours.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="document_brand_primary" className="text-xs text-muted-foreground">
+                                        Primary accent
+                                    </Label>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                            id="document_brand_primary"
+                                            type="color"
+                                            className="h-10 w-14 cursor-pointer rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 p-0.5"
+                                            value={
+                                                parseDocumentBrandHex(formData.document_brand_primary) ||
+                                                DEFAULT_DOCUMENT_BRAND_PRIMARY
+                                            }
+                                            onChange={(e) => handleInputChange("document_brand_primary", e.target.value)}
+                                            aria-label="Primary document accent colour"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-xs h-9"
+                                            onClick={() => handleInputChange("document_brand_primary", "")}
+                                        >
+                                            Paidly default
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="document_brand_secondary" className="text-xs text-muted-foreground">
+                                        Secondary accent
+                                    </Label>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                            id="document_brand_secondary"
+                                            type="color"
+                                            className="h-10 w-14 cursor-pointer rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 p-0.5"
+                                            value={
+                                                parseDocumentBrandHex(formData.document_brand_secondary) ||
+                                                DEFAULT_DOCUMENT_BRAND_SECONDARY
+                                            }
+                                            onChange={(e) => handleInputChange("document_brand_secondary", e.target.value)}
+                                            aria-label="Secondary document accent colour"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-xs h-9"
+                                            onClick={() => handleInputChange("document_brand_secondary", "")}
+                                        >
+                                            Paidly default
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <Button
                             type="button"
                             variant="outline"

@@ -29,16 +29,17 @@ import ClientMessages from '../components/clientportal/ClientMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const statusStyles = {
-    draft: "bg-slate-100 text-slate-700",
-    sent: "bg-primary/15 text-primary",
-    viewed: "bg-purple-100 text-purple-700",
-    paid: "bg-emerald-100 text-emerald-700",
-    partial_paid: "bg-yellow-100 text-yellow-700",
-    overdue: "bg-red-100 text-red-700",
-    cancelled: "bg-slate-200 text-slate-700",
-    accepted: "bg-green-100 text-green-700",
-    rejected: "bg-red-100 text-red-700",
-    expired: "bg-gray-100 text-gray-700"
+    draft: "bg-status-draft/15 text-slate-600 border border-status-draft/25",
+    sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
+    viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
+    paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
+    partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
+    cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    accepted: "bg-status-accepted/12 text-status-accepted border border-status-accepted/25",
+    rejected: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    expired: "bg-status-declined/10 text-status-declined border border-status-declined/20",
+    declined: "bg-status-declined/12 text-status-declined border border-status-declined/25",
 };
 
 const safeFormatDate = (dateStr) => {

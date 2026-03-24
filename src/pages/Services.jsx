@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Service } from "@/api/entities";
 import { User } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
+import { useServicesCatalogQuery, invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,17 +25,15 @@ import ConfirmationDialog from "@/components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
 
-const SERVICES_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
-
 export default function Services() {
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     const userProfileFromStore = useAppStore((s) => s.userProfile);
-    const [services, setServices] = useState([]);
+    const { data: services = [], isLoading } = useServicesCatalogQuery();
     const [user, setUser] = useState(userProfileFromStore ?? null);
     const [searchTerm, setSearchTerm] = useState("");
     const [showForm, setShowForm] = useState(false);
     const [editingService, setEditingService] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [selectedIndustry, setSelectedIndustry] = useState("custom");
     const [industries, setIndustries] = useState([]);
@@ -45,31 +45,12 @@ export default function Services() {
 
     useEffect(() => {
         setIndustries(getIndustries());
-        loadServices();
         loadUser();
     }, []);
 
     useEffect(() => {
         if (userProfileFromStore != null && user === null) setUser(userProfileFromStore);
     }, [userProfileFromStore, user]);
-
-    const loadServices = async () => {
-        setIsLoading(true);
-        try {
-            const servicesData = await Service.list("-created_date", SERVICES_LIST_OPTS);
-            setServices(servicesData || []);
-        } catch (error) {
-            console.error("Error loading services:", error);
-            toast({
-                title: "✗ Error",
-                description: "Failed to load services. Please refresh the page.",
-                variant: "destructive"
-            });
-            setServices([]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const loadUser = async () => {
         try {
@@ -121,25 +102,14 @@ export default function Services() {
         setIsSaving(true);
         try {
             if (editingService) {
-                const updated = await Service.update(editingService.id, serviceData);
-                const resolvedUpdated = { ...editingService, ...serviceData, ...(updated || {}) };
-                setServices((prev) =>
-                    prev.map((item) => (item.id === editingService.id ? resolvedUpdated : item))
-                );
+                await Service.update(editingService.id, serviceData);
                 toast({
                     title: "✓ Item Updated",
                     description: `${serviceData.name} has been updated successfully.`,
                     variant: "success"
                 });
             } else {
-                const created = await Service.create(serviceData);
-                const resolvedCreated = {
-                    ...serviceData,
-                    ...(created || {}),
-                    id: created?.id || `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`
-                };
-                // Optimistically surface the new item immediately; list reload confirms canonical state.
-                setServices((prev) => [resolvedCreated, ...prev.filter((item) => item.id !== resolvedCreated.id)]);
+                await Service.create(serviceData);
                 toast({
                     title: "✓ Item Created",
                     description: `${serviceData.name} has been added to your catalog.`,
@@ -148,7 +118,7 @@ export default function Services() {
             }
             setShowForm(false);
             setEditingService(null);
-            await loadServices();
+            await invalidateServicesCatalog(queryClient);
         } catch (error) {
             console.error("Error saving service:", error);
             const errorMessage = error.message || error.toString();
@@ -192,9 +162,8 @@ export default function Services() {
             // Create each template item
             const promises = templateItems.map(item => Service.create(item));
             await Promise.all(promises);
-            
-            // Reload services list
-            await loadServices();
+
+            await invalidateServicesCatalog(queryClient);
             
             // Show success message
             toast({
@@ -273,7 +242,7 @@ export default function Services() {
                     skipped++;
                 }
             }
-            await loadServices();
+            await invalidateServicesCatalog(queryClient);
             toast({
                 title: "Import complete",
                 description: `${created} item(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,

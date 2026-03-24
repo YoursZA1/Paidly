@@ -1,30 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Quote, Client, User } from '@/api/entities';
-import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
-import { useRef } from 'react';
-
-// Import templates
-import ClassicTemplate from '@/components/invoice/templates/ClassicTemplate';
-import ModernTemplate from '@/components/invoice/templates/ModernTemplate';
-import MinimalTemplate from '@/components/invoice/templates/MinimalTemplate';
-import BoldTemplate from '../components/invoice/templates/BoldTemplate';
-import PaidlyProTemplate from '@/components/invoice/templates/PaidlyProTemplate';
-import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
-
-const TEMPLATES = {
-    classic: ClassicTemplate,
-    modern: ModernTemplate,
-    minimal: MinimalTemplate,
-    bold: BoldTemplate,
-    paidlypro: PaidlyProTemplate,
-};
-
-const DRAFT_STORAGE_KEY = 'quoteDraft';
+import DocumentPreview from '@/components/DocumentPreview';
+import { recordToStyledPreviewDoc, profileForQuotePreview } from '@/utils/documentPreviewData';
+import { readQuoteDraftRaw } from '@/utils/invoiceDraftStorage';
 
 export default function QuotePDF() {
     const location = useLocation();
@@ -43,7 +25,7 @@ export default function QuotePDF() {
     useEffect(() => {
         if (isDraft) {
             try {
-                const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+                const raw = readQuoteDraftRaw();
                 if (raw) {
                     const draft = JSON.parse(raw);
                     const { quoteData, client: draftClient, user: draftUser } = draft;
@@ -53,6 +35,7 @@ export default function QuotePDF() {
                             created_date: quoteData.created_date || quoteData.invoice_date || quoteData.createdAt || new Date().toISOString(),
                             valid_until: quoteData.valid_until,
                             status: quoteData.status || 'draft',
+                            client_id: quoteData.client_id,
                             items: (quoteData.items || []).map((item) => ({
                                 service_name: item.name || item.service_name || 'Item',
                                 description: item.description || '',
@@ -69,6 +52,11 @@ export default function QuotePDF() {
                             terms_conditions: quoteData.terms_conditions || '',
                             project_title: quoteData.project_title || '',
                             project_description: quoteData.project_description || '',
+                            owner_company_name: quoteData.owner_company_name,
+                            owner_company_address: quoteData.owner_company_address,
+                            owner_email: quoteData.owner_email,
+                            owner_logo_url: quoteData.owner_logo_url,
+                            currency: quoteData.currency,
                         };
                         setQuote(mappedQuote);
                         setClient(draftClient);
@@ -124,17 +112,30 @@ export default function QuotePDF() {
         setIsLoading(false);
     };
 
-    const safeFormatDate = (dateStr) => {
-        if (!dateStr) return 'N/A';
-        const date = parseISO(dateStr);
-        return isValid(date) ? format(date, 'MMMM d, yyyy') : 'N/A';
-    };
+    const clientResolved = useMemo(
+        () => client || { name: quote?.client_name || 'Client', id: quote?.client_id },
+        [client, quote?.client_name, quote?.client_id]
+    );
+
+    const profile = useMemo(() => profileForQuotePreview(quote, user), [quote, user]);
+
+    const previewDoc = useMemo(
+        () => (quote ? recordToStyledPreviewDoc(quote, clientResolved, 'quote', profile) : null),
+        [quote, clientResolved, profile]
+    );
+
+    const clientsForPreview = useMemo(() => {
+        if (!clientResolved || typeof clientResolved !== 'object') return [];
+        const c = clientResolved;
+        const withId = c.id ? c : { ...c, id: quote?.client_id };
+        return [withId];
+    }, [clientResolved, quote?.client_id]);
 
     if (isLoading) {
         return <DocumentPageSkeleton title="Loading quote…" />;
     }
 
-    if (!quote || !client || !user) {
+    if (!quote || !user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
                 <p className="text-gray-600">
@@ -144,20 +145,6 @@ export default function QuotePDF() {
             </div>
         );
     }
-
-    const userCurrency = user?.currency || 'ZAR';
-    const templateKey = normalizeInvoiceTemplateKey(user?.invoice_template) || 'classic';
-    const TemplateComponent = TEMPLATES[templateKey] || TEMPLATES.classic;
-
-    // Map quote data to invoice structure for template compatibility
-    const mappedInvoice = {
-        ...quote,
-        items: Array.isArray(quote?.items) ? quote.items : [],
-        invoice_number: quote.quote_number, // Use quote number as invoice number
-        status: quote.status,
-        type: 'QUOTE', // Add type to distinguish in template if needed
-        delivery_date: quote.valid_until, // Map valid until to due date
-    };
 
     const handleDownloadPDF = async () => {
         if (!printRef.current || !quote) return;
@@ -203,37 +190,37 @@ export default function QuotePDF() {
                 }
             `}</style>
 
-            <div className="min-h-screen bg-gray-100 py-4 sm:py-8 print:bg-white print:py-0">
-                <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
-                    <div className="no-print mb-4 flex justify-end gap-2">
+            <div className="min-h-[100dvh] w-full bg-gray-100 py-2 sm:py-4 print:bg-white print:min-h-0 print:py-0">
+                <div className="pdf-wrapper w-full max-w-none mx-auto px-2 sm:px-4">
+                    <div className="no-print quote-pdf-actions mb-4 flex flex-col sm:flex-row justify-end gap-2">
                         <Button
                             onClick={() => (isDraft ? window.close() : navigate(-1))}
                             variant="outline"
-                            className="px-4 sm:px-6 py-2 rounded-lg text-sm"
+                            className="px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm border-slate-200"
                         >
                             {isDraft ? 'Close' : 'Back'}
                         </Button>
                         <Button
                             onClick={handleDownloadPDF}
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2 rounded-lg text-sm"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
                             disabled={isGeneratingPdf}
                         >
-                            {isGeneratingPdf ? 'Generating…' : 'Download PDF'}
+                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
                         </Button>
                     </div>
 
-                    <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
+                    <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto max-w-[210mm] mx-auto">
                         <div className="pdf-content">
                             <div ref={printRef}>
-                                <TemplateComponent
-                                    invoice={mappedInvoice}
-                                    client={client}
-                                    user={user}
-                                    bankingDetail={null} // Quotes might not have banking details attached yet
-                                    userCurrency={userCurrency}
-                                    safeFormatDate={safeFormatDate}
-                                    documentTitle="QUOTE" // Pass explicit title override
-                                />
+                                {previewDoc ? (
+                                    <DocumentPreview
+                                        doc={previewDoc}
+                                        docType="quote"
+                                        clients={clientsForPreview}
+                                        user={profile}
+                                        hideStatus
+                                    />
+                                ) : null}
                             </div>
                         </div>
                     </div>

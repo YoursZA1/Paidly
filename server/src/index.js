@@ -274,6 +274,7 @@ app.post("/api/waitlist", async (req, res) => {
         logSecurity("info", "waitlist_duplicate", { ip, email: normalizedEmail });
         return res.json({
           ok: true,
+          duplicate: true,
           message: "You're already on the list — we'll email you before we launch.",
         });
       }

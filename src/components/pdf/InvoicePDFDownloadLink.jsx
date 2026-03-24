@@ -1,9 +1,12 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { format, parseISO, isValid } from "date-fns";
+import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import generatePdfFromElement from "@/utils/generatePdfFromElement";
-import InvoiceTemplatePdfCapture from "./InvoiceTemplatePdfCapture";
+import DocumentPreview from "@/components/DocumentPreview";
+import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
+import { buildInvoiceTemplatePdfCaptureProps } from "./InvoiceTemplatePdfCapture";
 
 function bankBlockFromBankingRow(bankingDetail, refNumber) {
   if (!bankingDetail) return null;
@@ -133,10 +136,9 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
       })()
     : "";
 
-  const paymentTerms =
-    invoice?.terms_conditions?.trim() ||
-    invoice?.payment_terms?.trim() ||
-    "Due within 15 days upon acceptance. Late payments may incur interest.";
+  const paymentTerms = effectiveInvoiceTermsForDisplay(
+    invoice?.terms_conditions?.trim() || invoice?.payment_terms?.trim() || ""
+  );
 
   const refNumber =
     String(invoice?.invoice_number || invoice?.reference_number || number || "—").trim() || "—";
@@ -171,8 +173,8 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
 }
 
 /**
- * Download button: same HTML invoice templates as the preview (html2pdf.js).
- * Use when you have full invoice, client, and user (e.g. on InvoicePDF page).
+ * Download button: DocumentPreview layout (same as Create / View invoice) via html2pdf.
+ * Use when you have invoice, client, and user (e.g. on InvoicePDF page).
  */
 export default function InvoicePDFDownloadLink({
   invoice,
@@ -185,6 +187,34 @@ export default function InvoicePDFDownloadLink({
 }) {
   const captureRef = useRef(null);
   const [loading, setLoading] = useState(false);
+
+  const clientFallback = useMemo(
+    () => client || { name: invoice?.client_name || "Client" },
+    [client, invoice?.client_name]
+  );
+
+  const pack = useMemo(
+    () =>
+      invoice
+        ? buildInvoiceTemplatePdfCaptureProps(invoice, clientFallback, user, bankingDetail)
+        : null,
+    [invoice, clientFallback, user, bankingDetail]
+  );
+
+  const previewDoc = useMemo(
+    () =>
+      invoice && pack
+        ? recordToStyledPreviewDoc(invoice, pack.clientForTemplate, "invoice", pack.resolvedUser)
+        : null,
+    [invoice, pack]
+  );
+
+  const clientsForPreview = useMemo(() => {
+    if (!pack?.clientForTemplate || typeof pack.clientForTemplate !== "object") return [];
+    const c = pack.clientForTemplate;
+    const withId = c.id ? c : { ...c, id: invoice.client_id };
+    return [withId];
+  }, [pack?.clientForTemplate, invoice?.client_id]);
 
   if (!invoice) return null;
 
@@ -217,13 +247,18 @@ export default function InvoicePDFDownloadLink({
           zIndex: -1,
         }}
       >
-        <InvoiceTemplatePdfCapture
-          ref={captureRef}
-          invoice={invoice}
-          client={client}
-          user={user}
-          bankingDetail={bankingDetail}
-        />
+        {previewDoc && pack ? (
+          <DocumentPreview
+            ref={captureRef}
+            doc={previewDoc}
+            docType="invoice"
+            clients={clientsForPreview}
+            user={pack.resolvedUser}
+            hideStatus
+          />
+        ) : (
+          <div ref={captureRef} />
+        )}
       </div>
       <Button
         type="button"

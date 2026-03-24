@@ -39,19 +39,19 @@ export default function QuoteStatusTracker({ status }) {
                 if (index === 2) {
                     if (status === 'accepted') {
                         StatusIcon = CheckCircle2;
-                        colorClass = "text-emerald-600";
-                        bgClass = "bg-emerald-100";
-                        textClass = "text-emerald-900 font-medium";
+                        colorClass = "text-status-paid";
+                        bgClass = "bg-status-paid/15";
+                        textClass = "text-status-paid font-medium";
                     } else if (status === 'rejected') {
                         StatusIcon = XCircle;
-                        colorClass = "text-rose-600";
-                        bgClass = "bg-rose-100";
-                        textClass = "text-rose-900 font-medium";
+                        colorClass = "text-status-declined";
+                        bgClass = "bg-status-declined/15";
+                        textClass = "text-status-declined font-medium";
                     } else if (status === 'expired') {
                         StatusIcon = Clock;
-                        colorClass = "text-orange-600";
-                        bgClass = "bg-orange-100";
-                        textClass = "text-orange-900 font-medium";
+                        colorClass = "text-status-declined";
+                        bgClass = "bg-status-declined/12";
+                        textClass = "text-status-declined font-medium";
                     } else if (isCurrent && status !== 'sent' && status !== 'viewed') {
                          // Waiting for decision
                          StatusIcon = Clock; 

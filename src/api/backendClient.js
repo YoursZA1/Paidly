@@ -29,6 +29,20 @@ export function isProductionBackendUrlLocalhost() {
   return import.meta.env.PROD && /localhost|127\.0\.0\.1/i.test(serverUrl);
 }
 
+/**
+ * When false, email/password sign-in and sign-up use Supabase only (no POST /api/auth/*).
+ * - Production + localhost API URL → false.
+ * - VITE_SUPABASE_ONLY=1 → false (production or dev).
+ * - Development (Vite): false by default so /api/auth is not hit when `npm run server` is off (no 503 in console).
+ *   Set VITE_NODE_AUTH_API=1 when testing the Node auth routes locally with the server running.
+ */
+export function shouldUseNodeAuthApi() {
+  if (isProductionBackendUrlLocalhost()) return false;
+  if (viteEnvFlag("VITE_SUPABASE_ONLY")) return false;
+  if (isDev && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
+  return true;
+}
+
 if (isProductionBackendUrlLocalhost() && !supabaseOnlyProd) {
   console.warn(
     "[Paidly] VITE_SERVER_URL is missing or points to localhost in production. Email/password sign-in uses Supabase directly. Set VITE_SERVER_URL to your API (no trailing slash) for server rate limits, waitlist, and currency — or set VITE_SUPABASE_ONLY=1 if you intentionally omit the Node API."

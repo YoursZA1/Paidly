@@ -18,7 +18,7 @@ const { backendPost } = vi.hoisted(() => ({
 
 vi.mock("@/api/backendClient", () => ({
   backendApi: { post: backendPost },
-  isProductionBackendUrlLocalhost: () => false,
+  shouldUseNodeAuthApi: () => true,
 }));
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: mockSupabase }));

@@ -1,31 +1,20 @@
 import PropTypes from "prop-types";
-import React, { memo, useState } from "react";
+import React, { memo, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, FileText, Download, Send } from "lucide-react";
 import { motion } from "framer-motion";
-import { format, isValid, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { createPageUrl } from "@/utils";
 import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
-import InvoiceTemplateDocument from "@/components/pdf/InvoiceTemplateDocument";
+import DocumentPreview from "@/components/DocumentPreview";
 import { buildInvoiceTemplatePdfCaptureProps } from "@/components/pdf/InvoiceTemplatePdfCapture";
+import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 
-const DRAFT_STORAGE_KEY = "invoiceDraft";
-
-function safeFormatDate(dateStr) {
-  if (!dateStr) return "N/A";
-  const date =
-    typeof dateStr === "string"
-      ? parseISO(dateStr)
-      : dateStr instanceof Date
-        ? dateStr
-        : new Date(dateStr);
-  return isValid(date) ? format(date, "MMMM d, yyyy") : "N/A";
-}
+import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
 
 function InvoicePreview({
   invoiceData,
@@ -57,28 +46,36 @@ function InvoicePreview({
 
   const clientList = Array.isArray(clients) ? clients : [];
   const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
-  const pack = buildInvoiceTemplatePdfCaptureProps(
-    invoiceData,
-    clientProp ?? clientResolved ?? {},
-    user,
-    bankingDetail
+
+  const pack = useMemo(
+    () =>
+      buildInvoiceTemplatePdfCaptureProps(
+        invoiceData,
+        clientProp ?? clientResolved ?? {},
+        user,
+        bankingDetail
+      ),
+    [invoiceData, clientProp, clientResolved, user, bankingDetail]
   );
+
+  const previewDoc = useMemo(
+    () => recordToStyledPreviewDoc(invoiceData, pack.clientForTemplate, "invoice", pack.resolvedUser),
+    [invoiceData, pack]
+  );
+
   const { clientForTemplate: client } = pack;
 
   const handleDownloadPDF = () => {
     try {
-      sessionStorage.setItem(
-        DRAFT_STORAGE_KEY,
-        JSON.stringify({
-          invoiceData: {
-            ...invoiceData,
-            invoice_number: invoiceData.invoice_number || invoiceData.reference_number || "Draft",
-          },
-          client: clientProp ?? clientResolved ?? {},
-          user: user || {},
-          bankingDetail: bankingDetail || null,
-        })
-      );
+      writeInvoiceDraft({
+        invoiceData: {
+          ...invoiceData,
+          invoice_number: invoiceData.invoice_number || invoiceData.reference_number || "Draft",
+        },
+        client: clientProp ?? clientResolved ?? {},
+        user: user || {},
+        bankingDetail: bankingDetail || null,
+      });
       window.open(`${createPageUrl("InvoicePDF")}?draft=1`, "_blank", "noopener,noreferrer");
     } catch (e) {
       console.error("Failed to open invoice PDF:", e);
@@ -182,18 +179,14 @@ function InvoicePreview({
     }
   };
 
-  const templateDocument = (
-    <InvoiceTemplateDocument
-      TemplateComponent={pack.TemplateComponent}
-      invoice={pack.templateInvoice}
-      client={pack.clientForTemplate}
+  const templateDocument = previewDoc ? (
+    <DocumentPreview
+      doc={previewDoc}
+      docType="invoice"
+      clients={clientList}
       user={pack.resolvedUser}
-      bankingDetail={pack.bankingForTemplate}
-      userCurrency={pack.userCurrency}
-      safeFormatDate={safeFormatDate}
-      embeddedChrome={embedded}
     />
-  );
+  ) : null;
 
   if (embedded) {
     return <div className="w-full min-w-0 text-card-foreground">{templateDocument}</div>;
@@ -203,16 +196,6 @@ function InvoicePreview({
     <div style={{ opacity: 1 }}>
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-x-auto overflow-y-visible rounded-fintech text-card-foreground min-w-0">
         <CardHeader className="border-b border-border pb-4 sm:pb-6 px-4 sm:px-6">
-          {pack.resolvedUser?.logo_url && (
-            <div className="mb-3 sm:mb-4 flex justify-center">
-              <img
-                src={pack.resolvedUser.logo_url}
-                alt="Company Logo"
-                className="w-auto max-w-[200px] sm:max-w-xs rounded shadow"
-                style={{ height: "60px", maxWidth: "300px", objectFit: "contain" }}
-              />
-            </div>
-          )}
           <CardTitle className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
             <FileText className="w-5 h-5 shrink-0" />
             {previewOnly ? "Invoice" : "Invoice Preview"}

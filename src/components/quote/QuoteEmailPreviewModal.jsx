@@ -262,15 +262,15 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
                                     {(quote.notes || quote.terms_conditions) && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                                             {quote.notes && (
-                                                <div className="bg-yellow-50 p-4 rounded">
-                                                    <h3 className="font-bold text-yellow-800 mb-2">Additional Notes:</h3>
-                                                    <p className="whitespace-pre-wrap">{quote.notes}</p>
+                                                <div className="rounded-lg border border-primary/15 bg-primary/5 p-4">
+                                                    <h3 className="mb-2 font-bold text-primary">Additional Notes:</h3>
+                                                    <p className="whitespace-pre-wrap text-foreground">{quote.notes}</p>
                                                 </div>
                                             )}
                                             {quote.terms_conditions && (
-                                                <div className="bg-purple-50 p-4 rounded">
-                                                    <h3 className="font-bold text-purple-800 mb-2">Terms & Conditions:</h3>
-                                                    <p className="whitespace-pre-wrap">{quote.terms_conditions}</p>
+                                                <div className="rounded-lg border border-border bg-muted/60 p-4">
+                                                    <h3 className="mb-2 font-bold text-foreground">Terms & Conditions:</h3>
+                                                    <p className="whitespace-pre-wrap text-muted-foreground">{quote.terms_conditions}</p>
                                                 </div>
                                             )}
                                         </div>

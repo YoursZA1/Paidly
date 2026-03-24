@@ -226,18 +226,12 @@ export default function UnifiedInvoiceTemplate({
   const dueLabel = isQuote ? "Valid until" : "Due date";
   const numberLabel = isQuote ? "Quote no" : "Invoice no";
 
-  const taglineRaw =
-    typeof user?.invoice_header === "string" ? user.invoice_header.trim() : "";
-  const tagline =
-    taglineRaw && taglineRaw.length <= 140
-      ? taglineRaw.split("\n")[0].trim()
-      : taglineRaw
-        ? `${taglineRaw.slice(0, 100)}${taglineRaw.length > 100 ? "…" : ""}`
-        : "";
-
-  const companyTitle = (user?.company_name || "Your company").toUpperCase();
   const logoSrc =
-    user?.logo_url || user?.company_logo_url || null;
+    user?.logo_url ||
+    user?.company_logo_url ||
+    invoice?.owner_logo_url ||
+    invoice?.company?.logo_url ||
+    null;
   const businessContactRows = accountInfoRowsFromUser(user);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
   const hasAccountDetailsSection =
@@ -270,37 +264,20 @@ export default function UnifiedInvoiceTemplate({
     >
       <header className={`mb-6 sm:mb-8 ${cfg.headerAccent || ""}`}>
         <div className="flex flex-col gap-6 sm:flex-row sm:justify-between sm:items-start">
-          <div className="flex gap-3 sm:gap-4 min-w-0 items-start">
+          <div className="flex min-w-0 items-start">
             {logoSrc ? (
               <img
                 src={logoSrc}
                 alt=""
-                className="h-24 sm:h-28 w-auto max-w-[280px] sm:max-w-[320px] object-contain object-left shrink-0"
-                style={{ maxHeight: "112px" }}
+                className="h-48 sm:h-56 w-auto max-w-[560px] sm:max-w-[640px] object-contain object-left shrink-0"
+                style={{ maxHeight: "224px" }}
               />
             ) : (
               <div
-                className={`h-24 w-24 sm:h-28 sm:w-28 shrink-0 rounded-sm ${cfg.logoFallback}`}
+                className={`h-48 w-48 sm:h-56 sm:w-56 shrink-0 rounded-sm ${cfg.logoFallback}`}
                 aria-hidden
               />
             )}
-            <div className="min-w-0 flex-1">
-              <h1
-                className={`text-base sm:text-lg tracking-tight ${cfg.title} ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                {companyTitle}
-              </h1>
-              {tagline ? (
-                <p className="text-xs sm:text-sm text-neutral-500 mt-1 uppercase tracking-wide">
-                  {tagline}
-                </p>
-              ) : null}
-              {user?.company_address ? (
-                <p className="text-xs text-neutral-600 mt-2 whitespace-pre-line max-w-md">
-                  {user.company_address}
-                </p>
-              ) : null}
-            </div>
           </div>
           <div className="text-left sm:text-right shrink-0">
             <h2

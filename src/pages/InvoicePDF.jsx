@@ -1,17 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
-import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
-import InvoicePDFDownloadLink from '@/components/pdf/InvoicePDFDownloadLink';
-import InvoiceTemplateDocument from '@/components/pdf/InvoiceTemplateDocument';
 import { buildInvoiceTemplatePdfCaptureProps } from '@/components/pdf/InvoiceTemplatePdfCapture';
 import { mapInvoiceDataForTemplate } from '@/utils/invoiceTemplateData';
-
-const DRAFT_STORAGE_KEY = 'invoiceDraft';
+import DocumentPreview from '@/components/DocumentPreview';
+import { recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
+import { readInvoiceDraftRaw } from '@/utils/invoiceDraftStorage';
 const OPTIONAL_FETCH_TIMEOUT_MS = 15000;
+
+function clientsArrayForPreview(clientForTemplate, clientId) {
+    if (!clientForTemplate || typeof clientForTemplate !== 'object') return [];
+    const withId = clientForTemplate.id ? clientForTemplate : { ...clientForTemplate, id: clientId };
+    return [withId];
+}
 
 export default function InvoicePDF() {
     const location = useLocation();
@@ -31,7 +35,7 @@ export default function InvoicePDF() {
     useEffect(() => {
         if (isDraft) {
             try {
-                const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+                const raw = readInvoiceDraftRaw();
                 if (raw) {
                     const draft = JSON.parse(raw);
                     const { invoiceData, client: draftClient, user: draftUser } = draft;
@@ -128,11 +132,31 @@ export default function InvoicePDF() {
         setIsLoading(false);
     };
 
-    const safeFormatDate = (dateStr) => {
-        if (!dateStr) return 'N/A';
-        const date = parseISO(dateStr);
-        return isValid(date) ? format(date, 'MMMM d, yyyy') : 'N/A';
-    };
+    const clientFallback = useMemo(
+        () => client || { name: invoice?.client_name || 'Client' },
+        [client, invoice?.client_name]
+    );
+
+    const pdfPack = useMemo(
+        () =>
+            invoice
+                ? buildInvoiceTemplatePdfCaptureProps(invoice, clientFallback, user, bankingDetail)
+                : null,
+        [invoice, clientFallback, user, bankingDetail]
+    );
+
+    const previewDoc = useMemo(
+        () =>
+            invoice && pdfPack
+                ? recordToStyledPreviewDoc(invoice, pdfPack.clientForTemplate, 'invoice', pdfPack.resolvedUser)
+                : null,
+        [invoice, pdfPack]
+    );
+
+    const clientsForPreview = useMemo(
+        () => clientsArrayForPreview(pdfPack?.clientForTemplate, invoice?.client_id),
+        [pdfPack?.clientForTemplate, invoice?.client_id]
+    );
 
     if (isLoading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -152,7 +176,7 @@ export default function InvoicePDF() {
         );
     }
 
-    if (!invoice) {
+    if (!invoice || !pdfPack) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
                 <p className="text-gray-600">
@@ -163,17 +187,24 @@ export default function InvoicePDF() {
         );
     }
 
-    const pdfPack = buildInvoiceTemplatePdfCaptureProps(
-        invoice,
-        client || { name: invoice.client_name || 'Client' },
-        user,
-        bankingDetail
-    );
+    const handleDownloadPDF = async () => {
+        if (!printRef.current || isGeneratingPdf) return;
+        setIsGeneratingPdf(true);
+        try {
+            const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
+            await generatePdfFromElement(printRef.current, filename);
+        } catch (e) {
+            console.error('PDF generation failed, falling back to print:', e);
+            window.print();
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
 
     return (
         <>
-            <div className="min-h-screen bg-gray-100 py-4 sm:py-8 print:bg-white print:py-0">
-                <div className="pdf-wrapper w-full max-w-4xl mx-auto px-2 sm:px-4">
+            <div className="min-h-[100dvh] w-full bg-gray-100 py-2 sm:py-4 print:bg-white print:min-h-0 print:py-0">
+                <div className="pdf-wrapper w-full max-w-none mx-auto px-2 sm:px-4">
                     <div className="no-print invoice-pdf-actions mb-4 flex flex-col sm:flex-row justify-end gap-2">
                         <Button
                             onClick={() => (isDraft ? window.close() : navigate(-1))}
@@ -182,45 +213,25 @@ export default function InvoicePDF() {
                         >
                             {isDraft ? 'Close' : 'Back'}
                         </Button>
-                        <InvoicePDFDownloadLink
-                            invoice={invoice}
-                            client={client}
-                            user={pdfPack.resolvedUser}
-                            bankingDetail={bankingDetail}
-                            className="btn-download px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
-                        />
                         <Button
-                            onClick={async () => {
-                                if (!printRef.current || isGeneratingPdf) return;
-                                setIsGeneratingPdf(true);
-                                try {
-                                    const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                                    await generatePdfFromElement(printRef.current, filename);
-                                } catch (e) {
-                                    console.error('PDF generation failed, falling back to print:', e);
-                                    window.print();
-                                } finally {
-                                    setIsGeneratingPdf(false);
-                                }
-                            }}
+                            onClick={handleDownloadPDF}
                             disabled={isGeneratingPdf}
-                            variant="outline"
-                            className="px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
+                            className="btn-download bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg text-sm font-medium"
                         >
-                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF (template)'}
+                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
                         </Button>
                     </div>
 
-                    <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto">
-                        <InvoiceTemplateDocument
-                            TemplateComponent={pdfPack.TemplateComponent}
-                            invoice={pdfPack.templateInvoice}
-                            client={pdfPack.clientForTemplate}
-                            user={pdfPack.resolvedUser}
-                            bankingDetail={pdfPack.bankingForTemplate}
-                            userCurrency={pdfPack.userCurrency}
-                            safeFormatDate={safeFormatDate}
-                        />
+                    <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto max-w-[210mm] mx-auto">
+                        {previewDoc ? (
+                            <DocumentPreview
+                                doc={previewDoc}
+                                docType="invoice"
+                                clients={clientsForPreview}
+                                user={pdfPack.resolvedUser}
+                                hideStatus
+                            />
+                        ) : null}
                     </div>
                 </div>
             </div>

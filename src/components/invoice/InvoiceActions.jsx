@@ -12,7 +12,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuContent
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Share2, FileText, Send, XCircle, MessageCircle } from 'lucide-react';
+import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle, Edit, Loader2, Trash2, DollarSign, Share2, FileText, Send, XCircle, MessageCircle, LayoutTemplate } from 'lucide-react';
 import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -623,7 +623,10 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                                 <DrawerItem icon={Edit} label="Edit Invoice" href={createPageUrl(`EditInvoice?id=${invoice.id}`)} />
                             )}
                             {isPaid && (
-                                <DrawerItem icon={Eye} label="View Invoice" href={createPageUrl(`ViewInvoice?id=${invoice.id}`)} />
+                                <>
+                                    <DrawerItem icon={Eye} label="View Invoice" href={createPageUrl(`ViewInvoice?id=${invoice.id}`)} />
+                                    <DrawerItem icon={LayoutTemplate} label="Document view" href={createPageUrl(`ViewDocument/invoice/${invoice.id}`)} />
+                                </>
                             )}
                         </Section>
                         <Section label="Share">
@@ -634,6 +637,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                             )}
                         </Section>
                         <Section label="Export">
+                            <DrawerItem icon={LayoutTemplate} label="Document view" href={createPageUrl(`ViewDocument/invoice/${invoice.id}`)} />
                             <DrawerItem icon={FileText} label="Preview PDF" onClick={handlePreviewPDF} />
                             <DrawerItem icon={isDownloading ? Loader2 : Download} label={isDownloading ? "Downloading…" : "Download PDF"} onClick={handleDownloadPDF} />
                             {!isPaid && (
@@ -694,12 +698,20 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                         </DropdownMenuItem>
                     )}
                     {isPaid && (
-                        <DropdownMenuItem asChild>
-                            <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass}>
-                                <Eye className={iconClass} />
-                                View Invoice
-                            </Link>
-                        </DropdownMenuItem>
+                        <>
+                            <DropdownMenuItem asChild>
+                                <Link to={createPageUrl(`ViewInvoice?id=${invoice.id}`)} className={itemClass}>
+                                    <Eye className={iconClass} />
+                                    View Invoice
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)} className={itemClass}>
+                                    <LayoutTemplate className={iconClass} />
+                                    Document view
+                                </Link>
+                            </DropdownMenuItem>
+                        </>
                     )}
                 </Section>
                 <DropdownMenuSeparator />
@@ -721,6 +733,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 </Section>
                 <DropdownMenuSeparator />
                 <Section label="Export">
+                    <DropdownMenuItem asChild>
+                        <Link to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)} className={itemClass}>
+                            <LayoutTemplate className={iconClass} />
+                            Document view
+                        </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={handlePreviewPDF} className={itemClass} data-testid="invoice-preview-pdf">
                         <FileText className={iconClass} />
                         Preview PDF

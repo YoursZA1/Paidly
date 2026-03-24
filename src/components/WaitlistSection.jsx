@@ -3,20 +3,36 @@ import { Loader2, Mail, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { submitWaitlistSignup } from "@/api/waitlistClient";
-import { PRODUCT_LAUNCH_BADGE, PRODUCT_LAUNCH_SUBTITLE } from "@/constants/productLaunch";
+import {
+  PRODUCT_LAUNCH_BADGE,
+  PRODUCT_LAUNCH_DATE_LABEL,
+  PRODUCT_LAUNCH_SUBTITLE,
+  getProductLaunchTimeLeftPhrase,
+  getWaitlistThankYouMessage,
+} from "@/constants/productLaunch";
 
 export default function WaitlistSection() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [thanksOpen, setThanksOpen] = useState(false);
+  const [thanksTitle, setThanksTitle] = useState("");
+  const [thanksDescription, setThanksDescription] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
-    setSuccess(false);
     const normalized = email.trim().toLowerCase();
     if (!normalized) {
       setMessage("Please enter your email.");
@@ -26,15 +42,24 @@ export default function WaitlistSection() {
     try {
       const res = await submitWaitlistSignup({ email: normalized, name: name.trim() || undefined });
       if (res?.ok) {
-        setSuccess(true);
-        setMessage(res.message || "You're on the list. We'll be in touch soon.");
         setEmail("");
         setName("");
+        const timeLeft = getProductLaunchTimeLeftPhrase();
+        if (res.duplicate) {
+          setThanksTitle("You're already on the list");
+          setThanksDescription(
+            `We’ll still email you before we go live on ${PRODUCT_LAUNCH_DATE_LABEL}. ${timeLeft} left.`
+          );
+        } else {
+          const { title, description } = getWaitlistThankYouMessage();
+          setThanksTitle(title);
+          setThanksDescription(description);
+        }
+        setThanksOpen(true);
       } else {
         setMessage(res?.error || "Something went wrong. Please try again.");
       }
     } catch (err) {
-      setSuccess(false);
       const msg =
         err?.response?.data?.error ||
         err?.message ||
@@ -97,10 +122,7 @@ export default function WaitlistSection() {
             </div>
           </div>
           {message && (
-            <p
-              className={`text-sm ${success ? "text-emerald-400" : "text-red-400"}`}
-              role="status"
-            >
+            <p className="text-sm text-red-400" role="alert">
               {message}
             </p>
           )}
@@ -119,6 +141,25 @@ export default function WaitlistSection() {
             )}
           </Button>
         </form>
+
+        <AlertDialog open={thanksOpen} onOpenChange={setThanksOpen}>
+          <AlertDialogContent className="rounded-2xl border-border bg-zinc-950 text-zinc-100 sm:max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-bold text-white">{thanksTitle}</AlertDialogTitle>
+              <AlertDialogDescription className="text-left text-base leading-relaxed text-zinc-300">
+                {thanksDescription}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction
+                className="w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] sm:w-auto"
+                onClick={() => setThanksOpen(false)}
+              >
+                OK
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </section>
   );

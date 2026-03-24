@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import InvoiceMetaTags from '@/components/invoice/InvoiceMetaTags';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
-import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
+import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 
 /**
  * Public read-only invoice view at /view/:token.
@@ -213,7 +213,7 @@ export default function InvoiceView() {
   const publicViewUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/view/${token}` : '';
 
-  const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || 'classic';
+  const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
   const publicUser = {
     logo_url: invoice.owner_logo_url || invoice.company?.logo_url || '',
     company_name: invoice.owner_company_name || invoice.company?.name || '',

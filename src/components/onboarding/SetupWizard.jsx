@@ -251,12 +251,12 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                                     <UploadCloud className="w-4 h-4" />
                                                     {logoFile || formData.logo_url ? "Change Logo" : "Upload Logo"}
                                                 </span>
-                                                <span className="text-xs text-slate-400">PNG or SVG (SVG for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.</span>
+                                                <span className="text-xs text-slate-400">JPEG, PNG, or SVG (SVG for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.</span>
                                             </div>
                                             <Input 
                                                 id="logo-upload" 
                                                 type="file" 
-                                                accept="image/png,image/svg+xml" 
+                                                accept="image/jpeg,image/jpg,image/png,image/svg+xml" 
                                                 className="hidden" 
                                                 onChange={handleLogoChange}
                                             />

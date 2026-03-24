@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { backendApi, isProductionBackendUrlLocalhost } from "@/api/backendClient";
+import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
@@ -42,8 +42,8 @@ const normalizeSession = (session) => {
 
 const SupabaseAuthService = {
   /**
-   * Sign-up via POST /api/auth/sign-up (IP rate limits + abuse tiers on the API).
-   * Falls back to direct Supabase if the API is unreachable (network/DNS/TLS), including in production.
+   * Sign-up: POST /api/auth/sign-up when shouldUseNodeAuthApi() is true; otherwise direct Supabase (default in Vite dev).
+   * Falls back to direct Supabase if the API returns 5xx or is unreachable.
    */
   async signUpWithEmail(email, password, profile = {}) {
     const normalized = (email || "").trim().toLowerCase();
@@ -67,7 +67,7 @@ const SupabaseAuthService = {
       };
     };
 
-    if (isProductionBackendUrlLocalhost()) {
+    if (!shouldUseNodeAuthApi()) {
       return signUpDirect();
     }
 
@@ -138,9 +138,8 @@ const SupabaseAuthService = {
   },
 
   /**
-   * Password sign-in goes through POST /api/auth/sign-in so the API can rate-limit by IP.
-   * Production with missing/localhost VITE_SERVER_URL: direct Supabase only (see backendClient).
-   * If VITE_SERVER_URL is set but unreachable, falls back to direct Supabase after a console warning.
+   * Password sign-in: POST /api/auth/sign-in when shouldUseNodeAuthApi() is true (production with a real API, or dev with VITE_NODE_AUTH_API=1).
+   * Otherwise direct Supabase only — default in Vite dev avoids 503 when the Node server is not running.
    */
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
@@ -160,7 +159,7 @@ const SupabaseAuthService = {
       return normalizeSession(data.session);
     };
 
-    if (isProductionBackendUrlLocalhost()) {
+    if (!shouldUseNodeAuthApi()) {
       return signInDirect();
     }
 

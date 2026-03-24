@@ -9,7 +9,6 @@ import { getCurrencySymbol } from '@/utils/currencyCalculations';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { upsertBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
 import { useToast } from '@/components/ui/use-toast';
-import { getBusinessGoalYear } from '@/constants/businessGoalYear';
 import {
   Dialog,
   DialogContent,
@@ -39,21 +38,33 @@ function getConfidence(annualGoal, lastYearRevenue) {
   return { label: 'Ambitious', colorClass: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40', percent: 50 };
 }
 
-export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, lastYearRevenue = 0 }) {
+export function GoalSetterModal({
+  isOpen,
+  onClose,
+  onSaved,
+  user,
+  year: goalYearProp,
+  initialGoal,
+  lastYearRevenue = 0,
+}) {
   const [annualGoal, setAnnualGoal] = useState(0);
   const [strategyType, setStrategyType] = useState('steady');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const currency = user?.currency || 'ZAR';
   const symbol = getCurrencySymbol(currency);
-  const year = getBusinessGoalYear();
+  const year =
+    goalYearProp != null && Number.isFinite(Number(goalYearProp))
+      ? Number(goalYearProp)
+      : new Date().getFullYear();
 
+  // Reset fields from `initialGoal` when opening or when dashboard year / goal row changes — not from
+  // computed `year` (would fire at midnight) or `initialGoal?.year` (can disagree with `goalYearProp`).
   useEffect(() => {
-    if (isOpen) {
-      setAnnualGoal(initialGoal?.annual_target ?? 0);
-      setStrategyType(initialGoal?.strategy_type === 'aggressive' ? 'aggressive' : 'steady');
-    }
-  }, [isOpen, initialGoal?.annual_target, initialGoal?.strategy_type]);
+    if (!isOpen) return;
+    setAnnualGoal(initialGoal?.annual_target != null ? Number(initialGoal.annual_target) : 0);
+    setStrategyType(initialGoal?.strategy_type === 'aggressive' ? 'aggressive' : 'steady');
+  }, [isOpen, goalYearProp, initialGoal?.id, initialGoal?.annual_target, initialGoal?.strategy_type]);
 
   const monthlyAverage = annualGoal && Number(annualGoal) > 0 ? (Number(annualGoal) / 12) : 0;
   const confidence = getConfidence(Number(annualGoal), lastYearRevenue);
@@ -66,14 +77,13 @@ export function GoalSetterModal({ isOpen, onClose, onSaved, user, initialGoal, l
     }
     setLoading(true);
     try {
-      const goalYear = getBusinessGoalYear();
-      await upsertBusinessGoal(userId, goalYear, {
+      await upsertBusinessGoal(userId, year, {
         annual_target: Number(annualGoal) || 0,
         strategy_type: strategyType,
       });
       onSaved?.();
       onClose();
-      toast({ title: `${goalYear} target saved`, description: 'Your annual revenue goal is updated.' });
+      toast({ title: `${year} target saved`, description: 'Your annual revenue goal is updated.' });
     } catch (err) {
       const msg = err?.message || '';
       const isForbidden = msg.includes('policy') || msg.includes('row-level') || msg.includes('permission');

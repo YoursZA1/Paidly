@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import PayfastService from '@/services/PayfastService';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
-import { normalizeInvoiceTemplateKey } from '@/utils/invoiceTemplateData';
+import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -212,9 +212,14 @@ export default function PublicInvoice() {
     
     const canPayOnline = bankingDetail && bankingDetail.payment_gateway_url;
     const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
-    const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || 'classic';
+    const templateKey =
+      normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
     const publicUser = {
-        logo_url: invoice.owner_logo_url || invoice.company?.logo_url || '',
+        logo_url:
+            invoice.owner_logo_url ||
+            invoice.company?.logo_url ||
+            invoice.company?.company_logo_url ||
+            '',
         company_name: invoice.owner_company_name || invoice.company?.name || '',
         company_address: invoice.owner_company_address || '',
         email: invoice.owner_email || '',
