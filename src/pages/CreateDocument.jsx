@@ -22,6 +22,7 @@ import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { withApiLogging } from "@/utils/apiLogger";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
+import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -636,6 +637,7 @@ export default function CreateDocument() {
           currency: form.currency || "ZAR",
           notes: form.notes || "",
           terms_conditions: form.terms_conditions || "",
+          ...snapshotDocumentBrandForPersist(user),
           items,
         };
 

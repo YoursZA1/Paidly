@@ -4,7 +4,7 @@ import { User } from "@/api/entities";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { supabase } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
-import { backendApi } from "@/api/backendClient";
+import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import Button from "@/components/ui/button";
 
@@ -206,6 +206,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     // 1. Clear local state immediately so the UI shows logged out and redirect is never blocked.
     purgeSupabaseAuthStorage();
+    clearNodeAuthUnreachable();
     try {
       await User.logout();
     } catch {

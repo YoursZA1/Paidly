@@ -23,6 +23,7 @@ import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
 async function fetchPaymentsForInvoice(invoiceId) {
     if (!invoiceId) return [];
@@ -302,6 +303,14 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
         invoice &&
         ({
             ...(company || {}),
+            document_brand_primary:
+                parseDocumentBrandHex(invoice.document_brand_primary) != null
+                    ? invoice.document_brand_primary
+                    : company?.document_brand_primary,
+            document_brand_secondary:
+                parseDocumentBrandHex(invoice.document_brand_secondary) != null
+                    ? invoice.document_brand_secondary
+                    : company?.document_brand_secondary,
             // `company` is User.me() profile — prefer profile logo over stale owner_logo_url snapshot.
             logo_url:
                 company?.logo_url ||

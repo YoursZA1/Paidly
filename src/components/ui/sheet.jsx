@@ -16,6 +16,7 @@ const SheetClose = SheetPrimitive.Close
 const SheetPortal = SheetPrimitive.Portal
 
 const DIALOG_TITLE_DISPLAY_NAME = SheetPrimitive.Title.displayName || "DialogTitle"
+const DIALOG_DESCRIPTION_DISPLAY_NAME = SheetPrimitive.Description.displayName || "DialogDescription"
 
 const hasSheetTitleChild = (children) => {
   let found = false
@@ -23,6 +24,21 @@ const hasSheetTitleChild = (children) => {
     if (found || !React.isValidElement(node)) return
     const displayName = node.type?.displayName || node.type?.name
     if (displayName && (displayName === DIALOG_TITLE_DISPLAY_NAME || displayName === "DialogTitle")) {
+      found = true
+      return
+    }
+    React.Children.forEach(node.props?.children, walk)
+  }
+  React.Children.forEach(children, walk)
+  return found
+}
+
+const hasSheetDescriptionChild = (children) => {
+  let found = false
+  const walk = (node) => {
+    if (found || !React.isValidElement(node)) return
+    const displayName = node.type?.displayName || node.type?.name
+    if (displayName && displayName === DIALOG_DESCRIPTION_DISPLAY_NAME) {
       found = true
       return
     }
@@ -62,14 +78,45 @@ const sheetVariants = cva(
   }
 )
 
-const SheetContent = React.forwardRef(({ side = "right", className, hideClose = false, children, ...props }, ref) => {
+const SheetContent = React.forwardRef((allProps, ref) => {
+  const {
+    side = "right",
+    className,
+    hideClose = false,
+    children,
+    ...rest
+  } = allProps
+  const fallbackDescriptionId = React.useId()
+  const hasAriaDescribedbyKey = Object.prototype.hasOwnProperty.call(allProps, "aria-describedby")
+  const rawAriaDescribedBy = hasAriaDescribedbyKey ? allProps["aria-describedby"] : undefined
+  const { "aria-describedby": _ariaOmit, ...props } = rest
+  const hasNonEmptyAriaDescribedBy =
+    typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
   const hasTitle = hasSheetTitleChild(children)
+  const hasDescription = hasSheetDescriptionChild(children)
+  const injectFallbackDescription = !hasDescription && !hasNonEmptyAriaDescribedBy
+  const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
+    ? { "aria-describedby": rawAriaDescribedBy }
+    : injectFallbackDescription
+      ? { "aria-describedby": fallbackDescriptionId }
+      : {}
+
   return (
     <SheetPortal>
       <SheetOverlay />
-      <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+      <SheetPrimitive.Content
+        ref={ref}
+        className={cn(sheetVariants({ side }), className)}
+        {...ariaDescribedByProp}
+        {...props}
+      >
         {!hasTitle && (
           <SheetPrimitive.Title className="sr-only">Panel</SheetPrimitive.Title>
+        )}
+        {injectFallbackDescription && (
+          <SheetPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+            Panel content
+          </SheetPrimitive.Description>
         )}
         {!hideClose && (
           <SheetPrimitive.Close
@@ -129,7 +176,8 @@ SheetContent.propTypes = {
   side: PropTypes.string,
   className: PropTypes.string,
   hideClose: PropTypes.bool,
-  children: PropTypes.node
+  children: PropTypes.node,
+  "aria-describedby": PropTypes.string,
 }
 
 SheetHeader.propTypes = {

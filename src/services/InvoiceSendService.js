@@ -3,8 +3,9 @@
  * Handles sending invoices to clients via email and notifications
  */
 
-import { Invoice, DocumentSend, MessageLog } from '@/api/entities';
+import { Invoice, DocumentSend, MessageLog, User } from '@/api/entities';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
+import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 
 /**
  * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
@@ -94,11 +95,15 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
     // Currently: emailSubject, emailMessage, cc, bcc, sendSMS, sendNotification
     void options;
 
+    const me = await User.me().catch(() => null);
+    const brandPatch = me ? snapshotDocumentBrandForPersist(me) : {};
+
     // Update invoice status to 'sent' (with retry on spurious AbortError)
     await retryOnAbort(() =>
       Invoice.update(invoiceId, {
         status: 'sent',
         sent_date: new Date().toISOString(),
+        ...brandPatch,
       })
     );
 

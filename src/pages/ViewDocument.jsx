@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
+import { recordToStyledPreviewDoc, profileForQuotePreview } from "@/utils/documentPreviewData";
+import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { useParams, useNavigate } from "react-router-dom";
 import { Invoice, Quote, Client, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -206,7 +207,22 @@ export default function ViewDocument() {
     );
   }
 
-  const previewDoc = recordToStyledPreviewDoc(record, client, docType, profile);
+  const previewProfile =
+    docType === "quote"
+      ? profileForQuotePreview(record, profile)
+      : {
+          ...(profile || {}),
+          document_brand_primary:
+            parseDocumentBrandHex(record.document_brand_primary) != null
+              ? record.document_brand_primary
+              : profile?.document_brand_primary,
+          document_brand_secondary:
+            parseDocumentBrandHex(record.document_brand_secondary) != null
+              ? record.document_brand_secondary
+              : profile?.document_brand_secondary,
+        };
+
+  const previewDoc = recordToStyledPreviewDoc(record, client, docType, previewProfile);
   const titleNumber = previewDoc.number || record.id;
   const displayName = client?.name || previewDoc.client_name || "Client";
 
@@ -281,7 +297,7 @@ export default function ViewDocument() {
           doc={previewDoc}
           docType={docType}
           clients={client ? [client] : []}
-          user={profile}
+          user={previewProfile}
           hideStatus={downloading}
         />
       </div>

@@ -12,6 +12,37 @@ function viteEnvFlag(name) {
 
 const isDev = import.meta.env.DEV;
 
+const SKIP_NODE_AUTH_KEY = "paidly_skip_node_auth";
+
+/** After a transport failure (bad DNS, offline), skip further /api/auth/* attempts this tab until logout. */
+export function rememberNodeAuthUnreachable() {
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(SKIP_NODE_AUTH_KEY, "1");
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearNodeAuthUnreachable() {
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(SKIP_NODE_AUTH_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function isNodeAuthRememberedUnreachable() {
+  try {
+    return typeof sessionStorage !== "undefined" && sessionStorage.getItem(SKIP_NODE_AUTH_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** Intentional Supabase-only production (no Node API): silence the missing-URL console warning. */
 const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY");
 
@@ -39,6 +70,7 @@ export function isProductionBackendUrlLocalhost() {
 export function shouldUseNodeAuthApi() {
   if (isProductionBackendUrlLocalhost()) return false;
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) return false;
+  if (isNodeAuthRememberedUnreachable()) return false;
   if (isDev && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
   return true;
 }

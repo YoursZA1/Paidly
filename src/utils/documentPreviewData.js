@@ -1,10 +1,54 @@
 import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
+import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
+
+/**
+ * Overlay current session profile branding on a possibly stale `user` snapshot (e.g. ViewInvoice
+ * loaded User.me() once; after Settings save, auth context is fresher).
+ * Persisted document snapshot (invoice/quote row) wins for colours so public links match what was sent.
+ * @param {object|null|undefined} userProp — caller-supplied profile (from me() / merged template user)
+ * @param {object|null|undefined} liveAuthUser — useAuth().user after refreshUser()
+ * @returns {object}
+ */
+export function mergeLiveBrandingForDocuments(userProp, liveAuthUser) {
+  const base = userProp && typeof userProp === "object" ? { ...userProp } : {};
+  if (!liveAuthUser || typeof liveAuthUser !== "object") return base;
+
+  const hasPrimary = parseDocumentBrandHex(base.document_brand_primary) != null;
+  const hasSecondary = parseDocumentBrandHex(base.document_brand_secondary) != null;
+
+  if (!hasPrimary && liveAuthUser.document_brand_primary !== undefined) {
+    base.document_brand_primary = liveAuthUser.document_brand_primary;
+  }
+  if (!hasSecondary && liveAuthUser.document_brand_secondary !== undefined) {
+    base.document_brand_secondary = liveAuthUser.document_brand_secondary;
+  }
+  if (!(base.logo_url || base.company_logo_url) && liveAuthUser.logo_url) {
+    base.logo_url = liveAuthUser.logo_url;
+  }
+  if (!base.company_logo_url && liveAuthUser.company_logo_url) {
+    base.company_logo_url = liveAuthUser.company_logo_url;
+  }
+  if (!base.invoice_template && liveAuthUser.invoice_template) {
+    base.invoice_template = liveAuthUser.invoice_template;
+  }
+  if (
+    (base.invoice_header === undefined || base.invoice_header === null || base.invoice_header === "") &&
+    liveAuthUser.invoice_header !== undefined
+  ) {
+    base.invoice_header = liveAuthUser.invoice_header;
+  }
+  return base;
+}
 
 /** Profile fields for quote DocumentPreview (logo / company) — mirrors invoice preview resolution. */
 export function profileForQuotePreview(quoteData, user) {
   if (!quoteData && !user) return {};
+  const qp = parseDocumentBrandHex(quoteData?.document_brand_primary);
+  const qs = parseDocumentBrandHex(quoteData?.document_brand_secondary);
   return {
     ...(user || {}),
+    document_brand_primary: qp ?? user?.document_brand_primary ?? null,
+    document_brand_secondary: qs ?? user?.document_brand_secondary ?? null,
     logo_url:
       user?.logo_url ||
       user?.company_logo_url ||

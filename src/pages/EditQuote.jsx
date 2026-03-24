@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Quote, Client } from '@/api/entities';
+import { Quote, Client, User } from '@/api/entities';
+import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { useServicesCatalogQuery } from '@/hooks/useServicesCatalogQuery';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,7 +52,9 @@ export default function EditQuote() {
     const handleSaveChanges = async () => {
         if (!quoteData) return;
         try {
-            await Quote.update(quoteId, quoteData);
+            const me = await User.me().catch(() => null);
+            const brandPatch = me ? snapshotDocumentBrandForPersist(me) : {};
+            await Quote.update(quoteId, { ...quoteData, ...brandPatch });
             navigate(createViewDocumentUrl("quote", quoteId));
         } catch (error) {
             console.error("Error saving quote:", error);

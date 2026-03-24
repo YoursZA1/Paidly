@@ -25,3 +25,14 @@ export function resolveDocumentBrandColors(user) {
   const secondary = parseDocumentBrandHex(user?.document_brand_secondary) ?? DEFAULT_DOCUMENT_BRAND_SECONDARY;
   return { primary, secondary };
 }
+
+/**
+ * Values to persist on invoice/quote rows for public client views (Supabase text columns, null = default in UI).
+ * @param {object|null|undefined} user — profile / session user
+ */
+export function snapshotDocumentBrandForPersist(user) {
+  return {
+    document_brand_primary: parseDocumentBrandHex(user?.document_brand_primary),
+    document_brand_secondary: parseDocumentBrandHex(user?.document_brand_secondary),
+  };
+}

@@ -12,6 +12,7 @@ import { appendHistory, createHistoryEntry, diffInvoiceFields } from "@/utils/in
 import { logInvoiceUpdated, logStatusChanged } from "@/utils/auditLogger";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
+import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import PaymentBreakdown from "../components/invoice/PaymentBreakdown";
@@ -179,8 +180,10 @@ export default function EditInvoice() {
             });
 
             updatedInvoiceData.version_history = appendHistory(invoiceData.version_history, historyEntry);
-            
-            await Invoice.update(invoiceId, updatedInvoiceData);
+
+            const meForBrand = await User.me().catch(() => null);
+            const brandPatch = meForBrand ? snapshotDocumentBrandForPersist(meForBrand) : {};
+            await Invoice.update(invoiceId, { ...updatedInvoiceData, ...brandPatch });
 
             // Log the invoice update
             const clientName = clients.find(c => c.id === invoiceData.client_id)?.name || "Unknown";

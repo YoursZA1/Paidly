@@ -12,6 +12,7 @@ import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import PayfastService from '@/services/PayfastService';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -226,6 +227,8 @@ export default function PublicInvoice() {
         currency: ownerCurrency,
         invoice_template: templateKey,
         invoice_header: '',
+        document_brand_primary: parseDocumentBrandHex(invoice.document_brand_primary),
+        document_brand_secondary: parseDocumentBrandHex(invoice.document_brand_secondary),
     };
 
     const handlePayFast = async () => {

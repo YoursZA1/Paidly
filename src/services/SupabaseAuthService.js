@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabaseClient";
-import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
+import {
+  backendApi,
+  shouldUseNodeAuthApi,
+  rememberNodeAuthUnreachable,
+} from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
@@ -115,8 +119,9 @@ const SupabaseAuthService = {
       throw new Error(mapAuthError({ message: data?.error || "Sign up failed" }));
     } catch (err) {
       if (isAxiosTransportFailure(err)) {
+        rememberNodeAuthUnreachable();
         console.warn(
-          "[auth] API sign-up unreachable (network). Falling back to direct Supabase. Remove or fix VITE_SERVER_URL on Vercel if you do not use the Node API."
+          "[auth] API sign-up unreachable (network). Falling back to direct Supabase. On Vercel: fix VITE_SERVER_URL, or set VITE_SUPABASE_ONLY=1 if you do not use the Node API."
         );
         return signUpDirect();
       }
@@ -205,8 +210,9 @@ const SupabaseAuthService = {
       throw new Error(data?.error || "Login failed");
     } catch (err) {
       if (isAxiosTransportFailure(err)) {
+        rememberNodeAuthUnreachable();
         console.warn(
-          "[auth] API sign-in unreachable (network). Falling back to direct Supabase. Remove or fix VITE_SERVER_URL on Vercel if you do not use the Node API."
+          "[auth] API sign-in unreachable (network). Falling back to direct Supabase. On Vercel: fix VITE_SERVER_URL, or set VITE_SUPABASE_ONLY=1 if you do not use the Node API."
         );
         return signInDirect();
       }

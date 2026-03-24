@@ -3,6 +3,8 @@ import { format, isValid, parseISO } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
+import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
+import { useAuth } from "@/components/auth/AuthContext";
 
 const SLATE_900 = "#0f172a";
 
@@ -111,9 +113,15 @@ const DocumentPreview = forwardRef(function DocumentPreview(
   { doc, docType: docTypeProp, clients = [], user, hideStatus = false },
   ref
 ) {
+  const { user: authUser } = useAuth();
+  const effectiveUser = useMemo(
+    () => mergeLiveBrandingForDocuments(user, authUser),
+    [user, authUser]
+  );
+
   const { primary: BRAND_PRIMARY, secondary: BRAND_SECONDARY } = useMemo(
-    () => resolveDocumentBrandColors(user),
-    [user?.document_brand_primary, user?.document_brand_secondary]
+    () => resolveDocumentBrandColors(effectiveUser),
+    [effectiveUser?.document_brand_primary, effectiveUser?.document_brand_secondary]
   );
 
   const statusStylesMap = useMemo(
@@ -128,7 +136,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
   const resolved = useMemo(() => {
     if (!doc) return null;
     const docType = normalizeDocType(doc, docTypeProp);
-    const currency = doc.currency || user?.currency || "ZAR";
+    const currency = doc.currency || effectiveUser?.currency || "ZAR";
 
     const clientFromList =
       doc.client_id && Array.isArray(clients) ? clients.find((c) => c.id === doc.client_id) : null;
@@ -139,15 +147,15 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       [clientFromList?.address, clientFromList?.city, clientFromList?.country].filter(Boolean).join("\n") ||
       "";
 
-    const company_name = doc.company_name || user?.company_name || "Your Company";
-    const company_email = doc.company_email || user?.email || "";
-    const company_phone = String(doc.company_phone || user?.phone || "").trim();
+    const company_name = doc.company_name || effectiveUser?.company_name || "Your Company";
+    const company_email = doc.company_email || effectiveUser?.email || "";
+    const company_phone = String(doc.company_phone || effectiveUser?.phone || "").trim();
     const company_website = String(
-      doc.company_website || user?.company_website || user?.website || ""
+      doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
     ).trim();
-    const company_address = doc.company_address || user?.company_address || "";
+    const company_address = doc.company_address || effectiveUser?.company_address || "";
     const logo_url =
-      doc.owner_logo_url || user?.logo_url || user?.company_logo_url || null;
+      doc.owner_logo_url || effectiveUser?.logo_url || effectiveUser?.company_logo_url || null;
 
     const number = doc.number || doc.invoice_number || doc.quote_number || "—";
     const status = doc.status || "draft";
@@ -193,7 +201,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       fmt,
       logo_url,
     };
-  }, [doc, docTypeProp, clients, user]);
+  }, [doc, docTypeProp, clients, effectiveUser]);
 
   if (!doc || !resolved) return null;
 

@@ -25,7 +25,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 /** Realtime WebSocket and older stacks expect the JWT `anon` `public` key (`eyJ…`), not `sb_publishable_…`. */
 if (supabaseAnonKey && /^sb_publishable_/i.test(String(supabaseAnonKey).trim())) {
   console.warn(
-    "[Supabase] VITE_SUPABASE_ANON_KEY looks like a publishable key (sb_publishable_…). If Realtime fails to connect, set the JWT anon public key from Dashboard → Settings → API → Project API keys (starts with eyJ)."
+    "[Supabase] VITE_SUPABASE_ANON_KEY looks like a publishable key (sb_publishable_…). Use the JWT anon public key from Supabase → Project Settings → API (starts with eyJ). In production, set it in Vercel → Project → Environment Variables — Realtime and some clients expect the JWT key, not sb_publishable_…."
   );
 }
 

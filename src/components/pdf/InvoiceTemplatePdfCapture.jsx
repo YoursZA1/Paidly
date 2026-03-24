@@ -10,6 +10,7 @@ import {
   resolveInvoiceTemplateKey,
   DOCUMENT_TEMPLATE_KEY,
 } from "@/utils/invoiceTemplateData";
+import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
 
@@ -76,6 +77,15 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
         invoice_template: templateKey,
         invoice_header: "",
       };
+
+  if (invoice && resolvedUser) {
+    if (parseDocumentBrandHex(invoice.document_brand_primary)) {
+      resolvedUser.document_brand_primary = invoice.document_brand_primary;
+    }
+    if (parseDocumentBrandHex(invoice.document_brand_secondary)) {
+      resolvedUser.document_brand_secondary = invoice.document_brand_secondary;
+    }
+  }
 
   const TemplateComponent =
     templateKey === DOCUMENT_TEMPLATE_KEY ? TEMPLATES.classic : TEMPLATES[templateKey] || TEMPLATES.classic;
