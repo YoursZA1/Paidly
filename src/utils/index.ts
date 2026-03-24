@@ -75,6 +75,36 @@ export function shouldRedirectToAppAfterAuth(): boolean {
     }
 }
 
+const WELCOME_TOUR_ELIGIBLE_PREFIX = 'paidly_welcome_tour_eligible_';
+
+/** Call once after successful email/password signup (before redirect to the app). */
+export function setWelcomeTourEligibleAfterSignup(userId: string | null | undefined) {
+    if (!userId || typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(WELCOME_TOUR_ELIGIBLE_PREFIX + userId, '1');
+    } catch {
+        /* ignore */
+    }
+}
+
+export function isWelcomeTourEligible(userId: string | null | undefined): boolean {
+    if (!userId || typeof window === 'undefined') return false;
+    try {
+        return window.localStorage.getItem(WELCOME_TOUR_ELIGIBLE_PREFIX + userId) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function clearWelcomeTourEligible(userId: string | null | undefined) {
+    if (!userId || typeof window === 'undefined') return;
+    try {
+        window.localStorage.removeItem(WELCOME_TOUR_ELIGIBLE_PREFIX + userId);
+    } catch {
+        /* ignore */
+    }
+}
+
 export function createAdminPageUrl(pageName: string) {
     return '/admin/' + pageName.toLowerCase().replace(/ /g, '-');
 }

@@ -13,7 +13,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Building2, Loader2, Lock, Mail, Phone, User, Eye, EyeOff, CheckCircle } from "lucide-react";
-import { createPageUrl, getAppDashboardUrl, shouldRedirectToAppAfterAuth } from "@/utils";
+import {
+  createPageUrl,
+  getAppDashboardUrl,
+  shouldRedirectToAppAfterAuth,
+  setWelcomeTourEligibleAfterSignup,
+} from "@/utils";
 import { validatePasswordForSignup } from "@/utils/authPasswordPolicy";
 import {
   getSignupThrottleState,
@@ -297,6 +302,7 @@ export default function Signup() {
       }
       
       setSuccess(true);
+      setWelcomeTourEligibleAfterSignup(createdUserId);
       setTimeout(() => {
         if (shouldRedirectToAppAfterAuth()) {
           window.location.href = getAppDashboardUrl();

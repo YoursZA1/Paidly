@@ -5,6 +5,8 @@ import PropTypes from "prop-types";
  * Replace with your actual onboarding steps and UI as needed.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useAuth } from "@/components/auth/AuthContext";
+import { clearWelcomeTourEligible } from "@/utils";
 
 const TOUR_STEPS = [
   {
@@ -56,22 +58,19 @@ function getHighlightRect(selector) {
 }
 
 export default function OnboardingTour({ isOpen, onClose }) {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState(null);
   const timeoutRef = useRef();
 
-  const handleComplete = useCallback(() => {
-    localStorage.setItem("onboardingTourCompleted", "1");
+  const dismissTour = useCallback(() => {
+    clearWelcomeTourEligible(user?.id);
     onClose();
-  }, [onClose]);
+  }, [onClose, user?.id]);
 
-  // Store completion state in localStorage
-  useEffect(() => {
-    if (!isOpen) return;
-    if (localStorage.getItem("onboardingTourCompleted")) {
-      onClose();
-    }
-  }, [isOpen, onClose]);
+  const handleComplete = useCallback(() => {
+    dismissTour();
+  }, [dismissTour]);
 
   // Highlight logic
   useEffect(() => {
@@ -95,9 +94,8 @@ export default function OnboardingTour({ isOpen, onClose }) {
   }, [step, handleComplete]);
 
   const handleSkip = useCallback(() => {
-    localStorage.setItem("onboardingTourCompleted", "1");
-    onClose();
-  }, [onClose]);
+    dismissTour();
+  }, [dismissTour]);
 
   // Auto-close after 60s max
   useEffect(() => {

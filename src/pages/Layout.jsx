@@ -30,7 +30,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
-import { createPageUrl, createAdminPageUrl } from "@/utils";
+import { createPageUrl, createAdminPageUrl, isWelcomeTourEligible } from "@/utils";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import {
   Plus,
@@ -687,17 +687,22 @@ export default function Layout({ children, currentPageName }) {
   }, [location.pathname, currentPageName]);
 
   useEffect(() => {
-    if (!user) return;
-
-    // Logic for showing onboarding (Business Profile wizard pop-up disabled)
-    if (!user.tour_completed && currentPageName === 'Dashboard') {
-      setTimeout(() => setShowTour(true), 1000);
+    if (!user?.id) return;
+    if (currentPageName !== "Dashboard") {
+      setShowTour(false);
+      return;
     }
-  }, [currentPageName, user]);
+    // Welcome tour only after completing email signup (flag set in Signup.jsx), not on every login.
+    if (!isWelcomeTourEligible(user.id)) return;
+    const t = window.setTimeout(() => setShowTour(true), 1000);
+    return () => window.clearTimeout(t);
+  }, [currentPageName, user?.id]);
 
   const handleWizardComplete = () => {
     setShowWizard(false);
-    setShowTour(true);
+    if (user?.id && isWelcomeTourEligible(user.id)) {
+      setShowTour(true);
+    }
   };
 
   // Reminder and follow-up checks
