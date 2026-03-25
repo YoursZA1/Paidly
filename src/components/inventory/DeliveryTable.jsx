@@ -15,6 +15,12 @@ const statusConfig = {
 export default function DeliveryTable({ deliveries, products, onEdit, onDelete, onMarkDelivered }) {
   const getProductName = (id) => products.find((p) => p.id === id)?.name || "Unknown";
   const getCountStyle = (id) => products.find((p) => p.id === id)?.count_style || "units";
+  const formatExpectedDate = (value) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return format(d, "MMM d, yyyy");
+  };
 
   if (!deliveries.length) {
     return (
@@ -59,7 +65,7 @@ export default function DeliveryTable({ deliveries, products, onEdit, onDelete, 
                   </TableCell>
                   <TableCell className="text-muted-foreground">{d.supplier || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {d.expected_date ? format(new Date(d.expected_date), "MMM d, yyyy") : "—"}
+                    {formatExpectedDate(d.expected_date)}
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">{d.tracking_number || "—"}</TableCell>
                   <TableCell className="text-right">

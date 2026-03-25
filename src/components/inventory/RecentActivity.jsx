@@ -11,6 +11,11 @@ const typeConfig = {
 export default function RecentActivity({ transactions, products }) {
   const getProductName = (id) => products.find((p) => p.id === id)?.name || "Unknown";
   const getCountStyle = (id) => products.find((p) => p.id === id)?.count_style || "units";
+  const safeDateText = (value) => {
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) return "Date unavailable";
+    return format(d, "MMM d, h:mm a");
+  };
 
   if (!transactions.length) {
     return (
@@ -35,7 +40,7 @@ export default function RecentActivity({ transactions, products }) {
                 {cfg.label}: {getProductName(t.product_id)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {t.quantity} {getCountStyle(t.product_id)} · {format(new Date(t.created_date), "MMM d, h:mm a")}
+                {t.quantity} {getCountStyle(t.product_id)} · {safeDateText(t.created_date)}
               </p>
             </div>
           </div>

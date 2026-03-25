@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
+import { normalizeInventoryRows } from "@/utils/inventoryNormalization";
 
 import StatsCard from "../components/inventory/StatsCard";
 import ProductTable from "../components/inventory/ProductTable";
@@ -27,6 +28,17 @@ function toInt(value) {
 }
 
 const DELIVERY_ADDRESS_MARKER = "DELIVERY_ADDRESS:\n";
+const COUNT_STYLE_TO_DB_UNIT = {
+  units: "unit",
+  cases: "case",
+  packs: "pack",
+  boxes: "box",
+  pallets: "pallet",
+  bottles: "bottle",
+  bags: "bag",
+  rolls: "roll",
+};
+const VALID_DB_DEFAULT_UNITS = new Set(Object.values(COUNT_STYLE_TO_DB_UNIT));
 
 function packDeliveryNotes(notes, deliveryAddress) {
   const n = String(notes || "").trim();
@@ -34,6 +46,77 @@ function packDeliveryNotes(notes, deliveryAddress) {
   if (!addr) return n || null;
   if (!n) return `${DELIVERY_ADDRESS_MARKER}${addr}`.trim() || null;
   return `${DELIVERY_ADDRESS_MARKER}${addr}\n\n---\n\n${n}`.trim() || null;
+}
+
+function toDbDefaultUnit(countStyle, fallback) {
+  const primary = String(countStyle || "").trim().toLowerCase();
+  if (VALID_DB_DEFAULT_UNITS.has(primary)) return primary;
+  if (COUNT_STYLE_TO_DB_UNIT[primary]) return COUNT_STYLE_TO_DB_UNIT[primary];
+
+  const secondary = String(fallback || "").trim().toLowerCase();
+  if (VALID_DB_DEFAULT_UNITS.has(secondary)) return secondary;
+
+  return "unit";
+}
+
+function getReadableDeliveryError(error) {
+  const raw = String(error?.message || error?.details || error?.hint || "").trim();
+  const msg = raw.toLowerCase();
+  if (!raw) return "Failed to save delivery. Please try again.";
+  if (msg.includes("violates row-level security") || msg.includes("permission denied")) {
+    return "You do not have permission to save this delivery. Sign in again or check org access.";
+  }
+  if (msg.includes("foreign key") || msg.includes("violates foreign key")) {
+    return "Selected product is not valid for deliveries. Pick a catalog product and apply the latest database migration if this persists.";
+  }
+  if (msg.includes("invalid input syntax") && msg.includes("uuid")) {
+    return "Invalid product reference. Refresh the page and select the product again.";
+  }
+  return raw.length > 180 ? `${raw.slice(0, 177)}...` : raw;
+}
+
+function getReadableSaveError(error) {
+  const raw = String(error?.message || error?.details || error?.hint || "").trim();
+  const msg = raw.toLowerCase();
+  if (!raw) return "Failed to save product. Please try again.";
+  if (msg.includes("duplicate key") || msg.includes("already exists")) {
+    return "A product with this SKU already exists. Please use a different SKU.";
+  }
+  if (msg.includes("violates row-level security") || msg.includes("permission denied")) {
+    return "You do not have permission to update this product.";
+  }
+  if (msg.includes("default_unit") || msg.includes("check constraint")) {
+    return "Invalid count style for this product. Please select a supported count style.";
+  }
+  if (msg.includes("invalid input syntax")) {
+    return "One or more fields have invalid values. Please review and try again.";
+  }
+  return raw.length > 180 ? `${raw.slice(0, 177)}...` : raw;
+}
+
+function getReadableSaleError(error) {
+  const raw = String(error?.message || error?.details || error?.hint || "").trim();
+  const msg = raw.toLowerCase();
+  if (!raw) return "Failed to record sale. Please try again.";
+  if (msg.includes("no organization found")) {
+    return "Could not resolve your organization. Sign out and sign in again.";
+  }
+  if (msg.includes("violates row-level security") || msg.includes("permission denied")) {
+    return "You do not have permission to update stock for this product.";
+  }
+  if (msg.includes("must reference a product-type service")) {
+    return "This item is not marked as a product in catalog. Update it to product type and try again.";
+  }
+  if (msg.includes("not enough stock") || msg.includes("negative stock")) {
+    return "Not enough stock available to record this sale.";
+  }
+  return raw.length > 180 ? `${raw.slice(0, 177)}...` : raw;
+}
+
+/** Prefer catalog row org (multi-org safe); else membership org from Supabase auth uid. */
+function resolveInventoryProductOrgId(product, membershipOrgId) {
+  const fromRaw = product?._raw?.org_id ?? product?.org_id;
+  return fromRaw ?? membershipOrgId ?? null;
 }
 
 export default function Inventory() {
@@ -120,11 +203,14 @@ export default function Inventory() {
   );
 
   const getOrgIdForCurrentUser = useCallback(async () => {
-    if (!user?.id) return null;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authUid = sessionData?.session?.user?.id;
+    if (!authUid) return null;
     const { data, error } = await supabase
       .from("memberships")
       .select("org_id")
-      .eq("user_id", user.id)
+      .eq("user_id", authUid)
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -132,7 +218,7 @@ export default function Inventory() {
       return null;
     }
     return data?.org_id ?? null;
-  }, [user?.id]);
+  }, []);
 
   const loadProducts = useCallback(async () => {
     const { data, error } = await supabase
@@ -165,21 +251,8 @@ export default function Inventory() {
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
 
-    // Adapt Supabase `services` product rows to the UI Product shape.
-    return rows.map((s) => ({
-      id: s.id,
-      name: s.name,
-      sku: s.sku || "",
-      category: s.category || "",
-      // UI expects inventory semantics:
-      count_style: s.default_unit || s.unit || "units",
-      units_per_count: 1,
-      stock_on_hand: Number(s.stock_quantity ?? 0) || 0,
-      reorder_level: Number(s.low_stock_threshold ?? 10) || 10,
-      price: Number(s.price ?? 0) || 0,
-      // keep original fields around (handy for debugging / forward compatibility)
-      _raw: s,
-    }));
+    // Centralized normalization policy for product rows.
+    return normalizeInventoryRows("products", rows);
   }, []);
 
   const loadTransactions = useCallback(async () => {
@@ -192,52 +265,28 @@ export default function Inventory() {
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
 
-    // Adapt `inventory_movements` to the UI StockTransaction shape.
-    return rows.map((m) => {
-      const inferred =
-        m.type === "in" ? "received" :
-          m.type === "out" ? "sold" :
-            "adjusted";
-      return {
-        id: m.id,
-        product_id: m.product_id,
-        type: inferred,
-        quantity: Number(m.quantity ?? 0) || 0,
-        notes: m.source || "",
-        date: m.created_at ? String(m.created_at).slice(0, 10) : null,
-        created_date: m.created_at || new Date().toISOString(),
-      };
-    });
+    // Centralized normalization policy for transaction rows.
+    return normalizeInventoryRows("transactions", rows);
   }, []);
 
   const loadDeliveries = useCallback(async () => {
+    // Schema (Paidly migration): created_date / updated_date — not created_at / updated_at.
     const { data, error } = await supabase
       .from("deliveries")
       .select(
-        "id, product_id, quantity, status, supplier, expected_date, tracking_number, notes, created_at, updated_at"
+        "id, product_id, quantity, status, supplier, expected_date, tracking_number, notes, created_date, updated_date"
       )
-      .order("created_at", { ascending: false })
+      .order("created_date", { ascending: false })
       .limit(200);
 
     if (error) {
-      // Deliveries table may not exist yet (depending on whether migrations have been applied).
-      // Keep the rest of the inventory page functional.
-      console.warn("Inventory: deliveries not available yet", error);
+      // Table missing, RLS, or column mismatch — keep inventory usable without deliveries.
+      console.warn("Inventory: deliveries load skipped", error?.message || error);
       return [];
     }
     const rows = Array.isArray(data) ? data : [];
-    return rows.map((d) => ({
-      id: d.id,
-      product_id: d.product_id,
-      quantity: Number(d.quantity ?? 0) || 0,
-      status: d.status || "pending",
-      supplier: d.supplier || "",
-      expected_date: d.expected_date || "",
-      tracking_number: d.tracking_number || "",
-      notes: d.notes || "",
-      created_date: d.created_at || new Date().toISOString(),
-      updated_date: d.updated_at || null,
-    }));
+    // Centralized normalization policy for delivery rows.
+    return normalizeInventoryRows("deliveries", rows);
   }, []);
 
   const refetchAll = useCallback(async () => {
@@ -273,11 +322,17 @@ export default function Inventory() {
       }
 
       try {
-        // Read current stock from DB to avoid drift
+        const membershipOrgId = await getOrgIdForCurrentUser();
+        const resolvedOrgId = resolveInventoryProductOrgId(product, membershipOrgId);
+        if (!resolvedOrgId) {
+          throw new Error("No organization found for this user.");
+        }
+
         const { data: row, error: getErr } = await supabase
           .from("services")
           .select("stock_quantity")
           .eq("id", product_id)
+          .eq("org_id", resolvedOrgId)
           .maybeSingle();
         if (getErr) throw getErr;
         const current = Number(row?.stock_quantity ?? 0) || 0;
@@ -286,11 +341,11 @@ export default function Inventory() {
         const { error: updErr } = await supabase
           .from("services")
           .update({ stock_quantity: nextStock })
-          .eq("id", product_id);
+          .eq("id", product_id)
+          .eq("org_id", resolvedOrgId);
         if (updErr) throw updErr;
 
-        // History
-        await supabase.from("inventory_movements").insert({
+        const { error: movErr } = await supabase.from("inventory_movements").insert({
           product_id,
           quantity: qty,
           type: "in",
@@ -298,6 +353,7 @@ export default function Inventory() {
           reference_id: null,
           created_at: new Date().toISOString(),
         });
+        if (movErr) throw movErr;
 
         toast({
           title: "✓ Stock Received",
@@ -309,12 +365,12 @@ export default function Inventory() {
         console.error("Inventory: receive failed", e);
         toast({
           title: "✗ Receive Failed",
-          description: "Failed to receive stock. Please try again.",
+          description: getReadableSaleError(e),
           variant: "destructive",
         });
       }
     },
-    [products, refetchAll, toast]
+    [getOrgIdForCurrentUser, products, refetchAll, toast]
   );
 
   // Sell handler (stock out)
@@ -341,14 +397,41 @@ export default function Inventory() {
       }
 
       try {
-        // Best-effort: ensure the product satisfies trigger semantics (`services.type='product'`).
-        await supabase.from("services").update({ type: "product" }).eq("id", product_id);
+        const membershipOrgId = await getOrgIdForCurrentUser();
+        const resolvedOrgId = resolveInventoryProductOrgId(product, membershipOrgId);
+        if (!resolvedOrgId) {
+          throw new Error("No organization found for this user.");
+        }
 
-        const nextStock = stock - qty;
+        const { data: currentRow, error: getErr } = await supabase
+          .from("services")
+          .select("id, stock_quantity, type")
+          .eq("id", product_id)
+          .eq("org_id", resolvedOrgId)
+          .maybeSingle();
+        if (getErr) throw getErr;
+        if (!currentRow?.id) {
+          throw new Error("Product not found in your organization.");
+        }
+
+        // Best-effort: ensure the product satisfies trigger semantics (`services.type='product'`).
+        const { error: typeErr } = await supabase
+          .from("services")
+          .update({ type: "product" })
+          .eq("id", product_id)
+          .eq("org_id", resolvedOrgId);
+        if (typeErr) throw typeErr;
+
+        const dbStock = Number(currentRow.stock_quantity ?? 0) || 0;
+        if (dbStock < qty) {
+          throw new Error(`Not enough stock. Available stock is ${dbStock}.`);
+        }
+        const nextStock = dbStock - qty;
         const { error: updErr } = await supabase
           .from("services")
           .update({ stock_quantity: nextStock })
-          .eq("id", product_id);
+          .eq("id", product_id)
+          .eq("org_id", resolvedOrgId);
         if (updErr) throw updErr;
 
         const { error: insErr } = await supabase.from("inventory_movements").insert({
@@ -372,12 +455,12 @@ export default function Inventory() {
         console.error("Inventory: sell failed", e);
         toast({
           title: "✗ Sale Failed",
-          description: "Failed to record sale. Please try again.",
+          description: getReadableSaleError(e),
           variant: "destructive",
         });
       }
     },
-    [products, refetchAll, toast]
+    [getOrgIdForCurrentUser, products, refetchAll, toast]
   );
 
   const handleBarcode = useCallback(
@@ -440,27 +523,74 @@ export default function Inventory() {
   const handleSaveProduct = useCallback(
     async (productData) => {
       try {
+        if (!user?.id) return;
+        const membershipOrgId = await getOrgIdForCurrentUser();
+        const resolvedOrgId = editingProduct
+          ? resolveInventoryProductOrgId(editingProduct, membershipOrgId)
+          : membershipOrgId;
+        if (!resolvedOrgId) {
+          toast({
+            title: "✗ No Organization",
+            description: "No organization found for this user.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const name = String(productData?.name || "").trim();
+        if (!name) {
+          toast({
+            title: "✗ Missing Name",
+            description: "Product name is required.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const payload = {
+          org_id: resolvedOrgId,
           item_type: "product",
-          name: (productData?.name || "").trim(),
+          type: "product",
+          name,
           sku: (productData?.sku || "").trim() || null,
           category: (productData?.category || "").trim() || null,
-          default_unit: productData?.count_style || "units",
+          default_unit: toDbDefaultUnit(productData?.count_style, editingProduct?._raw?.default_unit),
           // Inventory fields (stored on services)
           stock_quantity: toInt(productData?.stock_on_hand),
           low_stock_threshold: toInt(productData?.reorder_level || 10),
           price: Number(productData?.price ?? 0) || 0,
+          default_rate: Number(productData?.price ?? 0) || 0,
         };
 
         if (editingProduct) {
-          await Service.update(editingProduct.id, payload);
+          const { data: updatedRow, error } = await supabase
+            .from("services")
+            .update(payload)
+            .eq("id", editingProduct.id)
+            .eq("org_id", resolvedOrgId)
+            .select("id")
+            .maybeSingle();
+          if (error) throw error;
+          if (!updatedRow?.id) {
+            const { data: fallbackRow, error: fallbackError } = await supabase
+              .from("services")
+              .update(payload)
+              .eq("id", editingProduct.id)
+              .select("id")
+              .maybeSingle();
+            if (fallbackError) throw fallbackError;
+            if (!fallbackRow?.id) {
+              throw new Error("No matching product row was updated.");
+            }
+          }
           toast({
             title: "✓ Product Updated",
             description: `${payload.name} was updated successfully.`,
             variant: "success",
           });
         } else {
-          await Service.create(payload);
+          const { error } = await supabase.from("services").insert(payload);
+          if (error) throw error;
           toast({
             title: "✓ Product Added",
             description: `${payload.name} was added to your inventory.`,
@@ -474,12 +604,12 @@ export default function Inventory() {
         console.error("Inventory: save product failed", e);
         toast({
           title: "✗ Save Failed",
-          description: "Failed to save product. Please try again.",
+          description: getReadableSaveError(e),
           variant: "destructive",
         });
       }
     },
-    [editingProduct, refetchAll, toast]
+    [editingProduct, getOrgIdForCurrentUser, refetchAll, toast, user?.id]
   );
 
   const handleDeleteProduct = useCallback(
@@ -507,9 +637,11 @@ export default function Inventory() {
 
   // Deliveries handlers
   const handleMarkDelivered = useCallback(
-    async (delivery) => {
+    async (delivery, options = {}) => {
+      const alreadyMarkedDelivered = options.alreadyMarkedDelivered === true;
       try {
-        if (!delivery || delivery.status === "delivered" || delivery.status === "cancelled") return;
+        if (!delivery || delivery.status === "cancelled") return;
+        if (!alreadyMarkedDelivered && delivery.status === "delivered") return;
 
         const qty = toInt(delivery.quantity);
         if (qty <= 0) {
@@ -524,12 +656,13 @@ export default function Inventory() {
         // Best-effort: ensure the product satisfies trigger semantics.
         await supabase.from("services").update({ type: "product" }).eq("id", delivery.product_id);
 
-        // Update delivery status first.
-        const { error: updDelErr } = await supabase
-          .from("deliveries")
-          .update({ status: "delivered", updated_at: new Date().toISOString() })
-          .eq("id", delivery.id);
-        if (updDelErr) throw updDelErr;
+        if (!alreadyMarkedDelivered) {
+          const { error: updDelErr } = await supabase
+            .from("deliveries")
+            .update({ status: "delivered", updated_date: new Date().toISOString() })
+            .eq("id", delivery.id);
+          if (updDelErr) throw updDelErr;
+        }
 
         // Then apply stock + insert movement history.
         const { data: productRow, error: prodErr } = await supabase
@@ -579,18 +712,19 @@ export default function Inventory() {
     async (deliveryData) => {
       try {
         if (!user?.id) return;
-        const resolvedOrgId = await getOrgIdForCurrentUser();
-        if (!resolvedOrgId) {
+        const { data: sessionWrap } = await supabase.auth.getSession();
+        const authUid = sessionWrap?.session?.user?.id;
+        if (!authUid) {
           toast({
-            title: "✗ No Organization",
-            description: "No organization found for this user.",
+            title: "✗ Not signed in",
+            description: "Sign in again to save deliveries.",
             variant: "destructive",
           });
           return;
         }
 
-        const payload = {
-          org_id: resolvedOrgId,
+        const now = new Date().toISOString();
+        const baseFields = {
           product_id: deliveryData.product_id,
           quantity: toInt(deliveryData.quantity),
           status: deliveryData.status,
@@ -598,14 +732,18 @@ export default function Inventory() {
           expected_date: deliveryData.expected_date || null,
           tracking_number: deliveryData.tracking_number || null,
           notes: packDeliveryNotes(deliveryData.notes, deliveryData.delivery_address),
-          created_by_id: user.id,
         };
 
-        const shouldApplyReceive = payload.status === "delivered" && (!editingDelivery?.id || editingDelivery?.status !== "delivered");
+        const shouldApplyReceive =
+          baseFields.status === "delivered" &&
+          (!editingDelivery?.id || editingDelivery?.status !== "delivered");
 
         let insertedId = null;
         if (editingDelivery?.id) {
-          const { error } = await supabase.from("deliveries").update(payload).eq("id", editingDelivery.id);
+          const { error } = await supabase
+            .from("deliveries")
+            .update({ ...baseFields, updated_date: now })
+            .eq("id", editingDelivery.id);
           if (error) throw error;
           toast({
             title: "✓ Delivery Updated",
@@ -613,7 +751,22 @@ export default function Inventory() {
             variant: "success",
           });
         } else {
-          const { data: inserted, error } = await supabase.from("deliveries").insert(payload).select().maybeSingle();
+          const newId =
+            typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+              ? crypto.randomUUID()
+              : `dlv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+          const insertPayload = {
+            id: newId,
+            ...baseFields,
+            created_by_id: authUid,
+            created_date: now,
+            updated_date: now,
+          };
+          const { data: inserted, error } = await supabase
+            .from("deliveries")
+            .insert(insertPayload)
+            .select()
+            .maybeSingle();
           if (error) throw error;
           insertedId = inserted?.id ?? null;
           toast({
@@ -627,7 +780,7 @@ export default function Inventory() {
           // Apply stock + insert movement if status is set to delivered via the dialog.
           const deliveryId = editingDelivery?.id || insertedId || deliveryData?.id;
           if (deliveryId) {
-            await handleMarkDelivered({ ...payload, id: deliveryId });
+            await handleMarkDelivered({ ...baseFields, id: deliveryId }, { alreadyMarkedDelivered: true });
           }
         }
 
@@ -638,12 +791,12 @@ export default function Inventory() {
         console.error("Inventory: save delivery failed", e);
         toast({
           title: "✗ Delivery Save Failed",
-          description: "Failed to save delivery. Please try again.",
+          description: getReadableDeliveryError(e),
           variant: "destructive",
         });
       }
     },
-    [editingDelivery, getOrgIdForCurrentUser, handleMarkDelivered, refetchAll, toast, user?.id]
+    [editingDelivery, handleMarkDelivered, refetchAll, toast, user?.id]
   );
 
   const handleDeleteDelivery = useCallback(

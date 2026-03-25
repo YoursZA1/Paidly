@@ -75,6 +75,11 @@
 .invoice-template-doc .unified-invoice-template td {
     vertical-align: top;
 }
+.invoice-template-doc .unified-invoice-template {
+    /* Keep invoice/quote constrained to A4-friendly width in screen preview. */
+    width: 100%;
+    max-width: 210mm;
+}
 .invoice-template-doc .unified-invoice-totals {
     align-items: start;
 }
@@ -160,6 +165,38 @@
     overflow-wrap: anywhere;
 }
 @media print {
+    .invoice-template-doc .unified-invoice-template {
+        /* Compact print density for invoice + quote while staying readable. */
+        font-size: 12px;
+        line-height: 1.35;
+    }
+    .invoice-template-doc .unified-invoice-template header {
+        margin-bottom: 12px !important;
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+    .invoice-template-doc .unified-invoice-template section {
+        margin-bottom: 12px !important;
+    }
+    .invoice-template-doc .unified-invoice-template .unified-invoice-totals,
+    .invoice-template-doc .unified-invoice-template .invoice-grid-bill-dates {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+    .invoice-template-doc .unified-invoice-template .unified-invoice-line-table {
+        break-inside: auto;
+        page-break-inside: auto;
+    }
+    .invoice-template-doc .unified-invoice-template .unified-invoice-line-table thead {
+        display: table-header-group !important;
+    }
+    .invoice-template-doc .unified-invoice-template .unified-invoice-line-table tfoot {
+        display: table-footer-group !important;
+    }
+    .invoice-template-doc .unified-invoice-template .unified-invoice-line-table tr {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
     .invoice-template-doc .invoice-grid-bill-dates {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
     }
@@ -202,7 +239,7 @@
 }
 @page {
     size: A4 portrait;
-    margin: 20mm;
+    margin: 12mm;
 }
 @media print {
     .invoice-template-doc.invoice-a4-root {

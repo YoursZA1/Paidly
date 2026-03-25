@@ -609,7 +609,7 @@ export default function UnifiedInvoiceTemplate({
           </div>
           <div className="text-left sm:text-right shrink-0 space-y-0.5">
             {user?.phone ? <p>Tel: {user.phone}</p> : null}
-            {user?.email ? <p>{user.email}</p> : null}
+            <p>Invoicing made easy with paidly</p>
           </div>
         </div>
       </footer>

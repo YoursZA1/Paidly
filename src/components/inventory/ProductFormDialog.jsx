@@ -47,21 +47,21 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
-              <Label>Product Name *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Premium Coffee Beans" required />
+              <Label htmlFor="product-name">Product Name *</Label>
+              <Input id="product-name" name="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Premium Coffee Beans" required />
             </div>
             <div className="space-y-1.5">
-              <Label>SKU</Label>
-              <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. COF-001" />
+              <Label htmlFor="product-sku">SKU</Label>
+              <Input id="product-sku" name="sku" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. COF-001" />
             </div>
             <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Beverages" />
+              <Label htmlFor="product-category">Category</Label>
+              <Input id="product-category" name="category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Beverages" />
             </div>
             <div className="space-y-1.5">
-              <Label>Count Style *</Label>
+              <Label htmlFor="product-count-style">Count Style *</Label>
               <Select value={form.count_style} onValueChange={(v) => setForm({ ...form, count_style: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="product-count-style" name="count_style"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {COUNT_STYLES.map((s) => (
                     <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
@@ -70,20 +70,20 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Units per {form.count_style.slice(0, -1)}</Label>
-              <Input type="number" min="1" value={form.units_per_count} onChange={(e) => setForm({ ...form, units_per_count: e.target.value })} />
+              <Label htmlFor="product-units-per-count">Units per {form.count_style.slice(0, -1)}</Label>
+              <Input id="product-units-per-count" name="units_per_count" type="number" min="1" value={form.units_per_count} onChange={(e) => setForm({ ...form, units_per_count: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Stock On Hand</Label>
-              <Input type="number" min="0" value={form.stock_on_hand} onChange={(e) => setForm({ ...form, stock_on_hand: e.target.value })} />
+              <Label htmlFor="product-stock-on-hand">Stock On Hand</Label>
+              <Input id="product-stock-on-hand" name="stock_on_hand" type="number" min="0" value={form.stock_on_hand} onChange={(e) => setForm({ ...form, stock_on_hand: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Reorder Level</Label>
-              <Input type="number" min="0" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
+              <Label htmlFor="product-reorder-level">Reorder Level</Label>
+              <Input id="product-reorder-level" name="reorder_level" type="number" min="0" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
             </div>
             <div className="col-span-2 space-y-1.5">
-              <Label>Price per {form.count_style.slice(0, -1)}</Label>
-              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+              <Label htmlFor="product-price">Price per {form.count_style.slice(0, -1)}</Label>
+              <Input id="product-price" name="price" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
             </div>
           </div>
           <DialogFooter>

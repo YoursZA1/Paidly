@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { getOAuthRedirectOrigin } from "@/utils";
+import { isGoogleOAuthEnabled } from "@/utils/authFeatureFlags";
 
 /** Google "G" logo - multicolor */
 function GoogleIcon({ className = "w-5 h-5" }) {
@@ -31,6 +32,8 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [error, setError] = useState("");
 
+  const showGoogle = isGoogleOAuthEnabled();
+
   const redirectTo = getOAuthRedirectOrigin() || null;
 
   const handleOAuth = async (provider) => {
@@ -44,6 +47,10 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
       setLoadingProvider(null);
     }
   };
+
+  if (!showGoogle) {
+    return null;
+  }
 
   return (
     <div className={className}>

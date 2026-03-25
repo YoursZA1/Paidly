@@ -357,7 +357,7 @@ export default function CashFlowPage() {
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash flow</h1>
-                        <p className="text-gray-600 dark:text-slate-400 mt-1">Monitor your income and expenses</p>
+                        <p className="text-gray-600 dark:text-slate-400 mt-1">Monitor your income and expenses to pull data correctly throughout the platform</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                         <Button 

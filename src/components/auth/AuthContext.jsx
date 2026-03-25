@@ -367,11 +367,18 @@ const AUTH_FALLBACK = {
   userPermissions: [],
 };
 
+let warnedAuthOutsideProvider = false;
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) {
     if (import.meta.env?.DEV) {
-      console.warn("[Auth] useAuth called outside AuthProvider (e.g. during HMR). Using fallback. If you see this after a hot reload, refresh the page.");
+      if (!warnedAuthOutsideProvider) {
+        warnedAuthOutsideProvider = true;
+        console.warn(
+          "[Auth] useAuth called outside AuthProvider (e.g. during HMR). Using fallback. If you see this after a hot reload, refresh the page."
+        );
+      }
       return AUTH_FALLBACK;
     }
     throw new Error("useAuth must be used within AuthProvider");

@@ -120,6 +120,14 @@ export default function ProjectDetails({
     }, [authUser?.default_tax_rate, authUser?.id, invoiceData.tax_rate, setInvoiceData]);
 
     useEffect(() => {
+        if (invoiceData?.banking_detail_id) return;
+        const def = Array.isArray(bankingDetails) ? bankingDetails.find((d) => d?.is_default) : null;
+        if (def?.id) {
+            handleInputChange('banking_detail_id', def.id);
+        }
+    }, [bankingDetails, handleInputChange, invoiceData?.banking_detail_id]);
+
+    useEffect(() => {
         if (quickItemInputRef.current) {
             quickItemInputRef.current.focus();
         }
@@ -1905,35 +1913,6 @@ export default function ProjectDetails({
                         {/* Rest of form */}
                         <div className="grid md:grid-cols-1 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="banking_detail" className="text-sm font-semibold text-slate-700">
-                                    Payment Method (Optional)
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                    <Select 
-                                        value={invoiceData.banking_detail_id || "none"} 
-                                        onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
-                                        className="flex-grow"
-                                    >
-                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20">
-                                            <SelectValue placeholder="Select payment method (optional)" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            {bankingDetails.map(detail => (
-                                                <SelectItem key={detail.id} value={detail.id}>
-                                                    {detail.bank_name} - {detail.payment_method.replace('_', ' ')}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button type="button" variant="outline" size="icon" onClick={() => setIsAddingBankingDetail(true)} aria-label="Add new payment method">
-                                        <Plus className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Add payment method details to display on the invoice, or leave empty to exclude</p>
-                            </div>
-
-                            <div className="space-y-2">
                                 <Label htmlFor="project_description" className="text-sm font-semibold text-slate-700">
                                     Project Description
                                 </Label>
@@ -1969,9 +1948,9 @@ export default function ProjectDetails({
                                 <h3 className="text-lg font-bold text-slate-900">Notes & Legal Text</h3>
                             </div>
 
-                            <div className="grid md:grid-cols-1 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 {/* Customer-Facing Notes */}
-                                <div className="space-y-2">
+                                <div className="space-y-2 md:col-span-1">
                                     <Label htmlFor="notes" className="text-sm font-bold text-slate-700 flex items-center gap-2">
                                         <span>💬</span> Customer Notes
                                     </Label>
@@ -1985,8 +1964,63 @@ export default function ProjectDetails({
                                     <p className="text-xs text-slate-600">Friendly message or instructions for your customer</p>
                                 </div>
 
+                                {/* Terms & Conditions */}
+                                <div className="space-y-2 md:col-span-1">
+                                    <Label htmlFor="terms_conditions" className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <span>📋</span> Terms &amp; Conditions
+                                    </Label>
+                                    <Textarea
+                                        id="terms_conditions"
+                                        value={invoiceData.terms_conditions || ""}
+                                        onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
+                                        placeholder="e.g., By accepting this invoice, customer agrees to all terms..."
+                                        className="min-h-32 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
+                                    />
+                                    <p className="text-xs text-slate-600">General legal terms, liability limitations, dispute resolution</p>
+                                </div>
+
+                                {/* Payment Details (uses profile default when set) */}
+                                <div className="space-y-2 md:col-span-1">
+                                    <Label htmlFor="banking_detail" className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <span>🏦</span> Payment Details
+                                    </Label>
+                                    <div className="flex items-center gap-2">
+                                        {(() => {
+                                            const safeBankingDetails = (bankingDetails || []).filter(
+                                                (detail) => typeof detail?.id === "string" && detail.id.trim().length > 0
+                                            );
+                                            const currentValue = String(invoiceData.banking_detail_id || "");
+                                            const hasCurrent = safeBankingDetails.some((d) => d.id === currentValue);
+                                            const selectValue = hasCurrent ? currentValue : "none";
+                                            return (
+                                        <Select
+                                            value={selectValue}
+                                            onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
+                                            className="flex-grow"
+                                        >
+                                            <SelectTrigger className="h-12 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20">
+                                                <SelectValue placeholder="Select payment details (optional)" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">Use profile default</SelectItem>
+                                                {safeBankingDetails.map(detail => (
+                                                    <SelectItem key={detail.id} value={detail.id}>
+                                                        {(detail.bank_name || "Bank")} - {String(detail.payment_method || "bank_transfer").replace('_', ' ')}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                            );
+                                        })()}
+                                        <Button type="button" variant="outline" size="icon" onClick={() => setIsAddingBankingDetail(true)} aria-label="Add new payment details">
+                                            <Plus className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-slate-600">Defaults to your profile payment details unless you choose another</p>
+                                </div>
+
                                 {/* Payment Terms */}
-                                <div className="space-y-2">
+                                <div className="space-y-2 md:col-span-3">
                                     <Label htmlFor="payment_terms" className="text-sm font-bold text-slate-700 flex items-center gap-2">
                                         <span>💳</span> Payment Terms
                                     </Label>
@@ -2001,7 +2035,7 @@ export default function ProjectDetails({
                                 </div>
 
                                 {/* Warranty/Service Notes */}
-                                <div className="space-y-2">
+                                <div className="space-y-2 md:col-span-3">
                                     <Label htmlFor="warranty_notes" className="text-sm font-bold text-slate-700 flex items-center gap-2">
                                         <span>🛡️</span> Warranty / Service Notes
                                     </Label>
@@ -2014,66 +2048,6 @@ export default function ProjectDetails({
                                     />
                                     <p className="text-xs text-slate-600">Warranty coverage, service guarantees, limitations</p>
                                 </div>
-
-                                {/* Terms & Conditions */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="terms_conditions" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>📋</span> Terms &amp; Conditions
-                                    </Label>
-                                    <Textarea
-                                        id="terms_conditions"
-                                        value={invoiceData.terms_conditions || ""}
-                                        onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
-                                        placeholder="e.g., By accepting this invoice, customer agrees to all terms. Work must be inspected within 7 days. Claims after this period may not be honored..."
-                                        className="min-h-32 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                    <p className="text-xs text-slate-600">General legal terms, liability limitations, dispute resolution</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Rest of form */}
-                        <div className="grid md:grid-cols-1 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="banking_detail" className="text-sm font-semibold text-slate-700">
-                                    Payment Method (Optional)
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                    <Select 
-                                        value={invoiceData.banking_detail_id || "none"} 
-                                        onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
-                                        className="flex-grow"
-                                    >
-                                        <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20">
-                                            <SelectValue placeholder="Select payment method (optional)" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            {bankingDetails.map(detail => (
-                                                <SelectItem key={detail.id} value={detail.id}>
-                                                    {detail.bank_name} - {detail.payment_method.replace('_', ' ')}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button type="button" variant="outline" size="icon" onClick={() => setIsAddingBankingDetail(true)} aria-label="Add new payment method">
-                                        <Plus className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Add payment method details to display on the invoice, or leave empty to exclude</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="project_description" className="text-sm font-semibold text-slate-700">
-                                    Project Description
-                                </Label>
-                                <Textarea
-                                    id="project_description"
-                                    value={invoiceData.project_description}
-                                    onChange={(e) => handleInputChange('project_description', e.target.value)}
-                                    placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
-                                />
                             </div>
                         </div>
 

@@ -8,6 +8,19 @@ import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
+function mapOAuthProviderError(error, provider) {
+  const raw = String(error?.message || error?.msg || "").trim();
+  const low = raw.toLowerCase();
+  const p = String(provider || "").toLowerCase();
+
+  if (low.includes("unsupported provider") || low.includes("provider is not enabled")) {
+    const name = p ? `${p.charAt(0).toUpperCase()}${p.slice(1)}` : "OAuth";
+    return `${name} sign-in is not enabled. Enable it in Supabase Dashboard -> Authentication -> Providers, add client credentials, and include this app URL in allowed redirect URLs.`;
+  }
+
+  return mapAuthError(error);
+}
+
 /** Axios: DNS failure, offline, CORS preflight abort, etc. Often surfaces as message "Network Error". */
 function isAxiosTransportFailure(err) {
   if (!err || err.isAxiosError !== true) return false;
@@ -243,7 +256,7 @@ const SupabaseAuthService = {
       }
     });
 
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throw new Error(mapOAuthProviderError(error, provider));
     return data;
   },
 
