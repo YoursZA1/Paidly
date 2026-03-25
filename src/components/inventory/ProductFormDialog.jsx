@@ -1,0 +1,95 @@
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const COUNT_STYLES = ["units", "cases", "packs", "boxes", "pallets", "bottles", "bags", "rolls"];
+
+const defaultProduct = {
+  name: "", sku: "", category: "", count_style: "units",
+  units_per_count: 1, stock_on_hand: 0, reorder_level: 10, price: 0,
+};
+
+export default function ProductFormDialog({ open, onOpenChange, product, onSave }) {
+  const [form, setForm] = useState(defaultProduct);
+  const isEdit = !!product;
+
+  useEffect(() => {
+    if (product) {
+      setForm({ ...defaultProduct, ...product });
+    } else {
+      setForm(defaultProduct);
+    }
+  }, [product, open]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({
+      ...form,
+      units_per_count: Number(form.units_per_count) || 1,
+      stock_on_hand: Number(form.stock_on_hand) || 0,
+      reorder_level: Number(form.reorder_level) || 10,
+      price: Number(form.price) || 0,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-xl">{isEdit ? "Edit Product" : "Add New Product"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 space-y-1.5">
+              <Label>Product Name *</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Premium Coffee Beans" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label>SKU</Label>
+              <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. COF-001" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Beverages" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Count Style *</Label>
+              <Select value={form.count_style} onValueChange={(v) => setForm({ ...form, count_style: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {COUNT_STYLES.map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Units per {form.count_style.slice(0, -1)}</Label>
+              <Input type="number" min="1" value={form.units_per_count} onChange={(e) => setForm({ ...form, units_per_count: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Stock On Hand</Label>
+              <Input type="number" min="0" value={form.stock_on_hand} onChange={(e) => setForm({ ...form, stock_on_hand: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reorder Level</Label>
+              <Input type="number" min="0" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <Label>Price per {form.count_style.slice(0, -1)}</Label>
+              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit">{isEdit ? "Update" : "Add Product"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

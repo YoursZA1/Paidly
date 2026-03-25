@@ -1,0 +1,39 @@
+{
+  "name": "StockTransaction",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string",
+      "description": "Reference to the product"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "sold",
+        "received",
+        "adjusted",
+        "returned"
+      ],
+      "description": "Type of transaction"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Quantity involved in this transaction"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about the transaction"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Transaction date"
+    }
+  },
+  "required": [
+    "product_id",
+    "type",
+    "quantity"
+  ]
+}
+

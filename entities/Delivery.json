@@ -1,0 +1,48 @@
+{
+  "name": "Delivery",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string",
+      "description": "Reference to the product"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Quantity being delivered"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_transit",
+        "delivered",
+        "cancelled"
+      ],
+      "default": "pending",
+      "description": "Current delivery status"
+    },
+    "supplier": {
+      "type": "string",
+      "description": "Supplier name"
+    },
+    "expected_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Expected delivery date"
+    },
+    "tracking_number": {
+      "type": "string",
+      "description": "Shipping tracking number"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Delivery notes"
+    }
+  },
+  "required": [
+    "product_id",
+    "quantity",
+    "status"
+  ]
+}
+

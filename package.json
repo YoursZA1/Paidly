@@ -58,6 +58,8 @@
     "@tanstack/react-virtual": "^3.13.22",
     "@vercel/analytics": "^1.6.1",
     "@vercel/og": "^0.11.1",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "axios": "^1.13.5",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",

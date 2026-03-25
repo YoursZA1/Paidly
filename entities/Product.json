@@ -1,0 +1,61 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "sku": {
+      "type": "string",
+      "description": "Stock keeping unit code"
+    },
+    "category": {
+      "type": "string",
+      "description": "Product category"
+    },
+    "count_style": {
+      "type": "string",
+      "enum": [
+        "units",
+        "cases",
+        "packs",
+        "boxes",
+        "pallets",
+        "bottles",
+        "bags",
+        "rolls"
+      ],
+      "default": "units",
+      "description": "How this product is counted"
+    },
+    "units_per_count": {
+      "type": "number",
+      "default": 1,
+      "description": "How many individual units per count style (e.g. 12 units per case)"
+    },
+    "stock_on_hand": {
+      "type": "number",
+      "default": 0,
+      "description": "Current stock quantity"
+    },
+    "reorder_level": {
+      "type": "number",
+      "default": 10,
+      "description": "Minimum stock before reorder alert"
+    },
+    "price": {
+      "type": "number",
+      "description": "Price per count unit"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    }
+  },
+  "required": [
+    "name",
+    "count_style"
+  ]
+}
+
