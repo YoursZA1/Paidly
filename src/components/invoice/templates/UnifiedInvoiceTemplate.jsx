@@ -56,7 +56,7 @@ function InvoiceDatesColumn({ issueDate, deliveryDate, dueLabel, heavy }) {
   const labelCls = `text-xs uppercase tracking-wide mb-1 text-neutral-600 ${heavy ? "font-black" : "font-bold"}`;
   const valueCls = `text-foreground ${heavy ? "font-bold" : "font-semibold"}`;
   const dueHeading =
-    dueLabel === "Valid until" ? "Valid until" : "Due date";
+    dueLabel === "Valid until" ? "Valid Until:" : "Due date";
   return (
     <div className="space-y-3 text-sm text-right">
       <div>
@@ -219,12 +219,27 @@ export default function UnifiedInvoiceTemplate({
 }) {
   const cfg = VARIANT_CONFIG[variant] || VARIANT_CONFIG.classic;
   const issueDate = safeFormatDate(invoice.created_date);
-  const deliveryDate = safeFormatDate(invoice.delivery_date);
   const resolvedTitle =
     documentTitle || (invoice.type === "QUOTE" ? "QUOTE" : "INVOICE");
   const isQuote = resolvedTitle === "QUOTE";
+  const deliveryDate = safeFormatDate(
+    isQuote ? invoice.valid_until ?? invoice.delivery_date : invoice.delivery_date
+  );
+  // Template safeFormatDate is typically month-first ("March 30, 2026").
+  // For QUOTE, the design spec expects day-first: "30 March 2026".
+  const deliveryDateLabel = (() => {
+    if (!isQuote) return deliveryDate;
+    const s = String(deliveryDate || "").trim();
+    const m = s.match(/^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/);
+    if (!m) return deliveryDate;
+    const [, month, day, year] = m;
+    return `${day} ${month} ${year}`;
+  })();
   const dueLabel = isQuote ? "Valid until" : "Due date";
   const numberLabel = isQuote ? "Quote no" : "Invoice no";
+  const displayNumber = isQuote
+    ? invoice.quote_number ?? invoice.number ?? "—"
+    : invoice.invoice_number ?? invoice.number ?? "—";
 
   const logoSrc =
     user?.logo_url ||
@@ -260,11 +275,15 @@ export default function UnifiedInvoiceTemplate({
 
   return (
     <div
-      className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal box-border ${cfg.font || ""}`}
-      style={{ padding: "12mm" }}
+      className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal box-border flex flex-col min-h-[297mm] ${cfg.font || ""}`}
     >
-      <header className={`mb-6 sm:mb-8 ${cfg.headerAccent || ""}`}>
-        <div className="flex flex-col gap-6 sm:flex-row sm:justify-between sm:items-start">
+      <header
+        className={`${isQuote ? "mb-8 sm:mb-8" : "mb-6 sm:mb-8"} ${cfg.headerAccent || ""}`}
+        aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}
+      >
+        <div
+          className={`flex flex-col ${isQuote ? "gap-4" : "gap-6"} sm:flex-row sm:justify-between sm:items-start`}
+        >
           <div className="flex min-w-0 items-start">
             {logoSrc ? (
               <img
@@ -289,258 +308,237 @@ export default function UnifiedInvoiceTemplate({
             <p
               className={`text-foreground text-xs sm:text-sm mt-1 uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
             >
-              {numberLabel}: {invoice.invoice_number || "—"}
+              {numberLabel}: {displayNumber}
             </p>
           </div>
         </div>
       </header>
 
-      <section className={`${cfg.band} ${pyBand} mb-5 sm:mb-6`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-12">
-          <InvoiceToBlock client={client} heavy={cfg.heavy} />
-          <ShipToBlock
-            client={client}
-            heavy={cfg.heavy}
-            itemsRequireShipping={itemsRequireShipping}
-            issueDate={issueDate}
-            deliveryDate={deliveryDate}
-            dueLabel={dueLabel}
-          />
-        </div>
-      </section>
-
-      {itemsRequireShipping ? (
-        <div className="mb-4 sm:mb-5">
-          <InvoiceDatesColumn
-            issueDate={issueDate}
-            deliveryDate={deliveryDate}
-            dueLabel={dueLabel}
-            heavy={cfg.heavy}
-          />
-        </div>
-      ) : null}
-
-      <section className="mb-6 sm:mb-8">
-        <table
-          className={`items invoice-table unified-invoice-line-table w-full border-collapse table-fixed border-t border-b ${cfg.rule}`}
-        >
-          <colgroup>
-            <col className="min-w-0" style={{ width: "50%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "19.5%" }} />
-            <col style={{ width: "19.5%" }} />
-          </colgroup>
-          <thead>
-            <tr className={`border-b ${cfg.rule}`}>
-              <th
-                className={`py-3 pr-4 sm:pr-6 text-left text-[10px] sm:text-xs uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                Description
-              </th>
-              <th
-                className={`py-3 px-2 sm:px-3 text-center text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                Quantity
-              </th>
-              <th
-                className={`py-3 pl-2 sm:pl-3 pr-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                Price
-              </th>
-              <th
-                className={`py-3 pl-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                Total
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length > 0 ? (
-              items.map((item, index) => {
-                const lineLabel = formatLineItemNameAndDescription(item);
-                return (
-                  <tr key={index} className={`border-b border-black/10 ${cfg.rule}`}>
-                    <td className="py-3.5 pr-4 sm:pr-6 align-top min-w-0">
-                      <p
-                        className={`text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}
-                      >
-                        {lineLabel}
-                      </p>
-                    </td>
-                    <td className="py-3.5 px-2 sm:px-3 align-top text-center tabular-nums text-foreground">
-                      {item.quantity}
-                    </td>
-                    <td className="py-3.5 pl-2 sm:pl-3 pr-2 align-top text-right tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
-                      {formatCurrency(item.unit_price, userCurrency)}
-                    </td>
-                    <td className="py-3.5 pl-2 align-top text-right font-medium tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
-                      {formatCurrency(item.total_price || 0, userCurrency)}
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="py-10 text-center text-neutral-500 text-sm"
-                >
-                  No items found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      <section
-        className={`unified-invoice-totals grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 mb-8 sm:mb-10 ${pySection}`}
-      >
-        <div>
-          <h3
-            className={`text-xs uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-bold"}`}
-          >
-            Total due
-          </h3>
+      <main aria-label="Invoice details" className="flex-1">
+        <section className={`${cfg.band} ${pyBand} ${isQuote ? "mb-8 sm:mb-8" : "mb-5 sm:mb-6"}`}>
           <div
-            className="px-4 py-5 sm:py-6 border border-black/10"
-            style={hatchStyle}
+            className={`grid grid-cols-1 sm:grid-cols-2 ${
+              isQuote ? "gap-6 sm:gap-8" : "gap-8 sm:gap-12"
+            }`}
           >
-            <p
-              className={`text-2xl sm:text-3xl tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              {formatCurrency(invoice.total_amount, userCurrency)}
-            </p>
+            <InvoiceToBlock client={client} heavy={cfg.heavy} />
+            <ShipToBlock
+              client={client}
+              heavy={cfg.heavy}
+              itemsRequireShipping={itemsRequireShipping}
+              issueDate={issueDate}
+              deliveryDate={deliveryDateLabel}
+              dueLabel={dueLabel}
+            />
           </div>
-        </div>
-        <div className="sm:justify-self-end w-full sm:max-w-xs">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-              <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                Subtotal
-              </span>
-              <span className="font-medium tabular-nums currency-value">
-                {formatCurrency(invoice.subtotal, userCurrency)}
-              </span>
-            </div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                  Discount
-                  {invoice.discount_type === "percentage"
-                    ? ` (${invoice.discount_value}%)`
-                    : ""}
-                </span>
-                <span className="font-medium tabular-nums currency-value text-red-600">
-                  -{formatCurrency(discountAmt, userCurrency)}
-                </span>
-              </div>
-            )}
-            {hasItemTax && (
-              <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                  Item taxes
-                </span>
-                <span className="font-medium tabular-nums currency-value">
-                  {formatCurrency(invoice.item_taxes || 0, userCurrency)}
-                </span>
-              </div>
-            )}
-            {Number(invoice.tax_rate) > 0 && (
-              <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                  Tax ({invoice.tax_rate}%)
-                </span>
-                <span className="font-medium tabular-nums currency-value">
-                  {formatCurrency(invoice.tax_amount, userCurrency)}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between gap-4 pt-1">
-              <span
-                className={`uppercase text-xs tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                Grand total
-              </span>
-              <span
-                className={`tabular-nums currency-value ${cfg.heavy ? "font-black" : "font-bold"}`}
+        </section>
+
+        {itemsRequireShipping ? (
+          <div className={isQuote ? "mb-8 sm:mb-8" : "mb-4 sm:mb-5"}>
+            <InvoiceDatesColumn
+              issueDate={issueDate}
+              deliveryDate={deliveryDateLabel}
+              dueLabel={dueLabel}
+              heavy={cfg.heavy}
+            />
+          </div>
+        ) : null}
+
+        <section className={isQuote ? "mb-8 sm:mb-8" : "mb-6 sm:mb-8"}>
+          <table
+            className={`items invoice-table unified-invoice-line-table w-full border-collapse table-fixed border-t border-b ${cfg.rule}`}
+          >
+            <colgroup>
+              <col className="min-w-0" style={{ width: "50%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "19.5%" }} />
+              <col style={{ width: "19.5%" }} />
+            </colgroup>
+            <thead>
+              <tr className={`border-b ${cfg.rule}`}>
+                <th
+                  className={`py-3 pr-4 sm:pr-6 text-left text-[10px] sm:text-xs uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
+                >
+                  Description
+                </th>
+                <th
+                  className={`py-3 px-2 sm:px-3 text-center text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
+                >
+                  Quantity
+                </th>
+                <th
+                  className={`py-3 pl-2 sm:pl-3 pr-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
+                >
+                  Price
+                </th>
+                <th
+                  className={`py-3 pl-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
+                >
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length > 0 ? (
+                items.map((item, index) => {
+                  const lineLabel = formatLineItemNameAndDescription(item);
+                  return (
+                    <tr key={index} className={`border-b border-black/10 ${cfg.rule}`}>
+                      <td className="py-3.5 pr-4 sm:pr-6 align-top min-w-0">
+                        <p
+                          className={`text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}
+                        >
+                          {lineLabel}
+                        </p>
+                      </td>
+                      <td className="py-3.5 px-2 sm:px-3 align-top text-center tabular-nums text-foreground">
+                        {item.quantity}
+                      </td>
+                      <td className="py-3.5 pl-2 sm:pl-3 pr-2 align-top text-right tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
+                        {formatCurrency(item.unit_price, userCurrency)}
+                      </td>
+                      <td className="py-3.5 pl-2 align-top text-right font-medium tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
+                        {formatCurrency(item.total_price || 0, userCurrency)}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="py-10 text-center text-neutral-500 text-sm"
+                  >
+                    No items found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section
+          className={`unified-invoice-totals grid grid-cols-1 sm:grid-cols-2 ${
+            isQuote ? "gap-4 sm:gap-6" : "gap-6 sm:gap-10"
+          } ${isQuote ? "mb-8 sm:mb-8" : "mb-8 sm:mb-10"} ${pySection}`}
+        >
+          <div>
+            <h3
+              className={`text-xs uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-bold"}`}
+            >
+              Total due
+            </h3>
+            <div
+              className="px-4 py-5 sm:py-6 border border-black/10"
+              style={hatchStyle}
+            >
+              <p
+                className={`text-2xl sm:text-3xl tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-bold"}`}
               >
                 {formatCurrency(invoice.total_amount, userCurrency)}
-              </span>
+              </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 text-sm border-t border-black/10 pt-6">
-        <div>
-          <h3
-            className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
-          >
-            Payment info
-          </h3>
-          <div className="space-y-4 text-neutral-700">
-            <div>
-              <p className="text-xs text-neutral-500 mb-2">Payment structure</p>
-              <ul className="space-y-1.5 text-sm">
-                {[
-                  { pct: "25%", value: paymentStructureTotal * 0.25 },
-                  { pct: "50%", value: paymentStructureTotal * 0.5 },
-                  { pct: "100%", value: paymentStructureTotal },
-                ].map(({ pct, value }) => (
-                  <li
-                    key={pct}
-                    className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums"
-                  >
-                    <span className="text-neutral-600 shrink-0">{pct}</span>
-                    <span className="font-medium text-foreground currency-value">
-                      {formatCurrency(value, userCurrency)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h3
-            className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
-          >
-            Account details
-          </h3>
-          {hasAccountDetailsSection ? (
-            <div className="space-y-4 text-neutral-700">
-              {accountBankRows.length > 0 ? (
-                <dl className="space-y-2">
-                  {accountBankRows.map((row) => (
-                    <div key={row.key}>
-                      <dt className="text-xs text-neutral-500">{row.label}</dt>
-                      <dd
-                        className={`font-medium text-foreground text-sm ${row.multiline ? "whitespace-pre-line" : ""}`}
-                      >
-                        {row.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="text-neutral-500 text-sm">
-                  Add default bank details in Settings, or choose a bank account on the invoice.
-                </p>
+          <div className="sm:justify-self-end w-full sm:max-w-xs">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                <span className="text-neutral-600 uppercase text-xs tracking-wide">
+                  Subtotal
+                </span>
+                <span className="font-medium tabular-nums currency-value">
+                  {formatCurrency(invoice.subtotal, userCurrency)}
+                </span>
+              </div>
+              {discountAmt > 0 && (
+                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
+                    Discount
+                    {invoice.discount_type === "percentage"
+                      ? ` (${invoice.discount_value}%)`
+                      : ""}
+                  </span>
+                  <span className="font-medium tabular-nums currency-value text-red-600">
+                    -{formatCurrency(discountAmt, userCurrency)}
+                  </span>
+                </div>
               )}
-              {businessContactRows.length > 0 ? (
-                <div
-                  className={
-                    accountBankRows.length > 0 ? "pt-3 border-t border-black/10" : ""
-                  }
+              {hasItemTax && (
+                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
+                    Item taxes
+                  </span>
+                  <span className="font-medium tabular-nums currency-value">
+                    {formatCurrency(invoice.item_taxes || 0, userCurrency)}
+                  </span>
+                </div>
+              )}
+              {Number(invoice.tax_rate) > 0 && (
+                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
+                    Tax ({invoice.tax_rate}%)
+                  </span>
+                  <span className="font-medium tabular-nums currency-value">
+                    {formatCurrency(invoice.tax_amount, userCurrency)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between gap-4 pt-1">
+                <span
+                  className={`uppercase text-xs tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
                 >
-                  <p
-                    className={`text-xs uppercase tracking-wide mb-2 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}
-                  >
-                    Business contact
-                  </p>
+                  Grand total
+                </span>
+                <span
+                  className={`tabular-nums currency-value ${cfg.heavy ? "font-black" : "font-bold"}`}
+                >
+                  {formatCurrency(invoice.total_amount, userCurrency)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 text-sm border-t border-black/10 pt-6">
+          <div>
+            <h3
+              className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
+            >
+              Payment info
+            </h3>
+            <div className="space-y-4 text-neutral-700">
+              <div>
+                <p className="text-xs text-neutral-500 mb-2">Payment structure</p>
+                <ul className="space-y-1.5 text-sm">
+                  {[
+                    { pct: "25%", value: paymentStructureTotal * 0.25 },
+                    { pct: "50%", value: paymentStructureTotal * 0.5 },
+                    { pct: "100%", value: paymentStructureTotal },
+                  ].map(({ pct, value }) => (
+                    <li
+                      key={pct}
+                      className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums"
+                    >
+                      <span className="text-neutral-600 shrink-0">{pct}</span>
+                      <span className="font-medium text-foreground currency-value">
+                        {formatCurrency(value, userCurrency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3
+              className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
+            >
+              Account details
+            </h3>
+            {hasAccountDetailsSection ? (
+              <div className="space-y-4 text-neutral-700">
+                {accountBankRows.length > 0 ? (
                   <dl className="space-y-2">
-                    {businessContactRows.map((row) => (
+                    {accountBankRows.map((row) => (
                       <div key={row.key}>
                         <dt className="text-xs text-neutral-500">{row.label}</dt>
                         <dd
@@ -551,43 +549,75 @@ export default function UnifiedInvoiceTemplate({
                       </div>
                     ))}
                   </dl>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-neutral-500 text-sm">—</p>
-          )}
-        </div>
-      </section>
+                ) : (
+                  <p className="text-neutral-500 text-sm">
+                    Add default bank details in Settings, or choose a bank account on the invoice.
+                  </p>
+                )}
+                {businessContactRows.length > 0 ? (
+                  <div
+                    className={
+                      accountBankRows.length > 0 ? "pt-3 border-t border-black/10" : ""
+                    }
+                  >
+                    <p
+                      className={`text-xs uppercase tracking-wide mb-2 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}
+                    >
+                      Business contact
+                    </p>
+                    <dl className="space-y-2">
+                      {businessContactRows.map((row) => (
+                        <div key={row.key}>
+                          <dt className="text-xs text-neutral-500">{row.label}</dt>
+                          <dd
+                            className={`font-medium text-foreground text-sm ${row.multiline ? "whitespace-pre-line" : ""}`}
+                          >
+                            {row.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-neutral-500 text-sm">—</p>
+            )}
+          </div>
+        </section>
 
-      <section className="mb-8 text-sm border-t border-black/10 pt-6">
-        <h3
-          className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
-        >
-          Notes
-        </h3>
-        <p className="text-neutral-700 text-xs sm:text-sm leading-relaxed mb-4">
-          {NOTES_PAYMENT_MILESTONES_COPY}
-        </p>
-        {invoice.notes ? (
-          <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-4 mt-4">
-            {invoice.notes}
+        <section className="mb-8 text-sm border-t border-black/10 pt-6">
+          <h3
+            className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
+          >
+            Notes
+          </h3>
+          <p className="text-neutral-700 text-xs sm:text-sm leading-relaxed mb-4">
+            {NOTES_PAYMENT_MILESTONES_COPY}
           </p>
-        ) : null}
-        {items.filter((item) => item.description?.trim()).length > 0 && (
-          <ul className="mt-4 pt-4 border-t border-black/10 space-y-1 text-neutral-700">
-            {items
-              .filter((item) => item.description?.trim())
-              .map((item, idx) => (
-                <li key={idx} className="text-foreground">
-                  {formatLineItemNameAndDescription(item)}
-                </li>
-              ))}
-          </ul>
-        )}
-      </section>
+          {invoice.notes ? (
+            <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-4 mt-4">
+              {invoice.notes}
+            </p>
+          ) : null}
+          {items.filter((item) => item.description?.trim()).length > 0 && (
+            <ul className="mt-4 pt-4 border-t border-black/10 space-y-1 text-neutral-700">
+              {items
+                .filter((item) => item.description?.trim())
+                .map((item, idx) => (
+                  <li key={idx} className="text-foreground">
+                    {formatLineItemNameAndDescription(item)}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </section>
+      </main>
 
-      <footer className="border-t border-black/20 pt-5 text-xs text-neutral-600">
+      <footer
+        className="border-t border-black/20 pt-5 text-xs text-neutral-600"
+        aria-label="Thank you for your business. Invoicing made easy with Paidly. Powered by Paidly."
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
           <div className="min-w-0">
             {user?.company_address ? (
@@ -602,6 +632,9 @@ export default function UnifiedInvoiceTemplate({
             <p>Thank you for your business.</p>
             <p>Invoicing made easy with Paidly</p>
           </div>
+        </div>
+        <div className="mt-4 pt-3 border-t border-black/10 text-[10px] text-neutral-500">
+          Powered by Paidly
         </div>
       </footer>
     </div>

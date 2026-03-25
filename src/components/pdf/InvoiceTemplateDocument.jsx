@@ -31,7 +31,11 @@ const InvoiceTemplateDocument = forwardRef(function InvoiceTemplateDocument(
         className={outerClass}
         style={embeddedChrome ? undefined : { maxWidth: "210mm" }}
       >
-        <div className="pdf-content invoice-container min-w-0 p-4 sm:p-6 md:p-8">
+        {/* A4 inner margins for preview + html2pdf capture. Print margins are handled by @page in CSS. */}
+        <div
+          className="pdf-content invoice-container min-w-0"
+          style={{ padding: "40px 48px" }}
+        >
           <TemplateComponent
             invoice={invoice}
             client={client}

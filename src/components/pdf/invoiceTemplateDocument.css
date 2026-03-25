@@ -239,7 +239,11 @@
 }
 @page {
     size: A4 portrait;
-    margin: 12mm;
+    /* Design-system A4 margins:
+       Top: 40px  (~10.6mm)
+       Bottom: 40px (~10.6mm)
+       Left/Right: 48px (~12.7mm) */
+    margin: 10.6mm 12.7mm 10.6mm 12.7mm;
 }
 @media print {
     .invoice-template-doc.invoice-a4-root {
