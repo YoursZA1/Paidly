@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Service } from "@/api/entities";
 import { User } from "@/api/entities";
@@ -25,6 +25,8 @@ import ConfirmationDialog from "@/components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
 
+const Inventory = lazy(() => import("./Inventory"));
+
 export default function Services() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -41,11 +43,17 @@ export default function Services() {
     const [isSaving, setIsSaving] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [createType, setCreateType] = useState("service"); // 'product' | 'service'
+    const [activeView, setActiveView] = useState("catalog"); // 'catalog' | 'inventory'
     const serviceFileInputRef = useRef(null);
 
     useEffect(() => {
         setIndustries(getIndustries());
-        loadUser();
+        // Avoid hitting auth.me when we already have cached profile data.
+        if (userProfileFromStore) {
+            setUser(userProfileFromStore);
+        } else {
+            loadUser();
+        }
     }, []);
 
     useEffect(() => {
@@ -265,13 +273,40 @@ export default function Services() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">
-                            Products & Services
+                            Prod & Services
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
                             Manage your offerings and pricing strategy.
                         </p>
                     </div>
 
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                onClick={() => setActiveView("catalog")}
+                                className={`rounded-2xl font-bold px-4 py-2.5 ${
+                                    activeView === "catalog"
+                                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
+                                }`}
+                            >
+                                Catalog
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => setActiveView("inventory")}
+                                className={`rounded-2xl font-bold px-4 py-2.5 ${
+                                    activeView === "inventory"
+                                        ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
+                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
+                                }`}
+                            >
+                                Inventory
+                            </Button>
+                        </div>
+
+                        {activeView === "inventory" ? null : (
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <div className="relative flex-1 md:w-72">
                             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
@@ -319,80 +354,94 @@ export default function Services() {
                             </Button>
                         </div>
                     </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* 2. INVENTORY GRID */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {isLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                            <Card key={i} className="rounded-[32px] overflow-hidden bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700">
-                                <CardContent className="p-6">
-                                    <div className="animate-pulse space-y-4">
-                                        <div className="h-6 bg-slate-200 dark:bg-slate-600 rounded w-2/3" />
-                                        <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-1/2" />
-                                        <div className="h-16 bg-slate-100 dark:bg-slate-700 rounded" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))
-                    ) : (
-                        <>
-                            {filteredServices.map((service) => {
-                                const price = service.default_rate ?? service.unit_price ?? 0;
-                                const billed = service.usage_count ?? 0;
-                                const isService = isServiceType(service.item_type);
-                                const isProduct = service.item_type === "product";
-                                const stock = typeof service.stock_quantity === "number" ? service.stock_quantity : null;
-                                return (
-                                    <motion.div
-                                        key={service.id}
-                                        initial={{ opacity: 0, y: 12 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.25 }}
-                                        className="group bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[32px] p-6 hover:shadow-xl hover:border-orange-100 dark:hover:border-orange-900/50 transition-all duration-300 relative overflow-hidden cursor-pointer"
-                                        onClick={() => {
-                                            setEditingService(service);
-                                            setCreateType(service?.item_type === "product" ? "product" : "service");
-                                            setShowForm(true);
-                                        }}
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                setEditingService(service);
-                                                setCreateType(service?.item_type === "product" ? "product" : "service");
-                                                setShowForm(true);
-                                            }
-                                        }}
-                                    >
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="flex items-center gap-2">
-                                                <div
-                                                    className={`p-3 rounded-2xl shrink-0 ${
-                                                        isService ? "bg-blue-50 dark:bg-blue-950/50" : "bg-orange-50 dark:bg-orange-950/50"
-                                                    }`}
-                                                >
-                                                    {isService ? (
-                                                        <TagIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                                                    ) : (
-                                                        <CubeIcon className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                                                    )}
-                                                </div>
-                                                <span
-                                                    className={`text-[10px] font-black tracking-widest uppercase px-2 py-1 rounded-full ${
-                                                        isProduct
-                                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                                            : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-                                                    }`}
-                                                >
-                                                    {isProduct ? "Product" : "Service"}
-                                                </span>
+                {activeView === "inventory" ? (
+                    <Suspense
+                        fallback={
+                            <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading inventory">
+                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                            </div>
+                        }
+                    >
+                        <Inventory />
+                    </Suspense>
+                ) : (
+                    <>
+                        {/* 2. INVENTORY GRID */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {isLoading ? (
+                                Array.from({ length: 6 }).map((_, i) => (
+                                    <Card key={i} className="rounded-[32px] overflow-hidden bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700">
+                                        <CardContent className="p-6">
+                                            <div className="animate-pulse space-y-4">
+                                                <div className="h-6 bg-slate-200 dark:bg-slate-600 rounded w-2/3" />
+                                                <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-1/2" />
+                                                <div className="h-16 bg-slate-100 dark:bg-slate-700 rounded" />
                                             </div>
-                                            <span className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums">
-                                                {formatCurrency(price, userCurrency)}
-                                            </span>
-                                        </div>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            ) : (
+                                <>
+                                    {filteredServices.map((service) => {
+                                        const price = service.default_rate ?? service.unit_price ?? 0;
+                                        const billed = service.usage_count ?? 0;
+                                        const isService = isServiceType(service.item_type);
+                                        const isProduct = service.item_type === "product";
+                                        const stock = typeof service.stock_quantity === "number" ? service.stock_quantity : null;
+                                        return (
+                                            <motion.div
+                                                key={service.id}
+                                                initial={{ opacity: 0, y: 12 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.25 }}
+                                                className="group bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[32px] p-6 hover:shadow-xl hover:border-orange-100 dark:hover:border-orange-900/50 transition-all duration-300 relative overflow-hidden cursor-pointer"
+                                                onClick={() => {
+                                                    setEditingService(service);
+                                                    setCreateType(service?.item_type === "product" ? "product" : "service");
+                                                    setShowForm(true);
+                                                }}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter" || e.key === " ") {
+                                                        e.preventDefault();
+                                                        setEditingService(service);
+                                                        setCreateType(service?.item_type === "product" ? "product" : "service");
+                                                        setShowForm(true);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex justify-between items-start mb-6">
+                                                    <div className="flex items-center gap-2">
+                                                        <div
+                                                            className={`p-3 rounded-2xl shrink-0 ${
+                                                                isService ? "bg-blue-50 dark:bg-blue-950/50" : "bg-orange-50 dark:bg-orange-950/50"
+                                                            }`}
+                                                        >
+                                                            {isService ? (
+                                                                <TagIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                                            ) : (
+                                                                <CubeIcon className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                                                            )}
+                                                        </div>
+                                                        <span
+                                                            className={`text-[10px] font-black tracking-widest uppercase px-2 py-1 rounded-full ${
+                                                                isProduct
+                                                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                                    : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                                            }`}
+                                                        >
+                                                            {isProduct ? "Product" : "Service"}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums">
+                                                        {formatCurrency(price, userCurrency)}
+                                                    </span>
+                                                </div>
 
                                         <div className="mb-6">
                                             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors line-clamp-2">
@@ -473,6 +522,8 @@ export default function Services() {
                             )}
                         </CardContent>
                     </Card>
+                )}
+                    </>
                 )}
             </div>
 

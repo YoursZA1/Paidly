@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Camera, CameraOff } from "lucide-react";
@@ -176,6 +176,9 @@ export default function BarcodeScannerDialog({
             {active ? <Camera className="w-4 h-4 text-primary" /> : <CameraOff className="w-4 h-4 text-muted-foreground" />}
             {title}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Use your device camera to scan a barcode. If camera permission is denied, close this dialog and try again.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

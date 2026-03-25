@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/auth/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
+import { useAppStore } from "@/stores/useAppStore";
 
 import StatsCard from "../components/inventory/StatsCard";
 import ProductTable from "../components/inventory/ProductTable";
@@ -25,9 +26,21 @@ function toInt(value) {
   return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
 
+const DELIVERY_ADDRESS_MARKER = "DELIVERY_ADDRESS:\n";
+
+function packDeliveryNotes(notes, deliveryAddress) {
+  const n = String(notes || "").trim();
+  const addr = String(deliveryAddress || "").trim();
+  if (!addr) return n || null;
+  if (!n) return `${DELIVERY_ADDRESS_MARKER}${addr}`.trim() || null;
+  return `${DELIVERY_ADDRESS_MARKER}${addr}\n\n---\n\n${n}`.trim() || null;
+}
+
 export default function Inventory() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const userProfile = useAppStore((s) => s.userProfile);
+  const userCurrency = userProfile?.currency || "ZAR";
 
   const [products, setProducts] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -47,6 +60,14 @@ export default function Inventory() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState("sell"); // 'sell' | 'receive'
   const [scannerQty, setScannerQty] = useState(1);
+
+  // Funnel both camera + keyboard-wedge scans through one state transition.
+  // Must be defined before the desktop keydown `useEffect` that calls it.
+  const applyWedgeScan = useCallback((code) => {
+    const c = String(code || "").trim();
+    if (!c) return;
+    setPendingBarcode(c);
+  }, []);
 
   // Desktop: support USB/Bluetooth scanners that type quickly + press Enter.
   useEffect(() => {
@@ -97,103 +118,6 @@ export default function Inventory() {
     },
     [products]
   );
-
-  const handleReceive = useCallback(
-    async ({ product_id, quantity, notes }) => {
-      const product = products.find((p) => p.id === product_id);
-      const qty = toInt(quantity);
-      if (!product || qty <= 0) {
-        toast({
-          title: "✗ Invalid Quantity",
-          description: "Please enter a valid quantity.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      try {
-        // Read current stock from DB to avoid drift
-        const { data: row, error: getErr } = await supabase
-          .from("services")
-          .select("stock_quantity")
-          .eq("id", product_id)
-          .maybeSingle();
-        if (getErr) throw getErr;
-        const current = Number(row?.stock_quantity ?? 0) || 0;
-        const nextStock = current + qty;
-
-        const { error: updErr } = await supabase
-          .from("services")
-          .update({ stock_quantity: nextStock })
-          .eq("id", product_id);
-        if (updErr) throw updErr;
-
-        // History
-        await supabase.from("inventory_movements").insert({
-          product_id,
-          quantity: qty,
-          type: "in",
-          source: notes || "barcode_receive",
-          reference_id: null,
-          created_at: new Date().toISOString(),
-        });
-
-        toast({
-          title: "✓ Stock Received",
-          description: `Added ${qty} ${product.count_style}.`,
-          variant: "success",
-        });
-        await refetchAll();
-      } catch (e) {
-        console.error("Inventory: receive failed", e);
-        toast({
-          title: "✗ Receive Failed",
-          description: "Failed to receive stock. Please try again.",
-          variant: "destructive",
-        });
-      }
-    },
-    [products, refetchAll, toast]
-  );
-
-  const handleBarcode = useCallback(
-    async (barcode) => {
-      const code = String(barcode || "").trim();
-      if (!code) return;
-
-      const product = findProductByBarcode(code);
-      if (!product) {
-        toast({
-          title: "✗ Product Not Found",
-          description: `No product matches barcode/SKU "${code}".`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const qty = toInt(scannerQty) || 1;
-
-      if (scannerMode === "receive") {
-        await handleReceive({ product_id: product.id, quantity: qty, notes: `barcode:${code}` });
-      } else {
-        await handleSell({ product_id: product.id, quantity: qty, notes: `barcode:${code}` });
-      }
-    },
-    [findProductByBarcode, handleReceive, handleSell, scannerMode, scannerQty, toast]
-  );
-
-  // Funnel both camera + keyboard-wedge scans through one state transition.
-  useEffect(() => {
-    if (!pendingBarcode) return;
-    handleBarcode(pendingBarcode);
-    setPendingBarcode(null);
-  }, [handleBarcode, pendingBarcode]);
-
-  const applyWedgeScan = useCallback((code) => {
-    const c = String(code || "").trim();
-    if (!c) return;
-    setPendingBarcode(c);
-  }, []);
 
   const getOrgIdForCurrentUser = useCallback(async () => {
     if (!user?.id) return null;
@@ -335,6 +259,159 @@ export default function Inventory() {
     });
   }, [refetchAll, toast, user?.id]);
 
+  const handleReceive = useCallback(
+    async ({ product_id, quantity, notes }) => {
+      const product = products.find((p) => p.id === product_id);
+      const qty = toInt(quantity);
+      if (!product || qty <= 0) {
+        toast({
+          title: "✗ Invalid Quantity",
+          description: "Please enter a valid quantity.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        // Read current stock from DB to avoid drift
+        const { data: row, error: getErr } = await supabase
+          .from("services")
+          .select("stock_quantity")
+          .eq("id", product_id)
+          .maybeSingle();
+        if (getErr) throw getErr;
+        const current = Number(row?.stock_quantity ?? 0) || 0;
+        const nextStock = current + qty;
+
+        const { error: updErr } = await supabase
+          .from("services")
+          .update({ stock_quantity: nextStock })
+          .eq("id", product_id);
+        if (updErr) throw updErr;
+
+        // History
+        await supabase.from("inventory_movements").insert({
+          product_id,
+          quantity: qty,
+          type: "in",
+          source: notes || "barcode_receive",
+          reference_id: null,
+          created_at: new Date().toISOString(),
+        });
+
+        toast({
+          title: "✓ Stock Received",
+          description: `Added ${qty} ${product.count_style}.`,
+          variant: "success",
+        });
+        await refetchAll();
+      } catch (e) {
+        console.error("Inventory: receive failed", e);
+        toast({
+          title: "✗ Receive Failed",
+          description: "Failed to receive stock. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    [products, refetchAll, toast]
+  );
+
+  // Sell handler (stock out)
+  const handleSell = useCallback(
+    async ({ product_id, quantity }) => {
+      const product = products.find((p) => p.id === product_id);
+      const qty = toInt(quantity);
+      if (!product || qty <= 0) {
+        toast({
+          title: "✗ Invalid Quantity",
+          description: "Please enter a valid quantity.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const stock = Number(product.stock_on_hand ?? 0);
+      if (stock < qty) {
+        toast({
+          title: "✗ Not Enough Stock",
+          description: `Available stock is ${stock}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        // Best-effort: ensure the product satisfies trigger semantics (`services.type='product'`).
+        await supabase.from("services").update({ type: "product" }).eq("id", product_id);
+
+        const nextStock = stock - qty;
+        const { error: updErr } = await supabase
+          .from("services")
+          .update({ stock_quantity: nextStock })
+          .eq("id", product_id);
+        if (updErr) throw updErr;
+
+        const { error: insErr } = await supabase.from("inventory_movements").insert({
+          product_id,
+          quantity: qty,
+          type: "out",
+          source: "manual_sale",
+          reference_id: null,
+          created_at: new Date().toISOString(),
+        });
+        if (insErr) throw insErr;
+
+        toast({
+          title: "✓ Sale Recorded",
+          description: `Sold ${qty} ${product.count_style}.`,
+          variant: "success",
+        });
+        setSellDialogOpen(false);
+        await refetchAll();
+      } catch (e) {
+        console.error("Inventory: sell failed", e);
+        toast({
+          title: "✗ Sale Failed",
+          description: "Failed to record sale. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    [products, refetchAll, toast]
+  );
+
+  const handleBarcode = useCallback(
+    async (barcode) => {
+      const code = String(barcode || "").trim();
+      if (!code) return;
+
+      const product = findProductByBarcode(code);
+      if (!product) {
+        toast({
+          title: "✗ Product Not Found",
+          description: `No product matches barcode/SKU "${code}".`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const qty = toInt(scannerQty) || 1;
+
+      if (scannerMode === "receive") {
+        await handleReceive({ product_id: product.id, quantity: qty, notes: `barcode:${code}` });
+      } else {
+        await handleSell({ product_id: product.id, quantity: qty, notes: `barcode:${code}` });
+      }
+    },
+    [findProductByBarcode, handleReceive, handleSell, scannerMode, scannerQty, toast]
+  );
+
+  useEffect(() => {
+    if (!pendingBarcode) return;
+    handleBarcode(pendingBarcode);
+    setPendingBarcode(null);
+  }, [handleBarcode, pendingBarcode]);
+
   const lowStockProducts = useMemo(() => {
     return products.filter((p) => (p.stock_on_hand || 0) <= (p.reorder_level || 10));
   }, [products]);
@@ -428,141 +505,7 @@ export default function Inventory() {
     [refetchAll, toast]
   );
 
-  // Sell handler (stock out)
-  const handleSell = useCallback(
-    async ({ product_id, quantity }) => {
-      const product = products.find((p) => p.id === product_id);
-      const qty = toInt(quantity);
-      if (!product || qty <= 0) {
-        toast({
-          title: "✗ Invalid Quantity",
-          description: "Please enter a valid quantity.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const stock = Number(product.stock_on_hand ?? 0);
-      if (stock < qty) {
-        toast({
-          title: "✗ Not Enough Stock",
-          description: `Available stock is ${stock}.`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      try {
-        // Best-effort: ensure the product satisfies trigger semantics (`services.type='product'`).
-        await supabase.from("services").update({ type: "product" }).eq("id", product_id);
-
-        const nextStock = stock - qty;
-        const { error: updErr } = await supabase
-          .from("services")
-          .update({ stock_quantity: nextStock })
-          .eq("id", product_id);
-        if (updErr) throw updErr;
-
-        const { error: insErr } = await supabase.from("inventory_movements").insert({
-          product_id,
-          quantity: qty,
-          type: "out",
-          source: "manual_sale",
-          reference_id: null,
-          created_at: new Date().toISOString(),
-        });
-        if (insErr) throw insErr;
-
-        toast({
-          title: "✓ Sale Recorded",
-          description: `Sold ${qty} ${product.count_style}.`,
-          variant: "success",
-        });
-        setSellDialogOpen(false);
-        await refetchAll();
-      } catch (e) {
-        console.error("Inventory: sell failed", e);
-        toast({
-          title: "✗ Sale Failed",
-          description: "Failed to record sale. Please try again.",
-          variant: "destructive",
-        });
-      }
-    },
-    [products, refetchAll, toast]
-  );
-
   // Deliveries handlers
-  const handleSaveDelivery = useCallback(
-    async (deliveryData) => {
-      try {
-        if (!user?.id) return;
-        const resolvedOrgId = await getOrgIdForCurrentUser();
-        if (!resolvedOrgId) {
-          toast({
-            title: "✗ No Organization",
-            description: "No organization found for this user.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const payload = {
-          org_id: resolvedOrgId,
-          product_id: deliveryData.product_id,
-          quantity: toInt(deliveryData.quantity),
-          status: deliveryData.status,
-          supplier: deliveryData.supplier || null,
-          expected_date: deliveryData.expected_date || null,
-          tracking_number: deliveryData.tracking_number || null,
-          notes: deliveryData.notes || null,
-          created_by_id: user.id,
-        };
-
-        const shouldApplyReceive = payload.status === "delivered" && (!editingDelivery?.id || editingDelivery?.status !== "delivered");
-
-        let insertedId = null;
-        if (editingDelivery?.id) {
-          const { error } = await supabase.from("deliveries").update(payload).eq("id", editingDelivery.id);
-          if (error) throw error;
-          toast({
-            title: "✓ Delivery Updated",
-            description: "Delivery was updated successfully.",
-            variant: "success",
-          });
-        } else {
-          const { data: inserted, error } = await supabase.from("deliveries").insert(payload).select().maybeSingle();
-          if (error) throw error;
-          insertedId = inserted?.id ?? null;
-          toast({
-            title: "✓ Delivery Created",
-            description: "Delivery was created successfully.",
-            variant: "success",
-          });
-        }
-
-        if (shouldApplyReceive) {
-          // Apply stock + insert movement if status is set to delivered via the dialog.
-          const deliveryId = editingDelivery?.id || insertedId || deliveryData?.id;
-          if (deliveryId) {
-            await handleMarkDelivered({ ...payload, id: deliveryId });
-          }
-        }
-
-        setDeliveryDialogOpen(false);
-        setEditingDelivery(null);
-        await refetchAll();
-      } catch (e) {
-        console.error("Inventory: save delivery failed", e);
-        toast({
-          title: "✗ Delivery Save Failed",
-          description: "Failed to save delivery. Please try again.",
-          variant: "destructive",
-        });
-      }
-    },
-    [editingDelivery, getOrgIdForCurrentUser, handleMarkDelivered, refetchAll, toast, user?.id]
-  );
-
   const handleMarkDelivered = useCallback(
     async (delivery) => {
       try {
@@ -630,6 +573,77 @@ export default function Inventory() {
       }
     },
     [refetchAll, toast]
+  );
+
+  const handleSaveDelivery = useCallback(
+    async (deliveryData) => {
+      try {
+        if (!user?.id) return;
+        const resolvedOrgId = await getOrgIdForCurrentUser();
+        if (!resolvedOrgId) {
+          toast({
+            title: "✗ No Organization",
+            description: "No organization found for this user.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const payload = {
+          org_id: resolvedOrgId,
+          product_id: deliveryData.product_id,
+          quantity: toInt(deliveryData.quantity),
+          status: deliveryData.status,
+          supplier: deliveryData.supplier || null,
+          expected_date: deliveryData.expected_date || null,
+          tracking_number: deliveryData.tracking_number || null,
+          notes: packDeliveryNotes(deliveryData.notes, deliveryData.delivery_address),
+          created_by_id: user.id,
+        };
+
+        const shouldApplyReceive = payload.status === "delivered" && (!editingDelivery?.id || editingDelivery?.status !== "delivered");
+
+        let insertedId = null;
+        if (editingDelivery?.id) {
+          const { error } = await supabase.from("deliveries").update(payload).eq("id", editingDelivery.id);
+          if (error) throw error;
+          toast({
+            title: "✓ Delivery Updated",
+            description: "Delivery was updated successfully.",
+            variant: "success",
+          });
+        } else {
+          const { data: inserted, error } = await supabase.from("deliveries").insert(payload).select().maybeSingle();
+          if (error) throw error;
+          insertedId = inserted?.id ?? null;
+          toast({
+            title: "✓ Delivery Created",
+            description: "Delivery was created successfully.",
+            variant: "success",
+          });
+        }
+
+        if (shouldApplyReceive) {
+          // Apply stock + insert movement if status is set to delivered via the dialog.
+          const deliveryId = editingDelivery?.id || insertedId || deliveryData?.id;
+          if (deliveryId) {
+            await handleMarkDelivered({ ...payload, id: deliveryId });
+          }
+        }
+
+        setDeliveryDialogOpen(false);
+        setEditingDelivery(null);
+        await refetchAll();
+      } catch (e) {
+        console.error("Inventory: save delivery failed", e);
+        toast({
+          title: "✗ Delivery Save Failed",
+          description: "Failed to save delivery. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    [editingDelivery, getOrgIdForCurrentUser, handleMarkDelivered, refetchAll, toast, user?.id]
   );
 
   const handleDeleteDelivery = useCallback(
@@ -814,7 +828,15 @@ export default function Inventory() {
                       />
                     </div>
                   </div>
-                  <ProductTable products={filteredProducts} onEdit={(p) => { setEditingProduct(p); setProductDialogOpen(true); }} onDelete={handleDeleteProduct} />
+                  <ProductTable
+                    products={filteredProducts}
+                    currencyCode={userCurrency}
+                    onEdit={(p) => {
+                      setEditingProduct(p);
+                      setProductDialogOpen(true);
+                    }}
+                    onDelete={handleDeleteProduct}
+                  />
                 </div>
               </TabsContent>
 

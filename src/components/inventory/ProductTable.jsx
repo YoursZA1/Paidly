@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { formatCurrency } from "@/components/CurrencySelector";
 
-export default function ProductTable({ products, onEdit, onDelete }) {
+export default function ProductTable({ products, onEdit, onDelete, currencyCode = "ZAR" }) {
   const getStockBadge = (product) => {
     if (product.stock_on_hand <= 0) {
       return <Badge variant="destructive" className="text-xs">Out of Stock</Badge>;
@@ -68,7 +69,7 @@ export default function ProductTable({ products, onEdit, onDelete }) {
                 </TableCell>
                 <TableCell>{getStockBadge(product)}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {product.price ? `$${product.price.toFixed(2)}` : "—"}
+                  {product.price ? formatCurrency(product.price, currencyCode) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
