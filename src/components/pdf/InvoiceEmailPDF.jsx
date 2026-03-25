@@ -6,6 +6,7 @@ import {
   Image,
   StyleSheet
 } from "@react-pdf/renderer";
+import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { LOGO_CONSTRAINTS } from "@/lib/logoUpload";
 
 const formatCurrency = (value, currency = "ZAR") =>
@@ -133,7 +134,7 @@ export default function InvoiceEmailPDF({ invoice, currency = "ZAR" }) {
 
         {invoice.items.map((item, i) => (
           <View key={i} style={styles.row} wrap={false}>
-            <Text style={styles.description}>{item.description}</Text>
+            <Text style={styles.description}>{formatLineItemNameAndDescription(item)}</Text>
             <Text style={styles.qty}>{item.qty}</Text>
             <Text style={styles.price}>{fmt(item.price)}</Text>
             <Text style={styles.total}>{fmt(item.total)}</Text>

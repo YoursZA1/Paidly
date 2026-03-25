@@ -30,6 +30,24 @@ export function formatLineItemDisplayName(raw) {
   return s;
 }
 
+/**
+ * One-line label for invoice/quote tables: "Service or product name - description".
+ * Collapses whitespace/newlines in the description so it flows on one visual line.
+ *
+ * @param {object} [item]
+ * @returns {string}
+ */
+export function formatLineItemNameAndDescription(item) {
+  const rawName = String(item?.service_name ?? item?.name ?? "").trim();
+  const title = rawName ? formatLineItemDisplayName(rawName) : "";
+  const rawDesc = typeof item?.description === "string" ? item.description.trim() : "";
+  const descOneLine = rawDesc.replace(/\s+/g, " ").trim();
+  if (title && descOneLine) return `${title} - ${descOneLine}`;
+  if (title) return title;
+  if (descOneLine) return descOneLine;
+  return "Item";
+}
+
 /** Resolves stored template id to document or a legacy HTML template key. */
 export function normalizeInvoiceTemplateKey(value) {
   const k = typeof value === "string" ? value.trim().toLowerCase() : "";

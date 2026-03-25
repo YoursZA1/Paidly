@@ -6,6 +6,7 @@ import {
   Document,
   StyleSheet
 } from "@react-pdf/renderer";
+import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 
 const formatCurrency = (value, currency = "ZAR") =>
   new Intl.NumberFormat("en-ZA", {
@@ -516,7 +517,7 @@ const InvoicePDF = React.memo(function InvoicePDF({ invoice, data, currency = "Z
               items.map((item, i) => (
                 <View key={i} style={tableStyles.row}>
                   <Text style={tableStyles.colDesc} wrap>
-                    {item.description}
+                    {formatLineItemNameAndDescription(item)}
                   </Text>
                   <Text style={tableStyles.colQty} wrap={false}>
                     {item.qty ?? ""}

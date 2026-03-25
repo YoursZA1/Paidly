@@ -73,6 +73,13 @@ async function verifySupabaseConfig() {
     console.log('   3. Add to .env: VITE_SUPABASE_ANON_KEY=your-anon-key');
     process.exit(1);
   }
+
+  if (/^sb_publishable_/i.test(String(supabaseAnonKey).trim())) {
+    console.error('❌ VITE_SUPABASE_ANON_KEY looks like a publishable key (sb_publishable_…), not the JWT anon key.');
+    console.log('\n📝 Use the anon public JWT (starts with eyJ) under Project API keys — not the publishable key.');
+    console.log('   Vercel: update the env var and redeploy.');
+    process.exit(1);
+  }
   
   // Validate URL format
   if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {

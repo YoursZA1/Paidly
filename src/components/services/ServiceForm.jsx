@@ -86,7 +86,8 @@ const typeSpecificConfig = {
     }
 };
 
-export default function ServiceForm({ service, onSave, onCancel, isSaving = false, defaultType = 'service' }) {
+export default function ServiceForm({ service, onSave, onCancel, isSaving = false, defaultType = 'service', variant = "default" }) {
+    const isDialog = variant === "dialog";
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState({
         // Base Fields
@@ -287,22 +288,30 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="mb-8"
+            className={isDialog ? "mb-0" : "mb-8"}
         >
-            <Card className="bg-white/80 dark:bg-slate-800/90 backdrop-blur-sm border-0 dark:border dark:border-slate-700 shadow-xl">
-                <CardHeader className="border-b border-slate-100 dark:border-slate-700 pb-6">
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                            <Headset className="w-5 h-5" />
-                            {service ? "Edit Catalog Item" : "Add New Catalog Item"}
-                        </CardTitle>
-                        <Button variant="ghost" size="icon" onClick={onCancel} className="hover:bg-slate-100 dark:hover:bg-slate-700">
-                            <X className="w-4 h-4" />
-                        </Button>
-                    </div>
-                </CardHeader>
-                
-                <CardContent className="p-8">
+            <Card
+                className={
+                    isDialog
+                        ? "border-0 shadow-none bg-transparent dark:bg-transparent"
+                        : "bg-white/80 dark:bg-slate-800/90 backdrop-blur-sm border-0 dark:border dark:border-slate-700 shadow-xl"
+                }
+            >
+                {!isDialog && (
+                    <CardHeader className="border-b border-slate-100 dark:border-slate-700 pb-6">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                <Headset className="w-5 h-5" />
+                                {service ? "Edit Catalog Item" : "Add New Catalog Item"}
+                            </CardTitle>
+                            <Button variant="ghost" size="icon" onClick={onCancel} className="hover:bg-slate-100 dark:hover:bg-slate-700">
+                                <X className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </CardHeader>
+                )}
+
+                <CardContent className={isDialog ? "p-0" : "p-8"}>
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* ====== BASE FIELDS SECTION (Required for all catalog items) ====== */}
                         <div className="border-l-4 border-primary pl-6 py-4">

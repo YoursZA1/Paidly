@@ -9,6 +9,7 @@ import { User } from '@/api/entities';
 import { formatCurrency } from '../CurrencySelector';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
+import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 
 export const generateQuoteEmailHtml = (quote, client, company, publicViewUrl) => {
     const companyName = company?.company_name || 'Your Company';
@@ -226,10 +227,8 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
                                             <tbody>
                                                 {quote.items?.map((item, index) => (
                                                     <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                                        <td className="border p-3">
-                                                            <strong>{item.service_name}</strong>
-                                                            {item.description && <br />}
-                                                            <span className="text-sm text-gray-600">{item.description}</span>
+                                                        <td className="border p-3 text-sm text-gray-800">
+                                                            {formatLineItemNameAndDescription(item)}
                                                         </td>
                                                         <td className="border p-3 text-center">{item.quantity}</td>
                                                         <td className="border p-3 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>

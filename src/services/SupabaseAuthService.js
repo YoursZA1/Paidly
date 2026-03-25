@@ -3,6 +3,7 @@ import {
   backendApi,
   shouldUseNodeAuthApi,
   rememberNodeAuthUnreachable,
+  getBackendBaseUrl,
 } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
@@ -133,8 +134,11 @@ const SupabaseAuthService = {
     } catch (err) {
       if (isAxiosTransportFailure(err)) {
         rememberNodeAuthUnreachable();
+        const apiBase = getBackendBaseUrl();
         console.warn(
-          "[auth] API sign-up unreachable (network). Falling back to direct Supabase. On Vercel: fix VITE_SERVER_URL, or set VITE_SUPABASE_ONLY=1 if you do not use the Node API."
+          `[auth] API sign-up unreachable (network) at ${apiBase}. Falling back to direct Supabase. ` +
+            `If you see net::ERR_NAME_NOT_RESOLVED, that host has no DNS — point VITE_SERVER_URL at a real API URL or add a DNS record. ` +
+            `If you do not use the Node API, set VITE_SUPABASE_ONLY=1 on Vercel and redeploy.`
         );
         return signUpDirect();
       }
@@ -224,8 +228,11 @@ const SupabaseAuthService = {
     } catch (err) {
       if (isAxiosTransportFailure(err)) {
         rememberNodeAuthUnreachable();
+        const apiBase = getBackendBaseUrl();
         console.warn(
-          "[auth] API sign-in unreachable (network). Falling back to direct Supabase. On Vercel: fix VITE_SERVER_URL, or set VITE_SUPABASE_ONLY=1 if you do not use the Node API."
+          `[auth] API sign-in unreachable (network) at ${apiBase}. Falling back to direct Supabase. ` +
+            `If you see net::ERR_NAME_NOT_RESOLVED, that host has no DNS — point VITE_SERVER_URL at a real API URL or add a DNS record. ` +
+            `If you do not use the Node API, set VITE_SUPABASE_ONLY=1 on Vercel and redeploy.`
         );
         return signInDirect();
       }

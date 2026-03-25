@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Mail, FileText, X, Send } from 'lucide-react';
 import { User, BankingDetail } from '@/api/entities';
 import { formatCurrency } from '@/utils/currencyCalculations';
+import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { format } from 'date-fns';
 import { getEmailOpenTrackingPixelUrl } from '@/services/InvoiceSendService';
 
@@ -272,10 +273,8 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                                             <tbody>
                                                 {invoice.items?.map((item, index) => (
                                                     <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                                        <td className="border p-3">
-                                                            <strong>{item.service_name}</strong>
-                                                            {item.description && <br />}
-                                                            <span className="text-sm text-gray-600">{item.description}</span>
+                                                        <td className="border p-3 text-sm text-gray-800">
+                                                            {formatLineItemNameAndDescription(item)}
                                                         </td>
                                                         <td className="border p-3 text-center">{item.quantity}</td>
                                                         <td className="border p-3 text-right">{formatCurrency(item.unit_price, userCurrency)}</td>

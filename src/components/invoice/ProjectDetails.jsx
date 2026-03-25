@@ -2090,7 +2090,8 @@ export default function ProjectDetails({
             <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
                 <DialogContent aria-describedby={undefined}>
                     <DialogTitle className="sr-only">Add service</DialogTitle>
-                    <ServiceForm 
+                    <ServiceForm
+                        variant="dialog"
                         onSave={handleSaveNewService}
                         onCancel={() => setIsAddingService(false)}
                     />

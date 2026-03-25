@@ -5,6 +5,7 @@ import LogoImage from "@/components/shared/LogoImage";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
 import { useAuth } from "@/components/auth/AuthContext";
+import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 
 const SLATE_900 = "#0f172a";
 
@@ -59,7 +60,7 @@ function normalizeLineItems(doc) {
           row.total != null && row.total !== ""
             ? Number(row.total)
             : Math.round(qty * unit * 100) / 100;
-        const desc = (row.description || "").trim() || (qty || unit ? "Item" : "");
+        const desc = formatLineItemNameAndDescription(row);
         return { description: desc, quantity: qty || 1, unit_price: unit, total };
       })
       .filter((row) => row.description || row.unit_price || row.quantity !== 1 || row.total);
@@ -75,7 +76,7 @@ function normalizeLineItems(doc) {
           Number(it.total_price ?? it.total) != null && !Number.isNaN(Number(it.total_price ?? it.total))
             ? Number(it.total_price ?? it.total)
             : Math.round(qty * unit * 100) / 100;
-        const desc = [it.service_name || it.name, it.description].filter(Boolean).join("\n").trim() || "Item";
+        const desc = formatLineItemNameAndDescription(it) || "Item";
         return { description: desc, quantity: qty, unit_price: unit, total };
       });
   }
@@ -538,7 +539,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
               ) : (
                 lineRows.map((item, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                    <td style={{ padding: "14px 16px", fontSize: "13px", color: "#374151", whiteSpace: "pre-line" }}>
+                    <td style={{ padding: "14px 16px", fontSize: "13px", color: "#374151" }}>
                       {item.description}
                     </td>
                     <td style={{ padding: "14px 16px", fontSize: "13px", color: "#374151", textAlign: "right" }}>

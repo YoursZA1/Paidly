@@ -1,7 +1,7 @@
 import React from "react";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import {
-  formatLineItemDisplayName,
+  formatLineItemNameAndDescription,
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
 
@@ -260,7 +260,8 @@ export default function UnifiedInvoiceTemplate({
 
   return (
     <div
-      className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal ${cfg.font || ""}`}
+      className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal box-border ${cfg.font || ""}`}
+      style={{ padding: "12mm" }}
     >
       <header className={`mb-6 sm:mb-8 ${cfg.headerAccent || ""}`}>
         <div className="flex flex-col gap-6 sm:flex-row sm:justify-between sm:items-start">
@@ -279,7 +280,7 @@ export default function UnifiedInvoiceTemplate({
               />
             )}
           </div>
-          <div className="text-left sm:text-right shrink-0">
+          <div className="invoice-doc-title-block text-left sm:text-right shrink-0">
             <h2
               className={`text-3xl sm:text-4xl uppercase tracking-tight ${cfg.title} ${cfg.heavy ? "font-black" : "font-bold"}`}
             >
@@ -356,23 +357,15 @@ export default function UnifiedInvoiceTemplate({
           <tbody>
             {items.length > 0 ? (
               items.map((item, index) => {
-                const title = formatLineItemDisplayName(
-                  item.service_name || item.name
-                );
-                const sub = typeof item.description === "string" ? item.description.trim() : "";
+                const lineLabel = formatLineItemNameAndDescription(item);
                 return (
                   <tr key={index} className={`border-b border-black/10 ${cfg.rule}`}>
                     <td className="py-3.5 pr-4 sm:pr-6 align-top min-w-0">
                       <p
                         className={`text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}
                       >
-                        {title}
+                        {lineLabel}
                       </p>
-                      {sub ? (
-                        <p className="text-xs text-neutral-500 mt-1 whitespace-pre-line leading-relaxed">
-                          {sub}
-                        </p>
-                      ) : null}
                     </td>
                     <td className="py-3.5 px-2 sm:px-3 align-top text-center tabular-nums text-foreground">
                       {item.quantity}
@@ -586,11 +579,8 @@ export default function UnifiedInvoiceTemplate({
             {items
               .filter((item) => item.description?.trim())
               .map((item, idx) => (
-                <li key={idx}>
-                  <span className="font-medium text-foreground">
-                    {formatLineItemDisplayName(item.service_name || item.name)}:
-                  </span>{" "}
-                  <span className="whitespace-pre-line">{item.description.trim()}</span>
+                <li key={idx} className="text-foreground">
+                  {formatLineItemNameAndDescription(item)}
                 </li>
               ))}
           </ul>
@@ -609,7 +599,8 @@ export default function UnifiedInvoiceTemplate({
           </div>
           <div className="text-left sm:text-right shrink-0 space-y-0.5">
             {user?.phone ? <p>Tel: {user.phone}</p> : null}
-            <p>Invoicing made easy with paidly</p>
+            <p>Thank you for your business.</p>
+            <p>Invoicing made easy with Paidly</p>
           </div>
         </div>
       </footer>

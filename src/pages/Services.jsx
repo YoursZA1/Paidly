@@ -14,7 +14,7 @@ import {
   CubeIcon,
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
 import { motion } from "framer-motion";
 import { getIndustries, getTemplateItems, generateDefaultItems } from "@/services/IndustryPresetsService";
@@ -527,14 +527,27 @@ export default function Services() {
                 )}
             </div>
 
-            {/* Slide-over panel for create/edit */}
-            <Sheet open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditingService(null); }}>
-                <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
-                    <div className="py-2">
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-6">
-                            {editingService ? "Edit item" : "New item"}
-                        </h2>
+            {/* Centered modal for create/edit */}
+            <Dialog
+                open={showForm}
+                onOpenChange={(open) => {
+                    setShowForm(open);
+                    if (!open) setEditingService(null);
+                }}
+            >
+                <DialogContent className="flex max-h-[min(92vh,880px)] w-[calc(100vw-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+                    <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4 text-left dark:border-slate-700">
+                        <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {editingService
+                                ? "Edit item"
+                                : createType === "product"
+                                  ? "New product"
+                                  : "New service"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
                         <ServiceForm
+                            variant="dialog"
                             service={editingService}
                             defaultType={editingService?.item_type || createType}
                             onSave={async (data) => {
@@ -549,8 +562,8 @@ export default function Services() {
                             isSaving={isSaving}
                         />
                     </div>
-                </SheetContent>
-            </Sheet>
+                </DialogContent>
+            </Dialog>
 
         </div>
     );

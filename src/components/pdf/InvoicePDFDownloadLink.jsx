@@ -7,6 +7,7 @@ import generatePdfFromElement from "@/utils/generatePdfFromElement";
 import DocumentPreview from "@/components/DocumentPreview";
 import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 import { buildInvoiceTemplatePdfCaptureProps } from "./InvoiceTemplatePdfCapture";
+import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 
 function bankBlockFromBankingRow(bankingDetail, refNumber) {
   if (!bankingDetail) return null;
@@ -77,7 +78,7 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
 
   const rawItems = invoice?.items || [];
   const items = rawItems.map((item) => ({
-    description: item.service_name || item.name || item.description || "Item",
+    description: formatLineItemNameAndDescription(item),
     qty: Number(item.quantity ?? item.qty ?? 1),
     price: Number(item.unit_price ?? item.rate ?? item.price ?? 0).toFixed(2),
     total: Number(
@@ -88,16 +89,12 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
     ).toFixed(2),
   }));
   const lineItemNotes = rawItems
-    .filter((item) => item.description)
-    .map((item) => ({
-      label: item.service_name || item.name || "Item",
-      note: item.description,
-    }));
+    .filter((item) => String(item.description || "").trim())
+    .map((item) => formatLineItemNameAndDescription(item));
   const notes = [
     invoice?.notes?.trim(),
     lineItemNotes.length > 0
-      ? "Service / line item notes:\n" +
-        lineItemNotes.map(({ label, note }) => `${label}: ${note}`).join("\n")
+      ? "Service / line item notes:\n" + lineItemNotes.join("\n")
       : "",
   ]
     .filter(Boolean)

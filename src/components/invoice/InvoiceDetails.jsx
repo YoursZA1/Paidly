@@ -590,6 +590,7 @@ export default function InvoiceDetails({
         <DialogTitle className="sr-only">Add service</DialogTitle>
         <div className="flex-1 min-h-0 overflow-y-auto p-6 pt-12 pb-6">
           <ServiceForm
+            variant="dialog"
             onSave={handleSaveNewService}
             onCancel={() => {
               setIsAddingService(false);
