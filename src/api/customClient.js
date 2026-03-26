@@ -1630,27 +1630,46 @@ class AuthManager {
     };
 
     // getSession can block on refresh; fail fast and still merge profile using cached id.
-    const GET_SESSION_MS = 6000;
+    const GET_SESSION_MS = 9000;
+    const GET_SESSION_RETRIES = 1;
+    const GET_SESSION_RETRY_BACKOFF_MS = 250;
     const PROFILE_MS = 15000;
+    const warnSessionSlowOnce = (detail) => {
+      if (!import.meta.env?.DEV) return;
+      const now = Date.now();
+      const last = this._lastMeSessionWarnAt || 0;
+      // Avoid noisy duplicate logs when multiple views call me() close together.
+      if (now - last < 30000) return;
+      this._lastMeSessionWarnAt = now;
+      console.warn(
+        "me(): getSession slow or failed; continuing with cached user id for profile refresh:",
+        detail
+      );
+    };
 
     let authUserId = null;
-    try {
-      const { data: sessionData, error: sessionError } = await withLocalTimeout(
-        supabase.auth.getSession(),
-        GET_SESSION_MS,
-        "auth.getSession"
-      );
-      if (sessionError) {
-        console.warn("Failed to get session in me():", getSupabaseErrorMessage(sessionError, "Session failed"));
-      } else if (sessionData?.session?.user?.id) {
-        authUserId = sessionData.session.user.id;
-      }
-    } catch (e) {
-      if (import.meta.env?.DEV) {
-        console.warn(
-          "me(): getSession slow or failed; continuing with cached user id for profile refresh:",
-          e?.message || e
+    for (let attempt = 0; attempt <= GET_SESSION_RETRIES; attempt++) {
+      try {
+        const { data: sessionData, error: sessionError } = await withLocalTimeout(
+          supabase.auth.getSession(),
+          GET_SESSION_MS,
+          "auth.getSession"
         );
+        if (sessionError) {
+          warnSessionSlowOnce(getSupabaseErrorMessage(sessionError, "Session failed"));
+          break;
+        }
+        if (sessionData?.session?.user?.id) {
+          authUserId = sessionData.session.user.id;
+        }
+        break;
+      } catch (e) {
+        const isLastAttempt = attempt >= GET_SESSION_RETRIES;
+        if (!isLastAttempt) {
+          await new Promise((resolve) => setTimeout(resolve, GET_SESSION_RETRY_BACKOFF_MS * (attempt + 1)));
+          continue;
+        }
+        warnSessionSlowOnce(e?.message || e);
       }
     }
 

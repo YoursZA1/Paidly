@@ -9,6 +9,17 @@ import { logUnhandledError, getCurrentPage } from '@/utils/apiLogger'
 // WebKit/Chromium often emit this during layout (Radix, tables); it is harmless and floods the console.
 const RESIZE_OBSERVER_LOOP_RE = /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)/i
 if (typeof window !== 'undefined') {
+  // After a new deploy, cached HTML can reference old chunk names.
+  // Let Vite signal this and do one safe reload to pick up fresh assets.
+  window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault()
+    const k = 'paidly_preload_reload_once'
+    const hasReloaded = sessionStorage.getItem(k) === '1'
+    if (hasReloaded) return
+    sessionStorage.setItem(k, '1')
+    window.location.reload()
+  })
+
   window.addEventListener(
     'error',
     (event) => {
