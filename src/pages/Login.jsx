@@ -1,6 +1,6 @@
 import Home from "./Home";
 
-/** Same marketing shell as /Home; login modal opens automatically on /Login, /Auth, /login (and #sign-in). */
+/** Same marketing shell as /Home; sign-in modal now opens only on explicit user action. */
 export default function Login() {
-  return <Home navActive="login" defaultLoginOpen />;
+  return <Home navActive="login" />;
 }

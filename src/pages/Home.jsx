@@ -16,29 +16,17 @@ import LaunchCountdownFloat from "@/components/LaunchCountdownFloat";
 /**
  * Marketing landing (Supabase-style dark shell). Optional authSlot renders between hero and features
  * (used by Signup). Log in opens a modal from the nav, hero, and footer.
- * @param {{ authSlot?: React.ReactNode, navActive?: "login" | "signup" | null, defaultLoginOpen?: boolean, showWaitlist?: boolean }} props
+ * @param {{ authSlot?: React.ReactNode, navActive?: "login" | "signup" | null, showWaitlist?: boolean }} props
  */
-function initialLoginOpen(defaultLoginOpen) {
-  if (typeof window === "undefined") return Boolean(defaultLoginOpen);
-  return Boolean(defaultLoginOpen) || window.location.hash === "#sign-in";
-}
-
 export default function Home({
   authSlot = null,
   navActive = null,
-  defaultLoginOpen = false,
   showWaitlist = true,
 }) {
   const location = useLocation();
-  const [loginOpen, setLoginOpen] = useState(() => initialLoginOpen(defaultLoginOpen));
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
-
-  useEffect(() => {
-    if (location.hash === "#sign-in") {
-      setLoginOpen(true);
-    }
-  }, [location.pathname, location.hash]);
 
   useEffect(() => {
     if (location.hash !== "#waitlist") return;
@@ -49,15 +37,6 @@ export default function Home({
     return () => window.clearTimeout(t);
   }, [location.pathname, location.hash]);
 
-  useEffect(() => {
-    const syncHash = () => {
-      if (typeof window !== "undefined" && window.location.hash === "#sign-in") {
-        setLoginOpen(true);
-      }
-    };
-    window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
-  }, []);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] pb-32 font-sans text-zinc-100 antialiased selection:bg-[#FF4F00]/30 sm:pb-28">
