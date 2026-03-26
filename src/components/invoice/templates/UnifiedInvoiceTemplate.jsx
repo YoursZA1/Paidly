@@ -1,4 +1,3 @@
-import React from "react";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import {
   formatLineItemNameAndDescription,
@@ -258,6 +257,17 @@ export default function UnifiedInvoiceTemplate({
   const hasItemTax = items.some((item) => Number(item.item_tax_rate) > 0);
   const discountAmt = Number(invoice.discount_amount || 0);
   const paymentStructureTotal = Number(invoice.total_amount ?? 0);
+  const noteText = String(invoice.notes || "").trim();
+  const describedItemsCount = items.filter((item) => item.description?.trim()).length;
+  // Heuristic to keep pagination clean: long/verbose item lists push totals to next page.
+  const estimatedItemRows = items.reduce((sum, item) => {
+    const text = formatLineItemNameAndDescription(item);
+    return sum + Math.max(1, Math.ceil((text || "").length / 70));
+  }, 0);
+  const trailingContentRows =
+    Math.ceil(noteText.length / 120) + describedItemsCount + (hasAccountDetailsSection ? 4 : 2);
+  const breakThreshold = trailingContentRows >= 8 ? 12 : 16;
+  const shouldBreakBeforeTotals = estimatedItemRows >= breakThreshold;
 
   const hatchStyle = {
     backgroundColor: cfg.hatchBg,
@@ -271,18 +281,17 @@ export default function UnifiedInvoiceTemplate({
   };
 
   const pyBand = cfg.sparse ? "py-4 px-4 sm:px-6" : "py-5 px-5 sm:px-8";
-  const pySection = cfg.sparse ? "py-4" : "py-6";
 
   return (
     <div
       className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal box-border flex flex-col min-h-[297mm] ${cfg.font || ""}`}
     >
       <header
-        className={`${isQuote ? "mb-8 sm:mb-8" : "mb-6 sm:mb-8"} ${cfg.headerAccent || ""}`}
+        className={`${isQuote ? "mb-6 sm:mb-7" : "mb-5 sm:mb-6"} ${cfg.headerAccent || ""}`}
         aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}
       >
         <div
-          className={`flex flex-col ${isQuote ? "gap-4" : "gap-6"} sm:flex-row sm:justify-between sm:items-start`}
+          className={`flex flex-col ${isQuote ? "gap-2" : "gap-3"} sm:flex-row sm:justify-between sm:items-start`}
         >
           <div className="flex min-w-0 items-start">
             {logoSrc ? (
@@ -315,10 +324,10 @@ export default function UnifiedInvoiceTemplate({
       </header>
 
       <main aria-label="Invoice details" className="flex-1">
-        <section className={`${cfg.band} ${pyBand} ${isQuote ? "mb-8 sm:mb-8" : "mb-5 sm:mb-6"}`}>
+        <section className={`section ${cfg.band} ${pyBand}`}>
           <div
             className={`grid grid-cols-1 sm:grid-cols-2 ${
-              isQuote ? "gap-6 sm:gap-8" : "gap-8 sm:gap-12"
+              isQuote ? "gap-2 sm:gap-3" : "gap-3 sm:gap-4"
             }`}
           >
             <InvoiceToBlock client={client} heavy={cfg.heavy} />
@@ -344,7 +353,7 @@ export default function UnifiedInvoiceTemplate({
           </div>
         ) : null}
 
-        <section className={isQuote ? "mb-8 sm:mb-8" : "mb-6 sm:mb-8"}>
+        <section className="section">
           <table
             className={`items invoice-table unified-invoice-line-table w-full border-collapse table-fixed border-t border-b ${cfg.rule}`}
           >
@@ -418,29 +427,26 @@ export default function UnifiedInvoiceTemplate({
         </section>
 
         <section
-          className={`unified-invoice-totals grid grid-cols-1 sm:grid-cols-2 ${
+          className={`${shouldBreakBeforeTotals ? "page-break-before" : ""} page-break-avoid unified-invoice-totals grid grid-cols-1 sm:grid-cols-2 ${
             isQuote ? "gap-4 sm:gap-6" : "gap-6 sm:gap-10"
-          } ${isQuote ? "mb-8 sm:mb-8" : "mb-8 sm:mb-10"} ${pySection}`}
-        >
+          } section ${cfg.sparse ? "py-2" : "py-3"}`}
+         >
           <div>
             <h3
               className={`text-xs uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-bold"}`}
             >
               Total due
             </h3>
-            <div
-              className="px-4 py-5 sm:py-6 border border-black/10"
-              style={hatchStyle}
-            >
+            <div className="px-4 py-3.5 sm:py-4 border border-black/10" style={hatchStyle}>
               <p
-                className={`text-2xl sm:text-3xl tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-bold"}`}
+                className={`text-xl sm:text-2xl tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-bold"}`}
               >
                 {formatCurrency(invoice.total_amount, userCurrency)}
               </p>
             </div>
           </div>
           <div className="sm:justify-self-end w-full sm:max-w-xs">
-            <div className="space-y-2 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
                 <span className="text-neutral-600 uppercase text-xs tracking-wide">
                   Subtotal
@@ -498,7 +504,7 @@ export default function UnifiedInvoiceTemplate({
           </div>
         </section>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 text-sm border-t border-black/10 pt-6">
+        <section className="section grid grid-cols-1 md:grid-cols-2 gap-8 text-sm border-t border-black/10 pt-6">
           <div>
             <h3
               className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
@@ -586,22 +592,22 @@ export default function UnifiedInvoiceTemplate({
           </div>
         </section>
 
-        <section className="mb-8 text-sm border-t border-black/10 pt-6">
+        <section className="section page-break-avoid text-sm border-t border-black/10 pt-5">
           <h3
-            className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
+            className={`text-[11px] uppercase tracking-wide mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}
           >
             Notes
           </h3>
-          <p className="text-neutral-700 text-xs sm:text-sm leading-relaxed mb-4">
+          <p className="text-neutral-600 text-xs leading-relaxed mb-3">
             {NOTES_PAYMENT_MILESTONES_COPY}
           </p>
           {invoice.notes ? (
-            <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-4 mt-4">
+            <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-3 mt-3">
               {invoice.notes}
             </p>
           ) : null}
           {items.filter((item) => item.description?.trim()).length > 0 && (
-            <ul className="mt-4 pt-4 border-t border-black/10 space-y-1 text-neutral-700">
+            <ul className="mt-3 pt-3 border-t border-black/10 space-y-1 text-neutral-600">
               {items
                 .filter((item) => item.description?.trim())
                 .map((item, idx) => (
@@ -615,7 +621,7 @@ export default function UnifiedInvoiceTemplate({
       </main>
 
       <footer
-        className="border-t border-black/20 pt-5 text-xs text-neutral-600"
+        className="footer page-break-avoid border-t border-black/20 pt-5 text-xs text-neutral-600"
         aria-label="Thank you for your business. Invoicing made easy with Paidly. Powered by Paidly."
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">

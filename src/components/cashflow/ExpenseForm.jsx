@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan }) {
     const { toast } = useToast();
-    const [formData, setFormData] = useState(expense || {
+    const baseFormState = {
         category: "office",
         description: "",
         amount: "",
@@ -38,7 +38,8 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
         rate_per_unit: 4.84, // Default SARS rate approx
         start_location: "",
         end_location: ""
-    });
+    };
+    const [formData, setFormData] = useState({ ...baseFormState, ...(expense || {}) });
 
     const [vendors, setVendors] = useState([]);
     const [isScanning, setIsScanning] = useState(false);
@@ -46,7 +47,23 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
     const [useBrowserOcr, setUseBrowserOcr] = useState(false);
     const [activeTab, setActiveTab] = useState(expense?.is_mileage ? "mileage" : "general");
 
-    const isImageFile = (file) => /^image\/(jpeg|png|webp|gif)$/i.test(file?.type);
+    const isImageFile = (file) => /^image\/(jpeg|jpg|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(file?.type);
+
+    const parseMoney = (value) => {
+        if (value == null || value === "") return null;
+        const normalized = String(value).replace(/[^\d.,-]/g, "").replace(",", ".");
+        const n = Number.parseFloat(normalized);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    const normalizeDateInput = (value) => {
+        if (!value) return format(new Date(), "yyyy-MM-dd");
+        const s = String(value).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        const d = new Date(s);
+        if (!Number.isNaN(d.getTime())) return format(d, "yyyy-MM-dd");
+        return format(new Date(), "yyyy-MM-dd");
+    };
 
     useEffect(() => {
         loadVendors();
@@ -58,6 +75,18 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
             }));
         }
     }, []);
+
+    useEffect(() => {
+        if (!expense) return;
+        setFormData((prev) => ({
+            ...baseFormState,
+            ...prev,
+            ...expense,
+            date: normalizeDateInput(expense.date),
+            amount: expense.amount ?? "",
+            attachments: Array.isArray(expense.attachments) ? expense.attachments : prev.attachments || [],
+        }));
+    }, [expense]);
 
     // Recalculate amount if mileage changes
     useEffect(() => {
@@ -83,10 +112,27 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        const parsedAmount = parseMoney(formData.amount);
+        if (!(parsedAmount > 0)) {
+            toast({
+                title: "Amount required",
+                description: "Enter a valid amount greater than zero before saving.",
+                variant: "destructive",
+            });
+            return;
+        }
+        if (!String(formData.description || "").trim()) {
+            toast({
+                title: "Description required",
+                description: "Add a short description for this expense.",
+                variant: "destructive",
+            });
+            return;
+        }
         
         const dataToSave = {
             ...formData,
-            amount: parseFloat(formData.amount),
+            amount: parsedAmount,
             is_mileage: activeTab === "mileage",
             // Flatten legacy receipt_url if attachments exist
             receipt_url: formData.attachments?.[0]?.url || formData.receipt_url || ""
@@ -145,25 +191,36 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
             if (useOcr) {
                 data = await extractReceiptDataWithTesseract(file);
             } else {
-                const result = await ExtractDataFromUploadedFile({
-                    file_url,
-                    json_schema: getReceiptExtractionSchema()
-                });
-                if (result.status === "success" && result.output) data = result.output;
+                let result = null;
+                try {
+                    result = await ExtractDataFromUploadedFile({
+                        file_url,
+                        json_schema: getReceiptExtractionSchema()
+                    });
+                } catch (err) {
+                    if (import.meta.env.DEV) console.warn("[ExpenseForm] Server extraction failed:", err?.message || err);
+                }
+                if (result?.status === "success" && result.output) data = result.output;
+                // Professional fallback: if server extraction is unavailable, automatically try browser OCR for images.
+                if (!data && isImageFile(file)) {
+                    data = await extractReceiptDataWithTesseract(file);
+                }
             }
 
             if (data) {
                 // Auto-fill expense form after parsing: vendor, amount, date (+ vat, currency, category, description)
                 const filled = parsedReceiptToExpenseForm(data);
+                const normalizedAmount = parseMoney(filled.amount);
+                const normalizedDate = normalizeDateInput(filled.date);
                 setFormData(prev => ({
                     ...prev,
-                    vendor: filled.vendor,
-                    amount: filled.amount,
-                    date: filled.date,
+                    vendor: filled.vendor || prev.vendor,
+                    amount: normalizedAmount != null ? String(normalizedAmount) : prev.amount,
+                    date: normalizedDate,
                     vat: filled.vat,
-                    currency: filled.currency,
-                    category: filled.category,
-                    description: filled.description,
+                    currency: filled.currency || prev.currency || "ZAR",
+                    category: filled.category || prev.category || "office",
+                    description: filled.description || prev.description || "Receipt",
                     attachments: newAttachments,
                     vendor_id: vendors.find(v => v.name.toLowerCase() === (data.vendor_name || "").toLowerCase())?.id ?? prev.vendor_id,
                 }));

@@ -9,7 +9,8 @@ import { mapInvoiceDataForTemplate } from '@/utils/invoiceTemplateData';
 import DocumentPreview from '@/components/DocumentPreview';
 import { recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
 import { readInvoiceDraftRaw } from '@/utils/invoiceDraftStorage';
-const OPTIONAL_FETCH_TIMEOUT_MS = 15000;
+const OPTIONAL_FETCH_TIMEOUT_MS = 30000;
+const OPTIONAL_FETCH_RETRIES = 2;
 
 function clientsArrayForPreview(clientForTemplate, clientId) {
     if (!clientForTemplate || typeof clientForTemplate !== 'object') return [];
@@ -98,7 +99,7 @@ export default function InvoicePDF() {
 
             const optionalFetch = async (fn, fallback = null) => {
                 try {
-                    return await withTimeoutRetry(fn, OPTIONAL_FETCH_TIMEOUT_MS, 1);
+                    return await withTimeoutRetry(fn, OPTIONAL_FETCH_TIMEOUT_MS, OPTIONAL_FETCH_RETRIES);
                 } catch (error) {
                     console.warn('Optional invoice PDF dependency failed to load:', error?.message || error);
                     return fallback;

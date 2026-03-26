@@ -22,6 +22,16 @@ const STEP_OCR_RESULT = 2;
 
 /** After parsing, populate the expense form: vendor, amount, date + receipt_url, attachments, etc. */
 function buildScanPayload(data, file_url, file) {
+    const normalizeAmount = (value) => {
+        if (value == null || value === "") return "";
+        const n = Number.parseFloat(String(value).replace(/[^\d.,-]/g, "").replace(",", "."));
+        return Number.isFinite(n) ? n : "";
+    };
+    const normalizeDate = (value) => {
+        const s = String(value || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        return new Date().toISOString().slice(0, 10);
+    };
     const expense = parsedReceiptToExpenseForm(data, {
         receipt_url: file_url,
         attachments: [{ name: file.name, url: file_url }],
@@ -29,6 +39,9 @@ function buildScanPayload(data, file_url, file) {
         payment_method: "bank_transfer",
         notes: "",
     });
+    expense.amount = normalizeAmount(expense.amount);
+    expense.date = normalizeDate(expense.date);
+    expense.description = String(expense.description || "").trim() || "Receipt";
     return expense;
 }
 
