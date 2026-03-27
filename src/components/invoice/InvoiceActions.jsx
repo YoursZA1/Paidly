@@ -35,6 +35,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { supabase } from '@/lib/supabaseClient';
 import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
+import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -132,9 +133,13 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             onOptimisticUpdate?.(invoice.id, 'sent');
             setSendPhase('success');
             toast({
-                title: "Invoice sent",
-                description: "Your invoice is on its way to the client.",
-                variant: "success"
+                title: "Invoice sent successfully",
+                description: documentSendSuccessDescription({
+                    mode: 'invoice',
+                    recipientEmail: client?.email?.trim() || '',
+                }),
+                variant: "success",
+                duration: 6500,
             });
             setTimeout(() => {
                 onActionSuccess();
@@ -327,10 +332,13 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
 
             setShowEmailPreview(false);
             toast({
-                title: "Email sent successfully",
-                description: `Invoice sent to ${client.email}`,
+                title: "Invoice sent successfully",
+                description: documentSendSuccessDescription({
+                    mode: 'invoice',
+                    recipientEmail: client.email?.trim() || '',
+                }),
                 variant: "success",
-                duration: 4000
+                duration: 6500,
             });
         } catch (error) {
             console.error("Failed to send email:", error);
@@ -407,9 +415,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             setShowManualShare(false);
             toast({
                 title: "Invoice marked as sent",
-                description: `Sent to ${sentToEmail}`,
+                description: documentSendSuccessDescription({
+                    mode: 'invoice',
+                    recipientEmail: sentToEmail?.trim() || '',
+                }),
                 variant: "success",
-                duration: 4000
+                duration: 6500,
             });
         } catch (error) {
             console.error("Failed to mark invoice as sent or save email:", error);

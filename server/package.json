@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "anvil-pdf": "node ./scripts/anvil-generate-plain-html.mjs",
     "react:generate-pdf": "tsx ./scripts/generate-react-anvil-pdf.tsx",
-    "react:generate-quote-pdf": "tsx ./scripts/generate-react-anvil-quote-pdf.tsx"
+    "react:generate-quote-pdf": "tsx ./scripts/generate-react-anvil-quote-pdf.tsx",
+    "resend:sample": "node ./scripts/resend-sample-attachment.mjs"
   },
   "dependencies": {
     "@anvilco/anvil": "^3.3.2",

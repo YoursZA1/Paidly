@@ -4,7 +4,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 // Resend configuration (set these in Supabase Edge Function Secrets)
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Paidly <no-reply@paidly.co.za>";
+const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Paidly <invoices@paidly.co.za>";
 
 // Supabase configuration
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";

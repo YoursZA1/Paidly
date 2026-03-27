@@ -52,8 +52,8 @@ export async function sendInvoice(invoiceData, options = {}) {
     throw new Error("invoiceData.client.email (or clientEmail/to) is required");
   }
 
-  // Invoice emails always send from noreply@paidly.co.za for all users
-  const fromAddress = options.from || "Paidly <noreply@paidly.co.za>";
+  // Canonical transactional sender (override with options.from or RESEND_FROM)
+  const fromAddress = options.from || "Paidly <invoices@paidly.co.za>";
 
   const clientName = invoiceData.client?.name?.trim() || "there";
   const amountDue =

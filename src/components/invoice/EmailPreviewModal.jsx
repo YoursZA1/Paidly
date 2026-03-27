@@ -9,85 +9,55 @@ import { User, BankingDetail } from '@/api/entities';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { format } from 'date-fns';
-import { getEmailOpenTrackingPixelUrl } from '@/services/InvoiceSendService';
+import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
+import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
+import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 
-/** Optional pixelUrl: when set, embeds a 1x1 tracking pixel to log email opens (GET /api/email-track/:token). */
-export const generateInvoiceEmailHtml = (invoice, client, company, bankingDetail, publicViewUrl, pixelUrl = '') => {
+/** ctaHref: use tracked URL from getTrackedLinkUrl when sending; pixelUrl for opens. */
+export const generateInvoiceEmailHtml = (invoice, client, company, ctaHref, pixelUrl = '') => {
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
     const formattedAmount = formatCurrency(invoice.total_amount, userCurrency);
     const dueDate = format(new Date(invoice.delivery_date), 'MMM d, yyyy');
+    const primary = parseDocumentBrandHex(invoice?.document_brand_primary) || parseDocumentBrandHex(company?.document_brand_primary) || '#f24e00';
+    const secondary = parseDocumentBrandHex(invoice?.document_brand_secondary) || parseDocumentBrandHex(company?.document_brand_secondary) || '#ff7c00';
 
-    return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-        <div style="background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); padding: 30px; border-radius: 10px 10px 0 0; color: white; text-align: center;">
-            <h1 style="margin: 0; fontSize: 28px;">Invoice from ${companyName}</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Invoice #${invoice.invoice_number}</p>
-        </div>
-        
-        <div style="background: white; padding: 30px; border: 1px solid #e1e5e9; border-top: none;">
-            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">Dear ${client.name},</p>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                Thank you for your business. Please find attached your invoice for <strong>${invoice.project_title}</strong>.
-            </p>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e1e5e9;">
-                <h3 style="margin: 0 0 15px 0; color: #333; border-bottom: 1px solid #e1e5e9; padding-bottom: 10px;">Invoice Summary</h3>
-                <div style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Invoice Number:</span>
-                        <span style="font-weight: bold; color: #333;">${invoice.invoice_number}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Project:</span>
-                        <span style="font-weight: bold; color: #333;">${invoice.project_title}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Amount Due:</span>
-                        <span style="font-weight: bold; color: #333; font-size: 18px;">${formattedAmount}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #666;">Due Date:</span>
-                        <span style="font-weight: bold; color: #333;">${dueDate}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: #fff7ed; padding: 15px; border-radius: 8px; border-left: 4px solid #f24e00; margin: 20px 0;">
-                <p style="margin: 0; color: #9a3412; font-size: 14px;">
-                    <strong>📎 Clean PDF Invoice:</strong> A professional PDF version of your invoice is available for download.
-                </p>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicViewUrl}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(242, 78, 0, 0.3);">
-                    🔍 View & Download Invoice
-                </a>
-            </div>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                You can view this invoice online anytime by clicking the button above, or download the PDF version directly from there.
-            </p>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                If you have any questions about this invoice, please don't hesitate to contact us.
-            </p>
-            
-            <div style="border-top: 1px solid #e1e5e9; padding-top: 20px; margin-top: 30px;">
-                <p style="color: #888; font-size: 14px; margin: 0;">
-                    Thank you for your partnership!
-                </p>
-            </div>
-        </div>
-        
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 10px 10px; text-align: center; border: 1px solid #e1e5e9; border-top: none;">
-            <p style="margin: 0; color: #666; font-size: 14px;">This is an automated message from ${companyName}.</p>
-        </div>
-        ${pixelUrl ? `<img src="${String(pixelUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" width="1" height="1" alt="" />` : ''}
-    </div>
+    const innerHtml = `
+      <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;">Dear ${String(client.name || 'there').replace(/</g, '&lt;')},</p>
+      <p style="margin:0 0 20px;color:#52525b;line-height:1.6;">
+        Thank you for your business. Your invoice for <strong>${String(invoice.project_title || '').replace(/</g, '&lt;')}</strong> is ready — PDF attached.
+      </p>
+      <table role="presentation" width="100%" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 20px;">
+        <tr><td style="padding:16px 18px;">
+          <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">Summary</p>
+          <table role="presentation" width="100%" style="font-size:14px;color:#18181b;">
+            <tr><td style="padding:4px 0;color:#71717a;">Invoice #</td><td align="right" style="font-weight:600;">${String(invoice.invoice_number || '').replace(/</g, '&lt;')}</td></tr>
+            <tr><td style="padding:4px 0;color:#71717a;">Amount due</td><td align="right" style="font-weight:700;font-size:18px;color:${primary};">${formattedAmount}</td></tr>
+            <tr><td style="padding:4px 0;color:#71717a;">Due</td><td align="right" style="font-weight:600;">${dueDate}</td></tr>
+          </table>
+        </td></tr>
+      </table>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="${String(ctaHref).replace(/"/g, '&quot;')}" style="display:inline-block;background:linear-gradient(135deg, ${primary} 0%, ${secondary} 100%);color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(242,78,0,0.25);">
+          View invoice online
+        </a>
+      </div>
+      <p style="margin:0;color:#71717a;font-size:13px;line-height:1.55;">
+        Questions? Reply to this email or contact ${String(companyName).replace(/</g, '&lt;')}.
+      </p>
     `;
+
+    return buildBrandedEmailDocumentHtml({
+        preheader: `Invoice ${invoice.invoice_number} — ${formattedAmount} due ${dueDate}`,
+        title: 'Invoice',
+        subtitle: `Invoice #${invoice.invoice_number}`,
+        innerHtml,
+        companyName,
+        footerNote: 'This is an automated message from your supplier.',
+        primaryHex: primary,
+        secondaryHex: secondary,
+        pixelUrl,
+    });
 };
 
 export default function EmailPreviewModal({ invoice, client, onClose, onSend, isSending, getTrackableLink }) {
@@ -134,12 +104,16 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     const publicViewUrl = invoice?.public_share_token
         ? `${window.location.origin}/view/${invoice.public_share_token}`
         : '';
-    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, publicViewUrl);
+    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, publicViewUrl);
     const handleSend = async () => {
         const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
         const viewUrl = (result && typeof result === 'object' && result.url != null) ? result.url : result;
         const pixelUrl = result?.trackingToken ? getEmailOpenTrackingPixelUrl(result.trackingToken) : '';
-        const html = generateInvoiceEmailHtml(invoice, client, company, bankingDetail, viewUrl, pixelUrl);
+        const ctaHref =
+            result?.trackingToken && viewUrl
+                ? getTrackedLinkUrl(result.trackingToken, viewUrl)
+                : viewUrl;
+        const html = generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixelUrl);
         onSend(html);
     };
 

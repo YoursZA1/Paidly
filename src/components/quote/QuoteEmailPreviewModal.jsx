@@ -10,85 +10,57 @@ import { formatCurrency } from '../CurrencySelector';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
+import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
+import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
+import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
 
-export const generateQuoteEmailHtml = (quote, client, company, publicViewUrl) => {
+export const generateQuoteEmailHtml = (quote, client, company, ctaHref, pixelUrl = '') => {
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
     const formattedAmount = formatCurrency(quote.total_amount, userCurrency);
     const validUntil = format(new Date(quote.valid_until), 'MMM d, yyyy');
+    const primary = parseDocumentBrandHex(quote?.document_brand_primary) || parseDocumentBrandHex(company?.document_brand_primary) || '#f24e00';
+    const secondary = parseDocumentBrandHex(quote?.document_brand_secondary) || parseDocumentBrandHex(company?.document_brand_secondary) || '#ff7c00';
 
-    return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-        <div style="background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); padding: 30px; border-radius: 10px 10px 0 0; color: white; text-align: center;">
-            <h1 style="margin: 0; fontSize: 28px;">Quote from ${companyName}</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Quote #${quote.quote_number}</p>
-        </div>
-        
-        <div style="background: white; padding: 30px; border: 1px solid #e1e5e9; border-top: none;">
-            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">Dear ${client.name},</p>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                Thank you for your interest. Please find your quote for <strong>${quote.project_title}</strong> below.
-            </p>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e1e5e9;">
-                <h3 style="margin: 0 0 15px 0; color: #333; border-bottom: 1px solid #e1e5e9; padding-bottom: 10px;">Quote Summary</h3>
-                <div style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Quote Number:</span>
-                        <span style="font-weight: bold; color: #333;">${quote.quote_number}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Project:</span>
-                        <span style="font-weight: bold; color: #333;">${quote.project_title}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: #666;">Total Amount:</span>
-                        <span style="font-weight: bold; color: #333; font-size: 18px;">${formattedAmount}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #666;">Valid Until:</span>
-                        <span style="font-weight: bold; color: #333;">${validUntil}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: #fff7ed; padding: 15px; border-radius: 8px; border-left: 4px solid #f24e00; margin: 20px 0;">
-                <p style="margin: 0; color: #9a3412; font-size: 14px;">
-                    <strong>📎 Professional Quote PDF:</strong> A detailed PDF version of your quote is available for download.
-                </p>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicViewUrl}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #f24e00 0%, #ff7c00 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(242, 78, 0, 0.3);">
-                    🔍 View & Download Quote
-                </a>
-            </div>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                You can view this quote online anytime by clicking the button above, or download the PDF version directly from there.
-            </p>
-            
-            <p style="color: #555; line-height: 1.6; margin-bottom: 20px;">
-                If you have any questions about this quote, please don't hesitate to contact us. We look forward to working with you!
-            </p>
-            
-            <div style="border-top: 1px solid #e1e5e9; padding-top: 20px; margin-top: 30px;">
-                <p style="color: #888; font-size: 14px; margin: 0;">
-                    Thank you for considering our services!
-                </p>
-            </div>
-        </div>
-        
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 10px 10px; text-align: center; border: 1px solid #e1e5e9; border-top: none;">
-            <p style="margin: 0; color: #666; font-size: 14px;">This is an automated message from ${companyName}.</p>
-        </div>
-    </div>
+    const innerHtml = `
+      <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;">Dear ${String(client.name || 'there').replace(/</g, '&lt;')},</p>
+      <p style="margin:0 0 20px;color:#52525b;line-height:1.6;">
+        Thank you for your interest. Your quote for <strong>${String(quote.project_title || '').replace(/</g, '&lt;')}</strong> is ready — PDF attached.
+      </p>
+      <table role="presentation" width="100%" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 20px;">
+        <tr><td style="padding:16px 18px;">
+          <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">Quote summary</p>
+          <table role="presentation" width="100%" style="font-size:14px;color:#18181b;">
+            <tr><td style="padding:4px 0;color:#71717a;">Quote #</td><td align="right" style="font-weight:600;">${String(quote.quote_number || '').replace(/</g, '&lt;')}</td></tr>
+            <tr><td style="padding:4px 0;color:#71717a;">Total</td><td align="right" style="font-weight:700;font-size:18px;color:${primary};">${formattedAmount}</td></tr>
+            <tr><td style="padding:4px 0;color:#71717a;">Valid until</td><td align="right" style="font-weight:600;">${validUntil}</td></tr>
+          </table>
+        </td></tr>
+      </table>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="${String(ctaHref).replace(/"/g, '&quot;')}" style="display:inline-block;background:linear-gradient(135deg, ${primary} 0%, ${secondary} 100%);color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(242,78,0,0.25);">
+          View quote online
+        </a>
+      </div>
+      <p style="margin:0;color:#71717a;font-size:13px;line-height:1.55;">
+        We look forward to working with you.
+      </p>
     `;
+
+    return buildBrandedEmailDocumentHtml({
+        preheader: `Quote ${quote.quote_number} — ${formattedAmount} · valid ${validUntil}`,
+        title: 'Quote',
+        subtitle: `Quote #${quote.quote_number}`,
+        innerHtml,
+        companyName,
+        footerNote: 'This is an automated message from your supplier.',
+        primaryHex: primary,
+        secondaryHex: secondary,
+        pixelUrl,
+    });
 };
 
-export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend, isSending }) {
+export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend, isSending, getTrackableLink }) {
     const [company, setCompany] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -124,6 +96,18 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
     const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicQuote?token=${quote.public_share_token || quote.id}`)}`;
     
     const emailHtml = generateQuoteEmailHtml(quote, client, company, publicViewUrl);
+
+    const handleSendClick = async () => {
+        const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
+        const viewUrl = (result && typeof result === 'object' && result.url != null) ? result.url : result;
+        const pixelUrl = result?.trackingToken ? getEmailOpenTrackingPixelUrl(result.trackingToken) : '';
+        const ctaHref =
+            result?.trackingToken && viewUrl
+                ? getTrackedLinkUrl(result.trackingToken, viewUrl)
+                : viewUrl;
+        const html = generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl);
+        onSend(html);
+    };
 
     return (
         <Dialog open={true} onOpenChange={onClose}>
@@ -290,9 +274,9 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
                         <X className="w-4 h-4 mr-2" />
                         Cancel
                     </Button>
-                    <Button onClick={() => onSend(emailHtml)} disabled={isSending} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Button onClick={handleSendClick} disabled={isSending} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                         <Send className="w-4 h-4 mr-2" />
-                        {isSending ? 'Sending...' : 'Send Email with Download Link'}
+                        {isSending ? 'Sending...' : 'Send Email with PDF Attachment'}
                     </Button>
                 </div>
             </DialogContent>

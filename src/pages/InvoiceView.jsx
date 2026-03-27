@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Invoice, Client, BankingDetail } from '@/api/entities';
-import { getBackendBaseUrl } from '@/api/backendClient';
+import { getPublicApiBase } from '@/api/backendClient';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { Loader2, AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
@@ -93,7 +93,7 @@ export default function InvoiceView() {
         const tokenParam = searchParams.get('token') || searchParams.get('tracking');
         if (tokenParam && !trackingTokenRecorded.current) {
           trackingTokenRecorded.current = true;
-          const apiBase = import.meta.env.DEV ? '' : getBackendBaseUrl();
+          const apiBase = getPublicApiBase();
           fetch(`${apiBase}/api/track-open`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

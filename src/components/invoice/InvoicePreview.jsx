@@ -15,6 +15,7 @@ import { buildInvoiceTemplatePdfCaptureProps } from "@/components/pdf/InvoiceTem
 import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 
 import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
+import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
 
 function InvoicePreview({
   invoiceData,
@@ -166,7 +167,15 @@ function InvoicePreview({
         toast({ title: "Send failed", description: json?.error || "Server error", variant: "destructive" });
         return;
       }
-      toast({ title: "Invoice sent", description: `Invoice ${invoiceNum} was sent to ${clientEmail}.` });
+      toast({
+        title: "Invoice sent successfully",
+        description: documentSendSuccessDescription({
+          mode: "invoice",
+          recipientEmail: clientEmail,
+        }),
+        variant: "success",
+        duration: 6500,
+      });
     } catch (error) {
       console.error("Send invoice error:", error);
       const isNetworkError = error?.message === "Failed to fetch" || error?.name === "TypeError";

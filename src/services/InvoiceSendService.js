@@ -4,6 +4,7 @@
  */
 
 import { Invoice, DocumentSend, MessageLog, User } from '@/api/entities';
+import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 
@@ -24,12 +25,24 @@ export const getTrackableBaseUrl = (baseUrl) => {
  * When the email client loads the image, GET /api/email-track/:token runs and logs the open in message_logs.
  * @param {string} trackingToken - Same token used for the invoice view link (from createTrackableInvoiceLink).
  * @param {string} [baseUrl] - App base URL (e.g. https://yourapp.com). Omit in browser to use current origin.
- * @returns {string} Full URL e.g. https://yourapp.com/api/email-track/{token}
+ * @returns {string} Full URL (query form works on Vercel static + serverless)
  */
 export const getEmailOpenTrackingPixelUrl = (trackingToken, baseUrl) => {
   const base = getTrackableBaseUrl(baseUrl);
   if (!base || !trackingToken) return '';
-  return `${base}/api/email-track/${encodeURIComponent(trackingToken)}`;
+  return `${base}/api/email-track?token=${encodeURIComponent(trackingToken)}`;
+};
+
+/**
+ * Wrap a destination URL so the first click is logged (clicked_at) before redirect.
+ * @param {string} trackingToken - message_logs.tracking_token
+ * @param {string} destinationUrl - Full HTTPS URL (e.g. trackable view URL)
+ * @param {string} [baseUrl] - Site origin
+ */
+export const getTrackedLinkUrl = (trackingToken, destinationUrl, baseUrl) => {
+  const base = getTrackableBaseUrl(baseUrl);
+  if (!base || !trackingToken || !destinationUrl) return destinationUrl;
+  return `${base}/api/track-link?token=${encodeURIComponent(trackingToken)}&u=${encodeURIComponent(destinationUrl)}`;
 };
 
 /**
@@ -59,6 +72,31 @@ export const createTrackableInvoiceLink = async (invoice, channel, recipient) =>
   });
   const origin = getTrackableBaseUrl();
   const url = `${origin}/view/${shareToken}?token=${token}`;
+  return { url, trackingToken: token };
+};
+
+/**
+ * Same as createTrackableInvoiceLink for quotes (public share token + message_logs row).
+ */
+export const createTrackableQuoteLink = async (quote, channel, recipient) => {
+  const shareToken = quote?.public_share_token;
+  if (!shareToken) {
+    throw new Error('Quote has no share token. Generate a share link first.');
+  }
+  const token = crypto.randomUUID();
+  const sentAt = new Date().toISOString();
+  await MessageLog.create({
+    document_type: 'quote',
+    document_id: quote.id,
+    client_id: quote.client_id || null,
+    channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+    recipient: recipient || null,
+    sent_at: sentAt,
+    tracking_token: token,
+  });
+  const origin = getTrackableBaseUrl();
+  const basePath = createPageUrl('PublicQuote');
+  const url = `${origin}${basePath}?token=${encodeURIComponent(shareToken)}&tracking=${encodeURIComponent(token)}`;
   return { url, trackingToken: token };
 };
 

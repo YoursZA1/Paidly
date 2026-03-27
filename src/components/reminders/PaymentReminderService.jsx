@@ -2,6 +2,7 @@ import { Invoice, Client, PaymentReminder, User } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
+import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 
 class PaymentReminderService {
     static async checkAndSendReminders() {
@@ -125,22 +126,25 @@ class PaymentReminderService {
             body = body.replace(new RegExp(key, 'g'), value);
         }
 
-        // Construct HTML Body
-        const htmlBody = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #333;">${companyName}</h2>
-                <p style="white-space: pre-wrap;">${body}</p>
-                <br/>
-                <div style="text-align: center; margin-top: 30px;">
-                    <a href="${publicViewUrl}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                        View Invoice
-                    </a>
-                </div>
-                <p style="text-align: center; margin-top: 20px; font-size: 12px; color: #888;">
-                    This is an automated reminder.
-                </p>
+        const innerHtml = `
+            <p style="margin:0 0 16px;color:#52525b;line-height:1.65;white-space:pre-wrap;">${body.replace(/</g, '&lt;')}</p>
+            <div style="text-align:center;margin:24px 0 0;">
+              <a href="${publicViewUrl.replace(/"/g, '&quot;')}" style="display:inline-block;background:linear-gradient(135deg,#f24e00 0%,#ff7c00 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;">
+                View invoice
+              </a>
             </div>
         `;
+        const htmlBody = buildBrandedEmailDocumentHtml({
+            preheader: subject,
+            title: 'Payment reminder',
+            subtitle: `Invoice ${invoice.invoice_number}`,
+            innerHtml,
+            companyName,
+            footerNote: 'Automated payment reminder. If you already paid, please disregard.',
+            primaryHex: '#f24e00',
+            secondaryHex: '#ff7c00',
+            pixelUrl: '',
+        });
 
         await SendEmail({
             to: client.email,

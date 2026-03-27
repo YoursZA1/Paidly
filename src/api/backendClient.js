@@ -90,3 +90,14 @@ export const backendApi = axios.create({
 export function getBackendBaseUrl() {
   return serverUrl;
 }
+
+/**
+ * Base URL for same-origin Vercel `/api/*` routes when the Node API host is unset or localhost in production.
+ */
+export function getPublicApiBase() {
+  if (isDev) return "";
+  const u = serverUrl;
+  if (u && !/localhost|127\.0\.0\.1/i.test(u)) return u;
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return u || "";
+}

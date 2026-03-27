@@ -268,7 +268,7 @@ export default function MessagesPage() {
     }, 0);
 
     // Timeline table: Document, Client, Channel, Sent, Opened, Paid (⚪ Sent, 🟡 Opened, 🟢 Paid)
-    const buildTimelineRow = (row, sentAt, openedAt, paymentDate) => {
+    const buildTimelineRow = (row, sentAt, openedAt, paymentDate, clickedAt) => {
         const isInvoice = row.document_type === 'invoice';
         const doc = isInvoice
             ? invoices.find((i) => i.id === row.document_id)
@@ -282,6 +282,7 @@ export default function MessagesPage() {
         const channelLabel = row.channel === 'whatsapp' ? 'WhatsApp' : 'Email';
         const opened = row.viewed === true;
         const paid = row.paid === true;
+        const clicked = clickedAt != null;
         const sentAtDate = sentAt ? new Date(sentAt) : null;
         return {
             id: row.id,
@@ -293,6 +294,8 @@ export default function MessagesPage() {
             sentIndicator: '⚪',
             opened: opened ? '✓' : '✗',
             openedIndicator: opened ? '🟡' : null,
+            clicked: clicked ? '✓' : '✗',
+            clickedIndicator: clicked ? '🔵' : null,
             paid: paid ? '✓' : '–',
             paidIndicator: paid ? '🟢' : null,
             detail: {
@@ -302,12 +305,13 @@ export default function MessagesPage() {
                 channelLabel,
                 sentAt: sentAtDate,
                 openedAt: openedAt ? new Date(openedAt) : null,
+                clickedAt: clickedAt ? new Date(clickedAt) : null,
                 paymentDate: paymentDate ? new Date(paymentDate) : null,
             },
         };
     };
     const timelineFromMessageLogs = messageLogs.map((log) =>
-        buildTimelineRow(log, log.sent_at, log.opened_at, log.payment_date)
+        buildTimelineRow(log, log.sent_at, log.opened_at, log.payment_date, log.clicked_at)
     );
     const timelineFromDocumentSends = documentSends
         .filter((send) => !messageLogs.some((l) => l.document_id === send.document_id && l.channel === send.channel))
@@ -333,7 +337,8 @@ export default function MessagesPage() {
                 { ...send, viewed: viewsForDoc.length > 0, paid },
                 send.sent_at,
                 openedAt,
-                paymentDate
+                paymentDate,
+                null
             );
         });
     const sentDocumentsRows = [...timelineFromMessageLogs, ...timelineFromDocumentSends].sort(
@@ -364,7 +369,9 @@ export default function MessagesPage() {
                 >
                     <div>
                         <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-                        <p className="text-muted-foreground">Communicate with your clients</p>
+                        <p className="text-muted-foreground">
+                            Conversations for in-app messages; Sent documents shows email opens, link clicks, and payment status.
+                        </p>
                     </div>
                     <Button onClick={() => setShowComposer(true)} className="bg-primary hover:bg-primary/90">
                         <Plus className="w-4 h-4 mr-2" />
@@ -394,8 +401,9 @@ export default function MessagesPage() {
                                     Sent documents
                                 </CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    Timeline: Document, Client, Channel, Sent, Opened, Paid.
+                                    Sent → Opened (email pixel) → Clicked (CTA) → Paid.
                                     <span className="ml-2">🟢 Paid</span>
+                                    <span className="ml-2">🔵 Clicked</span>
                                     <span className="ml-2">🟡 Opened</span>
                                     <span className="ml-2">⚪ Sent</span>
                                 </p>
@@ -427,9 +435,10 @@ export default function MessagesPage() {
                                                             {row.sentAt ? format(row.sentAt, 'MMM d') : '—'}
                                                         </div>
                                                     </div>
-                                                    <div className="mt-2 flex items-center gap-3 text-xs">
+                                                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                                                         <span className="text-muted-foreground">{row.sentIndicator} Sent</span>
                                                         <span className="text-muted-foreground">{row.openedIndicator || '—'} Opened</span>
+                                                        <span className="text-muted-foreground">{row.clickedIndicator || '—'} Clicked</span>
                                                         <span className="text-muted-foreground">{row.paidIndicator || '—'} Paid</span>
                                                     </div>
                                                 </button>
@@ -445,6 +454,7 @@ export default function MessagesPage() {
                                                     <th className="text-left py-3 px-2 font-medium">Channel</th>
                                                     <th className="text-left py-3 px-2 font-medium">Sent</th>
                                                     <th className="text-left py-3 px-2 font-medium">Opened</th>
+                                                    <th className="text-left py-3 px-2 font-medium">Clicked</th>
                                                     <th className="text-left py-3 px-2 font-medium">Paid</th>
                                                 </tr>
                                             </thead>
@@ -463,6 +473,7 @@ export default function MessagesPage() {
                                                         <td className="py-2.5 px-2">{row.channel}</td>
                                                         <td className="py-2.5 px-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
                                                         <td className="py-2.5 px-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
+                                                        <td className="py-2.5 px-2">{row.clickedIndicator ? `${row.clickedIndicator} ` : ''}{row.clicked}</td>
                                                         <td className="py-2.5 px-2">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
                                                     </tr>
                                                 ))}
@@ -499,6 +510,10 @@ export default function MessagesPage() {
                                     <p className="text-sm">
                                         <span className="text-muted-foreground">Opened: </span>
                                         {selectedMessageDetail.openedAt ? format(selectedMessageDetail.openedAt, 'MMMM d, HH:mm') : '—'}
+                                    </p>
+                                    <p className="text-sm">
+                                        <span className="text-muted-foreground">Link clicked: </span>
+                                        {selectedMessageDetail.clickedAt ? format(selectedMessageDetail.clickedAt, 'MMMM d, HH:mm') : '—'}
                                     </p>
                                     <p className="text-sm">
                                         <span className="text-muted-foreground">Paid: </span>

@@ -7,6 +7,7 @@ import { format } from 'date-fns'; // New import
 import { Skeleton } from '@/components/ui/skeleton'; // New import
 import DocumentLayout from '@/components/shared/DocumentLayout'; // New import
 import { createPageUrl } from '@/utils';
+import { getPublicApiBase } from '@/api/backendClient';
 
 // New component introduced in the outline
 function PublicQuoteContent({ quote, client, user }) {
@@ -122,22 +123,41 @@ function PublicQuoteContent({ quote, client, user }) {
 
 export default function PublicQuote() {
     const location = useLocation();
-    const quoteId = new URLSearchParams(location.search).get('id');
+    const searchParams = new URLSearchParams(location.search);
+    const quoteId = searchParams.get('id');
+    const shareToken = searchParams.get('token');
+    const trackingParam = searchParams.get('tracking');
     const [quote, setQuote] = useState(null);
     const [client, setClient] = useState(null); // New state for client
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        if (quoteId) {
+        if (!trackingParam) return;
+        const apiBase = getPublicApiBase();
+        fetch(`${apiBase}/api/track-open`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: trackingParam }),
+        }).catch(() => {});
+    }, [trackingParam]);
+
+    useEffect(() => {
+        if (quoteId || shareToken) {
             loadQuoteData();
         }
-    }, [quoteId]);
+    }, [quoteId, shareToken]);
 
     const loadQuoteData = async () => {
         setIsLoading(true); // Set loading true at the start
         try {
-            const quoteData = await Quote.get(quoteId);
+            let quoteData = null;
+            if (quoteId) {
+                quoteData = await Quote.get(quoteId);
+            } else if (shareToken) {
+                const matches = await Quote.filter({ public_share_token: shareToken });
+                quoteData = matches[0] || null;
+            }
             if (!quoteData) {
                 setIsLoading(false);
                 return;
@@ -199,7 +219,7 @@ export default function PublicQuote() {
             title="QUOTE" // Title for the document header
             documentNumber={quote.quote_number} // Quote number for the header
             date={format(new Date(quote.created_date), 'MMMM d, yyyy')} // Date for the header
-            downloadUrl={createPageUrl(`QuotePDF?id=${quoteId}`)} // URL for PDF download button
+            downloadUrl={createPageUrl(`QuotePDF?id=${quote.id}`)}
         >
             {/* PublicQuoteContent renders the main details of the quote */}
             <PublicQuoteContent quote={quote} client={client} user={user} />

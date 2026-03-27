@@ -48,3 +48,6 @@ playwright/.auth/
 # Local Anvil PDF outputs (CLI scripts)
 /generate-react.output.pdf
 /generate-plain-html.output.pdf
+
+# Vercel `vercel env pull` output (secrets)
+.env.vercel

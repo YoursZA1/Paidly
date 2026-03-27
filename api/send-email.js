@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: "Email service not configured (RESEND_API_KEY)" });
   }
 
-  const fromAddress = process.env.RESEND_FROM || "Paidly <support@paidly.co.za>";
+  const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
   try {
     const data = await resend.emails.send({
