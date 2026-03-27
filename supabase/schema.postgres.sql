@@ -216,7 +216,8 @@ create table if not exists public.quotes (
   created_by uuid references auth.users(id) on delete set null,
   user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  public_share_token text
 );
 
 create table if not exists public.quote_items (
@@ -1104,6 +1105,8 @@ create index if not exists idx_quotes_client_id on public.quotes(client_id);
 create index if not exists idx_quotes_quote_number on public.quotes(quote_number);
 create index if not exists idx_quotes_status on public.quotes(status);
 create index if not exists idx_quotes_created_at on public.quotes(created_at desc);
+create index if not exists idx_quotes_public_share_token on public.quotes(public_share_token)
+  where public_share_token is not null;
 
 create index if not exists idx_invoice_items_invoice_id on public.invoice_items(invoice_id);
 create index if not exists idx_quote_items_quote_id on public.quote_items(quote_id);

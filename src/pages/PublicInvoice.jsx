@@ -6,7 +6,7 @@ import { createPageUrl } from '@/utils';
 import { getPublicApiBase } from '@/api/backendClient';
 import { formatCurrency } from '../components/CurrencySelector';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
-import { AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
+import { AlertCircle, Download, CreditCard, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
@@ -254,6 +254,12 @@ export default function PublicInvoice() {
         }
     };
 
+    const shareTokenForPdf =
+        invoice.public_share_token || new URLSearchParams(location.search).get('token') || '';
+    const pdfDownloadHref = shareTokenForPdf
+        ? `${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(shareTokenForPdf)}&download=true`
+        : `${createPageUrl('InvoicePDF')}?id=${encodeURIComponent(invoice.id)}&download=true`;
+
     return (
         <div className="min-h-screen bg-background p-4 sm:p-8">
             <div className="max-w-4xl mx-auto">
@@ -278,7 +284,7 @@ export default function PublicInvoice() {
                             {isPaying ? 'Redirecting to PayFast…' : `Pay with PayFast (${formatCurrency(invoice.total_amount, ownerCurrency)})`}
                         </button>
                     )}
-                    <a href={createPageUrl(`InvoicePDF?id=${invoice.id}`)} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
+                    <a href={pdfDownloadHref} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
                         <button className="w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
                             <Download className="w-5 h-5" />
                             Download as PDF

@@ -15,7 +15,7 @@ import {
   validateReceiptUpload,
 } from "@/utils/fileUploadValidation";
 import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
-import { retryOnAbort } from "@/utils/retryOnAbort";
+import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -43,6 +43,22 @@ async function getSessionWithRetry() {
     /* fall through */
   }
   return first;
+}
+
+/**
+ * Session read for profile writes. When TOKEN_REFRESHED / parallel tabs abort in-flight
+ * `getSession()`, fall back to cached user id so Settings saves don't surface AbortError.
+ */
+async function getSessionDataForProfileWrite(cachedUser) {
+  try {
+    return await getSessionWithRetry();
+  } catch (e) {
+    if (isAbortError(e) && (cachedUser?.supabase_id || cachedUser?.id)) {
+      const id = String(cachedUser.supabase_id || cachedUser.id);
+      return { data: { session: { user: { id } } }, error: null };
+    }
+    throw e;
+  }
 }
 
 /**
@@ -1585,7 +1601,9 @@ class AuthManager {
     const email = (credentials.email || '').trim().toLowerCase();
     // Use role from credentials (which is now always synced with Supabase)
     const userId = this.generateUserId(email);
-    console.log(`👤 User login: ${email} → Database ID: ${userId}`);
+    if (import.meta.env.DEV) {
+      console.log(`👤 User login: ${email} → Database ID: ${userId}`);
+    }
 
     let companyProfile = {};
     let supabaseUserId = null;
@@ -1917,7 +1935,7 @@ class AuthManager {
       this.user = {};
     }
 
-    const { data: sessionData } = await getSessionWithRetry();
+    const { data: sessionData } = await getSessionDataForProfileWrite(this.user);
     // Same fallback as me(): avoid skipping DB writes when getSession is slow/empty but we already have the auth id.
     const authUserId =
       sessionData?.session?.user?.id ?? this.user?.supabase_id ?? this.user?.id ?? null;
@@ -1973,8 +1991,13 @@ class AuthManager {
       if (profileData[key] === undefined) delete profileData[key];
     });
 
-    try {
-      let { error } = await supabase.from("profiles").upsert({ id: authUserId, ...profileData }, { onConflict: "id" });
+    const upsertProfileRow = async () => {
+      let { error } = await retryOnAbort(
+        () =>
+          supabase.from("profiles").upsert({ id: authUserId, ...profileData }, { onConflict: "id" }),
+        8,
+        450
+      );
 
       const errMsg = error?.message || "";
       const stripBusiness =
@@ -2006,7 +2029,11 @@ class AuthManager {
         Object.keys(fallback).forEach((key) => {
           if (fallback[key] === undefined) delete fallback[key];
         });
-        const retry = await supabase.from("profiles").upsert({ id: authUserId, ...fallback }, { onConflict: "id" });
+        const retry = await retryOnAbort(
+          () => supabase.from("profiles").upsert({ id: authUserId, ...fallback }, { onConflict: "id" }),
+          8,
+          450
+        );
         error = retry.error;
         if (!error) {
           if (stripBusiness) {
@@ -2034,10 +2061,28 @@ class AuthManager {
         alertSupabaseWriteFailure(error, "Save profile failed");
         throw new Error(getSupabaseErrorMessage(error, "Save profile failed"));
       }
+    };
+
+    try {
+      await upsertProfileRow();
     } catch (e) {
-      if (e instanceof Error) throw e;
-      alertSupabaseWriteFailure(e, "Save profile failed");
-      throw new Error(getSupabaseErrorMessage(e, "Save profile failed"));
+      if (isAbortError(e)) {
+        await new Promise((r) => setTimeout(r, 900));
+        try {
+          await upsertProfileRow();
+        } catch (e2) {
+          if (isAbortError(e2)) {
+            console.warn(
+              "Profile sync aborted after retry (auth/network race). Local profile in this browser was updated.",
+              e2
+            );
+            return this.user;
+          }
+          throw e2;
+        }
+      } else {
+        throw e instanceof Error ? e : new Error(getSupabaseErrorMessage(e, "Save profile failed"));
+      }
     }
 
     return this.user;

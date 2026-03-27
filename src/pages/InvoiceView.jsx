@@ -249,7 +249,7 @@ export default function InvoiceView() {
             </a>
           )}
           <a
-            href={createPageUrl(`InvoicePDF?id=${invoice.id}`)}
+            href={`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex-grow sm:flex-grow-0"

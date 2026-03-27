@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
+import { getPublicApiBase } from '@/api/backendClient';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
@@ -23,6 +24,7 @@ export default function InvoicePDF() {
     const navigate = useNavigate();
     const urlParams = new URLSearchParams(location.search);
     const invoiceId = urlParams.get('id');
+    const shareToken = urlParams.get('token');
     const isDraft = urlParams.get('draft') === '1';
     const autoDownload = urlParams.get('download') === 'true';
     const [invoice, setInvoice] = useState(null);
@@ -57,10 +59,17 @@ export default function InvoicePDF() {
             }
             return;
         }
+        if (shareToken) {
+            loadInvoiceByShareToken(shareToken);
+            return;
+        }
         if (invoiceId) {
             loadInvoiceData();
+            return;
         }
-    }, [invoiceId, isDraft]);
+        setIsLoading(false);
+        setLoadError('Invalid PDF link. Use your invoice link or open Download from the app.');
+    }, [invoiceId, shareToken, isDraft]);
 
     const printRef = useRef(null);
 
@@ -87,6 +96,51 @@ export default function InvoicePDF() {
             clearTimeout(timer);
         };
     }, [autoDownload, isLoading, invoice]);
+
+    /** Public /view/:token and email links: no login; same API as InvoiceView. */
+    const loadInvoiceByShareToken = async (token) => {
+        setLoadError(null);
+        setIsLoading(true);
+        try {
+            const apiBase = getPublicApiBase();
+            const res = await fetch(`${apiBase}/api/public-invoice?token=${encodeURIComponent(token)}`);
+            if (res.status === 404) {
+                setLoadError('Invoice not found or link has expired.');
+                return;
+            }
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                setLoadError(j?.error || 'Could not load the invoice.');
+                return;
+            }
+            const payload = await res.json();
+            const currentInvoice = payload.invoice;
+            if (!currentInvoice) {
+                setLoadError('Invoice not found or link has expired.');
+                return;
+            }
+            setInvoice({
+                ...currentInvoice,
+                ...mapInvoiceDataForTemplate(currentInvoice),
+            });
+            if (payload.client) {
+                setClient(payload.client);
+            } else {
+                setClient(
+                    currentInvoice.client_name
+                        ? { name: currentInvoice.client_name, email: currentInvoice.client_email || '', address: '', phone: '' }
+                        : { name: 'Client', email: '', address: '', phone: '' }
+                );
+            }
+            setUser(null);
+            setBankingDetail(payload.bankingDetail || null);
+        } catch (error) {
+            console.error('Error loading public invoice for PDF:', error);
+            setLoadError(error?.message || 'Failed to load invoice. Please check the link and try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const loadInvoiceData = async () => {
         setLoadError(null);
@@ -171,7 +225,13 @@ export default function InvoicePDF() {
                     {loadError.includes('timed out') ? 'The request took too long. This can happen when the server is busy or your connection is slow.' : loadError}
                 </p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => loadInvoiceData()} className="rounded-lg">Try again</Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => (shareToken ? loadInvoiceByShareToken(shareToken) : loadInvoiceData())}
+                        className="rounded-lg"
+                    >
+                        Try again
+                    </Button>
                     <Button variant="ghost" onClick={() => navigate(-1)} className="rounded-lg">Back</Button>
                 </div>
             </div>
