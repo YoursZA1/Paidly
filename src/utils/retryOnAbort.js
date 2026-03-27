@@ -25,3 +25,28 @@ export async function retryOnAbort(fn, retries = 1, delayMs = 300) {
     throw err;
   }
 }
+
+/** Browser fetch() failures to Supabase/REST (offline, flaky mobile, ad blockers). */
+export const isTransientFetchFailure = (err) => {
+  const m = String(err?.message ?? err ?? "");
+  return /failed to fetch|networkerror|load failed|network request failed|net::err|could not reach supabase/i.test(m);
+};
+
+/**
+ * Retry when the thrown error looks like a transient network failure (e.g. Supabase "Failed to fetch").
+ * @param {() => Promise<T>} fn
+ * @param {number} retries - Extra attempts after the first try
+ * @param {number} delayMs
+ * @returns {Promise<T>}
+ */
+export async function retryOnTransientFetch(fn, retries = 2, delayMs = 400) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries > 0 && isTransientFetchFailure(err)) {
+      await new Promise((r) => setTimeout(r, delayMs));
+      return retryOnTransientFetch(fn, retries - 1, delayMs * 1.25);
+    }
+    throw err;
+  }
+}

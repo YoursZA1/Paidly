@@ -18,7 +18,16 @@ export function getSupabaseErrorMessage(error, fallback = "Something went wrong"
     error?.error_description ??
     (typeof error?.toString === "function" ? error.toString() : null);
   const msg = typeof raw === "string" ? raw.trim() : "";
-  if (msg && msg !== "[object Object]") return msg;
+  if (msg && msg !== "[object Object]") {
+    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg) || /load failed/i.test(msg)) {
+      return (
+        "Could not reach Supabase (network). Check your connection, VPN or ad blockers, and that " +
+        "VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in Vercel for Production, then redeploy. " +
+        "If the project was paused, resume it in the Supabase dashboard."
+      );
+    }
+    return msg;
+  }
   return fallback;
 }
 

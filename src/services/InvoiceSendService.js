@@ -5,7 +5,7 @@
 
 import { Invoice, DocumentSend, MessageLog, User } from '@/api/entities';
 import { createPageUrl } from '@/utils';
-import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
+import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 
 /**
@@ -61,15 +61,17 @@ export const createTrackableInvoiceLink = async (invoice, channel, recipient) =>
   }
   const token = crypto.randomUUID();
   const sentAt = new Date().toISOString();
-  await MessageLog.create({
-    document_type: 'invoice',
-    document_id: invoice.id,
-    client_id: invoice.client_id || null,
-    channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
-    recipient: recipient || null,
-    sent_at: sentAt,
-    tracking_token: token,
-  });
+  await retryOnTransientFetch(() =>
+    MessageLog.create({
+      document_type: 'invoice',
+      document_id: invoice.id,
+      client_id: invoice.client_id || null,
+      channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+      recipient: recipient || null,
+      sent_at: sentAt,
+      tracking_token: token,
+    })
+  );
   const origin = getTrackableBaseUrl();
   const url = `${origin}/view/${shareToken}?token=${token}`;
   return { url, trackingToken: token };
@@ -85,15 +87,17 @@ export const createTrackableQuoteLink = async (quote, channel, recipient) => {
   }
   const token = crypto.randomUUID();
   const sentAt = new Date().toISOString();
-  await MessageLog.create({
-    document_type: 'quote',
-    document_id: quote.id,
-    client_id: quote.client_id || null,
-    channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
-    recipient: recipient || null,
-    sent_at: sentAt,
-    tracking_token: token,
-  });
+  await retryOnTransientFetch(() =>
+    MessageLog.create({
+      document_type: 'quote',
+      document_id: quote.id,
+      client_id: quote.client_id || null,
+      channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+      recipient: recipient || null,
+      sent_at: sentAt,
+      tracking_token: token,
+    })
+  );
   const origin = getTrackableBaseUrl();
   const basePath = createPageUrl('PublicQuote');
   const url = `${origin}${basePath}?token=${encodeURIComponent(shareToken)}&tracking=${encodeURIComponent(token)}`;
