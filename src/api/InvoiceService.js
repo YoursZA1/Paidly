@@ -105,7 +105,11 @@ class InvoiceService {
     try {
       const baseUrl = window.location.origin;
       const publicViewUrl = trackableViewUrl || `${baseUrl}/view/${invoiceData.public_share_token || ''}` || `${baseUrl}/PublicInvoice?id=${invoiceData.id}`;
-      const pdfUrl = `${baseUrl}/InvoicePDF?id=${invoiceData.id}`;
+      const shareTok = invoiceData.public_share_token;
+      // Guests have no login: must use token, not ?id= (RLS). Matches public InvoicePDF loader.
+      const pdfUrl = shareTok
+        ? `${baseUrl}/InvoicePDF?token=${encodeURIComponent(shareTok)}&download=true`
+        : `${baseUrl}/InvoicePDF?id=${invoiceData.id}&download=true`;
 
       const emailSubject = `Invoice #${invoiceNumber} from ${companyName}`;
 

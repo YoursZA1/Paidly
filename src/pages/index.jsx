@@ -113,6 +113,8 @@ const AUTH_ROUTES = [
     { path: "/AcceptInvite", element: <AcceptInvite /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },
     { path: "/view/:token", element: <InvoiceView /> },
+    /** Guest-safe PDF + download; uses ?token= (public API) or ?id= when logged in */
+    { path: "/InvoicePDF", element: <InvoicePDF /> },
     { path: "/PublicQuote", element: <PublicQuote /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
     { path: "/ClientPortal", element: <ClientPortal /> },
@@ -168,7 +170,6 @@ const INVOICE_ROUTES = [
     { path: "/viewdocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
     { path: "/ViewInvoice", element: <RequireAuth><ViewInvoice /></RequireAuth> },
     { path: "/EditInvoice", element: <RequireAuth><EditInvoice /></RequireAuth> },
-    { path: "/InvoicePDF", element: <RequireAuth><InvoicePDF /></RequireAuth> },
     { path: "/RecurringInvoices", element: <RequireAuth><RecurringInvoices /></RequireAuth> },
     { path: "/CreateRecurringInvoice", element: <RequireAuth><CreateRecurringInvoice /></RequireAuth> },
 ];

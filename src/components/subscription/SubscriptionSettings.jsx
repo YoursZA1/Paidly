@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
+import { getBillingPortalUrl } from "@/utils";
 
-const BILLING_PORTAL_URL = import.meta.env.VITE_STRIPE_BILLING_PORTAL || "https://paidly.com";
 const CONTACT_SALES_EMAIL = "support@paidly.co.za";
 
 const TIERS = [
@@ -94,7 +94,8 @@ export default function SubscriptionSettings() {
     const currentTier = TIERS.find((t) => t.id === currentPlanId) || TIERS[0];
 
     const handleManageBilling = () => {
-        window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer");
+        const url = getBillingPortalUrl();
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
     };
 
     const handleContactSales = () => {

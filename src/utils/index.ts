@@ -63,6 +63,26 @@ export function getOAuthRedirectOrigin(): string {
     return window.location.origin;
 }
 
+/**
+ * Settings → Subscription → "Manage Billing & Invoices".
+ * Use `VITE_STRIPE_BILLING_PORTAL` for an external portal (e.g. Stripe Customer Portal URL).
+ * Otherwise same origin as the deployed app (`VITE_APP_URL` or `window.location.origin`), not a hardcoded marketing domain.
+ */
+export function getBillingPortalUrl(): string {
+    const portal = (import.meta.env.VITE_STRIPE_BILLING_PORTAL || '').toString().trim();
+    if (portal) return portal;
+    const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
+    if (appUrl) {
+        try {
+            return new URL(appUrl).origin;
+        } catch {
+            // ignore
+        }
+    }
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return '';
+}
+
 /** True when we should send the user to the app domain after login/signup (e.g. signed in on www → go to app). */
 export function shouldRedirectToAppAfterAuth(): boolean {
     const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
