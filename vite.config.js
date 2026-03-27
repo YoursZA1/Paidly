@@ -46,21 +46,27 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('@supabase/supabase-js')) return 'supabase';
-              if (id.includes('recharts')) return 'recharts';
-              if (id.includes('framer-motion')) return 'framer-motion';
-              if (id.includes('lucide-react')) return 'lucide';
-              if (id.includes('xlsx')) return 'xlsx';
-              // Keep html2pdf/jspdf/html2canvas in `vendor` — a separate `pdf` chunk caused
-              // "Circular chunk: pdf -> vendor -> pdf" and runtime TDZ errors ("Cannot access … before initialization").
-              if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('html2pdf')) return 'vendor';
+            if (!id.includes('node_modules')) return;
+            // PDF stack must stay in `vendor` (not a dedicated `pdf` chunk): a separate pdf chunk
+            // caused "Circular chunk: pdf -> vendor -> pdf" and TDZ runtime errors.
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('html2pdf')) {
               return 'vendor';
             }
+            if (id.includes('@supabase/supabase-js')) return 'supabase';
+            if (id.includes('recharts')) return 'recharts';
+            if (id.includes('framer-motion')) return 'framer-motion';
+            if (id.includes('lucide-react')) return 'lucide';
+            if (id.includes('xlsx')) return 'xlsx';
+            // Safe leaf splits (used widely but rarely pull pdf stack); avoids vendor↔react/radix cycles.
+            if (id.includes('date-fns')) return 'date-fns';
+            if (id.includes('/axios/') || id.includes('node_modules/axios')) return 'axios';
+            return 'vendor';
           },
         },
       },
-      chunkSizeWarningLimit: 2000,
+      // Main `vendor` includes html2pdf/jspdf/html2canvas (~760kb min) — splitting them out caused
+      // Rollup circular chunks + TDZ; splitting React/Radix caused vendor↔chunk cycles too.
+      chunkSizeWarningLimit: 2800,
     },
   };
 });
