@@ -3,10 +3,16 @@ import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
+import { supabase } from '@/lib/supabaseClient';
 
 class PaymentReminderService {
     static async checkAndSendReminders() {
         try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) {
+                return;
+            }
+
             const user = await User.me();
             const settings = user.reminder_settings;
 
@@ -56,6 +62,10 @@ class PaymentReminderService {
                 }
             }
         } catch (error) {
+            const msg = error?.message || String(error);
+            if (msg === 'Not authenticated' || /not authenticated/i.test(msg)) {
+                return;
+            }
             console.error('Error checking payment reminders:', error);
         }
     }

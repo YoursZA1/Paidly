@@ -65,8 +65,9 @@ export default function QuotePDF() {
                 }
             } catch (e) {
                 console.error('Failed to load draft quote:', e);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
             return;
         }
         if (quoteId) {
@@ -108,8 +109,9 @@ export default function QuotePDF() {
             setUser(userData);
         } catch (error) {
             console.error('Error loading data:', error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const clientResolved = useMemo(

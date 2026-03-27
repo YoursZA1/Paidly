@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import PropTypes from 'prop-types';
 import {
   Select,
@@ -27,7 +27,10 @@ export default function CurrencySelector({
   label = 'Currency',
   className = '',
   disabled = false,
+  id: idProp,
 }) {
+  const reactId = useId();
+  const controlId = idProp ?? `currency-select-${reactId}`;
   const [selectedCurrency, setSelectedCurrency] = useState(value);
   const [currencies, setCurrencies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -78,10 +81,14 @@ export default function CurrencySelector({
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
-      {label && <label className="text-sm font-medium text-gray-700">{label}</label>}
-      
+      {label ? (
+        <label htmlFor={controlId} className="text-sm font-medium text-gray-700">
+          {label}
+        </label>
+      ) : null}
+
       <Select value={selectedCurrency} onValueChange={handleCurrencyChange} disabled={disabled || loading}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger id={controlId} className="w-full">
           <SelectValue placeholder="Select currency" />
         </SelectTrigger>
         <SelectContent>
@@ -118,4 +125,5 @@ CurrencySelector.propTypes = {
   label: PropTypes.string,
   className: PropTypes.string,
   disabled: PropTypes.bool,
+  id: PropTypes.string,
 };

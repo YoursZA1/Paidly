@@ -11,6 +11,7 @@ import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { normalizeInventoryRows } from "@/utils/inventoryNormalization";
+import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
 
 import StatsCard from "../components/inventory/StatsCard";
 import ProductTable from "../components/inventory/ProductTable";
@@ -353,7 +354,7 @@ export default function Inventory() {
           reference_id: null,
           created_at: new Date().toISOString(),
         });
-        if (movErr) throw movErr;
+        if (!checkSupabaseWriteResult({ error: movErr }, "Record stock movement (receive)")) return;
 
         toast({
           title: "✓ Stock Received",
@@ -363,6 +364,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: receive failed", e);
+        alertSupabaseWriteFailure(e, "Receive stock");
         toast({
           title: "✗ Receive Failed",
           description: getReadableSaleError(e),
@@ -442,7 +444,7 @@ export default function Inventory() {
           reference_id: null,
           created_at: new Date().toISOString(),
         });
-        if (insErr) throw insErr;
+        if (!checkSupabaseWriteResult({ error: insErr }, "Record stock movement (sale)")) return;
 
         toast({
           title: "✓ Sale Recorded",
@@ -453,6 +455,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: sell failed", e);
+        alertSupabaseWriteFailure(e, "Record sale");
         toast({
           title: "✗ Sale Failed",
           description: getReadableSaleError(e),
@@ -590,7 +593,7 @@ export default function Inventory() {
           });
         } else {
           const { error } = await supabase.from("services").insert(payload);
-          if (error) throw error;
+          if (!checkSupabaseWriteResult({ error }, "Add inventory product")) return;
           toast({
             title: "✓ Product Added",
             description: `${payload.name} was added to your inventory.`,
@@ -602,6 +605,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: save product failed", e);
+        alertSupabaseWriteFailure(e, "Save inventory product");
         toast({
           title: "✗ Save Failed",
           description: getReadableSaveError(e),
@@ -625,6 +629,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: delete product failed", e);
+        alertSupabaseWriteFailure(e, "Delete inventory product");
         toast({
           title: "✗ Delete Failed",
           description: "Failed to delete product. Please try again.",
@@ -654,7 +659,11 @@ export default function Inventory() {
         }
 
         // Best-effort: ensure the product satisfies trigger semantics.
-        await supabase.from("services").update({ type: "product" }).eq("id", delivery.product_id);
+        const { error: typeErr } = await supabase
+          .from("services")
+          .update({ type: "product" })
+          .eq("id", delivery.product_id);
+        if (!checkSupabaseWriteResult({ error: typeErr }, "Update product type for delivery")) return;
 
         if (!alreadyMarkedDelivered) {
           const { error: updDelErr } = await supabase
@@ -698,6 +707,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: mark delivered failed", e);
+        alertSupabaseWriteFailure(e, "Mark delivery received");
         toast({
           title: "✗ Update Failed",
           description: "Failed to mark delivery as received. Please try again.",
@@ -789,6 +799,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: save delivery failed", e);
+        alertSupabaseWriteFailure(e, "Save delivery");
         toast({
           title: "✗ Delivery Save Failed",
           description: getReadableDeliveryError(e),
@@ -803,7 +814,8 @@ export default function Inventory() {
     async (delivery) => {
       if (!window.confirm("Delete this delivery?")) return;
       try {
-        await supabase.from("deliveries").delete().eq("id", delivery.id);
+        const { error: delErr } = await supabase.from("deliveries").delete().eq("id", delivery.id);
+        if (delErr) throw delErr;
         toast({
           title: "✓ Delivery Deleted",
           description: "Delivery was deleted successfully.",
@@ -812,6 +824,7 @@ export default function Inventory() {
         await refetchAll();
       } catch (e) {
         console.error("Inventory: delete delivery failed", e);
+        alertSupabaseWriteFailure(e, "Delete delivery");
         toast({
           title: "✗ Delete Failed",
           description: "Failed to delete delivery. Please try again.",

@@ -201,8 +201,9 @@ export default function QuotesPage() {
         } catch (error) {
             console.error("Import quotes error:", error);
             toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        } finally {
+            setIsImporting(false);
         }
-        setIsImporting(false);
     };
 
     return (

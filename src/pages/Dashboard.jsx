@@ -1636,8 +1636,9 @@ export default function Dashboard() {
           <div className="glass-card rounded-fintech p-6 mb-6 border border-border">
             <h2 className="text-lg font-semibold mb-2 text-foreground">Admin Roles Management</h2>
             <div className="mb-4">
-              <label className="font-semibold text-foreground mr-2">Select Admin Role:</label>
+              <label htmlFor="dashboard-admin-role" className="font-semibold text-foreground mr-2">Select Admin Role:</label>
               <select
+                id="dashboard-admin-role"
                 value={selectedRole}
                 onChange={e => setSelectedRole(e.target.value)}
                 className="border rounded px-2 py-1"

@@ -659,8 +659,12 @@ export default function AdminAccounts() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3">
-                  <Search size={20} className="text-slate-500" />
+                  <Search size={20} className="text-slate-500 shrink-0" aria-hidden />
+                  <label htmlFor="admin-accounts-search" className="sr-only">
+                    Search by account name or email
+                  </label>
                   <input
+                    id="admin-accounts-search"
                     type="text"
                     placeholder="Search by account name or email..."
                     value={searchQuery}
@@ -671,8 +675,9 @@ export default function AdminAccounts() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Plan</label>
+                    <label htmlFor="admin-accounts-filter-plan" className="block text-sm font-medium text-slate-700 mb-2">Plan</label>
                     <select
+                      id="admin-accounts-filter-plan"
                       value={filterPlan}
                       onChange={(e) => setFilterPlan(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2"
@@ -686,8 +691,9 @@ export default function AdminAccounts() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Health Status</label>
+                    <label htmlFor="admin-accounts-filter-health" className="block text-sm font-medium text-slate-700 mb-2">Health Status</label>
                     <select
+                      id="admin-accounts-filter-health"
                       value={filterHealth}
                       onChange={(e) => setFilterHealth(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2"

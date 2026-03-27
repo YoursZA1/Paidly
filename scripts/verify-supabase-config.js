@@ -14,33 +14,53 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..');
 
-// Load .env file (try .env.development first for dev, then .env)
+function parseEnvContent(envContent) {
+  const env = {};
+  envContent.split('\n').forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key && valueParts.length > 0) {
+        env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+      }
+    }
+  });
+  return env;
+}
+
+/** Vite loads .env*, later files override. Merge the same way so local overrides work. */
 function loadEnv() {
-  const envFiles = ['.env.development', '.env'];
+  const envFiles = ['.env.development.local', '.env.local', '.env.development', '.env'];
+  const merged = {};
+  const loaded = [];
   for (const envFile of envFiles) {
     try {
       const envPath = join(projectRoot, envFile);
       const envContent = readFileSync(envPath, 'utf-8');
-      const env = {};
-      envContent.split('\n').forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('#')) {
-          const [key, ...valueParts] = trimmed.split('=');
-          if (key && valueParts.length > 0) {
-            env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
-          }
-        }
-      });
-      if (env.VITE_SUPABASE_URL || env.VITE_SUPABASE_ANON_KEY) {
-        console.log(`   Loaded from ${envFile}\n`);
-        return env;
-      }
+      Object.assign(merged, parseEnvContent(envContent));
+      loaded.push(envFile);
     } catch {
-      // file not found or unreadable, try next
+      // missing or unreadable
     }
   }
-  console.error('❌ No .env.development or .env found with Supabase variables');
-  return null;
+  if (loaded.length) {
+    console.log(`   Loaded: ${loaded.join(', ')}\n`);
+  }
+  if (merged.NEXT_PUBLIC_SUPABASE_URL && !merged.VITE_SUPABASE_URL) {
+    console.warn(
+      '⚠️  NEXT_PUBLIC_SUPABASE_URL is set but this app is Vite — use VITE_SUPABASE_URL (NEXT_PUBLIC_* is not exposed to the client).\n'
+    );
+  }
+  if (merged.NEXT_PUBLIC_SUPABASE_ANON_KEY && !merged.VITE_SUPABASE_ANON_KEY) {
+    console.warn(
+      '⚠️  NEXT_PUBLIC_SUPABASE_ANON_KEY is set but this app is Vite — use VITE_SUPABASE_ANON_KEY.\n'
+    );
+  }
+  if (!merged.VITE_SUPABASE_URL && !merged.VITE_SUPABASE_ANON_KEY) {
+    console.error('❌ No VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in .env* files');
+    return null;
+  }
+  return merged;
 }
 
 async function verifySupabaseConfig() {
@@ -48,7 +68,7 @@ async function verifySupabaseConfig() {
   
   const env = loadEnv();
   if (!env) {
-    console.error('❌ Could not load .env.development or .env with Supabase variables');
+    console.error('❌ Could not load .env* with VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY');
     process.exit(1);
   }
   

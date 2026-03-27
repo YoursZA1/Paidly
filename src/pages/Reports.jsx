@@ -61,8 +61,9 @@ export default function Reports() {
         description: error?.message || 'Please check your connection and try again.',
         variant: 'destructive',
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const openReport = (params) => {

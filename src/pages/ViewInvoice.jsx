@@ -24,6 +24,8 @@ import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
+import { useToast } from '@/components/ui/use-toast';
+import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
 async function fetchPaymentsForInvoice(invoiceId) {
     if (!invoiceId) return [];
@@ -62,6 +64,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
     const invoiceId = invoiceIdProp ?? new URLSearchParams(location.search).get('id');
     const mountedRef = useRef(true);
     const loadIdRef = useRef(0);
+    const { toast } = useToast();
 
     useEffect(() => {
         mountedRef.current = true;
@@ -151,7 +154,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
             }
             const { createTrackableInvoiceLink, recordDocumentSend } = await import('@/services/InvoiceSendService');
             const { url: trackableViewUrl } = await createTrackableInvoiceLink(inv, 'email', client.email);
-            const result = await InvoiceService.sendInvoiceEmail(
+            await InvoiceService.sendInvoiceEmail(
                 inv,
                 client.email,
                 client.name,
@@ -166,11 +169,19 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                 setInvoice(prev => ({...prev, status: 'sent'}));
             }
             recordDocumentSend('invoice', inv.id, client?.id, 'email');
-            alert(result.message);
+            toast({
+                title: "Invoice sent to email successfully!",
+                description: documentSendSuccessDescription({
+                    mode: 'invoice',
+                    recipientEmail: client.email?.trim() || '',
+                }),
+                variant: 'success',
+                duration: 6500,
+            });
         } catch (error) {
             console.error("Failed to send email:", error);
             const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || 'Failed to send email. Please try again.');
-            alert(message);
+            toast({ title: 'Failed to send email', description: message, variant: 'destructive' });
         } finally {
             setIsSending(false);
         }

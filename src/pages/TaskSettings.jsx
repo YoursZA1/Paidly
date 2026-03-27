@@ -43,8 +43,9 @@ export default function TaskSettingsPage() {
             setClients(clientsData || []);
         } catch (error) {
             console.error('Error loading data:', error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSave = async () => {

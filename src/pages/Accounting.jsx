@@ -15,8 +15,9 @@ export default function Accounting() {
         setUser(currentUser);
       } catch (error) {
         console.error("Error fetching user:", error);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     fetchUser();
   }, []);

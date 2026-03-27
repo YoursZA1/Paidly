@@ -40,9 +40,10 @@ export default function PayslipsPage() {
         } catch (error) {
             console.error("Error loading data:", error);
             toast({ title: "Could not load payslips", description: error?.message, variant: "destructive" });
+        } finally {
+            setIsRefreshing(false);
+            setIsLoading(false);
         }
-        setIsRefreshing(false);
-        setIsLoading(false);
     };
 
     const handleExportCsv = async () => {
@@ -64,8 +65,9 @@ export default function PayslipsPage() {
             toast({ title: "Export complete", description: `${list.length} payslip(s) exported.`, variant: "default" });
         } catch (error) {
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
         }
-        setIsExporting(false);
     };
 
     const handleImportCsv = (e) => {
@@ -93,9 +95,10 @@ export default function PayslipsPage() {
                 loadData();
             } catch (err) {
                 toast({ title: "Import failed", description: err?.message || "Could not parse CSV.", variant: "destructive" });
+            } finally {
+                setIsImporting(false);
+                if (payslipFileInputRef.current) payslipFileInputRef.current.value = "";
             }
-            setIsImporting(false);
-            if (payslipFileInputRef.current) payslipFileInputRef.current.value = "";
         };
         reader.readAsText(file, "UTF-8");
     };

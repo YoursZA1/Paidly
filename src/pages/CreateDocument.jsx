@@ -26,6 +26,9 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
+/** Sentinel so Radix Select stays controlled (empty client_id must not use `undefined` → avoids uncontrolled/controlled warning). */
+const CLIENT_SELECT_NONE = "__paidly_no_client__";
+
 function normalizeDocType(raw) {
   const t = String(raw || "").toLowerCase();
   if (t === "quote" || t === "quotes") return "quote";
@@ -876,11 +879,21 @@ export default function CreateDocument() {
                 {clients.length > 0 && (
                   <div className="space-y-2">
                     <Label>Select existing client</Label>
-                    <Select value={form.client_id || undefined} onValueChange={selectClient}>
+                    <Select
+                      value={form.client_id ? form.client_id : CLIENT_SELECT_NONE}
+                      onValueChange={(v) => {
+                        if (v === CLIENT_SELECT_NONE) {
+                          setForm((f) => ({ ...f, client_id: "" }));
+                          return;
+                        }
+                        selectClient(v);
+                      }}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder={loadingClients ? "Loading…" : "Choose a client…"} />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={CLIENT_SELECT_NONE}>Choose a client…</SelectItem>
                         {clients.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.name}
@@ -958,7 +971,10 @@ export default function CreateDocument() {
                 </div>
                 <div className="space-y-2">
                   <Label>Currency</Label>
-                  <Select value={form.currency} onValueChange={(v) => update("currency", v)}>
+                  <Select
+                    value={CURRENCIES.includes(form.currency) ? form.currency : "ZAR"}
+                    onValueChange={(v) => update("currency", v)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

@@ -70,8 +70,8 @@ export default function AdminTransactions() {
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs mb-1">Status</label>
-            <select className="border rounded px-2 py-1" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+            <label htmlFor="tx-filter-status" className="block text-xs mb-1">Status</label>
+            <select id="tx-filter-status" className="border rounded px-2 py-1" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
               <option value="all">All</option>
               <option value="Success">Success</option>
               <option value="Failed">Failed</option>
@@ -79,32 +79,32 @@ export default function AdminTransactions() {
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Business</label>
-            <select className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
+            <label htmlFor="tx-filter-business" className="block text-xs mb-1">Business</label>
+            <select id="tx-filter-business" className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
               {businesses.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Customer</label>
-            <select className="border rounded px-2 py-1" value={filters.customer} onChange={e => setFilters(f => ({ ...f, customer: e.target.value }))}>
+            <label htmlFor="tx-filter-customer" className="block text-xs mb-1">Customer</label>
+            <select id="tx-filter-customer" className="border rounded px-2 py-1" value={filters.customer} onChange={e => setFilters(f => ({ ...f, customer: e.target.value }))}>
               {customers.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Min Amount</label>
-            <Input type="number" value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))} className="w-24" />
+            <label htmlFor="tx-filter-min" className="block text-xs mb-1">Min Amount</label>
+            <Input id="tx-filter-min" type="number" value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))} className="w-24" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Max Amount</label>
-            <Input type="number" value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))} className="w-24" />
+            <label htmlFor="tx-filter-max" className="block text-xs mb-1">Max Amount</label>
+            <Input id="tx-filter-max" type="number" value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))} className="w-24" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Start Date</label>
-            <Input type="date" value={filters.startDate} onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} className="w-36" />
+            <label htmlFor="tx-filter-start" className="block text-xs mb-1">Start Date</label>
+            <Input id="tx-filter-start" type="date" value={filters.startDate} onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} className="w-36" />
           </div>
           <div>
-            <label className="block text-xs mb-1">End Date</label>
-            <Input type="date" value={filters.endDate} onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} className="w-36" />
+            <label htmlFor="tx-filter-end" className="block text-xs mb-1">End Date</label>
+            <Input id="tx-filter-end" type="date" value={filters.endDate} onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} className="w-36" />
           </div>
           <Button variant="outline" onClick={() => setFilters({ status: 'all', business: 'all', customer: 'all', minAmount: '', maxAmount: '', startDate: '', endDate: '' })}>Reset</Button>
         </div>

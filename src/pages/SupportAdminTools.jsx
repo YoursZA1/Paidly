@@ -1380,8 +1380,8 @@ function WebhookFailuresTab({ currentUser, toast }) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Resolution</Label>
+            <fieldset className="space-y-2 border-0 p-0 m-0 min-w-0">
+              <legend className="text-sm font-medium leading-none mb-2">Resolution</legend>
               <div className="flex gap-2">
                 <Button
                   variant={filterResolved === "unresolved" ? "default" : "outline"}
@@ -1405,7 +1405,7 @@ function WebhookFailuresTab({ currentUser, toast }) {
                   All
                 </Button>
               </div>
-            </div>
+            </fieldset>
           </div>
         </CardContent>
       </Card>

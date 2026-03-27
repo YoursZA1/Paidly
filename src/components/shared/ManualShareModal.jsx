@@ -86,9 +86,10 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                 <div className="space-y-6 py-4">
                     {/* Copy Link Section */}
                     <div className="space-y-2">
-                        <Label>Public Link</Label>
+                        <Label htmlFor="manual-share-public-url">Public Link</Label>
                         <div className="flex gap-2">
                             <Input 
+                                id="manual-share-public-url"
                                 value={shareUrl} 
                                 readOnly 
                                 className="flex-1 font-mono text-sm"

@@ -38,8 +38,9 @@ export default function EditPayslip() {
         } catch (error) {
             console.error("Error loading payslip:", error);
             navigate(createPageUrl("Payslips"));
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const addAllowance = () => {

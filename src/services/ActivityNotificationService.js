@@ -5,7 +5,7 @@
  */
 
 import { supabase } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
 
 export async function createActivityNotification(userId, message) {
   try {
@@ -16,11 +16,13 @@ export async function createActivityNotification(userId, message) {
     });
     if (error) {
       console.warn("ActivityNotification: create failed", getSupabaseErrorMessage(error, "Create notification failed"));
+      alertSupabaseWriteFailure(error, "Create notification");
       return false;
     }
     return true;
   } catch (err) {
     console.warn("ActivityNotification: create failed", getSupabaseErrorMessage(err, "Create notification failed"));
+    alertSupabaseWriteFailure(err, "Create notification");
     return false;
   }
 }
@@ -45,11 +47,13 @@ export async function markNotificationRead(notificationId) {
       .eq("id", notificationId);
     if (error) {
       console.warn("ActivityNotification: mark read failed", getSupabaseErrorMessage(error, "Update failed"));
+      alertSupabaseWriteFailure(error, "Update notification");
       return false;
     }
     return true;
   } catch (err) {
     console.warn("ActivityNotification: mark read failed", getSupabaseErrorMessage(err, "Update failed"));
+    alertSupabaseWriteFailure(err, "Update notification");
     return false;
   }
 }
@@ -66,10 +70,12 @@ export async function markAllNotificationsReadForCurrentUser() {
       .eq("read", false);
     if (error) {
       console.warn("ActivityNotification: mark all read failed", getSupabaseErrorMessage(error, "Update failed"));
+      alertSupabaseWriteFailure(error, "Mark all notifications read");
       return false;
     }
     return true;
-  } catch {
+  } catch (err) {
+    alertSupabaseWriteFailure(err, "Mark all notifications read");
     return false;
   }
 }

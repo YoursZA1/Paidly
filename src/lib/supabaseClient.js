@@ -6,7 +6,11 @@
  * call createClient() elsewhere in the app.
  *
  * - Initialize with project URL and anon (public) key only. Never use the service_role key in the frontend.
- * - Credentials: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY.
+ * - **Vite (this app):** set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env`, `.env.local`, or Vercel.
+ *   They must match **Project URL** and **anon public** (JWT `eyJ…`) in Supabase → Settings → API.
+ *   Wrong URL/key pairs cause auth to hang or fail with no obvious UI error.
+ * - **Not Next.js:** `NEXT_PUBLIC_SUPABASE_*` is **not** exposed to the client unless you add a Vite `envPrefix`
+ *   — use `VITE_*` only. Run `node scripts/verify-supabase-config.js` to validate `.env`.
  * - RLS restricts data per user/role. See docs/SUPABASE_INTEGRATION_CHECKLIST.md.
  * - If env vars are missing, the app still loads and shows a setup message instead of a blank screen.
  */

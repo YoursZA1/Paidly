@@ -325,7 +325,6 @@ function CompanyProfileSettings() {
                             description: "You must be signed in to update profile. Please sign in and try again.",
                             variant: "destructive"
                         });
-                        setIsSaving(false);
                         return;
                     }
                     const publicUrl = await uploadLogo(logoFile, userId);
@@ -337,7 +336,6 @@ function CompanyProfileSettings() {
                         description: `Failed to upload logo: ${uploadError.message || 'Unknown error'}`,
                         variant: "destructive"
                     });
-                    setIsSaving(false);
                     return;
                 }
             }
@@ -390,8 +388,9 @@ function CompanyProfileSettings() {
                 description: `Failed to save settings: ${error.message || 'Please try again.'}`,
                 variant: "destructive"
             });
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     };
     
     if (isLoading) {
@@ -601,8 +600,10 @@ function CompanyProfileSettings() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-sm font-medium text-foreground">Default Currency</Label>
+                        <Label htmlFor="settings-default-currency" className="text-sm font-medium text-foreground">Default Currency</Label>
                         <CurrencySelector
+                            id="settings-default-currency"
+                            label=""
                             value={formData.currency}
                             onChange={(v) => handleInputChange("currency", v)}
                             className="h-11 rounded-lg"
@@ -888,8 +889,9 @@ function PaymentMethodsSettings() {
             setBankingDetails(detailsData || []);
         } catch (error) {
             console.error("Error loading banking details:", error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSaveDetail = async (detailData) => {
@@ -1024,8 +1026,9 @@ function PaymentMethodsSettings() {
             toast({ title: "Import complete", description: `${created} imported${skipped ? `, ${skipped} skipped.` : "."}`, variant: "default" });
         } catch (error) {
             toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        } finally {
+            setIsImporting(false);
         }
-        setIsImporting(false);
     };
 
     const maskAccount = (num) => (num && num.length >= 4 ? `****${num.slice(-4)}` : "****");

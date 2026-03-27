@@ -410,10 +410,12 @@ function RestrictedSettingsView({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
+              id="restricted-settings-search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search plans, currencies, tax, numbering, or features..."
               className="pl-10"
+              aria-label="Search restricted settings"
             />
           </div>
         </div>
@@ -525,24 +527,27 @@ function RestrictedSettingsView({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Tax Name</Label>
+                  <Label htmlFor="ps-tax-name">Tax Name</Label>
                   <Input
+                    id="ps-tax-name"
                     value={defaultsDraft.taxName || ''}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxName: e.target.value })}
                     placeholder="VAT"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tax Rate (%)</Label>
+                  <Label htmlFor="ps-tax-rate">Tax Rate (%)</Label>
                   <Input
+                    id="ps-tax-rate"
                     type="number"
                     value={defaultsDraft.taxRate ?? ''}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxRate: Number(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tax Number</Label>
+                  <Label htmlFor="ps-tax-number">Tax Number</Label>
                   <Input
+                    id="ps-tax-number"
                     value={defaultsDraft.taxNumber || ''}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, taxNumber: e.target.value })}
                     placeholder="123456789"
@@ -550,20 +555,22 @@ function RestrictedSettingsView({
                 </div>
                 <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
                   <div>
-                    <Label>Tax Enabled</Label>
+                    <Label htmlFor="ps-tax-enabled">Tax Enabled</Label>
                     <p className="text-xs text-slate-500">Apply tax by default</p>
                   </div>
                   <Switch
+                    id="ps-tax-enabled"
                     checked={Boolean(defaultsDraft.taxEnabled)}
                     onCheckedChange={(checked) => setDefaultsDraft({ ...defaultsDraft, taxEnabled: checked })}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
                   <div>
-                    <Label>Tax Inclusive</Label>
+                    <Label htmlFor="ps-tax-inclusive">Tax Inclusive</Label>
                     <p className="text-xs text-slate-500">Prices include tax</p>
                   </div>
                   <Switch
+                    id="ps-tax-inclusive"
                     checked={Boolean(defaultsDraft.taxInclusive)}
                     onCheckedChange={(checked) => setDefaultsDraft({ ...defaultsDraft, taxInclusive: checked })}
                   />
@@ -588,46 +595,52 @@ function RestrictedSettingsView({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Default Currency</Label>
+                  <Label htmlFor="ps-default-currency">Default Currency</Label>
                   <Input
+                    id="ps-default-currency"
                     value={defaultsDraft.currency || ''}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, currency: e.target.value.toUpperCase() })}
                     placeholder="ZAR"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Currency Symbol</Label>
+                  <Label htmlFor="ps-currency-symbol">Currency Symbol</Label>
                   <Input
+                    id="ps-currency-symbol"
                     value={defaultsDraft.currencySymbol || ''}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, currencySymbol: e.target.value })}
                     placeholder="R"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Decimal Places</Label>
+                  <Label htmlFor="ps-decimal-places">Decimal Places</Label>
                   <Input
+                    id="ps-decimal-places"
                     type="number"
                     value={defaultsDraft.decimalPlaces ?? 2}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, decimalPlaces: Number(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Thousands Separator</Label>
+                  <Label htmlFor="ps-thousands-separator">Thousands Separator</Label>
                   <Input
+                    id="ps-thousands-separator"
                     value={defaultsDraft.thousandsSeparator || ','}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, thousandsSeparator: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Decimal Separator</Label>
+                  <Label htmlFor="ps-decimal-separator">Decimal Separator</Label>
                   <Input
+                    id="ps-decimal-separator"
                     value={defaultsDraft.decimalSeparator || '.'}
                     onChange={(e) => setDefaultsDraft({ ...defaultsDraft, decimalSeparator: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Supported Currencies</Label>
+                  <Label htmlFor="ps-supported-currencies">Supported Currencies</Label>
                   <Input
+                    id="ps-supported-currencies"
                     value={supportedCurrencies}
                     onChange={(e) => setSupportedCurrencies(e.target.value)}
                     placeholder="ZAR, USD, EUR"
@@ -921,12 +934,13 @@ function SystemSettingsTab({ settings, onSave, saving }) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">Maintenance Mode</Label>
+                <Label htmlFor="system-maintenance-mode" className="text-base">Maintenance Mode</Label>
                 <p className="text-sm text-muted-foreground">
                   Disable access to the platform for non-admin users
                 </p>
               </div>
               <Switch
+                id="system-maintenance-mode"
                 checked={formData.maintenanceMode || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, maintenanceMode: checked })}
               />
@@ -947,12 +961,13 @@ function SystemSettingsTab({ settings, onSave, saving }) {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">Allow User Registration</Label>
+                <Label htmlFor="system-allow-registration" className="text-base">Allow User Registration</Label>
                 <p className="text-sm text-muted-foreground">
                   Allow new users to sign up
                 </p>
               </div>
               <Switch
+                id="system-allow-registration"
                 checked={formData.allowUserRegistration || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, allowUserRegistration: checked })}
               />
@@ -960,12 +975,13 @@ function SystemSettingsTab({ settings, onSave, saving }) {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">Require Email Verification</Label>
+                <Label htmlFor="system-require-email-verify" className="text-base">Require Email Verification</Label>
                 <p className="text-sm text-muted-foreground">
                   Users must verify their email before accessing the platform
                 </p>
               </div>
               <Switch
+                id="system-require-email-verify"
                 checked={formData.requireEmailVerification || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, requireEmailVerification: checked })}
               />
@@ -1026,9 +1042,9 @@ function EmailTemplatesTab({ templates, onSave, saving }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Select Template</Label>
+          <Label htmlFor="email-template-select">Select Template</Label>
           <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-            <SelectTrigger>
+            <SelectTrigger id="email-template-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1122,9 +1138,9 @@ function DocumentNumberingTab({ numbering, onSave, saving }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Document Type</Label>
+          <Label htmlFor="document-numbering-doc-type">Document Type</Label>
           <Select value={selectedDoc} onValueChange={setSelectedDoc}>
-            <SelectTrigger>
+            <SelectTrigger id="document-numbering-doc-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1204,7 +1220,7 @@ function DocumentNumberingTab({ numbering, onSave, saving }) {
                 [selectedDoc]: { ...currentDoc, format: value }
               })}
             >
-              <SelectTrigger>
+              <SelectTrigger id="format">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1224,7 +1240,7 @@ function DocumentNumberingTab({ numbering, onSave, saving }) {
                 [selectedDoc]: { ...currentDoc, resetPeriod: value }
               })}
             >
-              <SelectTrigger>
+              <SelectTrigger id="resetPeriod">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1239,12 +1255,13 @@ function DocumentNumberingTab({ numbering, onSave, saving }) {
 
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-base">Include Client Initials</Label>
+            <Label htmlFor="include-client-initials" className="text-base">Include Client Initials</Label>
             <p className="text-sm text-muted-foreground">
               Add client initials to document number
             </p>
           </div>
           <Switch
+            id="include-client-initials"
             checked={currentDoc.includeClientInitials || false}
             onCheckedChange={(checked) => setFormData({
               ...formData,
@@ -1305,7 +1322,7 @@ function DefaultSettingsTab({ defaults, onSave, saving }) {
               <div className="space-y-2">
                 <Label htmlFor="currency">Default Currency</Label>
                 <Select value={formData.currency} onValueChange={(value) => setFormData({ ...formData, currency: value })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="currency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1334,7 +1351,7 @@ function DefaultSettingsTab({ defaults, onSave, saving }) {
                   value={formData.currencyPosition} 
                   onValueChange={(value) => setFormData({ ...formData, currencyPosition: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="currencyPosition">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1387,12 +1404,13 @@ function DefaultSettingsTab({ defaults, onSave, saving }) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Enable Tax</Label>
+                  <Label htmlFor="default-enable-tax" className="text-base">Enable Tax</Label>
                   <p className="text-sm text-muted-foreground">
                     Apply tax to invoices by default
                   </p>
                 </div>
                 <Switch
+                  id="default-enable-tax"
                   checked={formData.taxEnabled || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, taxEnabled: checked })}
                 />
@@ -1540,11 +1558,12 @@ function FeaturesTab({ features, onSave, saving }) {
           {Object.entries(formData.beta || {}).map(([key, enabled]) => (
             <div key={key} className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">{key.replace(/([A-Z])/g, ' $1').trim()}</Label>
+                <Label htmlFor={`feature-beta-${key}`} className="text-base">{key.replace(/([A-Z])/g, ' $1').trim()}</Label>
               </div>
               <div className="flex items-center gap-2">
                 {enabled && <Badge variant="secondary" className="text-xs">Beta</Badge>}
                 <Switch
+                  id={`feature-beta-${key}`}
                   checked={enabled}
                   onCheckedChange={(checked) => handleToggle('beta', key, checked)}
                 />
@@ -1568,9 +1587,10 @@ function FeaturesTab({ features, onSave, saving }) {
           {Object.entries(formData.enabled || {}).map(([key, enabled]) => (
             <div key={key} className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">{key.replace(/([A-Z])/g, ' $1').trim()}</Label>
+                <Label htmlFor={`feature-enabled-${key}`} className="text-base">{key.replace(/([A-Z])/g, ' $1').trim()}</Label>
               </div>
               <Switch
+                id={`feature-enabled-${key}`}
                 checked={enabled}
                 onCheckedChange={(checked) => handleToggle('enabled', key, checked)}
               />
@@ -1630,32 +1650,36 @@ function SecurityTab({ security, onSave, saving }) {
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Require Uppercase Letters</Label>
+                <Label htmlFor="sec-pwd-upper">Require Uppercase Letters</Label>
                 <Switch
+                  id="sec-pwd-upper"
                   checked={formData.passwordRequireUppercase || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, passwordRequireUppercase: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Require Lowercase Letters</Label>
+                <Label htmlFor="sec-pwd-lower">Require Lowercase Letters</Label>
                 <Switch
+                  id="sec-pwd-lower"
                   checked={formData.passwordRequireLowercase || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, passwordRequireLowercase: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Require Numbers</Label>
+                <Label htmlFor="sec-pwd-numbers">Require Numbers</Label>
                 <Switch
+                  id="sec-pwd-numbers"
                   checked={formData.passwordRequireNumbers || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, passwordRequireNumbers: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Require Special Characters</Label>
+                <Label htmlFor="sec-pwd-special">Require Special Characters</Label>
                 <Switch
+                  id="sec-pwd-special"
                   checked={formData.passwordRequireSpecialChars || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, passwordRequireSpecialChars: checked })}
                 />
@@ -1682,10 +1706,11 @@ function SecurityTab({ security, onSave, saving }) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Two-Factor Authentication</Label>
+                  <Label htmlFor="sec-two-factor" className="text-base">Two-Factor Authentication</Label>
                   <p className="text-sm text-muted-foreground">Enable 2FA for all users</p>
                 </div>
                 <Switch
+                  id="sec-two-factor"
                   checked={formData.twoFactorEnabled || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, twoFactorEnabled: checked })}
                 />
@@ -1693,10 +1718,11 @@ function SecurityTab({ security, onSave, saving }) {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Secure Sessions</Label>
+                  <Label htmlFor="sec-secure-sessions" className="text-base">Secure Sessions</Label>
                   <p className="text-sm text-muted-foreground">Use secure session tokens</p>
                 </div>
                 <Switch
+                  id="sec-secure-sessions"
                   checked={formData.sessionSecure || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, sessionSecure: checked })}
                 />
@@ -1704,10 +1730,11 @@ function SecurityTab({ security, onSave, saving }) {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-base">CSRF Protection</Label>
+                  <Label htmlFor="sec-csrf" className="text-base">CSRF Protection</Label>
                   <p className="text-sm text-muted-foreground">Cross-site request forgery protection</p>
                 </div>
                 <Switch
+                  id="sec-csrf"
                   checked={formData.csrfProtection || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, csrfProtection: checked })}
                 />
@@ -1754,24 +1781,27 @@ function NotificationsTab({ notifications, onSave, saving }) {
         <form onSubmit={(e) => { e.preventDefault(); onSave(formData); }} className="space-y-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label>Email Notifications</Label>
+              <Label htmlFor="notif-email">Email Notifications</Label>
               <Switch
+                id="notif-email"
                 checked={formData.emailNotificationsEnabled || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, emailNotificationsEnabled: checked })}
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <Label>Push Notifications</Label>
+              <Label htmlFor="notif-push">Push Notifications</Label>
               <Switch
+                id="notif-push"
                 checked={formData.pushNotificationsEnabled || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, pushNotificationsEnabled: checked })}
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <Label>SMS Notifications</Label>
+              <Label htmlFor="notif-sms">SMS Notifications</Label>
               <Switch
+                id="notif-sms"
                 checked={formData.smsNotificationsEnabled || false}
                 onCheckedChange={(checked) => setFormData({ ...formData, smsNotificationsEnabled: checked })}
               />
@@ -1784,40 +1814,45 @@ function NotificationsTab({ notifications, onSave, saving }) {
             <h3 className="font-semibold mb-3">Event Notifications</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label>New Invoice Created</Label>
+                <Label htmlFor="notif-new-invoice">New Invoice Created</Label>
                 <Switch
+                  id="notif-new-invoice"
                   checked={formData.notifyOnNewInvoice || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, notifyOnNewInvoice: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Payment Received</Label>
+                <Label htmlFor="notif-payment">Payment Received</Label>
                 <Switch
+                  id="notif-payment"
                   checked={formData.notifyOnPaymentReceived || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, notifyOnPaymentReceived: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Invoice Overdue</Label>
+                <Label htmlFor="notif-overdue">Invoice Overdue</Label>
                 <Switch
+                  id="notif-overdue"
                   checked={formData.notifyOnOverdueInvoice || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, notifyOnOverdueInvoice: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>New User Registration</Label>
+                <Label htmlFor="notif-new-user">New User Registration</Label>
                 <Switch
+                  id="notif-new-user"
                   checked={formData.notifyOnNewUser || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, notifyOnNewUser: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>User Login (Admin only)</Label>
+                <Label htmlFor="notif-user-login">User Login (Admin only)</Label>
                 <Switch
+                  id="notif-user-login"
                   checked={formData.notifyOnUserLogin || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, notifyOnUserLogin: checked })}
                 />
@@ -1831,24 +1866,27 @@ function NotificationsTab({ notifications, onSave, saving }) {
             <h3 className="font-semibold mb-3">Scheduled Reports</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label>Daily Report</Label>
+                <Label htmlFor="notif-report-daily">Daily Report</Label>
                 <Switch
+                  id="notif-report-daily"
                   checked={formData.dailyReportEnabled || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, dailyReportEnabled: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Weekly Report</Label>
+                <Label htmlFor="notif-report-weekly">Weekly Report</Label>
                 <Switch
+                  id="notif-report-weekly"
                   checked={formData.weeklyReportEnabled || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, weeklyReportEnabled: checked })}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Label>Monthly Report</Label>
+                <Label htmlFor="notif-report-monthly">Monthly Report</Label>
                 <Switch
+                  id="notif-report-monthly"
                   checked={formData.monthlyReportEnabled || false}
                   onCheckedChange={(checked) => setFormData({ ...formData, monthlyReportEnabled: checked })}
                 />
@@ -1909,9 +1947,9 @@ function IntegrationsTab({ integrations, onSave, saving }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Select Integration</Label>
+          <Label htmlFor="integration-select">Select Integration</Label>
           <Select value={selectedIntegration} onValueChange={setSelectedIntegration}>
-            <SelectTrigger>
+            <SelectTrigger id="integration-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1929,12 +1967,13 @@ function IntegrationsTab({ integrations, onSave, saving }) {
 
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-base">Enable Integration</Label>
+            <Label htmlFor="integration-enabled" className="text-base">Enable Integration</Label>
             <p className="text-sm text-muted-foreground">
               Activate {integrationsList.find(i => i.value === selectedIntegration)?.label}
             </p>
           </div>
           <Switch
+            id="integration-enabled"
             checked={currentIntegration.enabled || false}
             onCheckedChange={(checked) => setFormData({
               ...formData,
@@ -1947,9 +1986,9 @@ function IntegrationsTab({ integrations, onSave, saving }) {
           <div className="space-y-4 pt-2">
             {Object.keys(currentIntegration).filter(key => key !== 'enabled').map(key => (
               <div key={key} className="space-y-2">
-                <Label htmlFor={key}>{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Label>
+                <Label htmlFor={`integration-${selectedIntegration}-${key}`}>{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Label>
                 <Input
-                  id={key}
+                  id={`integration-${selectedIntegration}-${key}`}
                   type="password"
                   value={currentIntegration[key] || ''}
                   onChange={(e) => setFormData({
@@ -2017,6 +2056,7 @@ function BrandingTab({ branding, onSave, saving }) {
                   value={formData.primaryColor || '#3b82f6'}
                   onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })}
                   placeholder="#3b82f6"
+                  aria-label="Primary color hex value"
                 />
               </div>
             </div>
@@ -2035,6 +2075,7 @@ function BrandingTab({ branding, onSave, saving }) {
                   value={formData.secondaryColor || '#1e293b'}
                   onChange={(e) => setFormData({ ...formData, secondaryColor: e.target.value })}
                   placeholder="#1e293b"
+                  aria-label="Secondary color hex value"
                 />
               </div>
             </div>
@@ -2053,6 +2094,7 @@ function BrandingTab({ branding, onSave, saving }) {
                   value={formData.accentColor || '#10b981'}
                   onChange={(e) => setFormData({ ...formData, accentColor: e.target.value })}
                   placeholder="#10b981"
+                  aria-label="Accent color hex value"
                 />
               </div>
             </div>

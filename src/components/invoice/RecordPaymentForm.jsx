@@ -110,7 +110,7 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
       </button>
 
       <div className="bg-muted/50 p-4 rounded-2xl border border-border">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        <label htmlFor="record-payment-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Amount Received
         </label>
         <div className="flex items-center gap-2 mt-1">

@@ -48,6 +48,33 @@ export function throwIfSupabaseError(result, context = "Operation failed") {
 }
 
 /**
+ * User-visible feedback for failed Supabase writes (insert/update/delete/upsert).
+ * Call when `error` is set or after catching a thrown Error from PostgREST.
+ * @param {unknown} error - PostgREST error object or Error
+ * @param {string} [context='Save failed'] - Shown if the error has no message
+ */
+export function alertSupabaseWriteFailure(error, context = "Save failed") {
+  if (error == null) return;
+  const msg = getSupabaseErrorMessage(error, context);
+  console.error(`[Supabase write] ${context}:`, error);
+  if (typeof window !== "undefined" && typeof window.alert === "function") {
+    window.alert(msg);
+  }
+}
+
+/**
+ * After `const { data, error } = await supabase.from(...).insert|update|...`
+ * @param {{ error?: unknown | null }} result
+ * @param {string} context
+ * @returns {boolean} true if ok (no error)
+ */
+export function checkSupabaseWriteResult(result, context = "Operation failed") {
+  if (!result?.error) return true;
+  alertSupabaseWriteFailure(result.error, context);
+  return false;
+}
+
+/**
  * Wrap an async function so any thrown error is re-thrown with a normalized message.
  * Useful when you want consistent user-facing messages without changing every catch block.
  * @param {() => Promise<T>} fn - Async function to run

@@ -168,7 +168,7 @@ function InvoicePreview({
         return;
       }
       toast({
-        title: "Invoice sent successfully",
+        title: "Invoice sent to email successfully!",
         description: documentSendSuccessDescription({
           mode: "invoice",
           recipientEmail: clientEmail,

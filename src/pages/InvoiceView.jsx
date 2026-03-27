@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Invoice, Client, BankingDetail } from '@/api/entities';
+import { Invoice } from '@/api/entities';
 import { getPublicApiBase } from '@/api/backendClient';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
@@ -37,47 +37,48 @@ export default function InvoiceView() {
       try {
         if (!token) {
           setError('Invalid invoice link. No token provided.');
-          setIsLoading(false);
           return;
         }
 
-        const invoices = await Invoice.filter({ public_share_token: token });
-        if (invoices.length === 0) {
+        const apiBase = getPublicApiBase();
+        const res = await fetch(
+          `${apiBase}/api/public-invoice?token=${encodeURIComponent(token)}`
+        );
+        if (res.status === 404) {
           setError('Invoice not found or link has expired.');
-          setIsLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j?.error || 'Could not load the invoice. Please check the link and try again.');
           return;
         }
 
-        const currentInvoice = invoices[0];
+        const payload = await res.json();
+        const currentInvoice = payload.invoice;
+        if (!currentInvoice) {
+          setError('Invoice not found or link has expired.');
+          return;
+        }
 
         if (currentInvoice.sent_to_email) {
           const verifiedEmail = sessionStorage.getItem(`invoice_${currentInvoice.id}_verified_email`);
           if (verifiedEmail !== currentInvoice.sent_to_email) {
             setNeedsEmailVerification(true);
             setInvoice(currentInvoice);
-            setIsLoading(false);
             return;
           }
         }
 
         setInvoice(currentInvoice);
 
-        try {
-          const clientData = await Client.get(currentInvoice.client_id);
-          setClient(clientData);
-        } catch (e) {
-          console.error('Could not load client data:', e);
+        if (payload.client) {
+          setClient(payload.client);
+        } else {
           setClient({ name: 'Client', email: '', address: '', phone: '' });
         }
 
-        if (currentInvoice.banking_detail_id) {
-          try {
-            const bankingData = await BankingDetail.get(currentInvoice.banking_detail_id);
-            setBankingDetail(bankingData);
-          } catch (e) {
-            console.error('Could not load banking details:', e);
-          }
-        }
+        setBankingDetail(payload.bankingDetail || null);
 
         const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
         if (autoUpdate) {
@@ -89,11 +90,9 @@ export default function InvoiceView() {
           }
         }
 
-        // Track when client opens the invoice: ?token=... or ?tracking=... → POST /api/track-open
         const tokenParam = searchParams.get('token') || searchParams.get('tracking');
         if (tokenParam && !trackingTokenRecorded.current) {
           trackingTokenRecorded.current = true;
-          const apiBase = getPublicApiBase();
           fetch(`${apiBase}/api/track-open`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -109,7 +108,7 @@ export default function InvoiceView() {
     };
 
     fetchInvoiceData();
-  }, [token]);
+  }, [token, searchParams]);
 
   const handleEmailVerification = async () => {
     if (!emailVerification.trim()) {

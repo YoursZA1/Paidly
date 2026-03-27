@@ -50,7 +50,6 @@ export default function PublicPayslip() {
 
             if (!token) {
                 setError("Invalid payslip link. No token provided.");
-                setIsLoading(false);
                 return;
             }
 
@@ -58,7 +57,6 @@ export default function PublicPayslip() {
             
             if (payslips.length === 0) {
                 setError("Payslip not found or link has expired.");
-                setIsLoading(false);
                 return;
             }
             
@@ -70,7 +68,6 @@ export default function PublicPayslip() {
                 if (verifiedEmail !== currentPayslip.sent_to_email) {
                     setNeedsEmailVerification(true);
                     setPayslip(currentPayslip);
-                    setIsLoading(false);
                     return;
                 }
             }

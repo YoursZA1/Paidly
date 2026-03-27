@@ -35,8 +35,9 @@ export default function BudgetsPage() {
             setInvoices(invoicesData);
         } catch (error) {
             console.error("Error loading budget data:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     const calculateSpending = (category, period, type) => {

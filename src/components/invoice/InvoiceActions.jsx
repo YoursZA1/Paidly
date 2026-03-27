@@ -332,7 +332,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
 
             setShowEmailPreview(false);
             toast({
-                title: "Invoice sent successfully",
+                title: "Invoice sent to email successfully!",
                 description: documentSendSuccessDescription({
                     mode: 'invoice',
                     recipientEmail: client.email?.trim() || '',

@@ -21,6 +21,7 @@ export default function CurrencyInput({
   name = 'amount',
 }) {
   const currencySymbol = getCurrencySymbol(currency);
+  const inputId = id || 'currency-amount';
 
   const handleChange = (e) => {
     const inputValue = e.target.value;
@@ -42,7 +43,7 @@ export default function CurrencyInput({
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
       {label && (
-        <label className="text-sm font-medium text-gray-700">
+        <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -54,7 +55,7 @@ export default function CurrencyInput({
         </span>
 
         <input
-          id={id || 'currency-amount'}
+          id={inputId}
           name={name}
           type="number"
           value={value}

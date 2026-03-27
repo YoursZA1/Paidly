@@ -22,7 +22,10 @@ export default function ClientMessages({ client, invoices }) {
     }, [messages]);
 
     const loadMessages = async () => {
-        if (!client?.id) return;
+        if (!client?.id) {
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         try {
             const allMessages = await breakApi.backend.ClientPortal.getMessages({ 
@@ -44,8 +47,9 @@ export default function ClientMessages({ client, invoices }) {
             }
         } catch (error) {
             console.error('Error loading messages:', error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSendMessage = async () => {
@@ -63,8 +67,9 @@ export default function ClientMessages({ client, invoices }) {
             loadMessages();
         } catch (error) {
             console.error('Error sending message:', error);
+        } finally {
+            setIsSending(false);
         }
-        setIsSending(false);
     };
 
     if (isLoading) {

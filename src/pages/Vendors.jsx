@@ -32,8 +32,9 @@ export default function VendorsPage() {
             setVendors(data);
         } catch (error) {
             console.error("Error loading vendors:", error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSave = async (e) => {

@@ -134,14 +134,12 @@ export default function Signup() {
 
       if (existingUser) {
         setError("An account with this email already exists");
-        setIsLoading(false);
         return;
       }
 
       const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
       if (storedUsers.some((user) => user.email === normalizedEmail)) {
         setError("An account with this email already exists");
-        setIsLoading(false);
         return;
       }
 
@@ -165,7 +163,6 @@ export default function Signup() {
         if (!authUserId) {
           recordSignupAttempt(normalizedEmail);
           setError("Signup could not be completed. Please try again or contact support.");
-          setIsLoading(false);
           return;
         }
         clearSignupAttempts(normalizedEmail);
@@ -178,7 +175,6 @@ export default function Signup() {
             ? "Signup failed due to database setup. If you're the administrator, open your Supabase project → SQL Editor, run the script in scripts/fix-signup-trigger.sql (or apply supabase/schema.postgres.sql), then try again."
             : msg
         );
-        setIsLoading(false);
         return;
       }
 

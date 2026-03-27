@@ -167,8 +167,9 @@ export default function RecurringInvoices() {
         } catch (error) {
             console.error('Import recurring invoices error:', error);
             toast({ title: 'Import failed', description: error?.message || 'Could not parse CSV.', variant: 'destructive' });
+        } finally {
+            setIsImporting(false);
         }
-        setIsImporting(false);
     };
 
     return (

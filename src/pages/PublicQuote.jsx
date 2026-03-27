@@ -159,7 +159,6 @@ export default function PublicQuote() {
                 quoteData = matches[0] || null;
             }
             if (!quoteData) {
-                setIsLoading(false);
                 return;
             }
 

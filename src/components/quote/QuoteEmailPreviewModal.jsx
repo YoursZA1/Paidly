@@ -74,8 +74,9 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
             setCompany(companyData);
         } catch (error) {
             console.error("Error loading data:", error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     if (isLoading) {

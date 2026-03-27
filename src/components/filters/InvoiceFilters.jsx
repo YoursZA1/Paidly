@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -133,9 +134,9 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-xl border border-border">
                     {/* Status Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Status</label>
+                        <Label htmlFor="invoice-filter-status" className="text-xs font-medium text-slate-600">Status</Label>
                         <Select value={filters.status} onValueChange={(v) => updateFilter('status', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="invoice-filter-status" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -148,9 +149,9 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
 
                     {/* Amount Range Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Amount Range</label>
+                        <Label htmlFor="invoice-filter-amount" className="text-xs font-medium text-slate-600">Amount Range</Label>
                         <Select value={filters.amountRange} onValueChange={(v) => updateFilter('amountRange', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="invoice-filter-amount" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -163,9 +164,9 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
 
                     {/* Client Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Client</label>
+                        <Label htmlFor="invoice-filter-client" className="text-xs font-medium text-slate-600">Client</Label>
                         <Select value={filters.clientId} onValueChange={(v) => updateFilter('clientId', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="invoice-filter-client" className="h-9">
                                 <SelectValue placeholder="All Clients" />
                             </SelectTrigger>
                             <SelectContent>
@@ -178,12 +179,12 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                     </div>
 
                     {/* Date Range */}
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Date Range</label>
+                    <fieldset className="space-y-1 border-0 p-0 m-0 min-w-0">
+                        <legend className="text-xs font-medium text-slate-600">Date Range</legend>
                         <div className="flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal">
+                                    <Button type="button" variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal" aria-label="Filter from date">
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {filters.dateFrom ? format(new Date(filters.dateFrom), 'MMM d') : 'From'}
                                     </Button>
@@ -198,7 +199,7 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                             </Popover>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal">
+                                    <Button type="button" variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal" aria-label="Filter to date">
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {filters.dateTo ? format(new Date(filters.dateTo), 'MMM d') : 'To'}
                                     </Button>
@@ -212,7 +213,7 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                                 </PopoverContent>
                             </Popover>
                         </div>
-                    </div>
+                    </fieldset>
                 </div>
             )}
         </div>

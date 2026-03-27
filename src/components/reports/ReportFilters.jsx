@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -51,9 +52,9 @@ export default function ReportFilters({
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Time Period</label>
+                            <Label htmlFor="report-filter-time-range" className="text-sm font-medium text-slate-700 mb-2 block">Time Period</Label>
                             <Select value={timeRange} onValueChange={onTimeRangeChange}>
-                                <SelectTrigger className="w-full bg-white border-slate-200">
+                                <SelectTrigger id="report-filter-time-range" className="w-full bg-white border-slate-200">
                                     <SelectValue placeholder="Select time range" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -69,12 +70,15 @@ export default function ReportFilters({
                         {timeRange === 'custom' && (
                             <>
                                 <div>
-                                    <label className="text-sm font-medium text-slate-700 mb-2 block">From Date</label>
+                                    <Label htmlFor="report-custom-from-trigger" className="text-sm font-medium text-slate-700 mb-2 block">From Date</Label>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <Button 
+                                                id="report-custom-from-trigger"
+                                                type="button"
                                                 variant="outline" 
                                                 className="w-full justify-start text-left font-normal"
+                                                aria-label="Report custom range from date"
                                             >
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {customDateRange?.from ? format(customDateRange.from, 'PPP') : 'Pick a date'}
@@ -91,12 +95,15 @@ export default function ReportFilters({
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-slate-700 mb-2 block">To Date</label>
+                                    <Label htmlFor="report-custom-to-trigger" className="text-sm font-medium text-slate-700 mb-2 block">To Date</Label>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <Button 
+                                                id="report-custom-to-trigger"
+                                                type="button"
                                                 variant="outline" 
                                                 className="w-full justify-start text-left font-normal"
+                                                aria-label="Report custom range to date"
                                             >
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {customDateRange?.to ? format(customDateRange.to, 'PPP') : 'Pick a date'}
@@ -116,9 +123,9 @@ export default function ReportFilters({
                         )}
 
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Filter by Customer</label>
+                            <Label htmlFor="report-filter-customer" className="text-sm font-medium text-slate-700 mb-2 block">Filter by Customer</Label>
                             <Select value={selectedClient || 'all'} onValueChange={(value) => onClientChange(value === 'all' ? null : value)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200">
+                                <SelectTrigger id="report-filter-customer" className="w-full bg-white border-slate-200">
                                     <SelectValue placeholder="All Customers" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -133,9 +140,9 @@ export default function ReportFilters({
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Invoice Status</label>
+                            <Label htmlFor="report-filter-invoice-status" className="text-sm font-medium text-slate-700 mb-2 block">Invoice Status</Label>
                             <Select value={invoiceStatus || 'all'} onValueChange={(value) => onInvoiceStatusChange(value === 'all' ? null : value)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200">
+                                <SelectTrigger id="report-filter-invoice-status" className="w-full bg-white border-slate-200">
                                     <SelectValue placeholder="All Statuses" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -150,9 +157,9 @@ export default function ReportFilters({
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Expense Category</label>
+                            <Label htmlFor="report-filter-expense-category" className="text-sm font-medium text-slate-700 mb-2 block">Expense Category</Label>
                             <Select value={expenseCategory || 'all'} onValueChange={(value) => onExpenseCategoryChange(value === 'all' ? null : value)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200">
+                                <SelectTrigger id="report-filter-expense-category" className="w-full bg-white border-slate-200">
                                     <SelectValue placeholder="All Categories" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -167,9 +174,9 @@ export default function ReportFilters({
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Service Provider / Vendor</label>
+                            <Label htmlFor="report-filter-vendor" className="text-sm font-medium text-slate-700 mb-2 block">Service Provider / Vendor</Label>
                             <Select value={selectedVendor || 'all'} onValueChange={(value) => onVendorChange(value === 'all' ? null : value)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200">
+                                <SelectTrigger id="report-filter-vendor" className="w-full bg-white border-slate-200">
                                     <SelectValue placeholder="All Vendors" />
                                 </SelectTrigger>
                                 <SelectContent>

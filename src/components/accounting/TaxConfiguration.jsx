@@ -60,9 +60,9 @@ export default function TaxConfiguration({ user, onSave }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-semibold">Region</Label>
+            <Label htmlFor="tax-config-region" className="text-sm font-semibold">Region</Label>
             <Select value={region} onValueChange={setRegion}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="tax-config-region" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -85,8 +85,9 @@ export default function TaxConfiguration({ user, onSave }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-semibold">Default Rate (%)</Label>
+            <Label htmlFor="tax-config-default-rate" className="text-sm font-semibold">Default Rate (%)</Label>
             <Input
+              id="tax-config-default-rate"
               type="number"
               min="0"
               max="100"
@@ -143,16 +144,18 @@ export default function TaxConfiguration({ user, onSave }) {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Profile Name</Label>
+                    <Label htmlFor="tax-profile-new-name">Profile Name</Label>
                     <Input
+                      id="tax-profile-new-name"
                       value={newProfile.name}
                       onChange={(e) => setNewProfile({ ...newProfile, name: e.target.value })}
                       placeholder="e.g., Exempted Services"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Tax Rate (%)</Label>
+                    <Label htmlFor="tax-profile-new-rate">Tax Rate (%)</Label>
                     <Input
+                      id="tax-profile-new-rate"
                       type="number"
                       min="0"
                       max="100"
@@ -163,9 +166,9 @@ export default function TaxConfiguration({ user, onSave }) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Type</Label>
+                    <Label htmlFor="tax-profile-new-type">Type</Label>
                     <Select value={newProfile.type} onValueChange={(value) => setNewProfile({ ...newProfile, type: value })}>
-                      <SelectTrigger>
+                      <SelectTrigger id="tax-profile-new-type">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -178,8 +181,9 @@ export default function TaxConfiguration({ user, onSave }) {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Description (Optional)</Label>
+                    <Label htmlFor="tax-profile-new-description">Description (Optional)</Label>
                     <Input
+                      id="tax-profile-new-description"
                       value={newProfile.description}
                       onChange={(e) => setNewProfile({ ...newProfile, description: e.target.value })}
                       placeholder="e.g., For digital services"

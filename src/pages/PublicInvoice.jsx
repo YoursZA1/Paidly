@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Invoice, Client, BankingDetail } from '@/api/entities';
+import { Invoice } from '@/api/entities';
 import { createPageUrl } from '@/utils';
+import { getPublicApiBase } from '@/api/backendClient';
 import { formatCurrency } from '../components/CurrencySelector';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
@@ -37,52 +38,48 @@ export default function PublicInvoice() {
 
                 if (!token) {
                     setError("Invalid invoice link. No token provided.");
-                    setIsLoading(false);
                     return;
                 }
 
-                // Filter invoices by the public share token
-                const invoices = await Invoice.filter({ public_share_token: token });
-                
-                if (invoices.length === 0) {
+                const apiBase = getPublicApiBase();
+                const res = await fetch(
+                    `${apiBase}/api/public-invoice?token=${encodeURIComponent(token)}`
+                );
+                if (res.status === 404) {
                     setError("Invoice not found or link has expired.");
-                    setIsLoading(false);
                     return;
                 }
-                
-                const currentInvoice = invoices[0];
-                
-                // Check if email verification is required
+                if (!res.ok) {
+                    const j = await res.json().catch(() => ({}));
+                    setError(j?.error || "Could not load the invoice. Please check the link and try again.");
+                    return;
+                }
+
+                const payload = await res.json();
+                const currentInvoice = payload.invoice;
+                if (!currentInvoice) {
+                    setError("Invoice not found or link has expired.");
+                    return;
+                }
+
                 if (currentInvoice.sent_to_email) {
                     const verifiedEmail = sessionStorage.getItem(`invoice_${currentInvoice.id}_verified_email`);
                     if (verifiedEmail !== currentInvoice.sent_to_email) {
                         setNeedsEmailVerification(true);
-                        setInvoice(currentInvoice); // Set invoice so we have access to sent_to_email for verification
-                        setIsLoading(false); // Stop loading to show verification UI
+                        setInvoice(currentInvoice);
                         return;
                     }
                 }
-                
+
                 setInvoice(currentInvoice);
 
-                // Fetch related data
-                try {
-                    const clientData = await Client.get(currentInvoice.client_id);
-                    setClient(clientData);
-                } catch (e) {
-                    console.error("Could not load client data:", e);
+                if (payload.client) {
+                    setClient(payload.client);
+                } else {
                     setClient({ name: "Client", email: "", address: "", phone: "" });
                 }
 
-                // Fetch banking details if available
-                if (currentInvoice.banking_detail_id) {
-                    try {
-                        const bankingData = await BankingDetail.get(currentInvoice.banking_detail_id);
-                        setBankingDetail(bankingData);
-                    } catch (e) {
-                        console.error("Could not load banking details:", e);
-                    }
-                }
+                setBankingDetail(payload.bankingDetail || null);
                 
                 const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
                 if (autoUpdate) {

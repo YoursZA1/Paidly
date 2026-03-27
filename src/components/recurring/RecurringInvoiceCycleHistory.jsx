@@ -77,8 +77,9 @@ const RecurringInvoiceCycleHistory = ({ recurringInvoiceId }) => {
       });
     } catch (error) {
       console.error('Error loading cycle history:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const getStatusBadge = (status) => {

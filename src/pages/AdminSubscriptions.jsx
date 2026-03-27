@@ -14,7 +14,7 @@ import {
   CheckCircle2, Clock, TrendingUp, Zap, RefreshCw, Flag, ArrowUpRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { getSupabaseErrorMessage } from '@/utils/supabaseErrorUtils';
+import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from '@/utils/supabaseErrorUtils';
 import {
   getStatusBadgeColor, getStatusLabel, getPlanBadgeColor,
   getPaymentStatusBadgeColor,
@@ -368,7 +368,10 @@ export default function AdminSubscriptions() {
     }
     try {
       const { error } = await supabase.from('users').update({ health: 'flagged', flag_reason: reason }).eq('id', flagTarget.userId);
-      if (error) throw new Error(getSupabaseErrorMessage(error, 'Failed to flag account'));
+      if (error) {
+        alertSupabaseWriteFailure(error, 'Flag account');
+        throw new Error(getSupabaseErrorMessage(error, 'Failed to flag account'));
+      }
       setIsFlagModalOpen(false);
       setFlagTarget(null);
       setFlagReason('');
@@ -1147,8 +1150,9 @@ export default function AdminSubscriptions() {
                 {upgradeTarget?.userName} · {upgradeTarget?.userEmail}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">New plan</label>
+                <label htmlFor="sub-upgrade-plan" className="text-sm font-medium text-slate-700">New plan</label>
                 <select
+                  id="sub-upgrade-plan"
                   value={upgradePlan}
                   onChange={(e) => setUpgradePlan(e.target.value)}
                   className="w-full bg-slate-100 rounded-lg px-3 py-2 border-none outline-none"
@@ -1187,8 +1191,9 @@ export default function AdminSubscriptions() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
+                <label htmlFor="sub-upgrade-reason" className="text-sm font-medium text-slate-700">Reason (optional)</label>
                 <textarea
+                  id="sub-upgrade-reason"
                   value={upgradeReason}
                   onChange={(e) => setUpgradeReason(e.target.value)}
                   placeholder="Why are you upgrading this account?"
@@ -1227,8 +1232,9 @@ export default function AdminSubscriptions() {
                 {flagTarget?.userName} · {flagTarget?.userEmail}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Reason</label>
+                <label htmlFor="sub-flag-reason" className="text-sm font-medium text-slate-700">Reason</label>
                 <textarea
+                  id="sub-flag-reason"
                   value={flagReason}
                   onChange={(e) => {
                     setFlagReason(e.target.value);

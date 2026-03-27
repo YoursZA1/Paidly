@@ -116,6 +116,7 @@ export default function CreateAccountDialog({ open, onOpenChange, onAccountCreat
       }, 1500);
     } catch (err) {
       setError(err.message || "Failed to create account");
+    } finally {
       setIsLoading(false);
     }
   };

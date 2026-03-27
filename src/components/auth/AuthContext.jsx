@@ -1,11 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { User } from "@/api/entities";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { supabase } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
+import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import Button from "@/components/ui/button";
 
 function getCachedUser() {
@@ -15,6 +16,55 @@ function getCachedUser() {
   } catch {
     return null;
   }
+}
+
+/** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
+function normalizeSessionFromClient(session) {
+  if (!session) return null;
+  return {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresAt: session.expires_at,
+    user: session.user,
+  };
+}
+
+/**
+ * Prefer the typed getSession(); on failure (network, refresh race), fall back to the raw client so we
+ * don't clear the app user and trigger RequireAuth → Login after mutations or token refresh.
+ */
+async function readSessionSafe() {
+  try {
+    const s = await SupabaseAuthService.getSession();
+    if (s?.user) return s;
+  } catch (e) {
+    if (import.meta.env?.DEV) {
+      console.warn("[Auth] SupabaseAuthService.getSession failed; using raw session:", e?.message || e);
+    }
+  }
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data?.session?.user) return null;
+  return normalizeSessionFromClient(data.session);
+}
+
+function minimalUserFromJwtUser(su) {
+  if (!su?.id) return null;
+  const email = (su.email || "").toLowerCase();
+  const fullName = su.user_metadata?.full_name || email.split("@")[0] || "User";
+  return {
+    id: su.id,
+    supabase_id: su.id,
+    auth_id: su.id,
+    email,
+    role: su.app_metadata?.role || "user",
+    full_name: fullName,
+    display_name: fullName,
+    company_name: "",
+    company_address: "",
+    currency: "ZAR",
+    logo_url: "",
+    timezone: "UTC",
+  };
 }
 
 const AuthContext = createContext(null);
@@ -27,25 +77,78 @@ export function AuthProvider({ children }) {
   const [resendSuccess, setResendSuccess] = useState("");
   const [error, setError] = useState("");
   const [session, setSession] = useState(null);
+  const refreshUserDebounceRef = useRef(null);
 
   const refreshUser = useCallback(async () => {
     try {
-      const session = await SupabaseAuthService.getSession();
-      if (session?.user) {
-        // Fetch profile from Supabase as soon as session is confirmed (handles login, refresh, new tab)
-        const currentUser = await User.restoreFromSupabaseSession(session);
-        setUser(currentUser ?? null);
+      let sessionNorm = await readSessionSafe();
+      if (!sessionNorm?.user) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.user) {
+          sessionNorm = normalizeSessionFromClient(data.session);
+        }
+      }
+
+      if (sessionNorm?.user) {
+        const currentUser = await User.restoreFromSupabaseSession(sessionNorm);
+        if (currentUser) {
+          setUser(currentUser);
+        } else {
+          const fb = getCachedUser();
+          const uid = sessionNorm.user.id;
+          if (fb && (fb.id === uid || fb.supabase_id === uid)) {
+            setUser(fb);
+          } else {
+            const min = minimalUserFromJwtUser(sessionNorm.user);
+            if (min) setUser(min);
+          }
+        }
+        setError("");
       } else {
         setUser(null);
+        setError("");
       }
-      setError("");
-    } catch {
-      setUser(null);
+    } catch (e) {
+      console.warn("[Auth] refreshUser:", e?.message || e);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const su = data?.session?.user;
+        if (su) {
+          const fb = getCachedUser();
+          if (fb && (fb.id === su.id || fb.supabase_id === su.id)) {
+            setUser(fb);
+          } else {
+            const min = minimalUserFromJwtUser(su);
+            if (min) setUser(min);
+          }
+        } else {
+          setUser(null);
+        }
+      } catch {
+        const fb = getCachedUser();
+        if (fb) setUser(fb);
+      }
       setError("");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  /** Coalesce TOKEN_REFRESHED + Realtime profile bursts so we don't stack profile restores after writes. */
+  const scheduleRefreshUser = useCallback(() => {
+    if (refreshUserDebounceRef.current) clearTimeout(refreshUserDebounceRef.current);
+    refreshUserDebounceRef.current = setTimeout(() => {
+      refreshUserDebounceRef.current = null;
+      refreshUser();
+    }, 450);
+  }, [refreshUser]);
+
+  useEffect(
+    () => () => {
+      if (refreshUserDebounceRef.current) clearTimeout(refreshUserDebounceRef.current);
+    },
+    []
+  );
 
   const refreshSession = useCallback(async () => {
     try {
@@ -111,6 +214,7 @@ export function AuthProvider({ children }) {
       } else if (event === "SIGNED_OUT") {
         setSession(null);
         setUser(null);
+        redirectToLoginIfProtectedPath();
       } else if (event === "TOKEN_REFRESHED" && nextSession) {
         setSession({
           accessToken: nextSession.access_token,
@@ -118,7 +222,7 @@ export function AuthProvider({ children }) {
           expiresAt: nextSession.expires_at,
           user: nextSession.user,
         });
-        await refreshUser();
+        scheduleRefreshUser();
       } else if (event === "INITIAL_SESSION" && nextSession?.user) {
         setSession({
           accessToken: nextSession.access_token,
@@ -127,17 +231,22 @@ export function AuthProvider({ children }) {
           user: nextSession.user,
         });
         await refreshUser();
+      } else if (!nextSession && event !== "INITIAL_SESSION") {
+        // Session cleared without INITIAL_SESSION (e.g. invalid refresh); keep guest flows on public routes only
+        setSession(null);
+        setUser(null);
+        redirectToLoginIfProtectedPath();
       }
     });
     return () => subscription.unsubscribe();
-  }, [refreshUser]);
+  }, [refreshUser, scheduleRefreshUser]);
 
   // Auto-update profile (and assets like logo) when the profiles row changes (e.g. Settings save, another tab, or admin)
   useSupabaseRealtime(
     user?.id ? ["profiles"] : [],
     useCallback(() => {
-      refreshUser();
-    }, [refreshUser]),
+      scheduleRefreshUser();
+    }, [scheduleRefreshUser]),
     { channelName: "auth-profile-updates" }
   );
 

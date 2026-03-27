@@ -71,24 +71,24 @@ export default function AdminFees() {
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs mb-1">Plan</label>
-            <select className="border rounded px-2 py-1" value={filters.plan} onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}>
+            <label htmlFor="fee-filter-plan" className="block text-xs mb-1">Plan</label>
+            <select id="fee-filter-plan" className="border rounded px-2 py-1" value={filters.plan} onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}>
               {plans.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Business</label>
-            <select className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
+            <label htmlFor="fee-filter-business" className="block text-xs mb-1">Business</label>
+            <select id="fee-filter-business" className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
               {businesses.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Min Total</label>
-            <Input type="number" value={filters.minTotal} onChange={e => setFilters(f => ({ ...f, minTotal: e.target.value }))} className="w-24" />
+            <label htmlFor="fee-filter-min" className="block text-xs mb-1">Min Total</label>
+            <Input id="fee-filter-min" type="number" value={filters.minTotal} onChange={e => setFilters(f => ({ ...f, minTotal: e.target.value }))} className="w-24" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Max Total</label>
-            <Input type="number" value={filters.maxTotal} onChange={e => setFilters(f => ({ ...f, maxTotal: e.target.value }))} className="w-24" />
+            <label htmlFor="fee-filter-max" className="block text-xs mb-1">Max Total</label>
+            <Input id="fee-filter-max" type="number" value={filters.maxTotal} onChange={e => setFilters(f => ({ ...f, maxTotal: e.target.value }))} className="w-24" />
           </div>
           <Button variant="outline" onClick={() => setFilters({ plan: 'all', business: 'all', minTotal: '', maxTotal: '' })}>Reset</Button>
         </div>
@@ -126,22 +126,22 @@ export default function AdminFees() {
         <h2 className="text-lg font-semibold mb-2">Fee Simulation Calculator</h2>
         <div className="flex flex-wrap gap-4 items-end mb-2">
           <div>
-            <label className="block text-xs mb-1">Plan</label>
-            <select className="border rounded px-2 py-1" value={sim.plan} onChange={e => setSim(s => ({ ...s, plan: e.target.value }))}>
+            <label htmlFor="fee-sim-plan" className="block text-xs mb-1">Plan</label>
+            <select id="fee-sim-plan" className="border rounded px-2 py-1" value={sim.plan} onChange={e => setSim(s => ({ ...s, plan: e.target.value }))}>
               <option value="">Select</option>
               {plans.filter(p => p !== 'all').map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Business (optional)</label>
-            <select className="border rounded px-2 py-1" value={sim.business} onChange={e => setSim(s => ({ ...s, business: e.target.value }))}>
+            <label htmlFor="fee-sim-business" className="block text-xs mb-1">Business (optional)</label>
+            <select id="fee-sim-business" className="border rounded px-2 py-1" value={sim.business} onChange={e => setSim(s => ({ ...s, business: e.target.value }))}>
               <option value="">Any</option>
               {businesses.filter(b => b !== 'all').map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Amount</label>
-            <Input type="number" value={sim.amount} onChange={e => setSim(s => ({ ...s, amount: e.target.value }))} className="w-32" />
+            <label htmlFor="fee-sim-amount" className="block text-xs mb-1">Amount</label>
+            <Input id="fee-sim-amount" type="number" value={sim.amount} onChange={e => setSim(s => ({ ...s, amount: e.target.value }))} className="w-32" />
           </div>
           <Button onClick={handleSimulate}>Simulate</Button>
         </div>

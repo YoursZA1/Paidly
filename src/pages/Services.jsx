@@ -259,8 +259,9 @@ export default function Services() {
         } catch (error) {
             console.error("Import services error:", error);
             toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        } finally {
+            setIsImporting(false);
         }
-        setIsImporting(false);
     };
 
     const isServiceType = (itemType) =>

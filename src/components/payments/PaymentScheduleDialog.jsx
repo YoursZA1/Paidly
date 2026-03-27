@@ -170,8 +170,8 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
 
         <div className="space-y-6 py-4">
           {/* Templates */}
-          <div className="space-y-2">
-            <Label>Quick Templates</Label>
+          <fieldset className="space-y-2 border-0 p-0 m-0 min-w-0">
+            <legend className="text-sm font-medium leading-none mb-2">Quick Templates</legend>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <Button 
                 variant="outline" 
@@ -214,12 +214,12 @@ export default function PaymentScheduleDialog({ invoice, isOpen, onClose, onSave
                 Deposit + Balance
               </Button>
             </div>
-          </div>
+          </fieldset>
 
           {/* Installments */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <Label>Installments</Label>
+              <span className="text-sm font-medium leading-none">Installments</span>
               <Button variant="outline" size="sm" onClick={addInstallment}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Installment

@@ -944,8 +944,9 @@ function ManualOverridesLogTab() {
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Type</label>
+              <label htmlFor="uac-filter-type" className="block text-sm font-medium text-slate-700 mb-2">Type</label>
               <select
+                id="uac-filter-type"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -958,8 +959,9 @@ function ManualOverridesLogTab() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Search</label>
+              <label htmlFor="uac-filter-search" className="block text-sm font-medium text-slate-700 mb-2">Search</label>
               <input
+                id="uac-filter-search"
                 type="text"
                 placeholder="Search by user, email, or admin..."
                 value={searchTerm}

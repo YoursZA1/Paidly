@@ -44,8 +44,9 @@ export default function AccountingDashboard({ user }) {
         setPayments(paymentData || []);
       } catch (error) {
         console.error('Failed to load accounting data:', error);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     loadData();
   }, []);

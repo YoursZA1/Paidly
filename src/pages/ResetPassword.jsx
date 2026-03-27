@@ -57,14 +57,12 @@ export default function ResetPassword() {
     try {
       if (password !== confirmPassword) {
         setError("Passwords do not match");
-        setIsLoading(false);
         return;
       }
 
       const policy = validatePasswordForSignup(password);
       if (!policy.ok) {
         setError(policy.message);
-        setIsLoading(false);
         return;
       }
 

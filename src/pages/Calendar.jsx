@@ -179,8 +179,9 @@ export default function CalendarPage() {
         } catch (error) {
             console.error('Error loading calendar data:', error);
             toast({ title: 'Could not load calendar data', description: error?.message, variant: 'destructive' });
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleExportTaskCsv = async () => {
@@ -202,8 +203,9 @@ export default function CalendarPage() {
             toast({ title: 'Export complete', description: `${list.length} task(s) exported.`, variant: 'default' });
         } catch (error) {
             toast({ title: 'Export failed', description: error?.message || 'Failed to export.', variant: 'destructive' });
+        } finally {
+            setIsExportingTasks(false);
         }
-        setIsExportingTasks(false);
     };
 
     const handleImportTaskCsv = (e) => {
@@ -231,9 +233,10 @@ export default function CalendarPage() {
                 loadData();
             } catch (err) {
                 toast({ title: 'Import failed', description: err?.message || 'Could not parse CSV.', variant: 'destructive' });
+            } finally {
+                setIsImportingTasks(false);
+                if (taskFileInputRef.current) taskFileInputRef.current.value = '';
             }
-            setIsImportingTasks(false);
-            if (taskFileInputRef.current) taskFileInputRef.current.value = '';
         };
         reader.readAsText(file, 'UTF-8');
     };

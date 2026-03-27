@@ -101,8 +101,9 @@ export default function EditRecurringInvoice() {
                 description: "Failed to load template",
                 variant: "destructive",
             });
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleUpdateTemplate = async (saveAsDraft) => {

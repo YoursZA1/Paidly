@@ -185,8 +185,9 @@ export default function InvoicesPage() {
         } catch (error) {
             console.error("Export invoices error:", error);
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
         }
-        setIsExporting(false);
     };
 
     const handleImportInvoices = () => invoiceFileInputRef.current?.click();
@@ -242,8 +243,9 @@ export default function InvoicesPage() {
         } catch (error) {
             console.error("Import invoices error:", error);
             toast({ title: "Import failed", description: error?.message || "Could not parse CSV.", variant: "destructive" });
+        } finally {
+            setIsImporting(false);
         }
-        setIsImporting(false);
     };
 
     const handleExportInvoiceViews = () => {

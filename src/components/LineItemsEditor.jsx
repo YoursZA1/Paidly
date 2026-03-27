@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useId } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronsUpDown, Plus, Trash2, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ function catalogItemToLineRow(rawItem, user, quantity = 1) {
 export default function LineItemsEditor({ items, onChange, currencyCode }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const lineItemsBaseId = useId();
   const list = Array.isArray(items) && items.length > 0 ? items : [emptyRow()];
   const [catalogOpenRow, setCatalogOpenRow] = useState(null);
   const [topCatalogOpen, setTopCatalogOpen] = useState(false);
@@ -128,7 +129,9 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
         <div>
-          <Label className="text-sm font-medium text-foreground">Select existing product or service</Label>
+          <Label htmlFor={`${lineItemsBaseId}-catalog-browse`} className="text-sm font-medium text-foreground">
+            Select existing product or service
+          </Label>
           <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
             Pick from your saved catalog (same list as{" "}
             <button
@@ -150,6 +153,7 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
         >
           <PopoverTrigger asChild>
             <Button
+              id={`${lineItemsBaseId}-catalog-browse`}
               type="button"
               variant="secondary"
               size="sm"
@@ -183,7 +187,9 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
         >
           <div className="space-y-2 sm:col-span-1 col-span-full">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label className="text-xs text-muted-foreground">Description</Label>
+              <Label htmlFor={`${lineItemsBaseId}-desc-${index}`} className="text-xs text-muted-foreground">
+                Description
+              </Label>
               <Popover
                 open={catalogOpenRow === index}
                 onOpenChange={(open) => {
@@ -223,14 +229,18 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               </Popover>
             </div>
             <Input
+              id={`${lineItemsBaseId}-desc-${index}`}
               value={row.description}
               onChange={(e) => updateAt(index, { description: e.target.value })}
               placeholder="Service or product"
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Qty</Label>
+            <Label htmlFor={`${lineItemsBaseId}-qty-${index}`} className="text-xs text-muted-foreground">
+              Qty
+            </Label>
             <Input
+              id={`${lineItemsBaseId}-qty-${index}`}
               type="number"
               min={0}
               step="0.01"
@@ -239,8 +249,11 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Unit</Label>
+            <Label htmlFor={`${lineItemsBaseId}-unit-${index}`} className="text-xs text-muted-foreground">
+              Unit
+            </Label>
             <Input
+              id={`${lineItemsBaseId}-unit-${index}`}
               type="number"
               min={0}
               step="0.01"
@@ -249,8 +262,16 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Total</Label>
-            <Input type="text" readOnly value={(Number(row.total) || 0).toFixed(2)} className="bg-muted/50" />
+            <Label htmlFor={`${lineItemsBaseId}-total-${index}`} className="text-xs text-muted-foreground">
+              Total
+            </Label>
+            <Input
+              id={`${lineItemsBaseId}-total-${index}`}
+              type="text"
+              readOnly
+              value={(Number(row.total) || 0).toFixed(2)}
+              className="bg-muted/50"
+            />
           </div>
           <div className="flex sm:justify-end pb-0.5">
             <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} aria-label="Remove line">

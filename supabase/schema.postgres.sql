@@ -214,6 +214,7 @@ create table if not exists public.quotes (
   notes text,
   terms_conditions text,
   created_by uuid references auth.users(id) on delete set null,
+  user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -247,6 +248,7 @@ create table if not exists public.invoices (
   notes text,
   terms_conditions text,
   created_by uuid references auth.users(id) on delete set null,
+  user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   banking_detail_id uuid,

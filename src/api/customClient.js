@@ -4,7 +4,7 @@
  */
 
 import { supabase } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 import {
@@ -20,16 +20,53 @@ import { retryOnAbort } from "@/utils/retryOnAbort";
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 
-/** Mobile/webview networks can spuriously abort in-flight auth/session reads. */
+/**
+ * Mobile/webview networks can spuriously abort in-flight auth/session reads.
+ * If `getSession()` is empty or slow (e.g. refresh race), `getUser()` validates the JWT with the
+ * auth server and often repopulates the local session — then a second `getSession()` succeeds.
+ */
 async function getSessionWithRetry() {
-  return retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+  const first = await retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+  if (first?.data?.session?.user) {
+    return first;
+  }
+  try {
+    const { data: userData, error: userErr } = await retryOnAbort(() => supabase.auth.getUser(), 2, 300);
+    if (userErr || !userData?.user) {
+      return first;
+    }
+    const second = await retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+    if (second?.data?.session?.user) {
+      return second;
+    }
+  } catch {
+    /* fall through */
+  }
+  return first;
+}
+
+/**
+ * Prefer supabase.auth.getUser() so the user id is validated with the auth server.
+ * Falls back to getSession() when getUser is unavailable or returns no user.
+ */
+async function getAuthUserIdForWrites() {
+  try {
+    const { data, error } = await retryOnAbort(() => supabase.auth.getUser(), 2, 300);
+    if (!error && data?.user?.id) {
+      return data.user.id;
+    }
+  } catch {
+    /* fall through */
+  }
+  const { data: sessionData } = await getSessionWithRetry();
+  return sessionData?.session?.user?.id ?? null;
 }
 
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
 const SUPABASE_SELECT_COLUMNS = {
-  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
+  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
-  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, created_at, updated_at, document_brand_primary, document_brand_secondary, public_share_token",
+  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, document_brand_primary, document_brand_secondary, public_share_token",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
   quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
@@ -609,6 +646,7 @@ class EntityManager {
         if (orgError) {
           const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
           console.error("Failed to create organization:", msg);
+          alertSupabaseWriteFailure(orgError, "Create organization failed");
           if (/permission|policy|RLS/i.test(msg)) {
             throw new Error("Permission denied: Unable to create organization. Please ensure RLS policies allow organization creation.");
           }
@@ -651,6 +689,7 @@ class EntityManager {
             }
           } else {
             const msg = getSupabaseErrorMessage(membershipError, "Create membership failed");
+            alertSupabaseWriteFailure(membershipError, "Create membership failed");
             if (/permission|policy|RLS/i.test(msg)) {
               throw new Error("Permission denied: Unable to create membership. Please ensure RLS policies allow membership creation.");
             }
@@ -674,12 +713,10 @@ class EntityManager {
 
   async create(data) {
     try {
-      const { data: sessionData } = await getSessionWithRetry();
-      if (!sessionData?.session?.user) {
+      const userId = await getAuthUserIdForWrites();
+      if (!userId) {
         throw new Error('Not authenticated');
       }
-
-      const userId = sessionData.session.user.id;
 
       // Ensure user has an organization and membership
       let orgId;
@@ -745,7 +782,7 @@ class EntityManager {
         });
       }
       if (supabaseTable === 'notes') {
-        supabaseData.user_id = sessionData.session.user.id;
+        supabaseData.user_id = userId;
       } else if (supabaseTable !== 'packages') {
         supabaseData.org_id = orgId;
       }
@@ -753,35 +790,36 @@ class EntityManager {
         supabaseData.org_id = data.org_id !== undefined ? data.org_id : null;
       }
 
-      // Only add created_by if the table has that column (invoices, quotes)
+      // Invoices / quotes: force auth user (getUser-validated id) on created_by + user_id columns
       if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
-        supabaseData.created_by = sessionData.session.user.id;
+        supabaseData.created_by = userId;
+        supabaseData.user_id = userId;
         // These tables have items in separate tables
         delete supabaseData.items;
       }
       if (supabaseTable === 'banking_details') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'services') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'recurring_invoices') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'packages') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'invoice_views') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'payslips') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'expenses') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       if (supabaseTable === 'tasks') {
-        if (!supabaseData.created_by_id) supabaseData.created_by_id = sessionData.session.user.id;
+        if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
       const DOCUMENT_SEND_INSERT_COLUMNS = ['org_id', 'document_type', 'document_id', 'client_id', 'channel', 'sent_at', 'created_at'];
       if (supabaseTable === 'document_sends') {
@@ -872,7 +910,7 @@ class EntityManager {
       ];
       if (supabaseTable === 'clients') {
         if (!supabaseData.created_by_id) {
-          supabaseData.created_by_id = sessionData.session.user.id;
+          supabaseData.created_by_id = userId;
         }
         Object.keys(supabaseData).forEach(key => {
           if (!CLIENT_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
@@ -893,7 +931,7 @@ class EntityManager {
       const INVOICE_INSERT_COLUMNS = [
         'org_id', 'client_id', 'invoice_number', 'status', 'project_title', 'project_description',
         'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
-        'currency', 'notes', 'terms_conditions', 'created_by', 'created_at', 'updated_at',
+        'currency', 'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
         'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
         'pdf_url', 'recurring_invoice_id', 'public_share_token', 'sent_to_email',
         'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
@@ -1007,7 +1045,7 @@ class EntityManager {
       const QUOTE_INSERT_COLUMNS = [
         'org_id', 'client_id', 'quote_number', 'status', 'project_title', 'project_description',
         'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
-        'notes', 'terms_conditions', 'created_by', 'created_at', 'updated_at',
+        'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
         'document_brand_primary', 'document_brand_secondary',
       ];
       if (supabaseTable === 'quotes') {
@@ -1045,6 +1083,7 @@ class EntityManager {
         if (error) {
           const msg = getSupabaseErrorMessage(error, `Create ${this.entityName} failed`);
           console.error(`Failed to create ${this.entityName} in Supabase:`, msg);
+          alertSupabaseWriteFailure(error, `Create ${this.entityName} failed`);
           throw new Error(`Failed to create ${this.entityName}: ${msg}`);
         }
 
@@ -1101,6 +1140,7 @@ class EntityManager {
 
           if (itemsError) {
             console.error(`Failed to create ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Create items failed"));
+            alertSupabaseWriteFailure(itemsError, `Create ${itemsTable} failed`);
           }
         }
       }
@@ -1364,6 +1404,7 @@ class EntityManager {
         if (error) {
           const msg = getSupabaseErrorMessage(error, `Update ${this.entityName} failed`);
           console.error(`Failed to update ${this.entityName} in Supabase:`, msg);
+          alertSupabaseWriteFailure(error, `Update ${this.entityName} failed`);
           throw new Error(`Failed to update ${this.entityName}: ${msg}`);
         }
 
@@ -1394,6 +1435,7 @@ class EntityManager {
             .eq(parentIdField, id);
           if (deleteItemsError) {
             console.error(`Failed to delete existing ${itemsTable}:`, getSupabaseErrorMessage(deleteItemsError, "Delete items failed"));
+            alertSupabaseWriteFailure(deleteItemsError, `Delete ${itemsTable} failed`);
           }
 
           const itemsToInsert = itemsToUpdate.map(item => ({
@@ -1412,6 +1454,7 @@ class EntityManager {
 
             if (itemsError) {
               console.error(`Failed to update ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Update items failed"));
+              alertSupabaseWriteFailure(itemsError, `Update ${itemsTable} failed`);
             }
           }
         }
@@ -1476,6 +1519,7 @@ class EntityManager {
             const { error: deleteError } = await deleteQuery;
             if (deleteError) {
               console.warn(`Failed to delete ${this.entityName} from Supabase:`, getSupabaseErrorMessage(deleteError, "Delete failed"));
+              alertSupabaseWriteFailure(deleteError, `Delete ${this.entityName} failed`);
             }
           }
         }
@@ -1987,10 +2031,12 @@ class AuthManager {
       }
 
       if (error) {
+        alertSupabaseWriteFailure(error, "Save profile failed");
         throw new Error(getSupabaseErrorMessage(error, "Save profile failed"));
       }
     } catch (e) {
       if (e instanceof Error) throw e;
+      alertSupabaseWriteFailure(e, "Save profile failed");
       throw new Error(getSupabaseErrorMessage(e, "Save profile failed"));
     }
 
@@ -2076,6 +2122,7 @@ class IntegrationManager {
         if (orgError) {
           const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
           console.error("Failed to create organization:", msg);
+          alertSupabaseWriteFailure(orgError, "Create organization failed");
           throw new Error(`Failed to create organization: ${msg}`);
         }
 
@@ -2097,6 +2144,7 @@ class IntegrationManager {
           const isUnique = membershipError.code === "23505" || /unique|duplicate/i.test(msg);
           if (!isUnique) {
             console.error("Failed to create membership:", msg);
+            alertSupabaseWriteFailure(membershipError, "Create membership failed");
             throw new Error(`Failed to create membership: ${msg}`);
           }
         }

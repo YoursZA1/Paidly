@@ -264,8 +264,9 @@ function LogsAuditTrail() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Event type</label>
+                    <label htmlFor="audit-filter-event-type" className="text-sm font-medium text-slate-700">Event type</label>
                     <select
+                      id="audit-filter-event-type"
                       value={filterType}
                       onChange={(e) => setFilterType(e.target.value)}
                       className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
@@ -281,8 +282,9 @@ function LogsAuditTrail() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Severity</label>
+                    <label htmlFor="audit-filter-severity" className="text-sm font-medium text-slate-700">Severity</label>
                     <select
+                      id="audit-filter-severity"
                       value={filterSeverity}
                       onChange={(e) => setFilterSeverity(e.target.value)}
                       className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
@@ -295,8 +297,9 @@ function LogsAuditTrail() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Date range</label>
+                    <label htmlFor="audit-filter-date-range" className="text-sm font-medium text-slate-700">Date range</label>
                     <select
+                      id="audit-filter-date-range"
                       value={dateFilter}
                       onChange={(e) => setDateFilter(e.target.value)}
                       className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
@@ -310,10 +313,11 @@ function LogsAuditTrail() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Search</label>
+                    <label htmlFor="audit-filter-search" className="text-sm font-medium text-slate-700">Search</label>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
+                        id="audit-filter-search"
                         placeholder="Search logs..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}

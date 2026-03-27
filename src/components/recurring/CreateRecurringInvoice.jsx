@@ -171,7 +171,6 @@ const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialC
       const validation = RecurringInvoiceService.validateData(formData);
       if (!validation.isValid) {
         setError(validation.errors.join(', '));
-        setLoading(false);
         return;
       }
 

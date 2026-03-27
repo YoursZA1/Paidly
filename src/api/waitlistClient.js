@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { backendApi } from "@/api/backendClient";
+import { alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
 
 /**
  * Insert waitlist row via Supabase (anon key + RLS insert policy).
@@ -52,6 +53,7 @@ export async function submitWaitlistSignup(payload) {
       supaResult.error?.message ||
       err?.message ||
       "We couldn't save that right now. Please try again in a moment.";
+    alertSupabaseWriteFailure(err, "Waitlist signup");
     return { ok: false, error: msg };
   }
 }

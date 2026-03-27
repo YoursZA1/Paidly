@@ -2,6 +2,7 @@
  * Business goals API (Supabase). RLS: users read/write own rows (see scripts/fix-business-goals-rls-self-service.sql).
  */
 import { supabase } from '@/lib/supabaseClient';
+import { alertSupabaseWriteFailure } from '@/utils/supabaseErrorUtils';
 
 const TABLE = 'business_goals';
 
@@ -61,7 +62,10 @@ export async function upsertBusinessGoal(userId, year, payload) {
   const existing = await getBusinessGoal(userId, y);
   if (existing?.id) {
     const { error } = await supabase.from(TABLE).update(body).eq('id', existing.id);
-    if (error) throw error;
+    if (error) {
+      alertSupabaseWriteFailure(error, 'Update business goal');
+      throw error;
+    }
     return;
   }
 
@@ -76,9 +80,11 @@ export async function upsertBusinessGoal(userId, year, payload) {
       if (again?.id) {
         const { error: e2 } = await supabase.from(TABLE).update(body).eq('id', again.id);
         if (!e2) return;
+        alertSupabaseWriteFailure(e2, 'Update business goal');
         throw e2;
       }
     }
+    alertSupabaseWriteFailure(error, 'Save business goal');
     throw error;
   }
 }

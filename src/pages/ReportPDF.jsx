@@ -228,8 +228,9 @@ export default function ReportPDF() {
 
         } catch (error) {
             console.error("Failed to load report data", error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     if (isLoading) return <DocumentPageSkeleton title="Loading report…" />;

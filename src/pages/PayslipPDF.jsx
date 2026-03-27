@@ -39,8 +39,9 @@ export default function PayslipPDF() {
             setUser(userData);
         } catch (error) {
             console.error('Error loading payslip data:', error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
     
     const safeFormatDate = (dateStr) => {

@@ -73,8 +73,8 @@ export default function AdminPayouts() {
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs mb-1">Status</label>
-            <select className="border rounded px-2 py-1" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+            <label htmlFor="po-filter-status" className="block text-xs mb-1">Status</label>
+            <select id="po-filter-status" className="border rounded px-2 py-1" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
               <option value="all">All</option>
               <option value="Pending">Pending</option>
               <option value="Processed">Processed</option>
@@ -82,26 +82,26 @@ export default function AdminPayouts() {
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Business</label>
-            <select className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
+            <label htmlFor="po-filter-business" className="block text-xs mb-1">Business</label>
+            <select id="po-filter-business" className="border rounded px-2 py-1" value={filters.business} onChange={e => setFilters(f => ({ ...f, business: e.target.value }))}>
               {businesses.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs mb-1">Min Amount</label>
-            <Input type="number" value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))} className="w-24" />
+            <label htmlFor="po-filter-min" className="block text-xs mb-1">Min Amount</label>
+            <Input id="po-filter-min" type="number" value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))} className="w-24" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Max Amount</label>
-            <Input type="number" value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))} className="w-24" />
+            <label htmlFor="po-filter-max" className="block text-xs mb-1">Max Amount</label>
+            <Input id="po-filter-max" type="number" value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))} className="w-24" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Start Date</label>
-            <Input type="date" value={filters.startDate} onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} className="w-36" />
+            <label htmlFor="po-filter-start" className="block text-xs mb-1">Start Date</label>
+            <Input id="po-filter-start" type="date" value={filters.startDate} onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} className="w-36" />
           </div>
           <div>
-            <label className="block text-xs mb-1">End Date</label>
-            <Input type="date" value={filters.endDate} onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} className="w-36" />
+            <label htmlFor="po-filter-end" className="block text-xs mb-1">End Date</label>
+            <Input id="po-filter-end" type="date" value={filters.endDate} onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} className="w-36" />
           </div>
           <Button variant="outline" onClick={() => setFilters({ status: 'all', business: 'all', minAmount: '', maxAmount: '', startDate: '', endDate: '' })}>Reset</Button>
         </div>

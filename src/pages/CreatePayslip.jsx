@@ -370,7 +370,7 @@ export default function CreatePayslip() {
                             {/* Allowances */}
                             <div>
                                 <div className="flex justify-between items-center mb-4">
-                                    <Label>Allowances</Label>
+                                    <span className="text-sm font-semibold">Allowances</span>
                                     <Button type="button" onClick={addAllowance} variant="outline" size="sm">
                                         <Plus className="w-4 h-4 mr-2" />
                                         Add Allowance
@@ -472,7 +472,7 @@ export default function CreatePayslip() {
                             {/* Other Deductions */}
                             <div>
                                 <div className="flex justify-between items-center mb-4">
-                                    <Label>Other Deductions</Label>
+                                    <span className="text-sm font-semibold">Other Deductions</span>
                                     <Button type="button" onClick={addOtherDeduction} variant="outline" size="sm">
                                         <Plus className="w-4 h-4 mr-2" />
                                         Add Deduction

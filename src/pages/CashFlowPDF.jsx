@@ -30,8 +30,9 @@ export default function CashFlowPDF() {
             setUser(userData);
         } catch (error) {
             console.error("Error loading cash flow data:", error);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const calculateMetrics = () => {

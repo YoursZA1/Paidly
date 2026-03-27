@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -133,9 +134,9 @@ export default function ClientFilters({ onFilterChange }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-xl border">
                     {/* Segment Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Segment</label>
+                        <Label htmlFor="client-filter-segment" className="text-xs font-medium text-slate-600">Segment</Label>
                         <Select value={filters.segment} onValueChange={(v) => updateFilter('segment', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="client-filter-segment" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -148,9 +149,9 @@ export default function ClientFilters({ onFilterChange }) {
 
                     {/* Industry Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Industry</label>
+                        <Label htmlFor="client-filter-industry" className="text-xs font-medium text-slate-600">Industry</Label>
                         <Select value={filters.industry} onValueChange={(v) => updateFilter('industry', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="client-filter-industry" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -164,9 +165,9 @@ export default function ClientFilters({ onFilterChange }) {
 
                     {/* Last Activity Filter */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Last Activity</label>
+                        <Label htmlFor="client-filter-activity" className="text-xs font-medium text-slate-600">Last Activity</Label>
                         <Select value={filters.activity} onValueChange={(v) => updateFilter('activity', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="client-filter-activity" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -179,9 +180,9 @@ export default function ClientFilters({ onFilterChange }) {
 
                     {/* Spending Range */}
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Total Spending</label>
+                        <Label htmlFor="client-filter-spending" className="text-xs font-medium text-slate-600">Total Spending</Label>
                         <Select value={filters.spending} onValueChange={(v) => updateFilter('spending', v)}>
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger id="client-filter-spending" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

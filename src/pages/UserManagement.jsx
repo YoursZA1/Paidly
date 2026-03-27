@@ -735,9 +735,9 @@ export default function UserManagement() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label htmlFor="user-form-role">Role</Label>
                 <Select value={form.role} onValueChange={(value) => setForm(prev => ({ ...prev, role: value }))}>
-                  <SelectTrigger>
+                  <SelectTrigger id="user-form-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -747,9 +747,9 @@ export default function UserManagement() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Status</Label>
+                <Label htmlFor="user-form-status">Status</Label>
                 <Select value={form.status} onValueChange={(value) => setForm(prev => ({ ...prev, status: value }))}>
-                  <SelectTrigger>
+                  <SelectTrigger id="user-form-status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -761,9 +761,9 @@ export default function UserManagement() {
               {!form.isSystemAdmin ? (
                 <>
                   <div className="space-y-2">
-                    <Label>Subscription plan</Label>
+                    <Label htmlFor="user-form-plan">Subscription plan</Label>
                     <Select value={form.plan} onValueChange={(value) => setForm(prev => ({ ...prev, plan: value }))}>
-                      <SelectTrigger>
+                      <SelectTrigger id="user-form-plan">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -779,6 +779,7 @@ export default function UserManagement() {
                     <Label htmlFor="currency">Default Currency</Label>
                     <CurrencySelector
                       id="currency"
+                      label=""
                       value={form.currency || 'ZAR'}
                       onChange={(value) => setForm(prev => ({ ...prev, currency: value }))}
                     />
@@ -1383,14 +1384,14 @@ export default function UserManagement() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Role</Label>
+                    <Label htmlFor="invite-role">Role</Label>
                     <Select
                       value={inviteForm.role}
                       onValueChange={(value) =>
                         setInviteForm(prev => ({ ...prev, role: value }))
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="invite-role">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1401,14 +1402,14 @@ export default function UserManagement() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Subscription plan</Label>
+                    <Label htmlFor="invite-plan">Subscription plan</Label>
                     <Select
                       value={inviteForm.plan}
                       onValueChange={(value) =>
                         setInviteForm(prev => ({ ...prev, plan: value }))
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="invite-plan">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

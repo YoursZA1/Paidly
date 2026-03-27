@@ -84,7 +84,6 @@ export default function SetupWizard({ isOpen, onComplete }) {
             const userId = user?.id;
             if (!userId) {
                 console.error("Setup: no user id (not authenticated)");
-                setIsLoading(false);
                 return;
             }
             let finalLogoUrl = formData.logo_url;
@@ -115,10 +114,10 @@ export default function SetupWizard({ isOpen, onComplete }) {
                 });
             }
 
-            setIsLoading(false);
             onComplete();
         } catch (error) {
             console.error("Error saving setup data:", error);
+        } finally {
             setIsLoading(false);
         }
     };
@@ -198,8 +197,10 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label>Default currency</Label>
+                                        <Label htmlFor="setup-wizard-currency">Default currency</Label>
                                         <CurrencySelector 
+                                            id="setup-wizard-currency"
+                                            label=""
                                             value={formData.currency} 
                                             onChange={(val) => handleInputChange('currency', val)}
                                         />

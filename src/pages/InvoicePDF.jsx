@@ -52,8 +52,9 @@ export default function InvoicePDF() {
                 }
             } catch (e) {
                 console.error('Failed to load draft invoice:', e);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
             return;
         }
         if (invoiceId) {
@@ -93,7 +94,6 @@ export default function InvoicePDF() {
         try {
             const invoiceRecord = await withTimeoutRetry(() => Invoice.get(invoiceId), ENTITY_GET_TIMEOUT_MS, 2);
             if (!invoiceRecord) {
-                setIsLoading(false);
                 return;
             }
 
@@ -129,8 +129,9 @@ export default function InvoicePDF() {
         } catch (error) {
             console.error('Error loading invoice data:', error);
             setLoadError(error?.message || 'Failed to load invoice. Please check your connection and try again.');
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const clientFallback = useMemo(

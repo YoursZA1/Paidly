@@ -45,8 +45,9 @@ export default function EditQuote() {
         } catch (err) {
             console.error("Error loading data:", err);
             setError(err.message || "Failed to load data");
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     const handleSaveChanges = async () => {

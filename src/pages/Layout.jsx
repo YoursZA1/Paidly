@@ -662,7 +662,7 @@ export default function Layout({ children, currentPageName }) {
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const mainContentRef = useRef(null);
-  const { user, logout } = useAuth();
+  const { user, logout, session: authSession } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fetchAll = useAppStore((s) => s.fetchAll);
@@ -670,16 +670,17 @@ export default function Layout({ children, currentPageName }) {
   const userProfile = useAppStore((s) => s.userProfile);
   const resetStore = useAppStore((s) => s.reset);
 
-  // Fetch shared app data when user is present (non-admin). Skip if we have fresh data so navigation doesn't refetch.
+  // Fetch shared app data when user + Supabase session are ready (non-admin). Skip if we have fresh data so navigation doesn't refetch.
   const STALE_MS = 5 * 60 * 1000; // 5 min – same as React Query staleTime
   useEffect(() => {
     if (!user?.id) return;
+    if (!authSession?.user) return;
     if ((user?.role || "").toLowerCase() === "admin") return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
     fetchAll();
-  }, [user?.id, user?.role, fetchAll, lastFetchedAt, userProfile]);
+  }, [user?.id, user?.role, authSession?.user?.id, fetchAll, lastFetchedAt, userProfile]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo
