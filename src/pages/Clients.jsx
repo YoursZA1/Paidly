@@ -23,6 +23,7 @@ import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
 import { useClientsQuery } from "@/hooks/useClientsQuery";
 import { useAppStore } from "@/stores/useAppStore";
+import { useAuth } from "@/components/auth/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
 
 const statusStyles = {
@@ -139,6 +140,7 @@ export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
   const clientsFromStore = useAppStore((s) => s.clients);
   const invoicesFromStore = useAppStore((s) => s.invoices);
   const userProfileFromStore = useAppStore((s) => s.userProfile);
@@ -159,8 +161,14 @@ export default function Clients() {
   });
   const clients = data?.clients ?? clientsFromStore ?? [];
   const invoices = data?.invoices ?? invoicesFromStore ?? [];
-  const user = data?.user ?? userProfileFromStore ?? null;
-  const loadError = isError ? (error?.message || "Unable to load clients") : null;
+  const user = data?.user ?? userProfileFromStore ?? authUser ?? null;
+  /** Only block the UI when the query failed and we have no rows from cache or store. */
+  const loadError =
+    isError && clients.length === 0 && invoices.length === 0
+      ? error?.message || "Unable to load clients"
+      : null;
+  /** Soft warning when refetch failed but cached rows still show */
+  const showRefreshStaleWarning = isError && (clients.length > 0 || invoices.length > 0);
   const showLoadingSkeleton = isLoading && clients.length === 0;
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -205,23 +213,22 @@ export default function Clients() {
   );
 
   useEffect(() => {
-    if (isError && lastLoadErrorToastRef.current < Date.now() - 4000) {
-      lastLoadErrorToastRef.current = Date.now();
-      const msg = error?.message || "";
-      toast({
-        title: "Could not load clients",
-        description: msg.includes("timed out")
-          ? "The server took too long to respond. Use Try again below or refresh the page."
-          : msg || "Something went wrong. Use Try again below or refresh the page.",
-        variant: "destructive",
-        action: (
-          <ToastAction onClick={() => refetch()} aria-label="Retry loading clients">
-            Try again
-          </ToastAction>
-        ),
-      });
-    }
-  }, [isError, error?.message, toast, refetch]);
+    if (!loadError || lastLoadErrorToastRef.current > Date.now() - 4000) return;
+    lastLoadErrorToastRef.current = Date.now();
+    const msg = error?.message || "";
+    toast({
+      title: "Could not load clients",
+      description: msg.includes("timed out")
+        ? "The server took too long to respond. Use Try again below or refresh the page."
+        : msg || "Something went wrong. Use Try again below or refresh the page.",
+      variant: "destructive",
+      action: (
+        <ToastAction onClick={() => refetch()} aria-label="Retry loading clients">
+          Try again
+        </ToastAction>
+      ),
+    });
+  }, [loadError, error?.message, toast, refetch]);
 
   useEffect(() => {
     if (searchFilteredClients.length > 0 && !activeClient) {
@@ -525,7 +532,7 @@ export default function Clients() {
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-2 min-h-0">
-          {loadError && (
+          {showRefreshStaleWarning && (
             <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-2 flex items-center justify-between gap-2 mb-2">
               <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-0 truncate">
                 Could not refresh. Showing cached data.

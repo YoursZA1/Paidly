@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical } from "lucide-react";
+import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { quotesToCsv, parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
 import { Link } from "react-router-dom";
@@ -56,7 +56,7 @@ export default function QuotesPage() {
         setIsRefreshing(true);
         setInitialError(null);
         try {
-            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 });
+            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 });
             setQuotes(Array.isArray(fresh) ? fresh : []);
             setInitialError(null);
         } catch (err) {
@@ -67,6 +67,10 @@ export default function QuotesPage() {
         }
     }, [quotes.length, setQuotes]);
 
+    const handleRefresh = useCallback(() => {
+        loadQuotes(true);
+    }, [loadQuotes]);
+
     useEffect(() => {
         loadQuotes();
     }, [loadQuotes]);
@@ -76,7 +80,7 @@ export default function QuotesPage() {
         async () => {
             // Refresh in background; keep the page responsive.
             queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY });
-            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => null);
+            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => null);
             if (Array.isArray(fresh)) setQuotes(fresh);
         },
         { channelName: "quotes-page" }
@@ -258,6 +262,19 @@ export default function QuotesPage() {
                             </Button>
                         </div>
 
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-xl shrink-0 touch-manipulation"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            aria-label="Refresh quotes"
+                            title="Refresh list"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                        </Button>
+
                         {/* Mobile: import/export in dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -271,6 +288,14 @@ export default function QuotesPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                                <DropdownMenuItem
+                                    onClick={handleRefresh}
+                                    disabled={isRefreshing}
+                                    className="rounded-lg"
+                                >
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                                    Refresh
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleImportQuotes} disabled={isImporting} className="rounded-lg">
                                     <Upload className="w-4 h-4 mr-2" />
                                     {isImporting ? "Importing…" : "Import CSV"}

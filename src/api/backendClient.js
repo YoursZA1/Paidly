@@ -83,7 +83,8 @@ if (isProductionBackendUrlLocalhost() && !supabaseOnlyProd) {
 
 export const backendApi = axios.create({
   baseURL,
-  timeout: 15000,
+  /** Cold serverless / slow mobile networks: 30s avoids spurious timeouts on auth/me and list proxies */
+  timeout: 30000,
   withCredentials: true,
 });
 

@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical } from "lucide-react";
+import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { invoicesToCsv, parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
@@ -31,6 +31,7 @@ export default function InvoicesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
+    const fetchAll = useAppStore((s) => s.fetchAll);
     const invoicesFromStore = useAppStore((s) => s.invoices);
     const clientsFromStore = useAppStore((s) => s.clients);
     const userProfile = useAppStore((s) => s.userProfile);
@@ -75,6 +76,26 @@ export default function InvoicesPage() {
         // When an action succeeds, prefer reloading only invoices; the store will sync via its own logic.
         queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
     }, [queryClient]);
+
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        setInitialError(null);
+        try {
+            await fetchAll();
+            const [paymentsData, viewsData] = await Promise.all([
+                Payment.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
+                InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
+            ]);
+            setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+            setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
+            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+        } catch (err) {
+            console.warn("Invoices refresh failed:", err);
+            setInitialError(err);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [fetchAll, queryClient]);
 
     const handleOptimisticUpdate = useCallback(
         async (id, status) => {
@@ -372,6 +393,18 @@ export default function InvoicesPage() {
                                 <List className="w-4 h-4" />
                             </Button>
                         </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-xl shrink-0 touch-manipulation"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            aria-label="Refresh invoices"
+                            title="Refresh list"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                        </Button>
                         {/* Mobile: Import/Export in dropdown; Desktop: all visible */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -380,6 +413,14 @@ export default function InvoicesPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                                <DropdownMenuItem
+                                    onClick={handleRefresh}
+                                    disabled={isRefreshing}
+                                    className="rounded-lg"
+                                >
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                                    Refresh
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleImportInvoices} disabled={isImporting} className="rounded-lg">
                                     <Upload className="w-4 h-4 mr-2" />
                                     {isImporting ? "Importing…" : "Import CSV"}

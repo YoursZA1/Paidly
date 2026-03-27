@@ -4,9 +4,9 @@ import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { withApiLogging, getCurrentPage } from '@/utils/apiLogger';
 
 const INVOICES_LIST_KEY = ['invoices'];
-const TIMEOUT_MS = 8000;
-const RETRIES = 0;
-const LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
+const TIMEOUT_MS = 30000;
+const RETRIES = 1;
+const LIST_OPTS = { limit: 100, maxWaitMs: 12000 };
 
 async function fetchInvoicesAndClients() {
   const page = getCurrentPage();

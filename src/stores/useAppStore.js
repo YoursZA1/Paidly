@@ -43,6 +43,7 @@ export const useAppStore = create((set, get) => ({
       };
 
       // Auth is required. Resolve it first (faster failure, clearer errors).
+      // User.me() can exceed 25s on cold Supabase (getSession + profiles select with retries).
       const userData = await safe(
         "auth.me",
         async () => {
@@ -53,7 +54,7 @@ export const useAppStore = create((set, get) => ({
           }
         },
         null,
-        25000,
+        70000,
         1
       );
 
@@ -64,10 +65,10 @@ export const useAppStore = create((set, get) => ({
 
       const settled = await Promise.allSettled([
         // Slightly longer caps so cold Supabase still returns rows; one retry on timeout.
-        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
-        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
-        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
-        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 6000 }), [], 12000, 1),
+        safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+        safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
       ]);
 
       const [invoicesData, clientsData, paymentsData, expensesData] = settled.map((r) =>
