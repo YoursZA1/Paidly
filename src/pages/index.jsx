@@ -87,6 +87,7 @@ const BackgroundJobs = lazy(() => import("./BackgroundJobs"));
 const BuildLogs = lazy(() => import("./BuildLogs"));
 const About = lazy(() => import("./About"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
+const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
 const BentoDemoPage = lazy(() => import("./BentoDemo"));
 const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
 
@@ -115,6 +116,11 @@ const AUTH_ROUTES = [
     { path: "/PublicQuote", element: <PublicQuote /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
     { path: "/ClientPortal", element: <ClientPortal /> },
+    { path: "/PrivacyPolicy", element: <PrivacyPolicy /> },
+    { path: "/privacy-policy", element: <PrivacyPolicy /> },
+    { path: "/TermsAndConditions", element: <TermsAndConditions /> },
+    { path: "/terms-and-conditions", element: <TermsAndConditions /> },
+    { path: "/terms", element: <TermsAndConditions /> },
 ];
 
 // --- Main App Pages ---
@@ -140,6 +146,8 @@ const MAIN_ROUTES = [
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
     { path: "/privacy-policy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
+    { path: "/TermsAndConditions", element: <RequireAuth><TermsAndConditions /></RequireAuth> },
+    { path: "/terms-and-conditions", element: <RequireAuth><TermsAndConditions /></RequireAuth> },
     { path: "/BentoDemo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/bento-demo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/AnimatedIconsDemo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },

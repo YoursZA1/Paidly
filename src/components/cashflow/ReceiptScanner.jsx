@@ -194,16 +194,16 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
-                <div className="flex items-center justify-between border-b border-border p-6">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
+            <div className="flex max-h-[calc(100dvh-0.25rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:max-h-[90vh]">
+                <div className="flex items-center justify-between border-b border-border p-4 sm:p-6">
                     <h2 className="text-xl font-semibold text-foreground">Scan Receipt</h2>
                     <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Close">
                         <X className="w-4 h-4" />
                     </Button>
                 </div>
 
-                <div className="p-6">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] p-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
                     <StepIndicator currentStep={currentStep} />
 
                     {loading ? (
@@ -228,15 +228,6 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                                         <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-border bg-background p-2 text-xs text-foreground">{result.raw}</pre>
                                     </details>
                                 )}
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" className="flex-1" onClick={() => setResult(null)}>
-                                    Scan another
-                                </Button>
-                                <Button className="flex-1 gap-2" onClick={handleContinueToForm}>
-                                    <FileText className="w-4 h-4" />
-                                    Confirm & save
-                                </Button>
                             </div>
                             <p className="text-center text-xs text-muted-foreground">
                                 Next: review the expense form and save
@@ -291,6 +282,18 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                         </div>
                     )}
                 </div>
+
+                {result && !loading && (
+                    <div className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-border bg-card/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:p-4">
+                        <Button variant="outline" className="flex-1" onClick={() => setResult(null)}>
+                            Scan another
+                        </Button>
+                        <Button className="flex-1 gap-2" onClick={handleContinueToForm}>
+                            <FileText className="w-4 h-4" />
+                            Confirm & save
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
     );

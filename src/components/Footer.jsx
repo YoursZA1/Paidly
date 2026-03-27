@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createSignupUrl, createWaitlistUrl } from "@/utils";
+import { createPageUrl, createSignupUrl, createWaitlistUrl } from "@/utils";
 
 /**
  * @param {{ onLoginClick: () => void }} props
@@ -12,8 +12,12 @@ export default function Footer({ onLoginClick }) {
       { label: "Join waitlist", to: createWaitlistUrl() },
       { label: "Create account", to: createSignupUrl() },
     ],
-    Support: [{ label: "Log in", action: "login" }],
-    Contact: [{ label: "hello@paidly.co.za", href: "mailto:hello@paidly.co.za" }],
+    Support: [
+      { label: "Log in", action: "login" },
+      { label: "Privacy Policy", to: createPageUrl("PrivacyPolicy") },
+      { label: "Terms & Conditions", to: createPageUrl("TermsAndConditions") },
+    ],
+    Contact: [{ label: "support@paidly.co.za", href: "mailto:support@paidly.co.za" }],
   };
   return (
     <footer className="border-t border-white/[0.08] bg-[#050505] px-4 py-14 sm:px-6 lg:px-8">

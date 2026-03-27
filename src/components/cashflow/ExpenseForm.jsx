@@ -276,9 +276,9 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl flex flex-col">
-                <div className="flex items-center justify-between border-b border-border p-6 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
+            <div className="flex max-h-[calc(100dvh-0.25rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:max-h-[90vh]">
+                <div className="flex items-center justify-between border-b border-border p-4 shrink-0 sm:p-6">
                     <div>
                         <h2 className="text-xl font-semibold text-primary">
                             {fromReceiptScan ? "Confirm & save" : expense?.id ? "Edit Expense" : "Add New Expense"}
@@ -292,8 +292,8 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                     </Button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                    <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
+                    <form onSubmit={handleSubmit} className="space-y-6 p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="grid w-full grid-cols-2 mb-6">
                                 <TabsTrigger value="general">General Expense</TabsTrigger>
@@ -627,11 +627,11 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                     </form>
                 </div>
 
-                <div className="flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-muted/40 p-6">
+                <div className="sticky bottom-0 z-10 flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-card/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:bg-muted/40 sm:p-6">
                     <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} className="flex-1 bg-primary hover:bg-primary/90">
+                    <Button type="submit" onClick={handleSubmit} className="flex-1 bg-primary hover:bg-primary/90">
                         {expense ? 'Update' : 'Create'} {activeTab === 'mileage' ? 'Trip' : 'Expense'}
                     </Button>
                 </div>

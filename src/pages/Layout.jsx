@@ -1117,6 +1117,9 @@ export default function Layout({ children, currentPageName }) {
                 <Link to={createPageUrl("PrivacyPolicy")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
                   Privacy Policy
                 </Link>
+                <Link to={createPageUrl("TermsAndConditions")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
+                  Terms &amp; Conditions
+                </Link>
                 <Link to={createPageUrl("Settings")} className="hover:text-primary transition-colors min-h-[48px] sm:min-h-0 inline-flex items-center justify-center py-2 touch-manipulation">
                   Settings
                 </Link>

@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS = {
   system: {
     siteName: 'Paidly',
     siteDescription: 'Professional Invoice Management Platform',
-    adminEmail: 'Accounts@paidly.co.za',
+    adminEmail: 'support@paidly.co.za',
     supportEmail: 'support@paidly.co.za',
     maintenanceMode: false,
     maintenanceMessage: 'We are currently performing scheduled maintenance. We\'ll be back shortly.',

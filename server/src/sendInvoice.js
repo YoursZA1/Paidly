@@ -112,7 +112,7 @@ export async function sendHtmlEmail(to, subject, html, fromName = "Paidly") {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const fromAddress = process.env.RESEND_FROM || "Paidly <sales@paidly.co.za>";
+  const fromAddress = process.env.RESEND_FROM || "Paidly <support@paidly.co.za>";
 
   if (!to || !subject) {
     return { success: false, error: "Missing to or subject" };
