@@ -1,6 +1,6 @@
 import React from "react";
 import DocumentTemplate from "./DocumentTemplate.jsx";
 
-export default function Invoice() {
-  return <DocumentTemplate docType="invoice" />;
+export default function Quote() {
+  return <DocumentTemplate docType="quote" />;
 }

@@ -21,10 +21,20 @@ export function buildDocumentPreviewPdfFilename(docType, numberRaw) {
 /**
  * Save PDF from a live DocumentPreview DOM node (same pipeline as Create / View document).
  */
-export async function downloadDocumentPreviewFromElement(element, docType, numberRaw) {
+export async function downloadDocumentPreviewFromElement(element, docType, numberRaw, anvilPayload = null) {
   if (!element) {
     throw new Error("No element to export");
   }
   const filename = buildDocumentPreviewPdfFilename(docType, numberRaw);
+  const engine = (import.meta.env.VITE_PDF_ENGINE || "html2pdf").toString().trim().toLowerCase();
+  if (engine === "anvil" && anvilPayload?.doc) {
+    const { generateDocumentPdfFromAnvil } = await import("./generatePdfFromAnvil.js");
+    await generateDocumentPdfFromAnvil(
+      { doc: anvilPayload.doc, docType },
+      filename,
+      { title: docType === "quote" ? "Quote" : "Invoice" }
+    );
+    return;
+  }
   await generatePdfFromElement(element, filename);
 }

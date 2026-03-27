@@ -52,12 +52,12 @@ const VARIANT_CONFIG = {
 };
 
 function InvoiceDatesColumn({ issueDate, deliveryDate, dueLabel, heavy }) {
-  const labelCls = `text-xs uppercase tracking-wide mb-1 text-neutral-600 ${heavy ? "font-black" : "font-bold"}`;
+  const labelCls = `text-[10px] uppercase tracking-wide mb-1 text-neutral-600 ${heavy ? "font-black" : "font-bold"}`;
   const valueCls = `text-foreground ${heavy ? "font-bold" : "font-semibold"}`;
   const dueHeading =
     dueLabel === "Valid until" ? "Valid Until:" : "Due date";
   return (
-    <div className="space-y-3 text-sm text-right">
+    <div className="space-y-1.5 text-[12px] leading-[1.3] text-right">
       <div>
         <p className={labelCls}>Date of issue</p>
         <p className={valueCls}>{issueDate}</p>
@@ -143,14 +143,14 @@ function ShipToBlock({
     return (
       <div>
         <h3
-          className={`text-xs uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
+          className={`text-[10px] uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
         >
           Ship to
         </h3>
         {lines.length === 0 ? (
-          <p className="text-neutral-500 text-sm">Same as invoice address</p>
+          <p className="text-neutral-500 text-[12px]">Same as invoice address</p>
         ) : (
-          <div className="space-y-0.5 text-sm">
+          <div className="space-y-0.5 text-[12px] leading-[1.3]">
             {lines.map(({ key, text, bold }) => (
               <p
                 key={key}
@@ -180,11 +180,11 @@ function InvoiceToBlock({ client, heavy }) {
   return (
     <div>
       <h3
-        className={`text-xs uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
+        className={`text-[10px] uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
       >
         Invoice to
       </h3>
-      <div className="space-y-0.5 text-sm">
+      <div className="space-y-0.5 text-[12px] leading-[1.3]">
         {lines.length === 0 ? (
           <p className="text-neutral-500">—</p>
         ) : (
@@ -200,6 +200,42 @@ function InvoiceToBlock({ client, heavy }) {
       </div>
     </div>
   );
+}
+
+const ROWS_PER_PAGE = 18;
+const PAGE_HEIGHT_BUDGET = 360;
+
+function estimateRowHeight(text) {
+  const base = 20;
+  const extra = Math.ceil(String(text || "").length / 80) * 10;
+  return base + extra;
+}
+
+function chunkRows(rows, maxRows = ROWS_PER_PAGE, maxHeight = PAGE_HEIGHT_BUDGET) {
+  const input = Array.isArray(rows) ? rows : [];
+  if (input.length === 0) return [[]];
+  const pages = [];
+  let current = [];
+  let currentHeight = 0;
+
+  for (const row of input) {
+    const label = formatLineItemNameAndDescription(row);
+    const rowHeight = estimateRowHeight(label);
+    const wouldOverflowCount = current.length >= maxRows;
+    const wouldOverflowHeight = currentHeight + rowHeight > maxHeight;
+
+    if (current.length > 0 && (wouldOverflowCount || wouldOverflowHeight)) {
+      pages.push(current);
+      current = [];
+      currentHeight = 0;
+    }
+
+    current.push(row);
+    currentHeight += rowHeight;
+  }
+
+  if (current.length > 0) pages.push(current);
+  return pages;
 }
 
 /**
@@ -257,17 +293,7 @@ export default function UnifiedInvoiceTemplate({
   const hasItemTax = items.some((item) => Number(item.item_tax_rate) > 0);
   const discountAmt = Number(invoice.discount_amount || 0);
   const paymentStructureTotal = Number(invoice.total_amount ?? 0);
-  const noteText = String(invoice.notes || "").trim();
-  const describedItemsCount = items.filter((item) => item.description?.trim()).length;
-  // Heuristic to keep pagination clean: long/verbose item lists push totals to next page.
-  const estimatedItemRows = items.reduce((sum, item) => {
-    const text = formatLineItemNameAndDescription(item);
-    return sum + Math.max(1, Math.ceil((text || "").length / 70));
-  }, 0);
-  const trailingContentRows =
-    Math.ceil(noteText.length / 120) + describedItemsCount + (hasAccountDetailsSection ? 4 : 2);
-  const breakThreshold = trailingContentRows >= 8 ? 12 : 16;
-  const shouldBreakBeforeTotals = estimatedItemRows >= breakThreshold;
+  const itemPages = chunkRows(items, ROWS_PER_PAGE, PAGE_HEIGHT_BUDGET);
 
   const hatchStyle = {
     backgroundColor: cfg.hatchBg,
@@ -280,369 +306,227 @@ export default function UnifiedInvoiceTemplate({
     )`,
   };
 
-  const pyBand = cfg.sparse ? "py-4 px-4 sm:px-6" : "py-5 px-5 sm:px-8";
+  const pyBand = cfg.sparse ? "py-4 px-5" : "py-5 px-5";
 
   return (
     <div
-      className={`invoice unified-invoice-template max-w-[210mm] mx-auto bg-white text-black text-sm leading-normal box-border flex flex-col min-h-[297mm] ${cfg.font || ""}`}
+      className={`invoice invoice-root unified-invoice-template max-w-[720px] mx-auto bg-white text-gray-900 text-[12px] leading-[1.35] box-border ${cfg.font || ""}`}
     >
-      <header
-        className={`${isQuote ? "mb-6 sm:mb-7" : "mb-5 sm:mb-6"} ${cfg.headerAccent || ""}`}
-        aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}
-      >
-        <div
-          className={`flex flex-col ${isQuote ? "gap-2" : "gap-3"} sm:flex-row sm:justify-between sm:items-start`}
-        >
-          <div className="flex min-w-0 items-start">
-            {logoSrc ? (
-              <img
-                src={logoSrc}
-                alt=""
-                className="h-48 sm:h-56 w-auto max-w-[560px] sm:max-w-[640px] object-contain object-left shrink-0"
-                style={{ maxHeight: "224px" }}
-              />
-            ) : (
-              <div
-                className={`h-48 w-48 sm:h-56 sm:w-56 shrink-0 rounded-sm ${cfg.logoFallback}`}
-                aria-hidden
-              />
-            )}
-          </div>
-          <div className="invoice-doc-title-block text-left sm:text-right shrink-0">
-            <h2
-              className={`text-3xl sm:text-4xl uppercase tracking-tight ${cfg.title} ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              {resolvedTitle}
-            </h2>
-            <p
-              className={`text-foreground text-xs sm:text-sm mt-1 uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              {numberLabel}: {displayNumber}
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main aria-label="Invoice details" className="flex-1">
-        <section className={`section ${cfg.band} ${pyBand}`}>
-          <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${
-              isQuote ? "gap-2 sm:gap-3" : "gap-3 sm:gap-4"
-            }`}
-          >
-            <InvoiceToBlock client={client} heavy={cfg.heavy} />
-            <ShipToBlock
-              client={client}
-              heavy={cfg.heavy}
-              itemsRequireShipping={itemsRequireShipping}
-              issueDate={issueDate}
-              deliveryDate={deliveryDateLabel}
-              dueLabel={dueLabel}
-            />
-          </div>
-        </section>
-
-        {itemsRequireShipping ? (
-          <div className={isQuote ? "mb-8 sm:mb-8" : "mb-4 sm:mb-5"}>
-            <InvoiceDatesColumn
-              issueDate={issueDate}
-              deliveryDate={deliveryDateLabel}
-              dueLabel={dueLabel}
-              heavy={cfg.heavy}
-            />
-          </div>
-        ) : null}
-
-        <section className="section">
-          <table
-            className={`items invoice-table unified-invoice-line-table w-full border-collapse table-fixed border-t border-b ${cfg.rule}`}
-          >
-            <colgroup>
-              <col className="min-w-0" style={{ width: "50%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "19.5%" }} />
-              <col style={{ width: "19.5%" }} />
-            </colgroup>
-            <thead>
-              <tr className={`border-b ${cfg.rule}`}>
-                <th
-                  className={`py-3 pr-4 sm:pr-6 text-left text-[10px] sm:text-xs uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  Description
-                </th>
-                <th
-                  className={`py-3 px-2 sm:px-3 text-center text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  Quantity
-                </th>
-                <th
-                  className={`py-3 pl-2 sm:pl-3 pr-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  Price
-                </th>
-                <th
-                  className={`py-3 pl-2 text-right text-[10px] sm:text-xs uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length > 0 ? (
-                items.map((item, index) => {
-                  const lineLabel = formatLineItemNameAndDescription(item);
-                  return (
-                    <tr key={index} className={`border-b border-black/10 ${cfg.rule}`}>
-                      <td className="py-3.5 pr-4 sm:pr-6 align-top min-w-0">
-                        <p
-                          className={`text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}
-                        >
-                          {lineLabel}
-                        </p>
-                      </td>
-                      <td className="py-3.5 px-2 sm:px-3 align-top text-center tabular-nums text-foreground">
-                        {item.quantity}
-                      </td>
-                      <td className="py-3.5 pl-2 sm:pl-3 pr-2 align-top text-right tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
-                        {formatCurrency(item.unit_price, userCurrency)}
-                      </td>
-                      <td className="py-3.5 pl-2 align-top text-right font-medium tabular-nums currency-value text-xs sm:text-sm whitespace-nowrap">
-                        {formatCurrency(item.total_price || 0, userCurrency)}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="py-10 text-center text-neutral-500 text-sm"
+      <main aria-label="Invoice details">
+        {itemPages.map((pageRows, index) => {
+          const isFirst = index === 0;
+          const isLast = index === itemPages.length - 1;
+          return (
+            <section className="page" key={`page-${index}`}>
+              {isFirst ? (
+                <>
+                  <header
+                    className={`no-break mb-6 ${cfg.headerAccent || ""}`}
+                    aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}
                   >
-                    No items found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </section>
-
-        <section
-          className={`${shouldBreakBeforeTotals ? "page-break-before" : ""} page-break-avoid unified-invoice-totals grid grid-cols-1 sm:grid-cols-2 ${
-            isQuote ? "gap-4 sm:gap-6" : "gap-6 sm:gap-10"
-          } section ${cfg.sparse ? "py-2" : "py-3"}`}
-         >
-          <div>
-            <h3
-              className={`text-xs uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              Total due
-            </h3>
-            <div className="px-4 py-3.5 sm:py-4 border border-black/10" style={hatchStyle}>
-              <p
-                className={`text-xl sm:text-2xl tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-bold"}`}
-              >
-                {formatCurrency(invoice.total_amount, userCurrency)}
-              </p>
-            </div>
-          </div>
-          <div className="sm:justify-self-end w-full sm:max-w-xs">
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                  Subtotal
-                </span>
-                <span className="font-medium tabular-nums currency-value">
-                  {formatCurrency(invoice.subtotal, userCurrency)}
-                </span>
-              </div>
-              {discountAmt > 0 && (
-                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                    Discount
-                    {invoice.discount_type === "percentage"
-                      ? ` (${invoice.discount_value}%)`
-                      : ""}
-                  </span>
-                  <span className="font-medium tabular-nums currency-value text-red-600">
-                    -{formatCurrency(discountAmt, userCurrency)}
-                  </span>
-                </div>
-              )}
-              {hasItemTax && (
-                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                    Item taxes
-                  </span>
-                  <span className="font-medium tabular-nums currency-value">
-                    {formatCurrency(invoice.item_taxes || 0, userCurrency)}
-                  </span>
-                </div>
-              )}
-              {Number(invoice.tax_rate) > 0 && (
-                <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
-                  <span className="text-neutral-600 uppercase text-xs tracking-wide">
-                    Tax ({invoice.tax_rate}%)
-                  </span>
-                  <span className="font-medium tabular-nums currency-value">
-                    {formatCurrency(invoice.tax_amount, userCurrency)}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between gap-4 pt-1">
-                <span
-                  className={`uppercase text-xs tracking-wide ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  Grand total
-                </span>
-                <span
-                  className={`tabular-nums currency-value ${cfg.heavy ? "font-black" : "font-bold"}`}
-                >
-                  {formatCurrency(invoice.total_amount, userCurrency)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section grid grid-cols-1 md:grid-cols-2 gap-8 text-sm border-t border-black/10 pt-6">
-          <div>
-            <h3
-              className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              Payment info
-            </h3>
-            <div className="space-y-4 text-neutral-700">
-              <div>
-                <p className="text-xs text-neutral-500 mb-2">Payment structure</p>
-                <ul className="space-y-1.5 text-sm">
-                  {[
-                    { pct: "25%", value: paymentStructureTotal * 0.25 },
-                    { pct: "50%", value: paymentStructureTotal * 0.5 },
-                    { pct: "100%", value: paymentStructureTotal },
-                  ].map(({ pct, value }) => (
-                    <li
-                      key={pct}
-                      className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums"
-                    >
-                      <span className="text-neutral-600 shrink-0">{pct}</span>
-                      <span className="font-medium text-foreground currency-value">
-                        {formatCurrency(value, userCurrency)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-          <div>
-            <h3
-              className={`text-xs uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-bold"}`}
-            >
-              Account details
-            </h3>
-            {hasAccountDetailsSection ? (
-              <div className="space-y-4 text-neutral-700">
-                {accountBankRows.length > 0 ? (
-                  <dl className="space-y-2">
-                    {accountBankRows.map((row) => (
-                      <div key={row.key}>
-                        <dt className="text-xs text-neutral-500">{row.label}</dt>
-                        <dd
-                          className={`font-medium text-foreground text-sm ${row.multiline ? "whitespace-pre-line" : ""}`}
-                        >
-                          {row.value}
-                        </dd>
+                    <div className={`flex flex-row justify-between items-start ${isQuote ? "gap-2" : "gap-3"}`}>
+                      <div className="flex min-w-0 items-start">
+                        {logoSrc ? (
+                          <img
+                            src={logoSrc}
+                            alt=""
+                            className="h-auto w-auto object-contain object-left shrink-0 max-h-[64px] max-w-[180px]"
+                            style={{ maxHeight: 64, maxWidth: 180 }}
+                          />
+                        ) : (
+                          <div className={`h-16 w-16 shrink-0 rounded-sm ${cfg.logoFallback}`} aria-hidden />
+                        )}
                       </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="text-neutral-500 text-sm">
-                    Add default bank details in Settings, or choose a bank account on the invoice.
-                  </p>
-                )}
-                {businessContactRows.length > 0 ? (
-                  <div
-                    className={
-                      accountBankRows.length > 0 ? "pt-3 border-t border-black/10" : ""
-                    }
-                  >
-                    <p
-                      className={`text-xs uppercase tracking-wide mb-2 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}
-                    >
-                      Business contact
-                    </p>
-                    <dl className="space-y-2">
-                      {businessContactRows.map((row) => (
-                        <div key={row.key}>
-                          <dt className="text-xs text-neutral-500">{row.label}</dt>
-                          <dd
-                            className={`font-medium text-foreground text-sm ${row.multiline ? "whitespace-pre-line" : ""}`}
-                          >
-                            {row.value}
-                          </dd>
+                      <div className="invoice-doc-title-block text-right shrink-0">
+                        <h2 className={`text-[20px] uppercase tracking-tight ${cfg.title} ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                          {resolvedTitle}
+                        </h2>
+                        <p className={`text-foreground text-[13px] mt-1 uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                          {numberLabel}: {displayNumber}
+                        </p>
+                      </div>
+                    </div>
+                  </header>
+
+                  <section className={`section no-break ${cfg.band} ${pyBand}`}>
+                    <div className="grid grid-cols-2 gap-4">
+                      <InvoiceToBlock client={client} heavy={cfg.heavy} />
+                      <ShipToBlock
+                        client={client}
+                        heavy={cfg.heavy}
+                        itemsRequireShipping={itemsRequireShipping}
+                        issueDate={issueDate}
+                        deliveryDate={deliveryDateLabel}
+                        dueLabel={dueLabel}
+                      />
+                    </div>
+                  </section>
+
+                  {itemsRequireShipping ? (
+                    <div className="no-break mb-4">
+                      <InvoiceDatesColumn
+                        issueDate={issueDate}
+                        deliveryDate={deliveryDateLabel}
+                        dueLabel={dueLabel}
+                        heavy={cfg.heavy}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              <section className="section">
+                <table className={`items invoice-table unified-invoice-line-table w-full text-[11px] leading-[15px] border-collapse table-fixed border-t border-b ${cfg.rule}`}>
+                  <colgroup>
+                    <col className="min-w-0" style={{ width: "50%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "19.5%" }} />
+                    <col style={{ width: "19.5%" }} />
+                  </colgroup>
+                  <thead className="no-break">
+                    <tr className={`border-b ${cfg.rule}`}>
+                      <th className={`py-1.5 pr-4 text-left text-[11px] uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-semibold"}`}>Description</th>
+                      <th className={`py-1.5 px-2 text-center text-[11px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Quantity</th>
+                      <th className={`py-1.5 pl-2 pr-2 text-right text-[11px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Price</th>
+                      <th className={`py-1.5 pl-2 text-right text-[11px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.length > 0 ? pageRows.map((item, rowIndex) => {
+                      const lineLabel = formatLineItemNameAndDescription(item);
+                      return (
+                        <tr key={`${index}-${rowIndex}`} className={`border-b border-black/10 ${cfg.rule}`}>
+                          <td className="py-1.5 pr-4 align-top min-w-0">
+                            <p className={`text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}>{lineLabel}</p>
+                          </td>
+                          <td className="py-1.5 px-2 align-top text-center tabular-nums text-foreground">{item.quantity}</td>
+                          <td className="py-1.5 pl-2 pr-2 align-top text-right tabular-nums currency-value text-[11px] whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                          <td className="py-1.5 pl-2 align-top text-right font-medium tabular-nums currency-value text-[11px] whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-neutral-500 text-[11px]">No items found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </section>
+
+              {isLast ? (
+                <>
+                  <section className={`section no-break unified-invoice-totals grid grid-cols-2 ${isQuote ? "gap-6" : "gap-8"} ${cfg.sparse ? "py-2" : "py-3"}`}>
+                    <div className="no-break">
+                      <h3 className={`text-[12px] uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-semibold"}`}>Total due</h3>
+                      <div className="px-4 py-3.5 border border-black/10" style={hatchStyle}>
+                        <p className={`text-[18px] tabular-nums currency-value tracking-tight ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                          {formatCurrency(invoice.total_amount, userCurrency)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="justify-self-end w-full max-w-xs">
+                      <div className="space-y-1 text-[12px]">
+                        <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                          <span className="text-neutral-600 uppercase text-[12px] tracking-wide">Subtotal</span>
+                          <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                         </div>
-                      ))}
-                    </dl>
-                  </div>
-                ) : null}
+                        {discountAmt > 0 && (
+                          <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                            <span className="text-neutral-600 uppercase text-[12px] tracking-wide">
+                              Discount{invoice.discount_type === "percentage" ? ` (${invoice.discount_value}%)` : ""}
+                            </span>
+                            <span className="font-medium tabular-nums currency-value text-red-600">-{formatCurrency(discountAmt, userCurrency)}</span>
+                          </div>
+                        )}
+                        {hasItemTax && (
+                          <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                            <span className="text-neutral-600 uppercase text-[12px] tracking-wide">Item taxes</span>
+                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                          </div>
+                        )}
+                        {Number(invoice.tax_rate) > 0 && (
+                          <div className="flex justify-between gap-4 border-b border-black/10 pb-2">
+                            <span className="text-neutral-600 uppercase text-[12px] tracking-wide">Tax ({invoice.tax_rate}%)</span>
+                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between gap-4 pt-1">
+                          <span className={`uppercase text-[12px] tracking-wide ${cfg.heavy ? "font-black" : "font-semibold"}`}>Grand total</span>
+                          <span className={`tabular-nums currency-value ${cfg.heavy ? "font-black" : "font-bold"}`}>{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="section no-break grid grid-cols-2 gap-8 text-[12px] border-t border-black/10 pt-6">
+                    <div>
+                      <h3 className={`text-[10px] uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-semibold"}`}>Payment info</h3>
+                      <div className="space-y-4 text-neutral-700">
+                        <div>
+                          <p className="text-[10px] text-neutral-500 mb-2">Payment structure</p>
+                          <ul className="space-y-1 text-[12px]">
+                            {[{ pct: "25%", value: paymentStructureTotal * 0.25 }, { pct: "50%", value: paymentStructureTotal * 0.5 }, { pct: "100%", value: paymentStructureTotal }].map(({ pct, value }) => (
+                              <li key={pct} className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums">
+                                <span className="text-neutral-600 shrink-0">{pct}</span>
+                                <span className="font-medium text-foreground currency-value">{formatCurrency(value, userCurrency)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className={`text-[10px] uppercase tracking-wide mb-3 ${cfg.heavy ? "font-black" : "font-semibold"}`}>Account details</h3>
+                      {hasAccountDetailsSection ? (
+                        <div className="space-y-4 text-neutral-700">
+                          {accountBankRows.length > 0 ? (
+                            <dl className="space-y-2">
+                              {accountBankRows.map((row) => (
+                                <div key={row.key}>
+                                  <dt className="text-xs text-neutral-500">{row.label}</dt>
+                                  <dd className={`font-medium text-foreground text-[12px] ${row.multiline ? "whitespace-pre-line" : ""}`}>{row.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : (
+                            <p className="text-neutral-500 text-[12px]">Add default bank details in Settings, or choose a bank account on the invoice.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-neutral-500 text-[12px]">—</p>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="section no-break text-[12px] border-t border-black/10 pt-5">
+                    <h3 className={`text-[11px] uppercase tracking-wide mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}>Notes</h3>
+                    <p className="text-neutral-600 text-xs leading-relaxed mb-3">{NOTES_PAYMENT_MILESTONES_COPY}</p>
+                    {invoice.notes ? <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-3 mt-3">{invoice.notes}</p> : null}
+                  </section>
+
+                  <footer className="footer no-break border-t border-black/20 pt-5 text-xs text-neutral-600">
+                    <div className="flex justify-between items-end gap-3">
+                      <div className="min-w-0">
+                        {user?.company_address ? <p className="whitespace-pre-line">{user.company_address}</p> : null}
+                        {user?.website ? <p className="mt-1 text-neutral-500">{user.website}</p> : null}
+                      </div>
+                      <div className="text-right shrink-0 space-y-0.5">
+                        {user?.phone ? <p>Tel: {user.phone}</p> : null}
+                        <p>Thank you for your business.</p>
+                        <p>Invoicing made easy with Paidly</p>
+                      </div>
+                    </div>
+                  </footer>
+                </>
+              ) : null}
+
+              <div className="mt-4 pt-2 text-[10px] text-gray-400 text-right">
+                Page {index + 1} of {itemPages.length}
               </div>
-            ) : (
-              <p className="text-neutral-500 text-sm">—</p>
-            )}
-          </div>
-        </section>
-
-        <section className="section page-break-avoid text-sm border-t border-black/10 pt-5">
-          <h3
-            className={`text-[11px] uppercase tracking-wide mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}
-          >
-            Notes
-          </h3>
-          <p className="text-neutral-600 text-xs leading-relaxed mb-3">
-            {NOTES_PAYMENT_MILESTONES_COPY}
-          </p>
-          {invoice.notes ? (
-            <p className="text-neutral-700 whitespace-pre-line border-t border-black/10 pt-3 mt-3">
-              {invoice.notes}
-            </p>
-          ) : null}
-          {items.filter((item) => item.description?.trim()).length > 0 && (
-            <ul className="mt-3 pt-3 border-t border-black/10 space-y-1 text-neutral-600">
-              {items
-                .filter((item) => item.description?.trim())
-                .map((item, idx) => (
-                  <li key={idx} className="text-foreground">
-                    {formatLineItemNameAndDescription(item)}
-                  </li>
-                ))}
-            </ul>
-          )}
-        </section>
+            </section>
+          );
+        })}
       </main>
-
-      <footer
-        className="footer page-break-avoid border-t border-black/20 pt-5 text-xs text-neutral-600"
-        aria-label="Thank you for your business. Invoicing made easy with Paidly. Powered by Paidly."
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
-          <div className="min-w-0">
-            {user?.company_address ? (
-              <p className="whitespace-pre-line">{user.company_address}</p>
-            ) : null}
-            {user?.website ? (
-              <p className="mt-1 text-neutral-500">{user.website}</p>
-            ) : null}
-          </div>
-          <div className="text-left sm:text-right shrink-0 space-y-0.5">
-            {user?.phone ? <p>Tel: {user.phone}</p> : null}
-            <p>Thank you for your business.</p>
-            <p>Invoicing made easy with Paidly</p>
-          </div>
-        </div>
-        <div className="mt-4 pt-3 border-t border-black/10 text-[10px] text-neutral-500">
-          Powered by Paidly
-        </div>
-      </footer>
     </div>
   );
 }

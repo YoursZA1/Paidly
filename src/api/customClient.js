@@ -1635,10 +1635,12 @@ class AuthManager {
     };
 
     // getSession can block on refresh; fail fast and still merge profile using cached id.
-    const GET_SESSION_MS = 9000;
-    const GET_SESSION_RETRIES = 1;
+    const GET_SESSION_MS = 12000;
+    const GET_SESSION_RETRIES = 2;
     const GET_SESSION_RETRY_BACKOFF_MS = 250;
-    const PROFILE_MS = 15000;
+    const PROFILE_MS = 22000;
+    const PROFILE_RETRIES = 2;
+    const PROFILE_RETRY_BACKOFF_MS = 350;
     const warnSessionSlowOnce = (detail) => {
       if (!import.meta.env?.DEV) return;
       const now = Date.now();
@@ -1648,6 +1650,18 @@ class AuthManager {
       this._lastMeSessionWarnAt = now;
       console.warn(
         "me(): getSession slow or failed; continuing with cached user id for profile refresh:",
+        detail
+      );
+    };
+    const warnProfileSlowOnce = (detail) => {
+      if (!import.meta.env?.DEV) return;
+      const now = Date.now();
+      const last = this._lastMeProfileWarnAt || 0;
+      // Avoid noisy duplicate logs when multiple views call me() close together.
+      if (now - last < 30000) return;
+      this._lastMeProfileWarnAt = now;
+      console.warn(
+        "me(): profile refresh slow or failed; using cached profile data:",
         detail
       );
     };
@@ -1684,13 +1698,43 @@ class AuthManager {
     }
 
     try {
-      const { data: profile, error } = await withLocalTimeout(
-        selectProfileByUserId(supabase, effectiveId),
-        PROFILE_MS,
-        "profiles.select"
-      );
+      let profile = null;
+      let error = null;
+      for (let attempt = 0; attempt <= PROFILE_RETRIES; attempt++) {
+        try {
+          const res = await retryOnAbort(
+            () =>
+              withLocalTimeout(
+                selectProfileByUserId(supabase, effectiveId),
+                PROFILE_MS,
+                "profiles.select"
+              ),
+            1,
+            250
+          );
+          profile = res?.data ?? null;
+          error = res?.error ?? null;
+          // Success, or "not found" shape with no transport error.
+          if (!error) break;
+        } catch (e) {
+          const isLastAttempt = attempt >= PROFILE_RETRIES;
+          if (!isLastAttempt) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, PROFILE_RETRY_BACKOFF_MS * (attempt + 1))
+            );
+            continue;
+          }
+          throw e;
+        }
+        // Query returned error (not throw): retry a couple times for transient DB/network delays.
+        if (attempt < PROFILE_RETRIES) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROFILE_RETRY_BACKOFF_MS * (attempt + 1))
+          );
+        }
+      }
       if (error) {
-        console.warn("Failed to load profile in me():", getSupabaseErrorMessage(error, "Load profile failed"));
+        warnProfileSlowOnce(getSupabaseErrorMessage(error, "Load profile failed"));
       }
       if (!error && profile) {
         // Merge Supabase profile (one row per user, id = auth.users.id) into local user
@@ -1728,9 +1772,7 @@ class AuthManager {
         this.saveUserToStorage();
       }
     } catch (e) {
-      if (import.meta.env?.DEV) {
-        console.warn("Failed to refresh profile in me():", getSupabaseErrorMessage(e, "Load profile failed"));
-      }
+      warnProfileSlowOnce(getSupabaseErrorMessage(e, "Load profile failed"));
     }
     return this.user;
   }

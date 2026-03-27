@@ -4,7 +4,16 @@
 */
 
 body {
-  font-size: 16px;
+  font-size: 12px;
+}
+
+.invoice-root {
+  font-size: 12px;
+}
+
+.page-break {
+  page-break-inside: avoid;
+  break-inside: avoid-page;
 }
 
 table {

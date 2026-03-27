@@ -78,7 +78,7 @@
 .invoice-template-doc .unified-invoice-template {
     /* Keep invoice/quote constrained to A4-friendly width in screen preview. */
     width: 100%;
-    max-width: 210mm;
+    max-width: 720px;
 }
 .invoice-template-doc .unified-invoice-totals {
     align-items: start;
@@ -93,7 +93,28 @@
     font-feature-settings: 'tnum' 1, 'lnum' 1;
 }
 .invoice-template-doc .section {
-    margin-bottom: 24px;
+    margin-bottom: 28px;
+}
+/* Explicit fixed page containers for deterministic PDF flow. */
+.invoice-template-doc .unified-invoice-template .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 40px 48px;
+    box-sizing: border-box;
+    page-break-after: always;
+    background: #fff;
+}
+.invoice-template-doc .unified-invoice-template .page:last-child {
+    page-break-after: auto;
+}
+.invoice-template-doc .no-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+}
+/* Explicit page-break safety blocks for client/totals groups. */
+.invoice-template-doc .page-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
 }
 /* Generic lock class for HTML->PDF and print pagination. */
 .invoice-template-doc .page-break-avoid {
@@ -182,12 +203,21 @@
     overflow-wrap: anywhere;
 }
 @media print {
+    .invoice-template-doc .unified-invoice-template .page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 40px 48px;
+        page-break-after: always;
+    }
+    .invoice-template-doc .unified-invoice-template .page:last-child {
+        page-break-after: auto;
+    }
     .invoice-template-doc .unified-invoice-template {
         /* Compact print density for invoice + quote while staying readable. */
         font-size: 12px;
-        line-height: 1.35;
-        /* Reserve space for fixed footer to avoid overlap with content. */
-        padding-bottom: 64px;
+        line-height: 1.3;
+        min-height: auto !important;
+        padding-bottom: 12px;
     }
     .invoice-template-doc .unified-invoice-template header {
         margin-bottom: 12px !important;
@@ -260,11 +290,8 @@
         word-wrap: break-word;
     }
     .invoice-template-doc .unified-invoice-template .footer {
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        left: 0;
-        right: 0;
+        position: static !important;
+        width: auto;
         background: #fff;
     }
 }

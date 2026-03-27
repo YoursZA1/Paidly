@@ -145,7 +145,7 @@ export default function ViewDocument() {
       }
       const numberRaw =
         docType === "invoice" ? record.invoice_number : record.quote_number;
-      await downloadDocumentPreviewFromElement(el, docType, numberRaw);
+      await downloadDocumentPreviewFromElement(el, docType, numberRaw, { doc: previewDoc });
       toast({
         title: "PDF downloaded",
         description: "Saved to your downloads folder.",
