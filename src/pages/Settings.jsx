@@ -851,17 +851,35 @@ function CompanyProfileSettings() {
 }
 
 function PaymentMethodsSettings() {
+    const { user: authUser, refreshUser } = useAuth();
     const [bankingDetails, setBankingDetails] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [editingDetail, setEditingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isImporting, setIsImporting] = useState(false);
+    const [isSavingDefaults, setIsSavingDefaults] = useState(false);
+    const [defaultBankForm, setDefaultBankForm] = useState({
+        business_bank_name: "",
+        business_account_name: "",
+        business_account_number: "",
+        business_branch_code: "",
+    });
     const bankingFileInputRef = useRef(null);
     const { toast } = useToast();
 
     useEffect(() => {
         loadBankingDetails();
     }, []);
+
+    useEffect(() => {
+        const b = businessFieldsFromProfile(authUser?.business);
+        setDefaultBankForm({
+            business_bank_name: b.bank_name || "",
+            business_account_name: b.account_name || "",
+            business_account_number: b.account_number || "",
+            business_branch_code: b.branch_code || "",
+        });
+    }, [authUser?.id, authUser?.business]);
 
     const loadBankingDetails = async () => {
         setIsLoading(true);
@@ -900,11 +918,52 @@ function PaymentMethodsSettings() {
     const handleSetDefault = async (detailId) => {
         try {
             await Promise.all(bankingDetails.map((d) => BankingDetail.update(d.id, { ...d, is_default: d.id === detailId })));
+            const selected = bankingDetails.find((d) => d.id === detailId);
+            if (selected) {
+                await User.updateMyUserData({
+                    business: {
+                        bank_name: selected.bank_name || "",
+                        account_name: selected.account_name || "",
+                        account_number: selected.account_number || "",
+                        branch_code: selected.routing_number || "",
+                    },
+                });
+                await refreshUser();
+            }
             loadBankingDetails();
-            toast({ title: "✓ Default Updated", description: "Default payment method updated.", variant: "success" });
+            toast({ title: "✓ Default Updated", description: "Default payment method and profile bank defaults updated.", variant: "success" });
         } catch (error) {
             console.error("Error setting default:", error);
             toast({ title: "✗ Error", description: "Failed to update default.", variant: "destructive" });
+        }
+    };
+
+    const handleDefaultBankInputChange = (field, value) => {
+        setDefaultBankForm((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleSaveProfileDefaults = async () => {
+        setIsSavingDefaults(true);
+        try {
+            const payload = {
+                business: compactBusinessForProfile(defaultBankForm),
+            };
+            await User.updateMyUserData(payload);
+            await refreshUser();
+            toast({
+                title: "✓ Default bank details updated",
+                description: "Profile defaults saved. Invoice-specific payment methods still override these values.",
+                variant: "success",
+            });
+        } catch (error) {
+            console.error("Error saving profile default bank details:", error);
+            toast({
+                title: "✗ Error",
+                description: error?.message || "Failed to save default bank details.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSavingDefaults(false);
         }
     };
 
@@ -1013,6 +1072,65 @@ function PaymentMethodsSettings() {
                     </Button>
                 </div>
             </div>
+
+            <SettingsCard
+                title="Default Bank Details"
+                description="Shown on PDFs when an invoice does not use a saved bank account. Invoice-specific payment methods still take priority."
+            >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="pm_default_bank_name" className="text-sm font-medium text-foreground">Bank</Label>
+                        <Input
+                            id="pm_default_bank_name"
+                            value={defaultBankForm.business_bank_name}
+                            onChange={(e) => handleDefaultBankInputChange("business_bank_name", e.target.value)}
+                            placeholder="e.g., FNB"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="pm_default_account_name" className="text-sm font-medium text-foreground">Account name</Label>
+                        <Input
+                            id="pm_default_account_name"
+                            value={defaultBankForm.business_account_name}
+                            onChange={(e) => handleDefaultBankInputChange("business_account_name", e.target.value)}
+                            placeholder="Business name on account"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="pm_default_account_number" className="text-sm font-medium text-foreground">Account number</Label>
+                        <Input
+                            id="pm_default_account_number"
+                            value={defaultBankForm.business_account_number}
+                            onChange={(e) => handleDefaultBankInputChange("business_account_number", e.target.value)}
+                            placeholder="Account number"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="pm_default_branch_code" className="text-sm font-medium text-foreground">Branch code</Label>
+                        <Input
+                            id="pm_default_branch_code"
+                            value={defaultBankForm.business_branch_code}
+                            onChange={(e) => handleDefaultBankInputChange("business_branch_code", e.target.value)}
+                            placeholder="e.g., 250655"
+                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                        />
+                    </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                    <Button
+                        type="button"
+                        onClick={handleSaveProfileDefaults}
+                        disabled={isSavingDefaults}
+                        className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white"
+                    >
+                        <Save className="w-4 h-4 mr-2" />
+                        {isSavingDefaults ? "Saving..." : "Save Default Bank Details"}
+                    </Button>
+                </div>
+            </SettingsCard>
 
             {showForm && (
                 <BankingForm
