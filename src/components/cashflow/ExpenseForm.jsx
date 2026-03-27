@@ -276,9 +276,9 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-                <div className="flex justify-between items-center p-6 border-b shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl flex flex-col">
+                <div className="flex items-center justify-between border-b border-border p-6 shrink-0">
                     <div>
                         <h2 className="text-xl font-semibold text-primary">
                             {fromReceiptScan ? "Confirm & save" : expense?.id ? "Edit Expense" : "Add New Expense"}
@@ -457,7 +457,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                     </div>
                                     <div>
                                         <Label>Vehicle / Mode</Label>
-                                        <div className="flex items-center h-10 px-3 border rounded-md bg-gray-50 text-gray-500">
+                                        <div className="flex h-10 items-center rounded-md border border-border bg-muted px-3 text-muted-foreground">
                                             <Car className="w-4 h-4 mr-2" />
                                             Personal Vehicle
                                         </div>
@@ -500,7 +500,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                     </div>
                                     <div>
                                         <Label>Total Amount</Label>
-                                        <div className="h-10 px-3 border rounded-md bg-gray-100 flex items-center font-semibold">
+                                        <div className="flex h-10 items-center rounded-md border border-border bg-muted px-3 font-semibold text-foreground">
                                             R {formData.amount || "0.00"}
                                         </div>
                                     </div>
@@ -510,7 +510,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                     <div>
                                         <Label>Start Location</Label>
                                         <div className="relative">
-                                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                            <MapPin className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input 
                                                 className="pl-9"
                                                 placeholder="From..."
@@ -522,7 +522,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                     <div>
                                         <Label>End Location</Label>
                                         <div className="relative">
-                                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                            <MapPin className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input 
                                                 className="pl-9"
                                                 placeholder="To..."
@@ -566,9 +566,9 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                     <Label>Attachments & Receipts</Label>
                                     <div className="mt-2 space-y-3">
                                         {formData.attachments?.map((file, index) => (
-                                            <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-gray-50">
+                                            <div key={index} className="flex items-center justify-between rounded-md border border-border bg-muted/50 p-2">
                                                 <div className="flex items-center gap-2 overflow-hidden">
-                                                    <Paperclip className="w-4 h-4 text-gray-500 shrink-0" />
+                                                    <Paperclip className="w-4 h-4 shrink-0 text-muted-foreground" />
                                                     <span className="text-sm truncate">{file.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
@@ -627,7 +627,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                     </form>
                 </div>
 
-                <div className="p-6 border-t bg-gray-50 rounded-b-xl flex gap-3 shrink-0">
+                <div className="flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-muted/40 p-6">
                     <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
                         Cancel
                     </Button>

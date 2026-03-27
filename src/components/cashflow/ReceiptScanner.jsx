@@ -9,12 +9,23 @@ import {
     getReceiptScanThrottleState,
     recordReceiptScanAttempt,
 } from "@/utils/receiptOcrRateLimit";
+import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 
 function formatRetryMinutes(ms) {
     return Math.max(1, Math.ceil(ms / 60000));
 }
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const IMAGE_TYPES = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/heic",
+    "image/heif",
+    "image/bmp",
+    "image/tiff",
+];
 
 /** Steps: 1 Upload Photo → 2 OCR Reads Receipt → 3 Confirm & Save (in form) */
 const STEP_UPLOAD = 1;
@@ -56,20 +67,20 @@ function StepIndicator({ currentStep }) {
                 <React.Fragment key={num}>
                     <div className="flex flex-col items-center">
                         <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
                                 currentStep > num
                                     ? "bg-primary text-primary-foreground"
                                     : currentStep === num
                                         ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
-                                        : "bg-slate-200 text-slate-500"
+                                        : "bg-muted text-muted-foreground"
                             }`}
                         >
                             {currentStep > num ? <CheckCircle2 className="w-4 h-4" /> : num}
                         </div>
-                        <span className="text-xs text-slate-500 mt-1 hidden sm:inline">{label}</span>
+                        <span className="mt-1 hidden text-xs text-muted-foreground sm:inline">{label}</span>
                     </div>
                     {num < steps.length && (
-                        <div className={`w-6 h-0.5 sm:w-8 ${currentStep > num ? "bg-primary" : "bg-slate-200"}`} />
+                        <div className={`h-0.5 w-6 sm:w-8 ${currentStep > num ? "bg-primary" : "bg-muted"}`} />
                     )}
                 </React.Fragment>
             ))}
@@ -88,7 +99,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
     const handleScan = async (file) => {
         if (!file) return;
 
-        const isImage = IMAGE_TYPES.includes(file.type);
+        const isImage = IMAGE_TYPES.includes((file.type || "").toLowerCase());
         if (useBrowserOcr && !isImage) {
             setError("Browser OCR works with images (JPG, PNG). Use server extraction for PDFs.");
             return;
@@ -106,12 +117,15 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
         setError(null);
         setResult(null);
 
+        let file_url = null;
         try {
             recordReceiptScanAttempt();
-            const { file_url } = await UploadToReceipts({ file });
+            const uploadRes = await retryOnAbort(() => UploadToReceipts({ file }), 2, 450);
+            file_url = uploadRes?.file_url || null;
+            if (!file_url) throw new Error("Receipt upload failed");
 
             if (useBrowserOcr && isImage) {
-                const data = await extractReceiptDataWithTesseract(file);
+                const data = await retryOnAbort(() => extractReceiptDataWithTesseract(file), 1, 350);
                 const payload = buildScanPayload(data, file_url, file);
                 setResult({
                     total: data.total != null ? String(data.total) : data.raw?.match(/total\s*R?\s*(\d+[.,]\d+)/i)?.[1] ?? null,
@@ -123,10 +137,10 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                 // Handle gracefully: if extraction fails or is unavailable, still attach the receipt and let user fill manually.
                 let apiResult = null;
                 try {
-                    apiResult = await ExtractDataFromUploadedFile({
+                    apiResult = await retryOnAbort(() => ExtractDataFromUploadedFile({
                         file_url,
                         json_schema: getReceiptExtractionSchema(),
-                    });
+                    }), 1, 350);
                 } catch (e) {
                     apiResult = { status: "error", error: e?.message || String(e) };
                 }
@@ -136,7 +150,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                 let raw = "";
                 if (!extracted && isImage) {
                     try {
-                        const data = await extractReceiptDataWithTesseract(file);
+                        const data = await retryOnAbort(() => extractReceiptDataWithTesseract(file), 1, 350);
                         extracted = data;
                         raw = data?.raw || "";
                     } catch (e) {
@@ -157,7 +171,19 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
             }
         } catch (err) {
             console.error("Error scanning receipt:", err);
-            setError(err?.message || "Failed to scan receipt. Please try again.");
+            const msg = err?.message || "Failed to scan receipt. Please try again.";
+            if (isAbortError(err)) {
+                // Mobile Safari / flaky networks may abort in-flight requests; preserve progress if upload succeeded.
+                if (file_url) {
+                    const payload = buildScanPayload(null, file_url, file);
+                    setResult({ total: payload?.amount ? String(payload.amount) : null, raw: "", payload });
+                    setError("Scan was interrupted, but the receipt was uploaded. Continue and fill details manually.");
+                } else {
+                    setError("The scan was interrupted on mobile/network. Please retry and keep the app open until upload completes.");
+                }
+            } else {
+                setError(msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -168,9 +194,9 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-700">
-                <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
+                <div className="flex items-center justify-between border-b border-border p-6">
                     <h2 className="text-xl font-semibold text-foreground">Scan Receipt</h2>
                     <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Close">
                         <X className="w-4 h-4" />
@@ -183,23 +209,23 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                     {loading ? (
                         <div className="text-center py-10">
                             <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-                            <p className="text-slate-600 dark:text-slate-400 font-medium">OCR reads receipt</p>
-                            <p className="text-sm text-slate-500 mt-2">Extracting vendor, amount, date…</p>
+                            <p className="font-medium text-foreground">OCR reads receipt</p>
+                            <p className="mt-2 text-sm text-muted-foreground">Extracting vendor, amount, date…</p>
                         </div>
                     ) : result ? (
                         <div className="space-y-4">
-                            <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 p-4 space-y-2">
-                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                            <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-4">
+                                <p className="font-medium text-foreground">
                                     Expense form auto-filled
                                 </p>
-                                <p className="text-sm text-slate-600 dark:text-slate-400">
+                                <p className="text-sm text-muted-foreground">
                                     Total: {result.total ?? "—"}
                                     {result.payload?.vendor && ` · ${result.payload.vendor}`}
                                 </p>
                                 {result.raw && (
                                     <details className="text-sm">
-                                        <summary className="cursor-pointer text-slate-600 dark:text-slate-400">Raw OCR text</summary>
-                                        <pre className="mt-2 p-2 bg-white dark:bg-slate-800 rounded border text-xs overflow-auto max-h-32 whitespace-pre-wrap">{result.raw}</pre>
+                                        <summary className="cursor-pointer text-muted-foreground">Raw OCR text</summary>
+                                        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-border bg-background p-2 text-xs text-foreground">{result.raw}</pre>
                                     </details>
                                 )}
                             </div>
@@ -212,16 +238,16 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                                     Confirm & save
                                 </Button>
                             </div>
-                            <p className="text-xs text-slate-500 text-center">
+                            <p className="text-center text-xs text-muted-foreground">
                                 Next: review the expense form and save
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50/50 dark:bg-slate-800/30">
-                                <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                                <p className="text-slate-700 dark:text-slate-300 font-medium mb-1">Upload photo</p>
-                                <p className="text-sm text-slate-500 mb-4">
+                            <div className="rounded-lg border-2 border-dashed border-border bg-muted/30 py-8 text-center">
+                                <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                                <p className="mb-1 font-medium text-foreground">Upload photo</p>
+                                <p className="mb-4 text-sm text-muted-foreground">
                                     We&apos;ll read the receipt and fill the expense for you
                                 </p>
                                 <label htmlFor="receipt-upload">
@@ -245,7 +271,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                                 </label>
                             </div>
 
-                            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
                                 <Checkbox
                                     checked={useBrowserOcr}
                                     onCheckedChange={(checked) => setUseBrowserOcr(!!checked)}
@@ -254,12 +280,12 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                             </label>
 
                             {error && (
-                                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm">
+                                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
                                     {error}
                                 </div>
                             )}
 
-                            <p className="text-xs text-slate-500 text-center">
+                            <p className="text-center text-xs text-muted-foreground">
                                 JPG, PNG, WebP, or PDF
                             </p>
                         </div>

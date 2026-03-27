@@ -20,6 +20,11 @@ import { retryOnAbort } from "@/utils/retryOnAbort";
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 
+/** Mobile/webview networks can spuriously abort in-flight auth/session reads. */
+async function getSessionWithRetry() {
+  return retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+}
+
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
 const SUPABASE_SELECT_COLUMNS = {
   invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
@@ -209,7 +214,7 @@ class EntityManager {
 
   async pullFromSupabase() {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) return;
 
       const userId = sessionData.session.user.id;
@@ -349,7 +354,7 @@ class EntityManager {
     if (!record) {
       // Try direct Supabase fetch as fallback
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: sessionData } = await getSessionWithRetry();
         if (sessionData?.session?.user) {
           const userId = sessionData.session.user.id;
           let orgId;
@@ -669,7 +674,7 @@ class EntityManager {
 
   async create(data) {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) {
         throw new Error('Not authenticated');
       }
@@ -1119,7 +1124,7 @@ class EntityManager {
     }
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) {
         throw new Error('Not authenticated');
       }
@@ -1440,7 +1445,7 @@ class EntityManager {
 
       // Optionally sync to Supabase if authenticated
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: sessionData } = await getSessionWithRetry();
         if (sessionData?.session?.user && id.includes('-')) {
           const table = this.entityName.toLowerCase() + 's';
           const supabaseTable = table === 'services' ? 'services' : 
@@ -1541,7 +1546,7 @@ class AuthManager {
     let companyProfile = {};
     let supabaseUserId = null;
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await getSessionWithRetry();
       if (sessionError) {
         console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
       } else if (sessionData?.session?.user?.id) {
@@ -1745,7 +1750,7 @@ class AuthManager {
     try {
       let su = optionalSession?.user ?? null;
       if (!su) {
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await getSessionWithRetry();
         if (error || !data?.session?.user) return null;
         su = data.session.user;
       }
@@ -1813,7 +1818,7 @@ class AuthManager {
    * @returns {Promise<string|null>} auth.users id or null if not authenticated
    */
   async getAuthUserId() {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await getSessionWithRetry();
     return data?.session?.user?.id ?? null;
   }
 
@@ -1826,7 +1831,7 @@ class AuthManager {
       this.user = {};
     }
 
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await getSessionWithRetry();
     // Same fallback as me(): avoid skipping DB writes when getSession is slow/empty but we already have the auth id.
     const authUserId =
       sessionData?.session?.user?.id ?? this.user?.supabase_id ?? this.user?.id ?? null;
@@ -1971,7 +1976,7 @@ class IntegrationManager {
     };
 
     const getSessionUser = async () => {
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await getSessionWithRetry();
       if (error) throw new Error(getSupabaseErrorMessage(error, "Failed to get session"));
       return data?.session?.user ?? null;
     };
@@ -2178,7 +2183,7 @@ class IntegrationManager {
           throw new Error("Missing to or subject");
         }
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
+          const { data: sessionData } = await getSessionWithRetry();
           const token = sessionData?.session?.access_token;
           if (!token) {
             throw new Error("Not signed in");
