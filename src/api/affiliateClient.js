@@ -170,6 +170,7 @@ function resolveApiBaseUrl() {
 
 function getAffiliateDashboardApiUrl() {
   const resolved = resolveApiBaseUrl();
+  console.log("[affiliate] API URL resolution:", { resolved, viteServerUrl: import.meta.env.VITE_SERVER_URL });
   if (resolved) {
     return `${resolved}/affiliate/dashboard`;
   }

@@ -15,8 +15,14 @@ function getSupabaseAdmin() {
 }
 
 export default async function handler(req, res) {
-  // CORS headers for production
-  res.setHeader('Access-Control-Allow-Origin', 'https://paidly.co.za');
+  // CORS headers for production - allow both domains due to Vercel redirects
+  const allowedOrigins = ['https://paidly.co.za', 'https://www.paidly.co.za'];
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
