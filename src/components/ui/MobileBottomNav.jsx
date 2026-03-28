@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PropTypes from "prop-types";
@@ -21,6 +21,10 @@ function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
 
+  useEffect(() => {
+    setSpeedDialOpen(false);
+  }, [location.pathname, location.search]);
+
   const isActive = (url) => location.pathname === url.split("?")[0];
 
   const handlePress = (callback) => {
@@ -29,39 +33,37 @@ function MobileBottomNav({ onOpenMenu }) {
   };
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 isolate pointer-events-none">
       <nav
-        className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-100 dark:border-slate-700/50 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        className="relative pointer-events-auto bg-background/95 dark:bg-background/95 backdrop-blur-xl backdrop-saturate-150 border-t border-border shadow-[0_-10px_40px_-12px_rgba(15,23,42,0.12)] dark:shadow-[0_-12px_40px_-8px_rgba(0,0,0,0.55)] px-4 sm:px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         aria-label="Primary navigation"
       >
-        <div className="flex justify-between items-center max-w-md mx-auto">
+        <div className="flex justify-between items-center max-w-lg mx-auto gap-0.5 sm:gap-1">
           {/* Home */}
           <Link
             to={createPageUrl("Dashboard")}
             onClick={() => handlePress()}
-            className="flex flex-col items-center gap-1 touch-manipulation min-h-[44px] justify-center group active:scale-90 transition-transform"
+            className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
+              isActive(createPageUrl("Dashboard")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
             aria-label="Home"
+            aria-current={isActive(createPageUrl("Dashboard")) ? "page" : undefined}
           >
-            <HomeIcon
-              className={`w-6 h-6 transition-transform group-active:scale-90 ${isActive(createPageUrl("Dashboard")) ? "text-primary" : "text-slate-400"}`}
-            />
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive(createPageUrl("Dashboard")) ? "text-primary" : "text-slate-400"}`}>
-              Home
-            </span>
+            <HomeIcon className="w-6 h-6 shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Home</span>
           </Link>
           {/* Invoices */}
           <Link
             to={createPageUrl("Invoices")}
             onClick={() => handlePress()}
-            className="flex flex-col items-center gap-1 touch-manipulation min-h-[44px] justify-center group active:scale-90 transition-transform"
+            className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
+              isActive(createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
             aria-label="Invoices"
+            aria-current={isActive(createPageUrl("Invoices")) ? "page" : undefined}
           >
-            <DocumentTextIcon
-              className={`w-6 h-6 transition-transform group-active:scale-90 ${isActive(createPageUrl("Invoices")) ? "text-primary" : "text-slate-400"}`}
-            />
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive(createPageUrl("Invoices")) ? "text-primary" : "text-slate-400"}`}>
-              Invoices
-            </span>
+            <DocumentTextIcon className="w-6 h-6 shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Invoices</span>
           </Link>
 
           {/* Center FAB */}
@@ -98,7 +100,7 @@ function MobileBottomNav({ onOpenMenu }) {
             <motion.button
               type="button"
               onClick={() => handlePress(() => setSpeedDialOpen((o) => !o))}
-              className="w-14 h-14 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-xl flex items-center justify-center text-white ring-4 ring-white dark:ring-slate-900 touch-manipulation"
+              className="w-14 h-14 bg-primary text-primary-foreground rounded-2xl shadow-lg shadow-primary/35 flex items-center justify-center ring-4 ring-background touch-manipulation"
               whileTap={{ scale: 0.92 }}
               animate={{ rotate: speedDialOpen ? 45 : 0 }}
               transition={{
@@ -117,27 +119,24 @@ function MobileBottomNav({ onOpenMenu }) {
           <Link
             to={createPageUrl("Clients")}
             onClick={() => handlePress()}
-            className="flex flex-col items-center gap-1 touch-manipulation min-h-[44px] justify-center group active:scale-90 transition-transform"
+            className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
+              isActive(createPageUrl("Clients")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
             aria-label="Clients"
+            aria-current={isActive(createPageUrl("Clients")) ? "page" : undefined}
           >
-            <UserGroupIcon
-              className={`w-6 h-6 transition-transform group-active:scale-90 ${isActive(createPageUrl("Clients")) ? "text-primary" : "text-slate-400"}`}
-            />
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive(createPageUrl("Clients")) ? "text-primary" : "text-slate-400"}`}>
-              Clients
-            </span>
+            <UserGroupIcon className="w-6 h-6 shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Clients</span>
           </Link>
           {/* Menu — opens sidebar drawer */}
           <button
             type="button"
             onClick={() => handlePress(() => onOpenMenu?.())}
-            className="flex flex-col items-center gap-1 touch-manipulation min-h-[44px] justify-center group active:scale-90 transition-transform"
+            className="flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.97]"
             aria-label="Menu"
           >
-            <Bars3Icon className="w-6 h-6 text-slate-400 transition-transform group-active:scale-90" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Menu
-            </span>
+            <Bars3Icon className="w-6 h-6 shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Menu</span>
           </button>
         </div>
       </nav>

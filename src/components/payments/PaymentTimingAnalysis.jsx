@@ -168,7 +168,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                             Monthly Payment Trend
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="min-w-0 overflow-x-auto">
+                        <div className="w-full min-w-0 max-w-full">
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={metrics.monthlyData}>
                                 <CartesianGrid strokeDasharray="3 3" />
@@ -190,12 +191,13 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                                 <Bar yAxisId="right" dataKey="payments" name="Payment Count" fill="#3b82f6" />
                             </BarChart>
                         </ResponsiveContainer>
+                        </div>
                     </CardContent>
                 </Card>
             )}
 
             {/* Payment Aging Distribution */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 min-w-0">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">Last 30 Days</CardTitle>

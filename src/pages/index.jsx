@@ -90,6 +90,9 @@ const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
 const BentoDemoPage = lazy(() => import("./BentoDemo"));
 const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
+const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
+const AffiliateApply = lazy(() => import("./AffiliateApply"));
+const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthContext";
@@ -123,6 +126,10 @@ const AUTH_ROUTES = [
     { path: "/TermsAndConditions", element: <TermsAndConditions /> },
     { path: "/terms-and-conditions", element: <TermsAndConditions /> },
     { path: "/terms", element: <TermsAndConditions /> },
+    { path: "/affiliate", element: <AffiliateLanding /> },
+    { path: "/Affiliate", element: <AffiliateLanding /> },
+    { path: "/affiliate/apply", element: <AffiliateApply /> },
+    { path: "/Affiliate/apply", element: <AffiliateApply /> },
 ];
 
 // --- Main App Pages ---
@@ -154,6 +161,7 @@ const MAIN_ROUTES = [
     { path: "/bento-demo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/AnimatedIconsDemo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
     { path: "/animated-icons-demo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
+    { path: "/dashboard/affiliate", element: <RequireAuth><AffiliateDashboard /></RequireAuth> },
 ];
 
 // --- Invoice Pages ---

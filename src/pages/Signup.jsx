@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { processPendingAffiliateReferral, recordAffiliateClick, setPendingReferralCode } from "@/api/affiliateClient";
 import Home from "./Home";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,7 @@ export default function Signup() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -61,6 +63,16 @@ export default function Signup() {
   const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Persist ?ref= for post-signup attribution (localStorage key `referral_code`); survives reloads / step changes.
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref?.trim()) {
+      const code = ref.trim();
+      setPendingReferralCode(code);
+      recordAffiliateClick(code);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (location.hash !== "#sign-up") return;
@@ -281,7 +293,13 @@ export default function Signup() {
         company_name: companyName.trim(),
         company_address: companyAddress.trim()
       });
-      
+
+      try {
+        await processPendingAffiliateReferral();
+      } catch {
+        /* non-fatal */
+      }
+
       // After login, sync Step 2 company updates to Supabase profile
       try {
         const { User } = await import("@/api/entities");

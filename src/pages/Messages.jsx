@@ -347,10 +347,10 @@ export default function MessagesPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-background p-4 sm:p-6">
-                <div className="max-w-7xl mx-auto">
+            <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6">
+                <div className="max-w-7xl mx-auto min-w-0">
                     <Skeleton className="h-12 w-64 mb-8" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
                         <Skeleton className="h-96" />
                         <Skeleton className="h-96 lg:col-span-2" />
                     </div>
@@ -360,8 +360,8 @@ export default function MessagesPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
+        <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6 overflow-x-hidden">
+            <div className="max-w-7xl mx-auto min-w-0">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -393,7 +393,7 @@ export default function MessagesPage() {
                 </Tabs>
 
                 {pageTab === 'sent-documents' ? (
-                    <div className={`grid gap-6 ${selectedMessageDetail ? 'lg:grid-cols-[1fr,320px]' : ''}`}>
+                    <div className={`grid gap-6 min-w-0 ${selectedMessageDetail ? 'lg:grid-cols-[1fr,320px]' : ''}`}>
                         <Card className="bg-card shadow-xl border border-border">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -408,7 +408,7 @@ export default function MessagesPage() {
                                     <span className="ml-2">⚪ Sent</span>
                                 </p>
                             </CardHeader>
-                            <CardContent className="overflow-x-auto">
+                            <CardContent className="overflow-x-auto mobile-scroll-x min-w-0">
                                 {sentDocumentsRows.length === 0 ? (
                                     <p className="text-muted-foreground py-8 text-center">
                                         No sent documents yet. Send an invoice via Email or WhatsApp to see them here.
@@ -446,7 +446,7 @@ export default function MessagesPage() {
                                         </div>
 
                                         {/* Desktop/tablet: table */}
-                                        <table className="hidden sm:table w-full text-sm border-collapse">
+                                        <table className="hidden sm:table w-full min-w-[640px] text-sm border-collapse">
                                             <thead>
                                                 <tr className="border-b border-border">
                                                     <th className="text-left py-3 px-2 font-medium">Document</th>
@@ -524,7 +524,7 @@ export default function MessagesPage() {
                         )}
                     </div>
                 ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
                     {/* Conversations List */}
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
@@ -566,7 +566,7 @@ export default function MessagesPage() {
                                     </TabsList>
                                 </Tabs>
                             </CardHeader>
-                            <CardContent className="p-4 max-h-[60vh] overflow-y-auto">
+                            <CardContent className="p-4">
                                 <ConversationList
                                     conversations={filteredConversations}
                                     clients={clients}
@@ -585,7 +585,11 @@ export default function MessagesPage() {
                         animate={{ opacity: 1, x: 0 }}
                         className={`lg:col-span-2 ${!selectedConversation ? 'hidden lg:block' : ''}`}
                     >
-                        <Card className="bg-card shadow-xl border border-border h-[70vh]">
+                        <Card className={`bg-card shadow-xl border border-border flex flex-col min-h-0 w-full min-w-0 overflow-hidden ${
+                            selectedConversation
+                                ? "h-[min(70vh,calc(100dvh-10rem))] lg:h-[70vh]"
+                                : "min-h-[240px] lg:h-[70vh]"
+                        }`}>
                             {selectedConversation ? (
                                 <ConversationThread
                                     messages={selectedConversation.messages}

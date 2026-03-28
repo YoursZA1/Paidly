@@ -5,7 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { User, BankingDetail } from "@/api/entities";
-import { uploadLogo, validateLogoFile, LOGO_CONSTRAINTS } from "@/lib/logoUpload";
+import {
+  uploadLogo,
+  validateLogoFile,
+  LOGO_CONSTRAINTS,
+  logoMaxSizeLabel,
+} from "@/lib/logoUpload";
 import { Loader2, UploadCloud, CheckCircle, ArrowRight, Building, CreditCard, Image as ImageIcon, X } from "lucide-react";
 import CurrencySelector from "@/components/CurrencySelector";
 import { motion, AnimatePresence } from "framer-motion";
@@ -252,7 +257,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                                     <UploadCloud className="w-4 h-4" />
                                                     {logoFile || formData.logo_url ? "Change Logo" : "Upload Logo"}
                                                 </span>
-                                                <span className="text-xs text-slate-400">JPEG, PNG, or SVG (SVG for sharp PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.</span>
+                                                <span className="text-xs text-slate-400">JPEG, PNG, or SVG (SVG for sharp PDFs). Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.</span>
                                             </div>
                                             <Input 
                                                 id="logo-upload" 

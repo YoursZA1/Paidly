@@ -1,3 +1,5 @@
+import { sanitizeEmailHtmlContent } from "./sanitizeHtmlStrings.js";
+
 /**
  * Strict validation / sanitization for HTTP inputs (defense in depth; Supabase uses parameterized queries).
  */
@@ -44,16 +46,14 @@ export function sanitizeOneLine(value, maxLen = 500) {
 }
 
 /**
+ * HTML for outbound email (`/api/send-email`, etc.): length cap + `sanitize-html` allowlist (XSS).
  * @param {string} html
  * @param {number} maxLen
  */
 export function sanitizeEmailHtmlBody(html, maxLen = 500_000) {
   if (typeof html !== "string") return "";
-  let s = html.replace(/\0/g, "").slice(0, maxLen);
-  s = s.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
-  s = s.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-  s = s.replace(/javascript:/gi, "blocked:");
-  return s;
+  const s = html.replace(/\0/g, "").slice(0, maxLen);
+  return sanitizeEmailHtmlContent(s);
 }
 
 /**

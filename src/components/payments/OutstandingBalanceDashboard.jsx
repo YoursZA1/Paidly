@@ -41,7 +41,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-0">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Total Outstanding</CardTitle>
@@ -152,8 +152,9 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
         <CardHeader>
           <CardTitle>Outstanding Aging Analysis</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 overflow-x-auto">
           {agingData.length > 0 ? (
+            <div className="w-full min-w-0 max-w-full">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={agingData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -165,6 +166,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
                 <Bar dataKey="count" fill="#3b82f6" name="Invoice Count" yAxisId="right" />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <div className="h-64 flex items-center justify-center text-gray-500">
               No aging data available

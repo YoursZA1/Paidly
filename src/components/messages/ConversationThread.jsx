@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import ReactQuill from 'react-quill';
 import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
+import { sanitizeMessageHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
 
 export default function ConversationThread({ messages, client, invoice, user, onSendReply, onBack, onDeleteMessage }) {
     const [replyContent, setReplyContent] = useState('');
@@ -43,7 +44,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
     );
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0 min-w-0">
             {/* Header */}
             <div className="bg-card border-b border-border p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
                 <Button variant="ghost" size="icon" onClick={onBack} aria-label="Go back to conversations">
@@ -65,7 +66,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 bg-muted/30">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-4 bg-muted/30">
                 {sortedMessages.map((message) => {
                     const isFromBusiness = message.sender_type === 'business';
                     return (
@@ -88,7 +89,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                                     )}
                                     <div 
                                         className="whitespace-pre-wrap prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: message.content }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(message.content) }}
                                     />
                                     
                                     {message.attachments?.length > 0 && (
@@ -96,7 +97,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
                                             {message.attachments.map((att, idx) => (
                                                 <a
                                                     key={idx}
-                                                    href={att.url}
+                                                    href={sanitizeHttpUrl(att.url, typeof window !== 'undefined' ? window.location.origin : '') || '#'}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className={`flex items-center gap-2 text-sm ${
@@ -150,7 +151,7 @@ export default function ConversationThread({ messages, client, invoice, user, on
             {/* Reply Box */}
             <div className="bg-card border-t border-border p-3 sm:p-4 space-y-3">
                 {/* Quick Replies */}
-                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                <div className="flex gap-2 overflow-x-auto overflow-y-hidden pb-2 no-scrollbar touch-pan-x">
                     {quickReplies.map((reply, index) => (
                         <button
                             key={index}
@@ -163,8 +164,8 @@ export default function ConversationThread({ messages, client, invoice, user, on
                     ))}
                 </div>
 
-                <div className="flex gap-3">
-                    <div className="flex-1 bg-background">
+                <div className="flex gap-2 sm:gap-3 min-w-0">
+                    <div className="flex-1 min-w-0 max-w-full bg-background [&_.ql-container]:max-w-full [&_.ql-editor]:break-words [&_.ql-toolbar]:flex-wrap">
                         <ReactQuill
                             value={replyContent}
                             onChange={setReplyContent}

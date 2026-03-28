@@ -40,6 +40,11 @@ export default defineConfig(({ mode }) => {
           target: backendTarget,
           changeOrigin: true,
         },
+        /** Same Node server as /api — affiliate dashboard lives at /affiliate/dashboard */
+        '/affiliate': {
+          target: backendTarget,
+          changeOrigin: true,
+        },
       },
     },
     build: {

@@ -19,6 +19,12 @@
       "permanent": true
     }
   ],
+  "rewrites": [
+    {
+      "source": "/affiliate/dashboard",
+      "destination": "/api/affiliate/dashboard"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

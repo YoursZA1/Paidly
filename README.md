@@ -37,12 +37,14 @@ npm start
 
 The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
 
-1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL, e.g. `https://paidly.co.za` — **no trailing slash**), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, **email/password sign-in still works** (via Supabase directly), but **waitlist, currency, and server rate limits** need the API URL set — **or** set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-only deploy and silence the production warning.
+1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL — **no trailing slash**; e.g. **`https://api.paidly.co.za`** if the API is on that host, or the same origin as the app if the API is colocated), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, **email/password sign-in still works** (via Supabase directly), but **waitlist, currency, and server rate limits** need the API URL set — **or** set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-only deploy and silence the production warning.
 2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
 3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
 4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` if you use an explicit allowlist; otherwise defaults allow `www.paidly.co.za`, `paidly.co.za`, legacy app.* hosts, and `*.vercel.app`.
 
 The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
+
+**Affiliate dashboard API (Node):** `GET https://api.paidly.co.za/affiliate/dashboard` (alias: `GET /api/affiliate/dashboard`) requires `Authorization: Bearer <Supabase access token>`. Opening the URL in a browser without a token returns **`401`** JSON such as `{"error":"Missing bearer token"}` — that confirms the route is deployed. A successful **`200`** body includes `ok`, `affiliate`, `stats`, **`summary`** (`signups`, `paid_users`, `earnings`), and `recentCommissions`.
 
 ## Environment variables
 
@@ -59,7 +61,7 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    |----------|----------|-------------|
    | `VITE_SUPABASE_URL` | Yes | Supabase project URL (Settings → API). |
    | `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (Settings → API). |
-   | `VITE_SERVER_URL` | Strongly recommended in prod | Backend API base URL. Dev default: `http://localhost:5179`. Without it in production, auth uses Supabase directly; waitlist/currency/admin API paths still need a real URL. |
+   | `VITE_SERVER_URL` | Strongly recommended in prod | **Local:** `http://localhost:5179` (include port; backend default). **Production:** e.g. `https://api.paidly.co.za`. Without it in production, auth uses Supabase directly; waitlist/currency/admin API paths still need a real URL. |
    | `VITE_SUPABASE_ONLY` | No | Set to `1` or `true` in production if you **do not** deploy the Node API; silences the missing-`VITE_SERVER_URL` console warning (sign-in stays direct to Supabase). |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `paidly`). Set to `invoicebreek` if your Supabase project still uses the legacy bucket. |
 

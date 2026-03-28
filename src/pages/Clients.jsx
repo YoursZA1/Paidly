@@ -405,10 +405,10 @@ export default function Clients() {
   }, [activeInvoices]);
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] bg-slate-50/50 dark:bg-slate-900/50 min-h-0 w-full min-w-0 overflow-x-hidden">
-      {/* Mobile: vertical card list (< 1024px) */}
-      <div className="lg:hidden flex flex-col w-full min-w-0 flex-1 overflow-hidden">
-        <div className="flex flex-col w-full px-4 pt-4 space-y-3 flex-1 min-h-0 overflow-hidden">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100dvh-4rem)] lg:min-h-0 min-h-0 w-full min-w-0 overflow-x-hidden bg-slate-50/50 dark:bg-slate-900/50">
+      {/* Mobile: single scroll with Layout main (no nested viewport height) */}
+      <div className="lg:hidden flex flex-col w-full min-w-0">
+        <div className="flex flex-col w-full px-4 pt-2 sm:pt-4 space-y-3 pb-4">
           <div className="flex justify-between items-center mb-2 shrink-0">
             <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Clients</h2>
             <div className="flex gap-2">
@@ -445,7 +445,7 @@ export default function Clients() {
             data-testid="clients-search"
           />
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pb-24 min-h-0">
+          <div className="space-y-3 overflow-x-hidden pb-2">
             {loadError && (
               <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
                 <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">

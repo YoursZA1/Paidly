@@ -1,18 +1,9 @@
+import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
+
 /**
  * Shared transactional email HTML (Resend) — premium, document-style layout.
  * Primary brand: Paidly orange; pass primaryHex to match company document branding.
- */
-
-function esc(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/**
+ *
  * @param {{
  *   preheader?: string,
  *   title: string,
@@ -60,7 +51,7 @@ export function buildBrandedEmailDocumentHtml(opts) {
       <td align="center">
         <table role="presentation" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);border:1px solid #e4e4e7;">
           <tr>
-            <td style="background:linear-gradient(135deg, ${esc(primaryHex)} 0%, ${esc(secondaryHex)} 100%);padding:28px 24px;text-align:center;">
+            <td style="background:linear-gradient(135deg, ${escapeHtml(primaryHex)} 0%, ${escapeHtml(secondaryHex)} 100%);padding:28px 24px;text-align:center;">
               <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.85);">Document</p>
               <h1 style="margin:8px 0 0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.25;">${safeTitle}</h1>
               ${safeSub ? `<p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.92);">${safeSub}</p>` : ''}
@@ -76,7 +67,7 @@ export function buildBrandedEmailDocumentHtml(opts) {
               <table role="presentation" width="100%" style="border-top:1px solid #e4e4e7;padding-top:20px;">
                 <tr>
                   <td style="font-size:12px;color:#71717a;line-height:1.5;">
-                    ${esc(footerNote)}<br />
+                    ${escapeHtml(footerNote)}<br />
                     <span style="color:#a1a1aa;">${safeCompany}</span>
                   </td>
                 </tr>
@@ -88,7 +79,12 @@ export function buildBrandedEmailDocumentHtml(opts) {
       </td>
     </tr>
   </table>
-  ${pixelUrl ? `<img src="${esc(pixelUrl)}" width="1" height="1" alt="" style="display:block;border:0;outline:none;" />` : ''}
+  ${(() => {
+    const safePixel = sanitizeHttpUrl(pixelUrl, typeof window !== 'undefined' ? window.location.origin : '');
+    return safePixel
+      ? `<img src="${escapeHtml(safePixel)}" width="1" height="1" alt="" style="display:block;border:0;outline:none;" />`
+      : '';
+  })()}
 </body>
 </html>`;
 }

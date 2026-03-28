@@ -3,6 +3,7 @@ import { uploadAndSaveLogo } from "./SetupWizard.uploadLogo";
 import PropTypes from "prop-types";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { User, BankingDetail } from "@/api/entities";
+import { logoMaxSizeLabel } from "@/lib/logoUpload";
 
 /**
  * Setup wizard (Step 1 of 5 = Business Profile). Data is loaded from and saved to
@@ -177,7 +178,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
             <input className="w-full border rounded p-2" name="country" placeholder="Country" value={form.country} onChange={handleChange} required />
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Upload Logo (optional)</label>
-              <input type="file" name="logo" accept="image/jpeg,image/jpg,image/png,image/svg+xml" onChange={handleChange} title="JPEG, PNG, or SVG, max 500KB" />
+              <input type="file" name="logo" accept="image/jpeg,image/jpg,image/png,image/svg+xml" onChange={handleChange} title={`JPEG, PNG, or SVG, max ${logoMaxSizeLabel()}`} />
             </div>
           </div>
         )}

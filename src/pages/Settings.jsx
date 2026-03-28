@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { User, BankingDetail } from "@/api/entities";
-import { uploadLogo, validateLogoFile, LOGO_CONSTRAINTS } from "@/lib/logoUpload";
+import {
+  uploadLogo,
+  validateLogoFile,
+  LOGO_CONSTRAINTS,
+  logoMaxSizeLabel,
+} from "@/lib/logoUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +42,7 @@ import {
 } from "@/utils/documentBrandColors";
 
 const SettingsCard = ({ title, description, children }) => (
-    <section className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-3xl p-8 mb-6 shadow-sm">
+    <section className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 sm:p-8 mb-4 sm:mb-6 shadow-sm min-w-0 overflow-x-hidden">
         <div className="mb-6">
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{description}</p>
@@ -672,7 +677,7 @@ function CompanyProfileSettings() {
                           onChange={handleLogoChange}
                         />
                         <p className="text-xs text-slate-400 dark:text-slate-500">
-                            JPEG, PNG, or SVG (SVG scales best in PDFs). Max {Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024)}KB. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
+                            JPEG, PNG, or SVG (SVG scales best in PDFs). Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
                         {logoFile && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-500 flex items-center gap-1 justify-center md:justify-start">
@@ -708,7 +713,7 @@ function CompanyProfileSettings() {
                             Document Template
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3" role="radiogroup" aria-label="Document templates">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0" role="radiogroup" aria-label="Document templates">
                             {DOCUMENT_TEMPLATES.map((template) => (
                                 <button
                                     type="button"
@@ -1271,9 +1276,9 @@ export default function Settings() {
     const [activeTab, setActiveTab] = useState(initialTab);
 
     return (
-        <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
-            <div className="max-w-4xl mx-auto py-10 px-6">
-                <header className="mb-10">
+        <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+            <div className="max-w-4xl mx-auto py-6 sm:py-10 px-0 sm:px-6 min-w-0">
+                <header className="mb-6 sm:mb-10">
                     <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">Settings</h1>
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Tailor Paidly to your business needs.</p>
                 </header>

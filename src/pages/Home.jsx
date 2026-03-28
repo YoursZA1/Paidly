@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { recordAffiliateClick, setPendingReferralCode } from "@/api/affiliateClient";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Features from "@/components/Features";
@@ -12,6 +13,7 @@ import Footer from "@/components/Footer";
 import LandingLoginModal from "@/components/auth/LandingLoginModal";
 import WaitlistSection from "@/components/WaitlistSection";
 import LaunchCountdownFloat from "@/components/LaunchCountdownFloat";
+import AffiliateSection from "@/components/marketing/AffiliateSection";
 
 /**
  * Marketing landing (Supabase-style dark shell). Optional authSlot renders between hero and features
@@ -27,6 +29,16 @@ export default function Home({
   const [loginOpen, setLoginOpen] = useState(false);
 
   const openLogin = useCallback(() => setLoginOpen(true), []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const ref = params.get("ref");
+    if (ref && ref.trim()) {
+      const code = ref.trim();
+      setPendingReferralCode(code);
+      recordAffiliateClick(code);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (location.hash !== "#waitlist") return;
@@ -48,6 +60,7 @@ export default function Home({
       <ProductPreview />
       <Pricing />
       <ValueSection />
+      <AffiliateSection />
       <SocialProof />
       <CTASection />
       <Footer onLoginClick={openLogin} />

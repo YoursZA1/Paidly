@@ -1,0 +1,300 @@
+import { supabase } from "@/lib/supabaseClient";
+
+/** Canonical key (survives reloads). Legacy key migrated on read. */
+const REFERRAL_CODE_KEY = "referral_code";
+const LEGACY_REF_KEY = "paidly_pending_ref";
+
+export function getPendingReferralCodeFromStorage() {
+  try {
+    const v =
+      window.localStorage.getItem(REFERRAL_CODE_KEY) || window.localStorage.getItem(LEGACY_REF_KEY);
+    return v && String(v).trim() ? String(v).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPendingReferralCode(code) {
+  const c = code && String(code).trim();
+  if (!c) return;
+  try {
+    window.localStorage.setItem(REFERRAL_CODE_KEY, c);
+    try {
+      window.localStorage.removeItem(LEGACY_REF_KEY);
+    } catch {
+      /* ignore */
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearPendingReferralCode() {
+  try {
+    window.localStorage.removeItem(REFERRAL_CODE_KEY);
+    window.localStorage.removeItem(LEGACY_REF_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Prefer server `/api/referrals/create` (JWT + service rules); fall back to Supabase RPC if API unreachable.
+ */
+export async function processPendingAffiliateReferral() {
+  const code = getPendingReferralCodeFromStorage();
+  if (!code) return { ok: true, skipped: true };
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData?.session;
+  const uid = session?.user?.id;
+  const accessToken = session?.access_token;
+  if (!uid || !accessToken) return { ok: false, error: "no_session" };
+
+  try {
+    const res = await fetch("/api/referrals/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ referral_code: code }),
+    });
+    let json = {};
+    try {
+      json = await res.json();
+    } catch {
+      /* ignore */
+    }
+    if (res.ok) {
+      clearPendingReferralCode();
+      return { ok: true, idempotent: json.idempotent === true };
+    }
+    if (res.status === 400) {
+      clearPendingReferralCode();
+      return { ok: false, error: json.error || "invalid_or_self" };
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn("[affiliate] /api/referrals/create failed; falling back to RPC", e?.message || e);
+    }
+  }
+
+  const { data, error } = await supabase.rpc("record_referral_signup", {
+    p_code: code,
+    p_new_user_id: uid,
+  });
+
+  if (error) {
+    console.warn("[affiliate] record_referral_signup", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const payload = data;
+  if (payload?.ok === false) {
+    if (payload?.error === "self_referral" || payload?.error === "invalid_code") {
+      clearPendingReferralCode();
+    }
+    return { ok: false, ...payload };
+  }
+
+  clearPendingReferralCode();
+  return { ok: true, data: payload };
+}
+
+export async function recordAffiliateClick(referralCode) {
+  if (!referralCode || String(referralCode).trim().length < 2) return;
+  const { error } = await supabase.rpc("record_affiliate_click", {
+    p_code: String(referralCode).trim(),
+  });
+  if (error && import.meta.env.DEV) {
+    console.warn("[affiliate] record_affiliate_click", error.message);
+  }
+}
+
+/**
+ * Submit public affiliate application (insert affiliate_applications).
+ */
+export async function submitAffiliateApplication({ email, fullName, whyPromote, audiencePlatform }) {
+  const row = {
+    email: String(email).trim().toLowerCase(),
+    full_name: String(fullName).trim(),
+    why_promote: whyPromote != null ? String(whyPromote).trim() : null,
+    audience_platform: audiencePlatform != null ? String(audiencePlatform).trim() : null,
+    status: "pending",
+  };
+  const { error } = await supabase.from("affiliate_applications").insert(row);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/**
+ * Node API base for absolute `fetch` URLs.
+ *
+ * Critical:
+ * - **Local:** `VITE_SERVER_URL=http://localhost:5179` (port required — matches `npm run server` / Vite proxy default).
+ * - **Production:** `VITE_SERVER_URL=https://api.paidly.co.za` (no trailing slash).
+ *
+ * If unset or invalid, uses same-origin `/api/...` (Vite dev proxies to the backend).
+ */
+function resolveApiBaseUrl() {
+  const raw = (import.meta.env.VITE_SERVER_URL ?? "").toString().trim();
+  if (!raw) return "";
+
+  const base = raw.replace(/\/$/, "");
+
+  try {
+    const u = new URL(base);
+    if (
+      u.protocol === "http:" &&
+      (u.hostname === "localhost" || u.hostname === "127.0.0.1") &&
+      !u.port
+    ) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Paidly] VITE_SERVER_URL must include the API port for local dev, e.g. http://localhost:5179 (not http://localhost alone). Using same-origin /api."
+        );
+      }
+      return "";
+    }
+    return base;
+  } catch {
+    if (import.meta.env.DEV) {
+      console.warn("[Paidly] VITE_SERVER_URL is not a valid URL; using same-origin /api.", base);
+    }
+    return "";
+  }
+}
+
+function getAffiliateDashboardApiUrl() {
+  const resolved = resolveApiBaseUrl();
+  if (resolved) {
+    return `${resolved}/affiliate/dashboard`;
+  }
+  /** Dev: Vite proxies `/affiliate` and `/api` to the Node server (see vite.config.js). */
+  return "/affiliate/dashboard";
+}
+
+async function fetchAffiliateDashboardFromSupabase() {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const uid = sessionData?.session?.user?.id;
+  if (!uid) return { ok: false, error: "no_session" };
+
+  const { data: affiliate, error: affErr } = await supabase
+    .from("affiliates")
+    .select("id, referral_code, commission_rate, status, created_at")
+    .eq("user_id", uid)
+    .eq("status", "approved")
+    .maybeSingle();
+
+  if (affErr) {
+    return { ok: false, error: affErr.message };
+  }
+
+  if (!affiliate) {
+    return {
+      ok: true,
+      affiliate: null,
+      stats: { clicks: 0, signups: 0, subscribed: 0, paidUsers: 0, earningsPending: 0, earningsPaid: 0 },
+      summary: { signups: 0, paid_users: 0, earnings: 0 },
+      recentCommissions: [],
+    };
+  }
+
+  const aid = affiliate.id;
+
+  const [clicksRes, referralsRes, commissionsRes] = await Promise.all([
+    supabase.from("affiliate_clicks").select("id", { count: "exact", head: true }).eq("affiliate_id", aid),
+    supabase.from("referrals").select("id, status").eq("affiliate_id", aid),
+    supabase
+      .from("commissions")
+      .select("id, amount, status, created_at")
+      .eq("affiliate_id", aid)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const referrals = referralsRes.data || [];
+  const signups = referrals.filter(
+    (r) => r.status === "signed_up" || r.status === "subscribed" || r.status === "paid"
+  ).length;
+  const subscribed = referrals.filter((r) => r.status === "subscribed" || r.status === "paid").length;
+  const paidUsers = referrals.filter((r) => r.status === "paid").length;
+
+  const commissions = commissionsRes.data || [];
+  const earningsPending = commissions
+    .filter((c) => c.status === "pending" || c.status === "approved")
+    .reduce((s, c) => s + Number(c.amount || 0), 0);
+  const earningsPaid = commissions
+    .filter((c) => c.status === "paid")
+    .reduce((s, c) => s + Number(c.amount || 0), 0);
+
+  const earningsTotal = earningsPending + earningsPaid;
+
+  return {
+    ok: true,
+    affiliate,
+    stats: {
+      clicks: clicksRes.count ?? 0,
+      signups,
+      subscribed,
+      paidUsers,
+      earningsPending,
+      earningsPaid,
+    },
+    summary: { signups, paid_users: paidUsers, earnings: earningsTotal },
+    recentCommissions: commissions,
+    referralsError: referralsRes.error?.message,
+  };
+}
+
+/**
+ * Affiliate dashboard: always calls the Node API first (`resolveApiBaseUrl()` + `/affiliate/dashboard`, or same-origin `/affiliate/dashboard` when unset — Vite proxies to the server).
+ * Bearer token is required by the API; `credentials: "include"` for cookie-backed setups. Falls back to Supabase client only if the API fails.
+ */
+export async function fetchAffiliateDashboardData() {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData?.session;
+  const accessToken = session?.access_token;
+  if (!session?.user?.id || !accessToken) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "[affiliate] fetchAffiliateDashboardData: no session — not calling API (check auth / RequireAuth)."
+      );
+    }
+    return { ok: false, error: "no_session" };
+  }
+
+  const url = getAffiliateDashboardApiUrl();
+  console.log("Fetching affiliate data from API...", url);
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      console.error(`[affiliate] API failed with status ${res.status}`);
+      throw new Error(`API failed (${res.status})`);
+    }
+
+    const data = await res.json();
+    console.log("[affiliate] Dashboard API success", { ok: data?.ok, affiliate: !!data?.affiliate, stats: !!data?.stats });
+    
+    if (!data?.ok) {
+      console.error("[affiliate] API returned error:", data?.error);
+      return data;
+    }
+    
+    return data;
+  } catch (err) {
+    console.error("[affiliate] API call failed — MUST FIX CONFIG (no fallback):", err.message);
+    return { ok: false, error: err.message || "API unreachable" };
+  }
+}

@@ -34,6 +34,27 @@ export function createWaitlistUrl(): string {
     return `${createPageUrl("Home")}#waitlist`;
 }
 
+export {
+    AFFILIATE_LANDING_PATH,
+    AFFILIATE_APPLY_PATH,
+    AFFILIATE_DASHBOARD_PATH,
+} from "./affiliatePaths";
+
+/** Canonical URL for the in-app affiliate program dashboard */
+export function createAffiliateDashboardUrl(): string {
+    return "/dashboard/affiliate";
+}
+
+/** Public affiliate program landing (apply) */
+export function createAffiliateLandingUrl(): string {
+    return "/affiliate";
+}
+
+/** Public affiliate application form */
+export function createAffiliateApplyUrl(): string {
+    return "/affiliate/apply";
+}
+
 /**
  * When sign-in runs on a different origin than the dashboard (e.g. legacy split marketing vs app hosts),
  * set VITE_APP_URL to the dashboard origin. With a single deployment on https://www.paidly.co.za, leave unset

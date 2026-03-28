@@ -13,6 +13,12 @@ html.light {
   color-scheme: light;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 /* Viewport-based scale for mobile: fluid base font so rem units scale with screen size */
 @media (max-width: 1023px) {
   html {

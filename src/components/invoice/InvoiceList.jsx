@@ -84,7 +84,7 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
     const issuedDate = invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "—";
     const amountLabel = formatCurrency(invoice.total_amount, userCurrency);
     return (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0 shadow-sm">
             <Link
                 to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
                 className="flex-1 min-w-0 flex justify-between items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"

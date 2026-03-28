@@ -69,14 +69,14 @@ const PaymentMethodAnalytics = ({ payments = [], currency = 'USD' }) => {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Payment Methods Used</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-gray-900">{analytics.statistics.totalMethods}</p>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-1 break-words line-clamp-3">
               {Object.keys(analytics.distribution).join(', ')}
             </p>
           </CardContent>
@@ -114,17 +114,21 @@ const PaymentMethodAnalytics = ({ payments = [], currency = 'USD' }) => {
         <CardHeader>
           <CardTitle>Payment Method Distribution</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 overflow-x-hidden">
           {analytics.chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={analytics.chartData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ method, percent }) => `${method}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
+                  label={({ method, percent }) => {
+                    const m = String(method || '');
+                    const short = m.length > 14 ? `${m.slice(0, 12)}…` : m;
+                    return `${short} ${((percent || 0) * 100).toFixed(0)}%`;
+                  }}
+                  outerRadius={72}
                   fill="#8884d8"
                   dataKey="amount"
                 >

@@ -7,6 +7,7 @@ import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
+import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
 
 function getCachedUser() {
@@ -240,6 +241,12 @@ export function AuthProvider({ children }) {
     });
     return () => subscription.unsubscribe();
   }, [refreshUser, scheduleRefreshUser]);
+
+  // Attach pending ?ref= from localStorage once a session exists (OAuth, email link, or after refresh).
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    processPendingAffiliateReferral();
+  }, [session?.user?.id]);
 
   // Auto-update profile (and assets like logo) when the profiles row changes (e.g. Settings save, another tab, or admin)
   useSupabaseRealtime(

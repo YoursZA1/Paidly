@@ -214,8 +214,8 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
         <CardHeader>
           <CardTitle>6-Month Trend Analysis</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <CardContent className="min-w-0 overflow-x-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 min-w-0">
             <div className={`p-3 rounded-lg border ${
               analysis.trends.incomeTrend === 'increasing' ? 'bg-green-50 border-green-200' :
               analysis.trends.incomeTrend === 'decreasing' ? 'bg-red-50 border-red-200' :
@@ -263,6 +263,7 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
           </div>
 
           {analysis.trends.monthlyData && analysis.trends.monthlyData.length > 0 && (
+            <div className="w-full min-w-0 overflow-x-auto">
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={analysis.trends.monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -294,6 +295,7 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
                 />
               </LineChart>
             </ResponsiveContainer>
+            </div>
           )}
         </CardContent>
       </Card>

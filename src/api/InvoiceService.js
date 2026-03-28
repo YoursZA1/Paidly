@@ -4,6 +4,7 @@
 
 import { breakApi } from './apiClient';
 import { isAbortError } from '@/utils/retryOnAbort';
+import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
 
 class InvoiceService {
   /**
@@ -156,6 +157,18 @@ class InvoiceService {
     pdfUrl,
     customMessage = ''
   ) {
+    const base =
+      typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+    const safeClient = escapeHtml(clientName);
+    const safeCompany = escapeHtml(companyName);
+    const safeInvoiceNumber = escapeHtml(invoiceNumber);
+    const safeView = sanitizeHttpUrl(publicViewUrl, base) || '#';
+    const safePdf = sanitizeHttpUrl(pdfUrl, base) || '#';
+    const safeCustom = customMessage
+      ? escapeHtml(customMessage).replace(/\r\n|\r|\n/g, '<br/>')
+      : '';
+    const dateSent = escapeHtml(new Date().toLocaleDateString());
+    const year = escapeHtml(String(new Date().getFullYear()));
     return `
       <!DOCTYPE html>
       <html>
@@ -266,44 +279,44 @@ class InvoiceService {
         <body>
           <div class="email-container">
             <div class="email-header">
-              <h1>Invoice from <span class="company-name">${companyName}</span></h1>
+              <h1>Invoice from <span class="company-name">${safeCompany}</span></h1>
             </div>
 
             <div class="email-body">
-              <p>Hello <strong>${clientName}</strong>,</p>
+              <p>Hello <strong>${safeClient}</strong>,</p>
               
-              <p>We're pleased to send you Invoice <strong>#${invoiceNumber}</strong>. Please review the details below and let us know if you have any questions.</p>
+              <p>We're pleased to send you Invoice <strong>#${safeInvoiceNumber}</strong>. Please review the details below and let us know if you have any questions.</p>
 
               <div class="invoice-details">
-                <p><strong>Invoice Number:</strong> ${invoiceNumber}</p>
-                <p><strong>From:</strong> ${companyName}</p>
-                <p><strong>Date Sent:</strong> ${new Date().toLocaleDateString()}</p>
+                <p><strong>Invoice Number:</strong> ${safeInvoiceNumber}</p>
+                <p><strong>From:</strong> ${safeCompany}</p>
+                <p><strong>Date Sent:</strong> ${dateSent}</p>
               </div>
 
               ${
-                customMessage
+                safeCustom
                   ? `<div class="custom-message">
-                      <p>${customMessage}</p>
+                      <p>${safeCustom}</p>
                     </div>`
                   : ''
               }
 
               <div class="button-group">
-                <a href="${publicViewUrl}" class="button button-primary">
+                <a href="${escapeHtml(safeView)}" class="button button-primary">
                   View Invoice Online
                 </a>
-                <a href="${pdfUrl}" class="button button-secondary">
+                <a href="${escapeHtml(safePdf)}" class="button button-secondary">
                   Download PDF
                 </a>
               </div>
 
               <p>Thank you for your business!</p>
-              <p>Best regards,<br><strong>${companyName}</strong></p>
+              <p>Best regards,<br><strong>${safeCompany}</strong></p>
             </div>
 
             <div class="email-footer">
               <p>This is an automated email from Paidly. Please do not reply to this email.</p>
-              <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+              <p>&copy; ${year} ${safeCompany}. All rights reserved.</p>
             </div>
           </div>
         </body>

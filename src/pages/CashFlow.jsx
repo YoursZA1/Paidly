@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
@@ -6,7 +6,7 @@ import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Camera, Download, Mail, Building2, Upload, ArrowUpRight, ArrowDownLeft, Wallet, LayoutGrid, List } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Camera, Download, Mail, Upload, ArrowUpRight, ArrowDownLeft, Wallet, LayoutGrid, List } from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
@@ -24,7 +24,6 @@ import { breakApi } from "@/api/apiClient";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { createPageUrl } from "@/utils";
-import { useNavigate } from 'react-router-dom';
 import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,7 +50,6 @@ async function fetchCashFlowPageData() {
 const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'];
 
 export default function CashFlowPage() {
-    const navigate = useNavigate();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const setExpensesInStore = useAppStore((s) => s.setExpenses);
@@ -75,7 +73,6 @@ export default function CashFlowPage() {
             }
             : undefined,
     });
-    const expensesFromQuery = data?.expenses ?? storeExpensesForInit ?? [];
     const payments = data?.payments ?? storePayments ?? [];
     const invoices = data?.invoices ?? storeInvoices ?? [];
     const user = data?.user ?? storeUser ?? null;
@@ -266,14 +263,14 @@ export default function CashFlowPage() {
             transition={{ duration: 0.3 }}
         >
             <Card className="hover:shadow-lg transition-shadow bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600 dark:text-slate-400">{title}</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2 min-w-0">
+                    <CardTitle className="text-sm font-medium text-gray-600 dark:text-slate-400 min-w-0 truncate">{title}</CardTitle>
                     <div className={`p-2 rounded-lg ${color}`}>
                         <Icon className="h-4 w-4 text-white" />
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{formatCurrency(value, userCurrency)}</div>
+                <CardContent className="min-w-0">
+                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 break-words">{formatCurrency(value, userCurrency)}</div>
                     {trend && (
                         <div className={`text-xs flex items-center gap-1 mt-2 ${trendValue >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {trendValue >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
@@ -346,9 +343,9 @@ export default function CashFlowPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="w-full h-full p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-900/95"
+            className="w-full min-w-0 h-full overflow-x-hidden mobile-page p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-900/95"
         >
-            <div className="max-w-7xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-6 min-w-0">
                 {/* Header */}
                 <motion.div 
                     initial={{ opacity: 0, y: -20 }}
@@ -400,7 +397,7 @@ export default function CashFlowPage() {
 
                 {/* Metrics Cards */}
                 {isLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
                         {[...Array(4)].map((_, i) => (
                             <Card key={i} className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <CardHeader className="pb-2">
@@ -414,7 +411,7 @@ export default function CashFlowPage() {
                         ))}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
                         <MetricCard 
                             title="Income (This Month)" 
                             value={metrics.currentMonthIncome}
@@ -443,12 +440,13 @@ export default function CashFlowPage() {
                 )}
 
                 {/* Charts Tabs */}
-                <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
+                <div className="flex gap-1 sm:gap-2 border-b border-gray-200 dark:border-slate-700 overflow-x-auto overflow-y-hidden pb-px -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x">
                     {['overview', 'expenses', 'analysis'].map(tab => (
                         <button
                             key={tab}
+                            type="button"
                             onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 font-medium transition-colors capitalize ${
+                            className={`shrink-0 px-3 sm:px-4 py-2 font-medium transition-colors capitalize whitespace-nowrap ${
                                 activeTab === tab 
                                     ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-600 dark:border-emerald-400' 
                                     : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100'
@@ -482,7 +480,8 @@ export default function CashFlowPage() {
                                     ))}
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="min-w-0 overflow-x-auto">
+                                <div className="w-full min-w-0 max-w-full">
                                 <ResponsiveContainer width="100%" height={400}>
                                     <BarChart data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
@@ -494,6 +493,7 @@ export default function CashFlowPage() {
                                         <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
                                     </BarChart>
                                 </ResponsiveContainer>
+                                </div>
                             </CardContent>
                         </Card>
 
@@ -501,7 +501,8 @@ export default function CashFlowPage() {
                             <CardHeader>
                                 <CardTitle className="text-slate-900 dark:text-slate-100">Net Cash Flow Trend</CardTitle>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="min-w-0 overflow-x-auto">
+                                <div className="w-full min-w-0 max-w-full">
                                 <ResponsiveContainer width="100%" height={300}>
                                     <LineChart data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
@@ -512,6 +513,7 @@ export default function CashFlowPage() {
                                         <Line type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={2} name="Net Flow" />
                                     </LineChart>
                                 </ResponsiveContainer>
+                                </div>
                             </CardContent>
                         </Card>
                     </motion.div>
@@ -523,22 +525,26 @@ export default function CashFlowPage() {
                         animate={{ opacity: 1 }}
                         className="space-y-6"
                     >
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
+                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
                                 <CardHeader>
                                     <CardTitle className="text-slate-900 dark:text-slate-100">Expense Breakdown</CardTitle>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="min-w-0 overflow-x-hidden">
                                     {categoryData.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
+                                        <ResponsiveContainer width="100%" height={280}>
                                             <PieChart>
                                                 <Pie
                                                     data={categoryData}
                                                     cx="50%"
                                                     cy="50%"
                                                     labelLine={false}
-                                                    label={({ name, value }) => `${name}: ${formatCurrency(value, userCurrency)}`}
-                                                    outerRadius={80}
+                                                    label={({ name, percent }) => {
+                                                        const n = String(name || "");
+                                                        const short = n.length > 14 ? `${n.slice(0, 12)}…` : n;
+                                                        return `${short} ${((percent || 0) * 100).toFixed(0)}%`;
+                                                    }}
+                                                    outerRadius={72}
                                                     fill="#8884d8"
                                                     dataKey="value"
                                                 >
@@ -557,22 +563,22 @@ export default function CashFlowPage() {
                                 </CardContent>
                             </Card>
 
-                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
                                 <CardHeader>
                                     <CardTitle className="text-slate-900 dark:text-slate-100">Category Summary</CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 min-w-0">
                                         {categoryData.map((category, idx) => (
-                                            <div key={idx} className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
+                                            <div key={idx} className="flex items-center justify-between gap-2 min-w-0">
+                                                <div className="flex items-center gap-2 min-w-0">
                                                     <div 
-                                                        className="w-3 h-3 rounded-full" 
+                                                        className="w-3 h-3 rounded-full shrink-0" 
                                                         style={{ backgroundColor: COLORS[idx % COLORS.length] }}
                                                     />
-                                                    <span className="text-sm font-medium capitalize text-slate-900 dark:text-slate-100">{category.name}</span>
+                                                    <span className="text-sm font-medium capitalize text-slate-900 dark:text-slate-100 truncate">{category.name}</span>
                                                 </div>
-                                                <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatCurrency(category.value, userCurrency)}</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 shrink-0 tabular-nums">{formatCurrency(category.value, userCurrency)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -699,8 +705,8 @@ export default function CashFlowPage() {
                             payments={payments}
                         />
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
                             <CardHeader>
                                 <CardTitle className="text-slate-900 dark:text-slate-100">Monthly Summary</CardTitle>
                             </CardHeader>
@@ -724,26 +730,26 @@ export default function CashFlowPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
                             <CardHeader>
                                 <CardTitle className="text-slate-900 dark:text-slate-100">Statistics</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="p-4 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30">
+                            <CardContent className="space-y-4 min-w-0">
+                                <div className="p-4 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30 min-w-0">
                                     <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Income</p>
-                                    <p className="text-2xl font-bold text-primary">
+                                    <p className="text-2xl font-bold text-primary break-words">
                                         {formatCurrency(metrics.totalIncome / Math.max(chartData.length, 1), userCurrency)}
                                     </p>
                                 </div>
-                                <div className="p-4 bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-800">
+                                <div className="p-4 bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-800 min-w-0">
                                     <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Expenses</p>
-                                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                                    <p className="text-2xl font-bold text-red-600 dark:text-red-400 break-words">
                                         {formatCurrency(metrics.totalExpenses / Math.max(chartData.length, 1), userCurrency)}
                                     </p>
                                 </div>
-                                <div className={`p-4 rounded-lg border ${metrics.totalIncome > metrics.totalExpenses ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800'}`}>
+                                <div className={`p-4 rounded-lg border min-w-0 ${metrics.totalIncome > metrics.totalExpenses ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800'}`}>
                                     <p className="text-sm text-gray-600 dark:text-slate-400">Overall Balance</p>
-                                    <p className={`text-2xl font-bold ${metrics.totalIncome > metrics.totalExpenses ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                    <p className={`text-2xl font-bold break-words ${metrics.totalIncome > metrics.totalExpenses ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
                                         {formatCurrency(metrics.totalIncome - metrics.totalExpenses, userCurrency)}
                                     </p>
                                 </div>

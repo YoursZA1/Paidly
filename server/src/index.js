@@ -13,7 +13,7 @@ import {
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
-import { getUserFromRequest } from "./supabaseAuth.js";
+import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
 import {
   consumeLoginSlot,
   getClientIp,
@@ -30,12 +30,11 @@ import {
   apiAbuseLimiterMiddleware,
   startApiAbusePruner,
 } from "./apiAbuseLimiter.js";
+import { createGlobalApiLimiter } from "./globalExpressRateLimit.js";
 import {
   assertFiniteAmount,
-  isReasonablePasswordLength,
   isSafeHttpUrl,
   isValidEmail,
-  isValidSubscriptionId,
   isValidTrackingToken,
   isValidUuid,
   normalizeHtmlPdfPageMargins,
@@ -49,6 +48,27 @@ import {
   validateBase64Pdf,
 } from "./inputValidation.js";
 import { generateHtmlPdfBuffer, getAnvilClient } from "./anvilPdf.js";
+import { parseBody } from "./validateBody.js";
+import {
+  signInBodySchema,
+  signUpBodySchema,
+  waitlistBodySchema,
+} from "./schemas/apiBodySchemas.js";
+import { sendInvoiceBodySchema } from "./schemas/invoiceSchemas.js";
+import {
+  adminBootstrapBodySchema,
+  adminInviteBodySchema,
+  adminRolesBodySchema,
+  generatePdfHtmlBodySchema,
+  payfastOnceBodySchema,
+  payfastSubscriptionBodySchema,
+  sendEmailBodySchema,
+  trackOpenBodySchema,
+} from "./schemas/mutationSchemas.js";
+import { sendUnexpectedError } from "./apiResponse.js";
+import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
+import { recordSubscriptionPaymentCommission } from "./affiliateSubscriptionCommission.js";
+import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from server directory (so it works when run from project root or server/)
@@ -228,6 +248,7 @@ app.use(express.urlencoded({
   }
 }));
 
+app.use("/api", createGlobalApiLimiter(getClientIp));
 app.use(apiAbuseLimiterMiddleware(getClientIp, logSecurity));
 
 /** Root URL — no SPA here; avoids a bare 404 when someone opens the API port in a browser. */
@@ -249,19 +270,13 @@ app.get("/api/health", (req, res) => {
 app.post("/api/waitlist", async (req, res) => {
   const ip = getClientIp(req);
   try {
-    const body = req.body || {};
-    const { email, name, source } = body;
-    if (!email || typeof email !== "string") {
-      logSecurity("warn", "waitlist_bad_request", { ip, reason: "missing_email" });
-      return res.status(400).json({ error: "Email is required" });
-    }
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      logSecurity("warn", "waitlist_bad_request", { ip, reason: "invalid_email" });
-      return res.status(400).json({ error: "Invalid email" });
-    }
-    const nameSafe = sanitizeOneLine(name != null ? String(name) : "", 120);
-    const sourceSafe = sanitizeOneLine(source != null ? String(source) : "", 64);
+    const parsed = parseBody(waitlistBodySchema, req, res, () =>
+      logSecurity("warn", "waitlist_bad_request", { ip, reason: "validation" })
+    );
+    if (!parsed) return;
+    const { email: normalizedEmail, name, source } = parsed;
+    const nameSafe = sanitizeOneLine(name != null ? name : "", 120);
+    const sourceSafe = sanitizeOneLine(source != null ? source : "", 64);
 
     const { error } = await supabaseAdmin.from("waitlist_signups").insert({
       email: normalizedEmail,
@@ -307,32 +322,69 @@ app.post("/api/waitlist", async (req, res) => {
 });
 
 /**
+ * Attach referral attribution after signup/login. Validates JWT server-side; idempotent per referred user.
+ */
+app.post("/api/referrals/create", async (req, res) => {
+  try {
+    const { user, error } = await getUserFromRequest(req);
+    if (error || !user?.id) {
+      return res.status(401).json({ error: error || "Unauthorized" });
+    }
+    const referralCode = req.body?.referral_code ?? req.body?.referralCode;
+    const result = await createReferralAttributionForUser(supabaseAdmin, {
+      referralCode: referralCode != null ? String(referralCode) : "",
+      userId: user.id,
+    });
+    if (!result.ok) {
+      const err = result.error;
+      if (err === "self_referral" || err === "invalid_affiliate" || err === "invalid_code") {
+        return res.status(400).json({ error: err });
+      }
+      return res.status(500).json({ error: err || "failed" });
+    }
+    return res.json({ ok: true, idempotent: result.idempotent === true });
+  } catch (err) {
+    console.error("[referrals/create]", err?.message || err);
+    return res.status(500).json({ error: "Unexpected error" });
+  }
+});
+
+/**
+ * Affiliate dashboard: stats + commissions (JWT).
+ * Canonical on API host: GET /affiliate/dashboard — alias: GET /api/affiliate/dashboard
+ */
+async function handleAffiliateDashboardGet(req, res) {
+  try {
+    const { user, error } = await getUserFromRequest(req);
+    if (error || !user?.id) {
+      return res.status(401).json({ error: error || "Unauthorized" });
+    }
+    const payload = await buildAffiliateDashboardPayload(supabaseAdmin, user.id);
+    if (!payload.ok) {
+      return res.status(500).json({ error: payload.error || "failed" });
+    }
+    return res.json(payload);
+  } catch (err) {
+    console.error("[affiliate/dashboard]", err?.message || err);
+    return res.status(500).json({ error: "Unexpected error" });
+  }
+}
+
+app.get("/affiliate/dashboard", handleAffiliateDashboardGet);
+app.get("/api/affiliate/dashboard", handleAffiliateDashboardGet);
+
+/**
  * Password sign-in proxied through the API so we can rate-limit by IP before hitting Supabase.
  * Client sets the returned tokens via supabase.auth.setSession (see SupabaseAuthService.signInWithEmail).
  */
 app.post("/api/auth/sign-in", async (req, res) => {
   const ip = getClientIp(req);
   try {
-    const { email, password } = req.body || {};
-    if (
-      !email ||
-      typeof email !== "string" ||
-      !password ||
-      typeof password !== "string"
-    ) {
-      logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "missing_fields" });
-      return res.status(400).json({ error: "Email and password are required" });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "invalid_email" });
-      return res.status(400).json({ error: "Invalid email" });
-    }
-    if (!isReasonablePasswordLength(password)) {
-      logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "invalid_password_length" });
-      return res.status(400).json({ error: "Invalid password" });
-    }
+    const parsed = parseBody(signInBodySchema, req, res, () =>
+      logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "validation" })
+    );
+    if (!parsed) return;
+    const { email: normalizedEmail, password } = parsed;
 
     const slot = consumeLoginSlot(ip);
     if (!slot.ok) {
@@ -413,27 +465,11 @@ app.post("/api/auth/sign-in", async (req, res) => {
 app.post("/api/auth/sign-up", async (req, res) => {
   const ip = getClientIp(req);
   try {
-    const body = req.body || {};
-    const { email, password, data: profile } = body;
-    if (
-      !email ||
-      typeof email !== "string" ||
-      !password ||
-      typeof password !== "string"
-    ) {
-      logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "missing_fields" });
-      return res.status(400).json({ error: "Email and password are required" });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "invalid_email" });
-      return res.status(400).json({ error: "Invalid email" });
-    }
-    if (!isReasonablePasswordLength(password)) {
-      logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "invalid_password_length" });
-      return res.status(400).json({ error: "Invalid password" });
-    }
+    const parsed = parseBody(signUpBodySchema, req, res, () =>
+      logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
+    );
+    if (!parsed) return;
+    const { email: normalizedEmail, password, data: profile } = parsed;
 
     const supabaseAnon = getSupabaseAnonClient();
     if (!supabaseAnon) {
@@ -505,27 +541,21 @@ app.post("/api/auth/sign-up", async (req, res) => {
  */
 app.post("/api/track-open", async (req, res) => {
   try {
-    const { token } = req.body || {};
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ error: "Missing token" });
-    }
-    const trimmed = token.trim();
-    if (!isValidTrackingToken(trimmed)) {
-      return res.status(400).json({ error: "Invalid token" });
-    }
+    const parsed = parseBody(trackOpenBodySchema, req, res, () =>
+      logSecurity("warn", "track_open_bad_request", { reason: "validation" })
+    );
+    if (!parsed) return;
     const { error } = await supabaseAdmin
       .from("message_logs")
       .update({ viewed: true, opened_at: new Date().toISOString() })
-      .eq("tracking_token", trimmed);
+      .eq("tracking_token", parsed.token);
     if (error) {
       console.warn("[track-open]", error.message);
       return res.status(500).json({ error: "Failed to record open" });
     }
     return res.json({ ok: true });
   } catch (err) {
-    if (!res.headersSent) {
-      return res.status(500).json({ error: err?.message || "Track open failed" });
-    }
+    return sendUnexpectedError(res, err, "track-open");
   }
 });
 
@@ -566,12 +596,12 @@ app.get("/api/email-track/:token", async (req, res) => {
  * HTML + CSS → PDF via Anvil (same payload shape as Anvil’s generate-pdf API).
  * Requires Bearer auth. Set ANVIL_API_TOKEN on the API server.
  */
-app.post("/api/generate-pdf-html", async (req, res) => {
+app.post("/api/generate-pdf-html", requireAuthMiddleware, async (req, res) => {
   try {
-    const { user, error: authError } = await getUserFromRequest(req);
-    if (authError || !user) {
-      return res.status(401).json({ error: authError || "Authentication required" });
-    }
+    const user = req.authUser;
+
+    const parsed = parseBody(generatePdfHtmlBodySchema, req, res);
+    if (!parsed) return;
 
     const anvil = getAnvilClient();
     if (!anvil) {
@@ -581,18 +611,11 @@ app.post("/api/generate-pdf-html", async (req, res) => {
       });
     }
 
-    const body = req.body || {};
-    const htmlRaw = body.html;
-    const cssRaw = body.css;
-    if (typeof htmlRaw !== "string" || htmlRaw.trim().length === 0) {
-      return res.status(400).json({ error: "html is required" });
-    }
-
-    const html = sanitizeHtmlForPdf(htmlRaw);
-    const css = sanitizeCssForPdf(typeof cssRaw === "string" ? cssRaw : "");
-    const title = sanitizeHtmlPdfTitle(body.title);
-    const page = normalizeHtmlPdfPageMargins(body.page);
-    const filenameRaw = sanitizeOneLine(body.filename != null ? String(body.filename) : "document.pdf", 180) || "document.pdf";
+    const html = sanitizeHtmlForPdf(parsed.html);
+    const css = sanitizeCssForPdf(typeof parsed.css === "string" ? parsed.css : "");
+    const title = sanitizeHtmlPdfTitle(parsed.title);
+    const page = normalizeHtmlPdfPageMargins(parsed.page);
+    const filenameRaw = sanitizeOneLine(parsed.filename != null ? String(parsed.filename) : "document.pdf", 180) || "document.pdf";
     const downloadName = filenameRaw.toLowerCase().endsWith(".pdf") ? filenameRaw : `${filenameRaw}.pdf`;
     const asciiName = downloadName.replace(/[^\x20-\x7e]/g, "_");
 
@@ -617,54 +640,45 @@ app.post("/api/generate-pdf-html", async (req, res) => {
   } catch (err) {
     console.error("[generate-pdf-html]", err?.message || err);
     logSecurity("error", "anvil_pdf_exception", { message: err?.message || "unknown" });
-    if (!res.headersSent) {
-      return res.status(500).json({ error: "PDF generation failed" });
-    }
+    return sendUnexpectedError(res, err, "generate-pdf-html");
   }
 });
 
-app.post("/api/send-invoice", async (req, res) => {
+app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
   try {
-    const { user, error: authError } = await getUserFromRequest(req);
-    if (authError || !user) {
-      return res.status(401).json({ error: authError || "Authentication required" });
-    }
+    const user = req.authUser;
 
-    const { base64PDF, clientEmail, invoiceNum, fromName, clientName, amountDue, dueDate } = req.body || {};
-    if (!base64PDF || !clientEmail || !invoiceNum) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        fields: ["base64PDF", "clientEmail", "invoiceNum"],
-      });
-    }
+    const parsed = parseBody(sendInvoiceBodySchema, req, res, () =>
+      logSecurity("warn", "send_invoice_bad_request", {
+        userId: user.id || null,
+        reason: "validation",
+      })
+    );
+    if (!parsed) return;
 
-    const pdfCheck = validateBase64Pdf(base64PDF);
+    const pdfCheck = validateBase64Pdf(parsed.base64PDF);
     if (!pdfCheck.ok) {
       return res.status(400).json({ error: pdfCheck.error || "Invalid document" });
     }
 
-    const toEmail = String(clientEmail).trim().toLowerCase();
-    if (!isValidEmail(toEmail)) {
-      return res.status(400).json({ error: "Invalid client email" });
-    }
-
-    const invNum = sanitizeOneLine(String(invoiceNum), 120);
+    const toEmail = parsed.clientEmail;
+    const invNum = sanitizeOneLine(parsed.invoiceNum, 120);
     if (!invNum) {
       return res.status(400).json({ error: "Invalid invoice number" });
     }
 
-    const senderName = sanitizeOneLine(fromName ? String(fromName) : "Paidly", 200) || "Paidly";
+    const senderName = sanitizeOneLine(parsed.fromName ?? "Paidly", 200) || "Paidly";
 
-    const template = [clientName, amountDue, dueDate].some(Boolean)
+    const template = [parsed.clientName, parsed.amountDue, parsed.dueDate].some(Boolean)
       ? {
-          clientName: sanitizeOneLine(clientName != null ? String(clientName) : "there", 200) || "there",
-          amountDue: sanitizeOneLine(amountDue != null ? String(amountDue) : "", 80),
-          dueDate: sanitizeOneLine(dueDate != null ? String(dueDate) : "", 80),
+          clientName: sanitizeOneLine(parsed.clientName ?? "there", 200) || "there",
+          amountDue: sanitizeOneLine(parsed.amountDue ?? "", 80),
+          dueDate: sanitizeOneLine(parsed.dueDate ?? "", 80),
         }
       : null;
 
     const result = await sendInvoiceEmail(
-      base64PDF,
+      parsed.base64PDF,
       toEmail,
       invNum,
       senderName,
@@ -676,38 +690,24 @@ app.post("/api/send-invoice", async (req, res) => {
     }
     return res.json({ success: true, data: result.data });
   } catch (err) {
-    if (!res.headersSent) {
-      return res.status(500).json({ success: false, error: err?.message || "Send failed" });
-    }
+    return sendUnexpectedError(res, err, "send-invoice", { success: false });
   }
 });
 
-app.post("/api/send-email", async (req, res) => {
+app.post("/api/send-email", requireAuthMiddleware, async (req, res) => {
   try {
-    const { user, error: authError } = await getUserFromRequest(req);
-    if (authError || !user) {
-      return res.status(401).json({ error: authError || "Authentication required" });
-    }
+    const user = req.authUser;
 
-    const { to, subject, body } = req.body || {};
-    if (!to || !subject) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        fields: ["to", "subject"],
-      });
-    }
+    const parsed = parseBody(sendEmailBodySchema, req, res);
+    if (!parsed) return;
 
-    const toNorm = String(to).trim().toLowerCase();
-    if (!isValidEmail(toNorm)) {
-      return res.status(400).json({ error: "Invalid recipient email" });
-    }
-
-    const subjectSafe = sanitizeOneLine(String(subject), 998);
+    const toNorm = parsed.to;
+    const subjectSafe = sanitizeOneLine(parsed.subject, 998);
     if (!subjectSafe) {
       return res.status(400).json({ error: "Invalid subject" });
     }
 
-    const bodySafe = sanitizeEmailHtmlBody(typeof body === "string" ? body : "");
+    const bodySafe = sanitizeEmailHtmlBody(parsed.body);
 
     const result = await sendHtmlEmail(
       toNorm,
@@ -721,15 +721,16 @@ app.post("/api/send-email", async (req, res) => {
     }
     return res.json({ success: true, data: result.data });
   } catch (err) {
-    if (!res.headersSent) {
-      return res.status(500).json({ success: false, error: err?.message || "Send failed" });
-    }
+    return sendUnexpectedError(res, err, "send-email", { success: false });
   }
 });
 
 const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
 
 app.post("/api/payfast/subscription", (req, res) => {
+  const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
+  if (!parsed) return;
+
   const {
     subscriptionId,
     userId,
@@ -741,31 +742,13 @@ app.post("/api/payfast/subscription", (req, res) => {
     currency,
     returnUrl,
     cancelUrl
-  } = req.body || {};
+  } = parsed;
 
-  if (!subscriptionId || !userEmail || !amount) {
-    return res.status(400).json({
-      error: "Missing required fields",
-      fields: ["subscriptionId", "userEmail", "amount"]
-    });
-  }
-
-  if (!isValidSubscriptionId(String(subscriptionId))) {
-    return res.status(400).json({ error: "Invalid subscription id" });
-  }
-
-  const emailNorm = String(userEmail).trim().toLowerCase();
-  if (!isValidEmail(emailNorm)) {
-    return res.status(400).json({ error: "Invalid email" });
-  }
+  const emailNorm = userEmail;
 
   const amountCheck = assertFiniteAmount(amount, { min: 0.01, max: 1_000_000_000 });
   if (!amountCheck.ok) {
     return res.status(400).json({ error: amountCheck.error });
-  }
-
-  if (userId != null && userId !== "" && !isValidUuid(String(userId).trim())) {
-    return res.status(400).json({ error: "Invalid user id" });
   }
 
   const cycleRaw = String(billingCycle || "monthly").toLowerCase();
@@ -842,32 +825,20 @@ app.post("/api/payfast/subscription", (req, res) => {
  */
 app.post("/api/payfast/once", async (req, res) => {
   try {
+    const parsed = parseBody(payfastOnceBodySchema, req, res);
+    if (!parsed) return;
+
     const {
-      invoiceId,
+      invoiceId: invId,
       amount,
       currency,
       clientName,
       clientEmail,
       returnUrl,
       cancelUrl
-    } = req.body || {};
+    } = parsed;
 
-    if (!invoiceId || !amount || !clientEmail) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        fields: ["invoiceId", "amount", "clientEmail"]
-      });
-    }
-
-    const invId = String(invoiceId).trim();
-    if (!isValidUuid(invId)) {
-      return res.status(400).json({ error: "Invalid invoice id" });
-    }
-
-    const payerEmail = String(clientEmail).trim().toLowerCase();
-    if (!isValidEmail(payerEmail)) {
-      return res.status(400).json({ error: "Invalid email" });
-    }
+    const payerEmail = clientEmail;
 
     const amountOnceCheck = assertFiniteAmount(amount, { min: 0.01, max: 1_000_000_000 });
     if (!amountOnceCheck.ok) {
@@ -963,7 +934,7 @@ app.post("/api/payfast/once", async (req, res) => {
     });
   } catch (err) {
     console.error("[payfast-once] Error", err);
-    return res.status(500).json({ error: "Failed to start Payfast payment" });
+    return sendUnexpectedError(res, err, "payfast-once");
   }
 });
 
@@ -990,11 +961,30 @@ app.post("/api/payfast/itn", async (req, res) => {
   }
 
   const customStr1 = String(payload.custom_str1 || "");
+  const userIdFromSub = String(payload.custom_str2 || "").trim();
+
   if (!customStr1.startsWith("invoice:")) {
-    // Not a one-time invoice payment; acknowledge for now.
+    if (isValidUuid(userIdFromSub)) {
+      const paymentAmountRaw = payload.amount_gross ?? payload.amount;
+      const paymentAmount = Number(paymentAmountRaw);
+      if (Number.isFinite(paymentAmount) && paymentAmount > 0) {
+        try {
+          const c = await recordSubscriptionPaymentCommission(supabaseAdmin, {
+            userId: userIdFromSub,
+            grossAmountZar: paymentAmount,
+            source: `payfast_itn:${String(payload.pf_payment_id || payload.m_payment_id || "")}`,
+          });
+          console.log("[payfast-itn] Subscription / affiliate ledger", c);
+        } catch (e) {
+          console.error("[payfast-itn] Subscription affiliate commission failed", e?.message || e);
+        }
+      }
+      return res.status(200).send("OK");
+    }
     console.log("[payfast-itn] Non-invoice ITN received", {
       m_payment_id: payload.m_payment_id,
-      payment_status: payload.payment_status
+      payment_status: payload.payment_status,
+      custom_str1: customStr1
     });
     return res.status(200).send("OK");
   }
@@ -1104,26 +1094,11 @@ app.post("/api/admin/roles", async (req, res) => {
     const user = await getAdminFromRequest(req, res);
     if (!user) return;
 
-    const { userId, role } = req.body || {};
-    if (!userId || !role) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        fields: ["userId", "role"]
-      });
-    }
+    const parsed = parseBody(adminRolesBodySchema, req, res);
+    if (!parsed) return;
 
-    const targetId = String(userId).trim();
-    if (!isValidUuid(targetId)) {
-      return res.status(400).json({ error: "Invalid user id" });
-    }
-
-    const normalizedRole = String(role).toLowerCase();
-    if (!["admin", "user"].includes(normalizedRole)) {
-      return res.status(400).json({
-        error: "Invalid role",
-        allowed: ["admin", "user"]
-      });
-    }
+    const targetId = parsed.userId;
+    const normalizedRole = parsed.role;
 
     const { data, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       targetId,
@@ -1145,9 +1120,7 @@ app.post("/api/admin/roles", async (req, res) => {
       return;
     }
     logAdminApi(req.method, req.path, 500, err?.message);
-    return res.status(500).json({
-      error: err?.message || "Failed to update user role"
-    });
+    return sendUnexpectedError(res, err, "admin/roles");
   }
 });
 
@@ -1162,29 +1135,26 @@ app.post("/api/admin/invite-user", async (req, res) => {
       return;
     }
 
-    const { email, full_name, role, plan, redirect_to } = req.body || {};
-    if (!email || typeof email !== "string") {
-      return res.status(400).json({ error: "email is required" });
-    }
+    const parsed = parseBody(adminInviteBodySchema, req, res);
+    if (!parsed) return;
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      return res.status(400).json({ error: "Invalid email" });
-    }
+    const normalizedEmail = parsed.email;
 
     if (
-      redirect_to != null &&
-      String(redirect_to).trim() !== "" &&
-      !isSafeHttpUrl(String(redirect_to))
+      parsed.redirect_to != null &&
+      String(parsed.redirect_to).trim() !== "" &&
+      !isSafeHttpUrl(String(parsed.redirect_to))
     ) {
       return res.status(400).json({ error: "Invalid redirect URL" });
     }
 
-    const meta = sanitizeInviteMetadata(full_name, role, plan);
+    const meta = sanitizeInviteMetadata(parsed.full_name, parsed.role, parsed.plan);
 
     const origin =
-      (typeof redirect_to === "string" && redirect_to.trim() && isSafeHttpUrl(String(redirect_to).trim())
-        ? String(redirect_to).trim()
+      (typeof parsed.redirect_to === "string" &&
+        parsed.redirect_to.trim() &&
+        isSafeHttpUrl(String(parsed.redirect_to).trim())
+        ? String(parsed.redirect_to).trim()
         : "") ||
       (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).replace(/\/$/, "")) ||
       "";
@@ -1211,7 +1181,7 @@ app.post("/api/admin/invite-user", async (req, res) => {
       return;
     }
     logAdminApi(req.method, req.path, 500, err?.message);
-    return res.status(500).json({ error: err?.message || "Invite failed" });
+    return sendUnexpectedError(res, err, "admin/invite-user");
   }
 });
 
@@ -1227,33 +1197,15 @@ app.post("/api/admin/bootstrap", async (req, res) => {
       return res.status(401).json({ error: "Invalid bootstrap token" });
     }
 
-    const { email, password, role } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        fields: ["email", "password"]
-      });
-    }
+    const parsed = parseBody(adminBootstrapBodySchema, req, res);
+    if (!parsed) return;
 
-    const bootEmail = String(email).trim().toLowerCase();
-    if (!isValidEmail(bootEmail)) {
-      return res.status(400).json({ error: "Invalid email" });
-    }
-    if (!isReasonablePasswordLength(password)) {
-      return res.status(400).json({ error: "Invalid password" });
-    }
-
-    const normalizedRole = String(role ?? "user").toLowerCase();
-    if (!["admin", "user"].includes(normalizedRole)) {
-      return res.status(400).json({
-        error: "Invalid role",
-        allowed: ["admin", "user"]
-      });
-    }
+    const bootEmail = parsed.email;
+    const normalizedRole = parsed.role ?? "user";
 
     const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: bootEmail,
-      password,
+      password: parsed.password,
       email_confirm: true,
       app_metadata: { role: normalizedRole }
     });
@@ -1270,9 +1222,7 @@ app.post("/api/admin/bootstrap", async (req, res) => {
     if (res.headersSent) {
       return;
     }
-    return res.status(500).json({
-      error: err?.message || "Failed to bootstrap admin user"
-    });
+    return sendUnexpectedError(res, err, "admin/bootstrap");
   }
 });
 

@@ -49,6 +49,7 @@ import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
 import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
+import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
@@ -1516,6 +1517,8 @@ export default function Dashboard() {
           </h1>
           <p className="finbank-body text-xs sm:text-sm text-foreground hidden sm:block">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
+
+        <AffiliateProgramBanner />
 
         {/* KPI Carousel — Framer Motion swipe on mobile, grid on desktop */}
         <div className="mb-4 sm:mb-6">

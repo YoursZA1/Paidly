@@ -6,14 +6,21 @@ const COMPANY_LOGOS_BUCKET = "company-logos";
 export const LOGO_CONSTRAINTS = {
   /** Allowed MIME types: JPEG, PNG, SVG (SVG scales crisply in PDFs). */
   ALLOWED_TYPES: ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"],
-  /** Max file size in bytes (500KB) */
-  MAX_SIZE_BYTES: 500 * 1024,
+  /** Max file size in bytes (2MB) — cap uploads; always pair with MIME allowlist (browser `type` is hint-only). */
+  MAX_SIZE_BYTES: 2 * 1024 * 1024,
   /** Recommended max width in pixels. Keep under this for sharp PDFs; avoid low-resolution PNGs. */
   RECOMMENDED_WIDTH_PX: 300,
   /** Max width for logo in PDF output (keeps logos sharp; SVG scales perfectly) */
   PDF_LOGO_MAX_WIDTH_PX: 300,
   /** Aspect ratio: flexible (no constraint) */
 };
+
+/** e.g. "2MB" for help text next to file inputs */
+export function logoMaxSizeLabel() {
+  const b = LOGO_CONSTRAINTS.MAX_SIZE_BYTES;
+  if (b % (1024 * 1024) === 0) return `${b / (1024 * 1024)}MB`;
+  return `${Math.round(b / 1024)}KB`;
+}
 
 function logoExtension(file) {
   const m = /\.([^.]+)$/.exec(String(file?.name || "").trim());
@@ -27,6 +34,16 @@ export function isAllowedLogoFileType(file) {
   const ext = logoExtension(file).replace(/[^a-z0-9]/g, "");
   if (ext === "jpeg") return true;
   return ext === "png" || ext === "jpg" || ext === "svg";
+}
+
+/**
+ * When the browser reports a MIME type, it must be an image family type.
+ * (Narrow allowlist in `isAllowedLogoFileType` still applies — this rejects e.g. `application/x-msdownload`.)
+ */
+export function isImageMimeType(file) {
+  const t = (file?.type || "").toLowerCase();
+  if (!t) return true;
+  return t.includes("image");
 }
 
 /** Content-Type for Supabase upload when `file.type` is missing. */
@@ -49,12 +66,18 @@ export function validateLogoFile(file) {
   if (!file || !(file instanceof File)) {
     return { valid: false, message: "Please select a file." };
   }
+  if (!isImageMimeType(file)) {
+    return { valid: false, message: "Invalid file type." };
+  }
   if (!isAllowedLogoFileType(file)) {
     return { valid: false, message: "Logo must be JPEG, PNG, or SVG." };
   }
   if (file.size > LOGO_CONSTRAINTS.MAX_SIZE_BYTES) {
-    const maxKB = Math.round(LOGO_CONSTRAINTS.MAX_SIZE_BYTES / 1024);
-    return { valid: false, message: `Logo must be under ${maxKB}KB.` };
+    const maxMb = LOGO_CONSTRAINTS.MAX_SIZE_BYTES / (1024 * 1024);
+    return {
+      valid: false,
+      message: `Logo must be ${maxMb}MB or smaller.`,
+    };
   }
   return { valid: true };
 }
@@ -62,9 +85,9 @@ export function validateLogoFile(file) {
 /**
  * Upload a logo file to the company-logos bucket and return its public URL.
  * Save the returned URL to profiles.logo_url (or companies.logo_url if you use a companies table).
- * Validates format (JPEG, PNG, or SVG) and max size (500KB) before upload.
+ * Validates format (JPEG, PNG, or SVG) and max size (2MB) before upload.
  *
- * @param {File} file - Logo image file (JPEG, PNG, or SVG, max 500KB)
+ * @param {File} file - Logo image file (JPEG, PNG, or SVG, max 2MB)
  * @param {string} companyId - Company or profile id (e.g. user id or org id) used in the stored filename
  * @returns {Promise<string>} Public URL of the uploaded logo
  * @throws {Error} If validation or upload fails

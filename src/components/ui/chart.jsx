@@ -3,6 +3,7 @@ import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
+import { sanitizeChartSeriesKey, sanitizeCssColorLiteral } from "@/utils/htmlSecurity"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = {
@@ -64,11 +65,15 @@ const ChartStyle = ({
 ${prefix} [data-chart=${id}] {
 ${colorConfig
 .map(([key, itemConfig]) => {
-const color =
+const safeKey = sanitizeChartSeriesKey(key)
+if (!safeKey) return null
+const raw =
   itemConfig.theme?.[theme] ||
   itemConfig.color
-return color ? `  --color-${key}: ${color};` : null
+const color = sanitizeCssColorLiteral(raw)
+return color ? `  --color-${safeKey}: ${color};` : null
 })
+.filter(Boolean)
 .join("\n")}
 }
 `)

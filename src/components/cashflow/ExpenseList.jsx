@@ -180,7 +180,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                 </CardHeader>
                 <CardContent className="p-0 sm:p-6 sm:pt-0">
                     {/* Desktop View: virtualized table for large lists */}
-                    <div className="hidden md:block overflow-x-auto">
+                    <div className="hidden md:block overflow-x-auto mobile-scroll-x min-w-0">
                         {isLoading ? (
                             <Table>
                                 <TableHeader>

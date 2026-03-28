@@ -3,6 +3,7 @@ import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
+import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
 import { supabase } from '@/lib/supabaseClient';
 
 class PaymentReminderService {
@@ -115,7 +116,8 @@ class PaymentReminderService {
         const amountFormatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: currency }).format(invoice.total_amount);
         const dueDateFormatted = format(new Date(invoice.delivery_date), 'MMM d, yyyy');
         const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicInvoice?id=${invoice.id}`)}`;
-        
+        const safeViewUrl = sanitizeHttpUrl(publicViewUrl, window.location.origin) || '#';
+
         // Replace variables in subject and body
         const variables = {
             '{{invoice_number}}': invoice.invoice_number,
@@ -125,21 +127,21 @@ class PaymentReminderService {
             '{{currency}}': currency,
             '{{due_date}}': dueDateFormatted,
             '{{company_name}}': companyName,
-            '{{view_link}}': publicViewUrl
+            '{{view_link}}': safeViewUrl
         };
 
         let subject = rule.subject;
         let body = rule.body;
 
         for (const [key, value] of Object.entries(variables)) {
-            subject = subject.replace(new RegExp(key, 'g'), value);
-            body = body.replace(new RegExp(key, 'g'), value);
+            subject = subject.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), String(value ?? ''));
+            body = body.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), String(value ?? ''));
         }
 
         const innerHtml = `
-            <p style="margin:0 0 16px;color:#52525b;line-height:1.65;white-space:pre-wrap;">${body.replace(/</g, '&lt;')}</p>
+            <p style="margin:0 0 16px;color:#52525b;line-height:1.65;white-space:pre-wrap;">${escapeHtml(body)}</p>
             <div style="text-align:center;margin:24px 0 0;">
-              <a href="${publicViewUrl.replace(/"/g, '&quot;')}" style="display:inline-block;background:linear-gradient(135deg,#f24e00 0%,#ff7c00 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;">
+              <a href="${escapeHtml(safeViewUrl)}" style="display:inline-block;background:linear-gradient(135deg,#f24e00 0%,#ff7c00 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;">
                 View invoice
               </a>
             </div>

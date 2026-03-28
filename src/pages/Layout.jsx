@@ -1,7 +1,7 @@
 import PropTypes from "prop-types";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
 
 import Button from "@/components/ui/button";
@@ -27,6 +27,7 @@ import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsCompactLayout } from "@/hooks/use-mobile";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
@@ -58,7 +59,8 @@ import {
   BarChart3,
   Wrench,
   Terminal,
-  Receipt
+  Receipt,
+  Handshake
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -323,6 +325,14 @@ const allNavigationItems = [
     roles: ["user", "admin"],
     id: "nav-messages",
   },
+  {
+    title: "Affiliate",
+    url: "/dashboard/affiliate",
+    icon: Handshake,
+    feature: null,
+    roles: ["user", "admin"],
+    id: "nav-affiliate",
+  },
   { type: "section", title: "Settings", id: "nav-section-settings" },
   {
     title: "Settings",
@@ -512,7 +522,7 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
   const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
   const managementIds = new Set([
     "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
-    "nav-calendar", "nav-messages", "nav-settings"
+    "nav-calendar", "nav-messages", "nav-affiliate", "nav-settings"
   ]);
   const mainItems = items.filter((i) => i.id && MAIN_IDS.has(i.id));
   let managementItems = items.filter((i) => i.id && managementIds.has(i.id));
@@ -650,6 +660,8 @@ const STANDALONE_PAGE_NAMES = [
   "ForgotPassword",
   "ResetPassword",
   "AcceptInvite",
+  "Affiliate",
+  "Affiliate/apply",
 ];
 
 export default function Layout({ children, currentPageName }) {
@@ -662,6 +674,8 @@ export default function Layout({ children, currentPageName }) {
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const mainContentRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
+  const isCompactLayout = useIsCompactLayout();
   const { user, logout, session: authSession } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -940,7 +954,7 @@ export default function Layout({ children, currentPageName }) {
       </Sheet>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 bg-background ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 bg-background ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
         {/* Top header: fixed on mobile (hamburger + Paidly + avatar); standard header on lg+ */}
         <motion.header
           initial={{ y: -100 }}
@@ -1096,10 +1110,13 @@ export default function Layout({ children, currentPageName }) {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname + location.search}
-              initial={{ opacity: 0, x: 60 }}
+              initial={{ opacity: 0, x: prefersReducedMotion ? 0 : isCompactLayout ? 18 : 48 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -60 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+              exit={{ opacity: 0, x: prefersReducedMotion ? 0 : isCompactLayout ? -18 : -48 }}
+              transition={{
+                duration: prefersReducedMotion ? 0.12 : 0.28,
+                ease: [0.25, 0.1, 0.25, 1],
+              }}
               className="min-h-full w-full min-w-0"
             >
               {children}
