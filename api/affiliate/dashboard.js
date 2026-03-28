@@ -15,6 +15,17 @@ function getSupabaseAdmin() {
 }
 
 export default async function handler(req, res) {
+  // CORS headers for production
+  res.setHeader('Access-Control-Allow-Origin', 'https://paidly.co.za');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).end();

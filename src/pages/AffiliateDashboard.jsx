@@ -68,6 +68,7 @@ export default function AffiliateDashboard() {
   const refreshing = useAffiliateDashboardStore((s) => s.refreshing);
   const loadError = useAffiliateDashboardStore((s) => s.loadError);
   const payload = useAffiliateDashboardStore((s) => s.affiliateData);
+  const fetchDashboard = useAffiliateDashboardStore((s) => s.fetchDashboard);
   const setAffiliateDashboard = useAffiliateDashboardStore((s) => s.setAffiliateDashboard);
   const setLoading = useAffiliateDashboardStore((s) => s.setLoading);
   const setLoadError = useAffiliateDashboardStore((s) => s.setLoadError);
