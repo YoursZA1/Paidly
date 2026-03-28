@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createPageUrl, createWaitlistUrl } from "@/utils";
+import { createPageUrl, createWaitlistUrl, createAffiliateLandingUrl } from "@/utils";
 
 /**
  * @param {{ active?: "login" | "signup" | null, onLoginClick: () => void }} props
@@ -25,6 +25,9 @@ export default function Navbar({ active = null, onLoginClick }) {
           <a href="#product" className="transition hover:text-white">
             Product
           </a>
+          <Link to={createAffiliateLandingUrl()} className="transition hover:text-white">
+            Affiliate
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
