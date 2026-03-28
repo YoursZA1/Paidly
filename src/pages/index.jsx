@@ -66,6 +66,7 @@ const ExcelDataCapture = lazy(() => import("./ExcelDataCapture"));
 const SubscriptionsManagement = lazy(() => import("./SubscriptionsManagement"));
 const DocumentActivity = lazy(() => import("./DocumentActivity"));
 const AdminUsers = lazy(() => import("./AdminUsers"));
+const AdminAffiliates = lazy(() => import("./AdminAffiliates"));
 const AdminAccounts = lazy(() => import("./AdminAccounts"));
 const AdminDocumentOversight = lazy(() => import("./AdminDocumentOversight"));
 const AdminSubscriptions = lazy(() => import("./AdminSubscriptions"));
@@ -223,6 +224,7 @@ const ADMIN_ROUTES = [
     { path: "/SubscriptionsManagement", element: <RequireAuth roles={["admin"]}><SubscriptionsManagement /></RequireAuth> },
     { path: "/DocumentActivity", element: <RequireAuth roles={["admin"]}><DocumentActivity /></RequireAuth> },
     { path: "/AdminUsers", element: <RequireAuth roles={["admin"]}><AdminUsers /></RequireAuth> },
+    { path: "/AdminAffiliates", element: <RequireAuth roles={["admin"]}><AdminAffiliates /></RequireAuth> },
     { path: "/AdminAccounts", element: <RequireAuth roles={["admin"]}><AdminAccounts /></RequireAuth> },
     { path: "/AdminDocumentOversight", element: <RequireAuth roles={["admin"]}><AdminDocumentOversight /></RequireAuth> },
     { path: "/AdminSubscriptions", element: <RequireAuth roles={["admin"]}><AdminSubscriptions /></RequireAuth> },
@@ -243,6 +245,7 @@ const ADMIN_ROUTES = [
     { path: "/admin/subscriptions-management", element: <RequireAuth roles={["admin"]}><SubscriptionsManagement /></RequireAuth> },
     { path: "/admin/document-activity", element: <RequireAuth roles={["admin"]}><DocumentActivity /></RequireAuth> },
     { path: "/admin/user-management", element: <RequireAuth roles={["admin"]}><AdminUsers /></RequireAuth> },
+    { path: "/admin/affiliates", element: <RequireAuth roles={["admin"]}><AdminAffiliates /></RequireAuth> },
     { path: "/admin/accounts-management", element: <RequireAuth roles={["admin"]}><AdminAccounts /></RequireAuth> },
     { path: "/admin/document-oversight", element: <RequireAuth roles={["admin"]}><AdminDocumentOversight /></RequireAuth> },
     { path: "/admin/platform-settings", element: <RequireAuth roles={["admin"]}><PlatformSettings /></RequireAuth> },

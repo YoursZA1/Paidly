@@ -87,6 +87,14 @@ const adminNavigationItems = [
     id: "nav-admin-users"
   },
   {
+    title: "Affiliates",
+    url: createAdminPageUrl("Affiliates"),
+    icon: Users,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-affiliates"
+  },
+  {
     title: "Accounts",
     url: createAdminPageUrl("Accounts Management"),
     icon: Building2,
