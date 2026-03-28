@@ -6,6 +6,7 @@
  */
 
 import AdminDataService from './AdminDataService';
+import { updateUserSubscription } from '../api/userManagement';
 
 const STORAGE_KEY = 'breakapi_user_management';
 
@@ -258,6 +259,31 @@ class UserManagementService {
   static getUserActionLog() {
     const actions = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_actions`) || '[]');
     return actions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  /**
+   * Update user plan via API and local storage
+   */
+  static async changeUserPlan(userId, plan) {
+    if (!userId || !plan) {
+      return { success: false, error: 'Missing userId or plan' };
+    }
+
+    try {
+      const response = await updateUserSubscription(userId, plan);
+      const result = response.data || {};
+
+      if (result.success) {
+        AdminDataService.updateUser(userId, { plan });
+        this.broadcastDataChange('userPlanUpdated', { userId, plan });
+        return { success: true, user: result.profile || AdminDataService.getUserById(userId) };
+      }
+
+      return { success: false, error: result.error || 'Failed to update plan' };
+    } catch (error) {
+      console.error('❌ UserManagementService.changeUserPlan error', error);
+      return { success: false, error: error?.message || 'API error updating plan' };
+    }
   }
 
   /**

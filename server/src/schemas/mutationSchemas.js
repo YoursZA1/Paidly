@@ -90,3 +90,14 @@ export const adminBootstrapBodySchema = z.object({
   password: apiPasswordSchema,
   role: z.enum(["admin", "user"]).optional(),
 });
+
+export const adminUpdateUserBodySchema = z.object({
+  plan: z.union([
+    z.literal("free"),
+    z.literal("starter"),
+    z.literal("professional"),
+    z.literal("enterprise"),
+  ]).optional(),
+  full_name: z.string().trim().min(1).max(255).optional(),
+  user_metadata: z.record(z.any()).optional(),
+});

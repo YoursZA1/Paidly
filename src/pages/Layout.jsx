@@ -164,14 +164,6 @@ const adminNavigationItems = [
     id: "nav-admin-dashboard"
   },
   {
-    title: "Prod & Services",
-    url: createPageUrl("Services"),
-    icon: Briefcase,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-services",
-  },
-  {
     title: "Businesses",
     icon: Building2,
     feature: null,

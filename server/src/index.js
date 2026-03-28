@@ -59,6 +59,7 @@ import {
   adminBootstrapBodySchema,
   adminInviteBodySchema,
   adminRolesBodySchema,
+  adminUpdateUserBodySchema,
   generatePdfHtmlBodySchema,
   payfastOnceBodySchema,
   payfastSubscriptionBodySchema,
@@ -1276,6 +1277,77 @@ app.get("/api/admin/users", async (req, res) => {
   }
 });
 
+app.put("/api/admin/users/:userId", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res);
+    if (!adminUser) {
+      return;
+    }
+
+    const { userId } = req.params;
+    if (!userId || !isValidUuid(String(userId).trim())) {
+      return res.status(400).json({ error: "Invalid or missing userId" });
+    }
+
+    const parsed = parseBody(adminUpdateUserBodySchema, req, res);
+    if (!parsed) return;
+
+    const updates = {};
+    if (parsed.plan) {
+      const plan = String(parsed.plan).trim().toLowerCase();
+      const allowedPlans = ["free", "starter", "professional", "enterprise"];
+      if (!allowedPlans.includes(plan)) {
+        return res.status(400).json({ error: "Invalid plan value" });
+      }
+      updates.subscription_plan = plan;
+    }
+
+    if (parsed.full_name) {
+      updates.full_name = String(parsed.full_name).trim();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No update fields provided" });
+    }
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .update(updates)
+      .eq("id", userId);
+
+    if (profileError) {
+      logAdminApi(req.method, req.path, 500, `profiles update: ${profileError.message}`);
+      return res.status(500).json({ error: profileError.message });
+    }
+
+    let userData = null;
+    if (parsed.user_metadata && Object.keys(parsed.user_metadata).length > 0) {
+      const authUpdatePayload = { user_metadata: { ...parsed.user_metadata } };
+      const { data: authData, error: userError } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdatePayload);
+
+      if (userError) {
+        logAdminApi(req.method, req.path, 500, `auth.updateUserById: ${userError.message}`);
+        return res.status(500).json({ error: userError.message });
+      }
+
+      userData = authData?.user || null;
+    }
+
+    logAdminApi(req.method, req.path, 200, `user updated: ${userId}`);
+    return res.json({
+      success: true,
+      profile: profileData?.[0] || null,
+      user: userData || null
+    });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return sendUnexpectedError(res, err, "admin/users/update");
+  }
+});
+
 app.delete("/api/admin/users/:userId", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res);
@@ -1352,7 +1424,7 @@ app.get("/api/admin/sync-users", async (req, res) => {
 
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, email, avatar_url, logo_url")
+      .select("id, full_name, email, avatar_url, logo_url, subscription_plan")
       .in("id", userIds);
 
     if (profilesError) {
@@ -1461,7 +1533,7 @@ app.get("/api/admin/sync-data", async (req, res) => {
     const { data: profiles, error: profilesError } = userIds.length
       ? await supabaseAdmin
         .from("profiles")
-        .select("id, full_name, email, avatar_url, logo_url")
+        .select("id, full_name, email, avatar_url, logo_url, subscription_plan")
         .in("id", userIds)
       : { data: [], error: null };
 
@@ -1532,6 +1604,56 @@ app.get("/api/admin/sync-data", async (req, res) => {
     if (quotesError) {
       logAdminApi(req.method, req.path, 500, `quotes: ${quotesError.message}`);
       return res.status(500).json({ error: quotesError.message });
+    }
+
+    const { data: affiliates, error: affiliatesError } = await supabaseAdmin
+      .from("affiliates")
+      .select("*")
+      .limit(limit);
+
+    if (affiliatesError) {
+      logAdminApi(req.method, req.path, 500, `affiliates: ${affiliatesError.message}`);
+      return res.status(500).json({ error: affiliatesError.message });
+    }
+
+    const { data: affiliateApplications, error: affiliateApplicationsError } = await supabaseAdmin
+      .from("affiliate_applications")
+      .select("*")
+      .limit(limit);
+
+    if (affiliateApplicationsError) {
+      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${affiliateApplicationsError.message}`);
+      return res.status(500).json({ error: affiliateApplicationsError.message });
+    }
+
+    const { data: referrals, error: referralsError } = await supabaseAdmin
+      .from("referrals")
+      .select("*")
+      .limit(limit);
+
+    if (referralsError) {
+      logAdminApi(req.method, req.path, 500, `referrals: ${referralsError.message}`);
+      return res.status(500).json({ error: referralsError.message });
+    }
+
+    const { data: commissions, error: commissionsError } = await supabaseAdmin
+      .from("commissions")
+      .select("*")
+      .limit(limit);
+
+    if (commissionsError) {
+      logAdminApi(req.method, req.path, 500, `commissions: ${commissionsError.message}`);
+      return res.status(500).json({ error: commissionsError.message });
+    }
+
+    const { data: affiliateClicks, error: affiliateClicksError } = await supabaseAdmin
+      .from("affiliate_clicks")
+      .select("*")
+      .limit(limit);
+
+    if (affiliateClicksError) {
+      logAdminApi(req.method, req.path, 500, `affiliate_clicks: ${affiliateClicksError.message}`);
+      return res.status(500).json({ error: affiliateClicksError.message });
     }
 
     const { data: payments, error: paymentsError } = await supabaseAdmin
@@ -1623,7 +1745,12 @@ app.get("/api/admin/sync-data", async (req, res) => {
       services: mappedServices.length,
       invoices: mappedInvoices.length,
       quotes: mappedQuotes.length,
-      payments: mappedPayments.length
+      payments: mappedPayments.length,
+      affiliates: (affiliates || []).length,
+      affiliate_applications: (affiliateApplications || []).length,
+      referrals: (referrals || []).length,
+      commissions: (commissions || []).length,
+      affiliate_clicks: (affiliateClicks || []).length
     };
     logAdminApi(req.method, req.path, 200, `sync ok: ${counts.users} users, ${counts.invoices} invoices`);
     return res.json({
@@ -1635,6 +1762,11 @@ app.get("/api/admin/sync-data", async (req, res) => {
       invoices: mappedInvoices,
       quotes: mappedQuotes,
       payments: mappedPayments,
+      affiliates: affiliates || [],
+      affiliate_applications: affiliateApplications || [],
+      referrals: referrals || [],
+      commissions: commissions || [],
+      affiliate_clicks: affiliateClicks || [],
       assets,
       bucket: storageBucket
     });

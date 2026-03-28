@@ -33,6 +33,15 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [planChanges, setPlanChanges] = useState({});
+  const [planUpdatingId, setPlanUpdatingId] = useState(null);
+
+  const PLAN_OPTIONS = [
+    { value: 'free', label: 'Free' },
+    { value: 'starter', label: 'Starter' },
+    { value: 'professional', label: 'Professional' },
+    { value: 'enterprise', label: 'Enterprise' },
+  ];
 
   // Data states
   const [statusBreakdown, setStatusBreakdown] = useState(null);
@@ -103,6 +112,27 @@ export default function AdminUsers() {
       const result = UserManagementService.resetPassword(userId);
       alert(`Temporary password: ${result.tempPassword}\nExpires in: ${result.expiresIn}`);
       loadData();
+    }
+  };
+
+  const handleChangePlan = async (userId, newPlan) => {
+    if (!userId || !newPlan) return;
+
+    setPlanUpdatingId(userId);
+    try {
+      const result = await UserManagementService.changeUserPlan(userId, newPlan);
+      if (result.success) {
+        setPlanChanges((prev) => ({ ...prev, [userId]: newPlan }));
+        loadData();
+        alert(`Updated user plan to ${newPlan} successfully.`);
+      } else {
+        alert(`Unable to update plan: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      alert('Failed to update user plan. Check console for details.');
+    } finally {
+      setPlanUpdatingId(null);
     }
   };
 
@@ -365,9 +395,33 @@ export default function AdminUsers() {
                       </td>
                       <td className="px-6 py-4 text-slate-700">{user.company}</td>
                       <td className="px-6 py-4">
-                        <Badge className={getPlanColor(user.plan)}>
-                          {getPlanLabel(user.plan)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={planChanges[user.id] || user.plan || 'free'}
+                            onChange={(e) => setPlanChanges((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          >
+                            {PLAN_OPTIONS.map((plan) => (
+                              <option key={plan.value} value={plan.value}>
+                                {plan.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => handleChangePlan(user.id, planChanges[user.id] || user.plan || 'free')}
+                            disabled={planUpdatingId === user.id}
+                          >
+                            {planUpdatingId === user.id ? 'Saving...' : 'Save'}
+                          </Button>
+                        </div>
+                        <div className="mt-1">
+                          <Badge className={getPlanColor(user.plan)}>
+                            {getPlanLabel(user.plan)}
+                          </Badge>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <Badge className={getStatusColor(user.status)}>

@@ -274,7 +274,7 @@ export default function Services() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">
-                            Prod & Services
+                            Services
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
                             Manage your offerings and pricing strategy.

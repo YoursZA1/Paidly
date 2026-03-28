@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import AdminDataService from "@/services/AdminDataService";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getPublicApiBase } from "@/api/backendClient";
 
 const STORAGE_KEYS = {
   USERS: "breakapi_users",
@@ -35,6 +36,11 @@ const saveSupabaseData = (payload, status = "success", errorMessage = null) => {
   localStorage.setItem(STORAGE_KEYS.SUPABASE_QUOTES, JSON.stringify(payload.quotes || []));
   localStorage.setItem(STORAGE_KEYS.SUPABASE_PAYMENTS, JSON.stringify(payload.payments || []));
   localStorage.setItem(STORAGE_KEYS.SUPABASE_ASSETS, JSON.stringify(payload.assets || []));
+  localStorage.setItem("breakapi_supabase_affiliates", JSON.stringify(payload.affiliates || []));
+  localStorage.setItem("breakapi_supabase_affiliate_applications", JSON.stringify(payload.affiliate_applications || []));
+  localStorage.setItem("breakapi_supabase_referrals", JSON.stringify(payload.referrals || []));
+  localStorage.setItem("breakapi_supabase_commissions", JSON.stringify(payload.commissions || []));
+  localStorage.setItem("breakapi_supabase_affiliate_clicks", JSON.stringify(payload.affiliate_clicks || []));
   localStorage.setItem(STORAGE_KEYS.SUPABASE_META, JSON.stringify({
     bucket: payload.bucket || null,
     synced_at: new Date().toISOString(),
@@ -82,7 +88,7 @@ const mergeUsers = (existingUsers, supabaseUsers) => {
       full_name: existing?.full_name || profile?.full_name || userMeta.full_name || userMeta.name || "",
       role: appMeta.role || existing?.role || "user",
       status: existing?.status || "active",
-      plan: existing?.plan || "free",
+      plan: existing?.plan || userMeta.plan || profile?.subscription_plan || "free",
       company_name: existing?.company_name || "",
       company_address: existing?.company_address || "",
       phone: existing?.phone || "",
@@ -165,8 +171,12 @@ export const syncAdminData = async () => {
       throw new Error("No Supabase session. Please log in and try again.");
     }
 
-    const serverUrl = (import.meta.env.VITE_SERVER_URL || "http://localhost:5179").replace(/\/$/, "");
-    const url = `${serverUrl}/api/admin/sync-data`;
+    if (String(import.meta.env.VITE_SUPABASE_ONLY || "").trim().toLowerCase() === "1") {
+      throw new Error("Sync is disabled in Supabase-only mode (VITE_SUPABASE_ONLY=1). Set VITE_SERVER_URL to your backend API to use admin data sync.");
+    }
+
+    const serverUrl = getPublicApiBase() || "http://localhost:5179";
+    const url = `${serverUrl.replace(/\/$/, "")}/api/admin/sync-data`;
     let response;
     try {
       response = await fetch(url, {

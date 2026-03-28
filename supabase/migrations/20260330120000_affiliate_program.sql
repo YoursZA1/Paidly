@@ -168,10 +168,40 @@ CREATE POLICY "affiliate_applications_own_select"
   ON public.affiliate_applications FOR SELECT TO authenticated
   USING (user_id IS NOT NULL AND user_id = auth.uid());
 
+CREATE POLICY "affiliate_applications_admin_select"
+  ON public.affiliate_applications FOR SELECT TO authenticated
+  USING (public.is_admin());
+
+CREATE POLICY "affiliate_applications_admin_update"
+  ON public.affiliate_applications FOR UPDATE TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "affiliate_applications_admin_delete"
+  ON public.affiliate_applications FOR DELETE TO authenticated
+  USING (public.is_admin());
+
 -- Affiliates: only own row
 CREATE POLICY "affiliates_select_own"
   ON public.affiliates FOR SELECT TO authenticated
   USING (user_id = auth.uid());
+
+CREATE POLICY "affiliates_admin_select"
+  ON public.affiliates FOR SELECT TO authenticated
+  USING (public.is_admin());
+
+CREATE POLICY "affiliates_admin_insert"
+  ON public.affiliates FOR INSERT TO authenticated
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "affiliates_admin_update"
+  ON public.affiliates FOR UPDATE TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "affiliates_admin_delete"
+  ON public.affiliates FOR DELETE TO authenticated
+  USING (public.is_admin());
 
 -- Referrals: affiliate owner can read their referrals
 CREATE POLICY "referrals_select_by_affiliate_owner"

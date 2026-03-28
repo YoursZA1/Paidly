@@ -29,7 +29,12 @@ const SUPABASE_KEYS = {
   INVOICES: 'breakapi_supabase_invoices',
   QUOTES: 'breakapi_supabase_quotes',
   PAYMENTS: 'breakapi_supabase_payments',
-  ASSETS: 'breakapi_supabase_assets'
+  ASSETS: 'breakapi_supabase_assets',
+  AFFILIATES: 'breakapi_supabase_affiliates',
+  AFFILIATE_APPLICATIONS: 'breakapi_supabase_affiliate_applications',
+  REFERRALS: 'breakapi_supabase_referrals',
+  COMMISSIONS: 'breakapi_supabase_commissions',
+  AFFILIATE_CLICKS: 'breakapi_supabase_affiliate_clicks'
 };
 
 // Cache duration in milliseconds (5 minutes)
@@ -111,6 +116,64 @@ class AdminDataService {
       return users;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading users:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all affiliates from synced data
+   */
+  static getAllAffiliates() {
+    try {
+      const affiliates = this.getSupabaseData(SUPABASE_KEYS.AFFILIATES);
+      console.log(`📊 AdminDataService: Loaded ${affiliates.length} affiliates from storage`);
+      return affiliates;
+    } catch (error) {
+      console.error('❌ AdminDataService: Error loading affiliates:', error);
+      return [];
+    }
+  }
+
+  static getAllAffiliateApplications() {
+    try {
+      const applications = this.getSupabaseData(SUPABASE_KEYS.AFFILIATE_APPLICATIONS);
+      console.log(`📊 AdminDataService: Loaded ${applications.length} affiliate applications from storage`);
+      return applications;
+    } catch (error) {
+      console.error('❌ AdminDataService: Error loading affiliate applications:', error);
+      return [];
+    }
+  }
+
+  static getAllReferrals() {
+    try {
+      const referrals = this.getSupabaseData(SUPABASE_KEYS.REFERRALS);
+      console.log(`📊 AdminDataService: Loaded ${referrals.length} referrals from storage`);
+      return referrals;
+    } catch (error) {
+      console.error('❌ AdminDataService: Error loading referrals:', error);
+      return [];
+    }
+  }
+
+  static getAllCommissions() {
+    try {
+      const commissions = this.getSupabaseData(SUPABASE_KEYS.COMMISSIONS);
+      console.log(`📊 AdminDataService: Loaded ${commissions.length} commissions from storage`);
+      return commissions;
+    } catch (error) {
+      console.error('❌ AdminDataService: Error loading commissions:', error);
+      return [];
+    }
+  }
+
+  static getAllAffiliateClicks() {
+    try {
+      const clicks = this.getSupabaseData(SUPABASE_KEYS.AFFILIATE_CLICKS);
+      console.log(`📊 AdminDataService: Loaded ${clicks.length} affiliate clicks from storage`);
+      return clicks;
+    } catch (error) {
+      console.error('❌ AdminDataService: Error loading affiliate clicks:', error);
       return [];
     }
   }

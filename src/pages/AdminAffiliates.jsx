@@ -89,6 +89,10 @@ export default function AdminAffiliates() {
       // Generate a unique referral code
       const referralCode = `AFF${Date.now().toString(36).toUpperCase()}`;
 
+      if (!application.user_id) {
+        throw new Error('Cannot approve: application is not linked to a registered user. Set user_id on the application first.');
+      }
+
       // Update application status
       const { error: appError } = await supabase
         .from('affiliate_applications')

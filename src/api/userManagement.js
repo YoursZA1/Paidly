@@ -28,3 +28,11 @@ export async function syncAndCleanUsers() {
   await backendApi.post("/api/admin/clean-orphaned-users");
   return supabaseUsers;
 }
+
+// Update user profile subscription plan and metadata
+export async function updateUserSubscription(userId, plan, user_metadata = {}) {
+  return backendApi.put(`/api/admin/users/${userId}`, {
+    plan,
+    user_metadata,
+  });
+}
