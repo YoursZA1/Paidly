@@ -186,12 +186,13 @@ function resolveApiBaseUrl() {
 
 function getAffiliateDashboardApiUrl() {
   const resolved = resolveApiBaseUrl();
+  /** Prefer `/api/affiliate/dashboard` — Vercel serverless; `/affiliate/dashboard` can be served as SPA HTML if rewrites order differs. */
+  const path = "/api/affiliate/dashboard";
   console.log("[affiliate] API URL resolution:", { resolved, viteServerUrl: import.meta.env.VITE_SERVER_URL });
   if (resolved) {
-    return `${resolved}/affiliate/dashboard`;
+    return `${resolved.replace(/\/$/, "")}${path}`;
   }
-  /** Dev: Vite proxies `/affiliate` and `/api` to the Node server (see vite.config.js). */
-  return "/affiliate/dashboard";
+  return path;
 }
 
 async function fetchAffiliateDashboardFromSupabase() {
@@ -268,8 +269,8 @@ async function fetchAffiliateDashboardFromSupabase() {
 }
 
 /**
- * Affiliate dashboard: always calls the Node API first (`resolveApiBaseUrl()` + `/affiliate/dashboard`, or same-origin `/affiliate/dashboard` when unset — Vite proxies to the server).
- * Bearer token is required by the API; `credentials: "include"` for cookie-backed setups. Falls back to Supabase client only if the API fails.
+ * Affiliate dashboard: calls Node or Vercel handler at `GET /api/affiliate/dashboard` (same-origin when VITE_SERVER_URL matches page host / apex–www handling).
+ * Bearer token required. Falls back to Supabase if the API fails or returns non-JSON (e.g. HTML shell).
  */
 export async function fetchAffiliateDashboardData() {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -310,7 +311,17 @@ export async function fetchAffiliateDashboardData() {
       throw new Error(`API failed (${res.status})`);
     }
 
-    const data = await res.json();
+    const text = await res.text();
+    const trimmed = text.trim();
+    if (trimmed.startsWith("<") || trimmed.startsWith("<!")) {
+      throw new Error("affiliate_api_returned_html");
+    }
+    let data;
+    try {
+      data = JSON.parse(trimmed);
+    } catch (e) {
+      throw new Error(`affiliate_api_invalid_json: ${e?.message || e}`);
+    }
     console.log("[affiliate] Dashboard API success", { ok: data?.ok, affiliate: !!data?.affiliate, stats: !!data?.stats });
     
     if (!data?.ok) {
@@ -320,7 +331,12 @@ export async function fetchAffiliateDashboardData() {
     
     return data;
   } catch (err) {
-    console.error("[affiliate] API call failed, falling back to Supabase:", err.message);
+    const msg = err?.message || String(err);
+    if (import.meta.env.DEV || msg.includes("affiliate_api_")) {
+      console.warn("[affiliate] API call failed, falling back to Supabase:", msg);
+    } else {
+      console.warn("[affiliate] API call failed, falling back to Supabase");
+    }
     const fallbackData = await fetchAffiliateDashboardFromSupabase();
     return fallbackData;
   }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,6 +57,7 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Generate Payout</DialogTitle>
+          <DialogDescription className="sr-only">Enter gross amount and commission details for this payout.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="rounded-lg border border-border p-3 text-sm">

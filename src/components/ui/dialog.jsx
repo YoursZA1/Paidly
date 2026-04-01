@@ -110,12 +110,14 @@ const DialogContent = React.forwardRef((allProps, ref) => {
     typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
 
   const hasTitle = hasDialogChild(children, DialogTitle)
+  const hasUserDescription = hasDialogChild(children, DialogDescription)
   /**
    * Safety-first: unless caller provides a non-empty custom id, wire a fallback
    * Description + aria-describedby target. This avoids Radix warnings even when
    * child detection fails in wrapped/HMR edge cases.
+   * Skip injection when a real {@link DialogDescription} is present (e.g. under DialogHeader).
    */
-  const injectFallbackDescription = !hasNonEmptyAriaDescribedBy
+  const injectFallbackDescription = !hasNonEmptyAriaDescribedBy && !hasUserDescription
 
   /**
    * Non-empty aria-describedby: caller controls the id.

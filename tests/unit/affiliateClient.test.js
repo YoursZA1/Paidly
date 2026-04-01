@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockSupabase = {
   auth: {
@@ -10,21 +10,29 @@ const mockSupabase = {
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: mockSupabase }));
 
-const createMockQueryBuilder = (resolvedValue) => ({
-  select: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  order: vi.fn().mockReturnThis(),
-  limit: vi.fn().mockReturnThis(),
-  count: vi.fn().mockReturnThis(),
-  head: vi.fn().mockReturnThis(),
-  maybeSingle: vi.fn().mockResolvedValue(resolvedValue),
-});
+/**
+ * `maybeSingle()` resolves to `{ data, error }` like @supabase/supabase-js.
+ * @param {{ data: unknown, error: unknown }} row
+ */
+function createAffiliateRowQueryBuilder(row) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue(row),
+  };
+}
 
 describe("fetchAffiliateDashboardData", () => {
   beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("VITE_NODE_AFFILIATE_API", "1");
     mockSupabase.auth.getSession.mockClear();
     mockSupabase.from.mockClear();
     global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   const mockSession = {
@@ -65,7 +73,7 @@ describe("fetchAffiliateDashboardData", () => {
     mockSupabase.auth.getSession.mockResolvedValue(mockSession);
     global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => mockApiResponse,
+      text: async () => JSON.stringify(mockApiResponse),
     });
 
     const { fetchAffiliateDashboardData } = await import("@/api/affiliateClient");
@@ -89,7 +97,7 @@ describe("fetchAffiliateDashboardData", () => {
       data: [
         { id: "ref-1", status: "signed_up" },
         { id: "ref-2", status: "subscribed" },
-        { id: "ref-3", status: "paid" },
+        { id: "ref-3", status: "pending" },
       ],
       error: null,
     };
@@ -102,13 +110,14 @@ describe("fetchAffiliateDashboardData", () => {
       error: null,
     };
 
-    const affiliateQueryBuilder = createMockQueryBuilder({
+    const affiliateQueryBuilder = createAffiliateRowQueryBuilder({
       data: mockAffiliate,
       error: null,
     });
 
     const clicksQueryBuilder = {
-      select: vi.fn().mockResolvedValue(mockClicksRes),
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue(mockClicksRes),
     };
 
     const referralsQueryBuilder = {
@@ -142,7 +151,7 @@ describe("fetchAffiliateDashboardData", () => {
     mockSupabase.auth.getSession.mockResolvedValue(mockSession);
     global.fetch.mockRejectedValue(new Error("Network error"));
 
-    const affiliateQueryBuilder = createMockQueryBuilder({
+    const affiliateQueryBuilder = createAffiliateRowQueryBuilder({
       data: null,
       error: { message: "DB error" },
     });
@@ -170,7 +179,7 @@ describe("fetchAffiliateDashboardData", () => {
     mockSupabase.auth.getSession.mockResolvedValue(mockSession);
     global.fetch.mockRejectedValue(new Error("API down"));
 
-    const affiliateQueryBuilder = createMockQueryBuilder({
+    const affiliateQueryBuilder = createAffiliateRowQueryBuilder({
       data: null,
       error: null,
     });

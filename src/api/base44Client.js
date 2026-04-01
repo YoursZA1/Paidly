@@ -121,13 +121,15 @@ const ENTITY_TABLES = {
   User: 'profiles',
 };
 
+// Use '*' for tables whose schema differs across environments (PostgREST 400 if any column is missing).
+// Normalization below still maps fields to the app shape.
 const ENTITY_SELECTS = {
-  PlatformUser: 'id, full_name, email, role, status, plan, subscription_plan, company_name, invoices_sent, invoices_count, created_at, updated_at',
-  Subscription: 'id, user_id, user_email, email, user_name, full_name, plan, current_plan, amount, custom_price, status, billing_cycle, start_date, next_billing_date, created_at, updated_at',
+  PlatformUser: '*',
+  Subscription: '*',
+  WaitlistEntry: '*',
   AffiliateSubmission: 'id, user_id, email, full_name, audience_platform, status, created_at, updated_at',
   AffiliatePayout: 'id, affiliate_id, amount, currency, status, source, created_at, updated_at',
-  WaitlistEntry: 'id, name, full_name, email, converted, created_at, updated_at',
-  User: 'id, email, full_name, role, created_at',
+  User: '*',
 };
 
 function normalizeEntity(entityName, row) {

@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -255,6 +255,7 @@ export default function AffiliatesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Affiliate Application</DialogTitle>
+            <DialogDescription className="sr-only">Review applicant details and approve or decline.</DialogDescription>
           </DialogHeader>
           {viewingApp && (
             <div className="space-y-4 mt-4">

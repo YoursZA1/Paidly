@@ -15,11 +15,14 @@ const isDev = import.meta.env.DEV;
 
 const SKIP_NODE_AUTH_KEY = "paidly_skip_node_auth";
 
-/** After a transport failure (bad DNS, offline), skip further /api/auth/* attempts this tab until logout. */
+/** After 405/404/501 or transport failure, skip further /api/auth/* attempts until logout. Persist in localStorage so new tabs/sessions do not hit a broken route every time. */
 export function rememberNodeAuthUnreachable() {
   try {
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.setItem(SKIP_NODE_AUTH_KEY, "1");
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(SKIP_NODE_AUTH_KEY, "1");
     }
   } catch {
     /* ignore */
@@ -31,6 +34,9 @@ export function clearNodeAuthUnreachable() {
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem(SKIP_NODE_AUTH_KEY);
     }
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(SKIP_NODE_AUTH_KEY);
+    }
   } catch {
     /* ignore */
   }
@@ -38,7 +44,10 @@ export function clearNodeAuthUnreachable() {
 
 function isNodeAuthRememberedUnreachable() {
   try {
-    return typeof sessionStorage !== "undefined" && sessionStorage.getItem(SKIP_NODE_AUTH_KEY) === "1";
+    return (
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem(SKIP_NODE_AUTH_KEY) === "1") ||
+      (typeof localStorage !== "undefined" && localStorage.getItem(SKIP_NODE_AUTH_KEY) === "1")
+    );
   } catch {
     return false;
   }

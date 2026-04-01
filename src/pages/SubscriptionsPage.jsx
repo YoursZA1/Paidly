@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { Search, MoreHorizontal, Plus } from 'lucide-react';
@@ -16,7 +16,58 @@ import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
-import SubscriptionFormDialog from '@/components/subscriptions/SubscriptionFormDialog';
+import SubscriptionFormDialog, {
+  mapProfilePlanToSubPlan,
+} from '@/components/subscriptions/SubscriptionFormDialog';
+
+const PLAN_DEFAULT_AMOUNT = { individual: 25, sme: 50, corporate: 110 };
+const LIST_LIMIT = 500;
+
+function pickLatestSubscriptionForUser(subs, userId) {
+  const uid = String(userId);
+  const matches = subs.filter((s) => s.user_id && String(s.user_id) === uid);
+  if (!matches.length) return null;
+  return matches.sort(
+    (a, b) => new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0)
+  )[0];
+}
+
+/** One row per platform user: real subscription or synthetic “no record” row */
+function buildSubscriptionRows(users, subscriptions) {
+  const assignedSubIds = new Set();
+  const rows = [];
+
+  for (const u of users) {
+    const sub = pickLatestSubscriptionForUser(subscriptions, u.id);
+    if (sub) {
+      assignedSubIds.add(sub.id);
+      rows.push({ ...sub, _rowKey: sub.id });
+    } else {
+      const plan = mapProfilePlanToSubPlan(u.plan || u.subscription_plan);
+      rows.push({
+        id: null,
+        user_id: u.id,
+        user_name: u.full_name || '',
+        user_email: u.email || '',
+        plan,
+        amount: PLAN_DEFAULT_AMOUNT[plan] ?? 0,
+        billing_cycle: 'monthly',
+        status: 'none',
+        next_billing_date: null,
+        _isSynthetic: true,
+        _rowKey: `syn-${u.id}`,
+      });
+    }
+  }
+
+  for (const s of subscriptions) {
+    if (s.id && !assignedSubIds.has(s.id)) {
+      rows.push({ ...s, _rowKey: s.id });
+    }
+  }
+
+  return rows;
+}
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 
@@ -29,11 +80,24 @@ export default function SubscriptionsPage() {
   const [editingSub, setEditingSub] = useState(null);
   const queryClient = useQueryClient();
 
-  const { data: subscriptions = [], isLoading, refetch } = useQuery({
+  const { data: subscriptions = [], isLoading: subsLoading, refetch } = useQuery({
     queryKey: ['subscriptions'],
-    queryFn: () => paidly.entities.Subscription.list('-created_date', 200),
+    queryFn: () => paidly.entities.Subscription.list('-created_date', LIST_LIMIT),
     refetchInterval: 30000,
   });
+
+  const { data: platformUsers = [], isLoading: usersLoading } = useQuery({
+    queryKey: ['platform-users'],
+    queryFn: () => paidly.entities.PlatformUser.list('-created_date', LIST_LIMIT),
+    refetchInterval: 30000,
+  });
+
+  const rows = useMemo(
+    () => buildSubscriptionRows(platformUsers, subscriptions),
+    [platformUsers, subscriptions]
+  );
+
+  const isLoading = subsLoading || usersLoading;
 
   const subsFetching = useIsFetching({ queryKey: ['subscriptions'] }) > 0;
 
@@ -41,12 +105,13 @@ export default function SubscriptionsPage() {
     mutationFn: ({ id, data }) => paidly.entities.Subscription.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       toast.success('Subscription updated');
     },
     onError: (err) => toast.error(err?.message || 'Update failed'),
   });
 
-  const filtered = subscriptions.filter((s) => {
+  const filtered = rows.filter((s) => {
     const matchSearch =
       !search ||
       (s.user_name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -81,7 +146,7 @@ export default function SubscriptionsPage() {
     <div>
       <PageHeader
         title="Subscriptions"
-        description="Manage all platform subscriptions"
+        description="All platform users and their subscription records (profile plan shown when no subscription row exists)"
         onRefresh={() => refetch()}
         isRefreshing={subsFetching}
       >
@@ -96,7 +161,7 @@ export default function SubscriptionsPage() {
           { plan: 'sme', label: 'SME', price: 'R50/mo', color: 'border-primary/30' },
           { plan: 'corporate', label: 'Corporate', price: 'R110/mo', color: 'border-purple-500/30' },
         ].map((p) => {
-          const count = subscriptions.filter((s) => s.plan === p.plan && s.status === 'active').length;
+          const count = rows.filter((s) => s.plan === p.plan && s.status === 'active').length;
           return (
             <div key={p.plan} className={`rounded-xl border-2 bg-card p-5 ${p.color}`}>
               <p className="text-sm text-muted-foreground">{p.label}</p>
@@ -114,7 +179,7 @@ export default function SubscriptionsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search subscriptions..."
+            placeholder="Search users and subscriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-card pl-10"
@@ -141,6 +206,7 @@ export default function SubscriptionsPage() {
             <SelectItem value="paused">Paused</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
             <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="none">No subscription row</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -161,7 +227,10 @@ export default function SubscriptionsPage() {
             </thead>
             <tbody>
               {filtered.map((sub) => (
-                <tr key={sub.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                <tr
+                  key={sub._rowKey || sub.id}
+                  className="border-b border-border/50 transition-colors hover:bg-muted/30"
+                >
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium">{sub.user_name || '—'}</p>
                     <p className="text-xs text-muted-foreground">{sub.user_email}</p>
@@ -169,7 +238,16 @@ export default function SubscriptionsPage() {
                   <td className="px-6 py-4">
                     <PlanBadge plan={sub.plan} />
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium">R {sub.amount}</td>
+                  <td className="px-6 py-4 text-sm font-medium">
+                    {sub._isSynthetic ? (
+                      <span className="text-muted-foreground">
+                        R {PLAN_DEFAULT_AMOUNT[sub.plan] ?? 0}{' '}
+                        <span className="text-xs">(profile)</span>
+                      </span>
+                    ) : (
+                      <>R {Number(sub.amount ?? 0).toFixed(2)}</>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm capitalize text-muted-foreground">
                     {sub.billing_cycle || 'monthly'}
                   </td>
@@ -189,30 +267,43 @@ export default function SubscriptionsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setShowAdd(false);
-                            setEditingSub(sub);
-                          }}
-                        >
-                          Edit Subscription
-                        </DropdownMenuItem>
-                        {sub.status === 'active' ? (
-                          <DropdownMenuItem onClick={() => handleStatusChange(sub, 'paused')}>
-                            Pause
+                        {sub._isSynthetic ? (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setShowAdd(false);
+                              setEditingSub(sub);
+                            }}
+                          >
+                            Create subscription
                           </DropdownMenuItem>
-                        ) : null}
-                        {sub.status === 'paused' ? (
-                          <DropdownMenuItem onClick={() => handleStatusChange(sub, 'active')}>
-                            Reactivate
-                          </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => handleStatusChange(sub, 'cancelled')}
-                        >
-                          Cancel
-                        </DropdownMenuItem>
+                        ) : (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setShowAdd(false);
+                                setEditingSub(sub);
+                              }}
+                            >
+                              Edit subscription
+                            </DropdownMenuItem>
+                            {sub.status === 'active' ? (
+                              <DropdownMenuItem onClick={() => handleStatusChange(sub, 'paused')}>
+                                Pause
+                              </DropdownMenuItem>
+                            ) : null}
+                            {sub.status === 'paused' ? (
+                              <DropdownMenuItem onClick={() => handleStatusChange(sub, 'active')}>
+                                Reactivate
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleStatusChange(sub, 'cancelled')}
+                            >
+                              Cancel
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>

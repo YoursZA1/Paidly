@@ -6,6 +6,7 @@ import {
   getBackendBaseUrl,
 } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { retryOnAbort } from "@/utils/retryOnAbort";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
@@ -175,10 +176,15 @@ const SupabaseAuthService = {
     const normalized = (email || "").trim().toLowerCase();
 
     const signInDirect = async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: normalized,
-        password,
-      });
+      const { data, error } = await retryOnAbort(
+        () =>
+          supabase.auth.signInWithPassword({
+            email: normalized,
+            password,
+          }),
+        2,
+        400
+      );
       if (error) {
         const msg = mapAuthError(error);
         if (looksLikeNetworkFailureText(msg)) {
@@ -284,13 +290,13 @@ const SupabaseAuthService = {
   },
 
   async getSession() {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await retryOnAbort(() => supabase.auth.getSession(), 3, 400);
     if (error) throw new Error(mapAuthError(error));
     return normalizeSession(data.session);
   },
 
   async getUser() {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await retryOnAbort(() => supabase.auth.getUser(), 3, 400);
     if (error) throw new Error(mapAuthError(error));
     return data?.user ?? null;
   },

@@ -19,6 +19,16 @@ const PLAN_DEFAULT_AMOUNT = {
   corporate: 110,
 };
 
+/** Map profile / app plan names to subscription plan keys */
+export function mapProfilePlanToSubPlan(plan) {
+  const x = String(plan || '').toLowerCase();
+  if (['individual', 'basic', 'starter', 'free'].includes(x)) return 'individual';
+  if (['sme', 'professional', 'business'].includes(x)) return 'sme';
+  if (['corporate', 'enterprise'].includes(x)) return 'corporate';
+  if (x === 'none' || x === 'trial' || !x) return 'individual';
+  return 'individual';
+}
+
 function toLocalDateInput(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -58,7 +68,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   const isEdit = Boolean(subscription?.id);
   const { data: users = [] } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 200),
+    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 500),
     enabled: open,
   });
 
@@ -81,7 +91,24 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
           : endOfMonthDate(),
       });
     } else {
-      setForm(emptyForm());
+      // Create flow: optional row prefill (user without subscription row yet)
+      if (subscription?.user_id && !subscription?.id) {
+        const p = mapProfilePlanToSubPlan(subscription.plan);
+        setForm({
+          ...emptyForm(),
+          user_id: String(subscription.user_id),
+          user_name: subscription.user_name || '',
+          user_email: subscription.user_email || '',
+          plan: p,
+          amount: PLAN_DEFAULT_AMOUNT[p] ?? 25,
+          status: 'active',
+          billing_cycle: subscription.billing_cycle || 'monthly',
+          start_date: todayDate(),
+          next_billing_date: endOfMonthDate(),
+        });
+      } else {
+        setForm(emptyForm());
+      }
     }
   }, [open, subscription]);
 
@@ -113,6 +140,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
     mutationFn: (payload) => paidly.entities.Subscription.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       toast.success('Subscription created');
       onClose();
     },
@@ -123,6 +151,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
     mutationFn: ({ id, data }) => paidly.entities.Subscription.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       toast.success('Subscription updated');
       onClose();
     },
