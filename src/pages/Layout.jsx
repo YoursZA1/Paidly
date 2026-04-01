@@ -33,6 +33,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible } from "@/utils";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
+import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
   Plus,
   ChevronsRight,
@@ -657,7 +658,6 @@ export default function Layout({ children, currentPageName }) {
       const oneDay = 24 * 60 * 60 * 1000;
       if (!lastFollowUpCheck || (now - parseInt(lastFollowUpCheck) > oneDay)) {
         try {
-          const PaymentReminderService = (await import('@/components/reminders/PaymentReminderService')).default;
           await PaymentReminderService.checkAndSendReminders();
           const QuoteReminderService = (await import('@/components/quote/QuoteReminderService')).default;
           await QuoteReminderService.checkAndSendReminders();

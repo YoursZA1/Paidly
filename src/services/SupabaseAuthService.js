@@ -48,6 +48,11 @@ function looksLikeNetworkFailureText(msg) {
   );
 }
 
+function isNodeAuthRouteUnsupportedStatus(status) {
+  const s = Number(status);
+  return s === 404 || s === 405 || s === 501;
+}
+
 const normalizeSession = (session) => {
   if (!session) return null;
   return {
@@ -124,8 +129,11 @@ const SupabaseAuthService = {
         throw new Error(msg);
       }
 
-      // API down or misconfigured (502/503/504/5xx): still allow auth via Supabase (IP rate-limit on API is skipped for this attempt).
-      if (status >= 500) {
+      // API down/misconfigured or route absent (404/405): allow auth via Supabase.
+      if (status >= 500 || isNodeAuthRouteUnsupportedStatus(status)) {
+        if (isNodeAuthRouteUnsupportedStatus(status)) {
+          rememberNodeAuthUnreachable();
+        }
         console.warn(`[auth] API sign-up returned ${status}; falling back to direct Supabase.`);
         return signUpDirect();
       }
@@ -218,8 +226,11 @@ const SupabaseAuthService = {
         throw new Error(mapAuthError({ message: data?.error || "Invalid login credentials" }));
       }
 
-      // API unavailable (503, cold start, missing env): fall back so users can still sign in via Supabase.
-      if (status >= 500) {
+      // API unavailable or auth route unsupported (404/405): fall back to Supabase.
+      if (status >= 500 || isNodeAuthRouteUnsupportedStatus(status)) {
+        if (isNodeAuthRouteUnsupportedStatus(status)) {
+          rememberNodeAuthUnreachable();
+        }
         console.warn(`[auth] API sign-in returned ${status}; falling back to direct Supabase.`);
         return signInDirect();
       }

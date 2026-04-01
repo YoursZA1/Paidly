@@ -1,6 +1,17 @@
 import { supabase } from "@/lib/supabaseClient";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 
+function viteEnvFlag(name) {
+  const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function shouldUseNodeAffiliateApi() {
+  if (viteEnvFlag("VITE_SUPABASE_ONLY")) return false;
+  if (import.meta.env.DEV && !viteEnvFlag("VITE_NODE_AFFILIATE_API")) return false;
+  return true;
+}
+
 /** Canonical key (survives reloads). Legacy key migrated on read. */
 const REFERRAL_CODE_KEY = "referral_code";
 const LEGACY_REF_KEY = "paidly_pending_ref";
@@ -271,6 +282,15 @@ export async function fetchAffiliateDashboardData() {
       );
     }
     return { ok: false, error: "no_session" };
+  }
+
+  if (!shouldUseNodeAffiliateApi()) {
+    if (import.meta.env.DEV) {
+      console.info(
+        "[affiliate] Using Supabase data source in dev (set VITE_NODE_AFFILIATE_API=1 to call the Node API)."
+      );
+    }
+    return fetchAffiliateDashboardFromSupabase();
   }
 
   const url = getAffiliateDashboardApiUrl();
