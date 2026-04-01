@@ -321,7 +321,9 @@ export default function Signup() {
         if (shouldRedirectToAppAfterAuth()) {
           window.location.href = getAppDashboardUrl();
         } else {
-          navigate(createPageUrl("Dashboard"));
+          const storedUser = JSON.parse(localStorage.getItem("breakapi_user") || "null");
+          const role = String(storedUser?.role || "").toLowerCase();
+          navigate(role === "admin" ? "/admin-v2" : createPageUrl("Dashboard"));
         }
       }, 800);
     } catch (err) {

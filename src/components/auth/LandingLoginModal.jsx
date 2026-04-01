@@ -52,6 +52,13 @@ export default function LandingLoginModal({ open, onOpenChange }) {
     navigate(to);
   };
 
+  const resolvePostLoginRoute = (userLike, fallbackPath) => {
+    const role = String(userLike?.role || "").toLowerCase();
+    if (role === "admin") return "/admin-v2";
+    const safeFallback = fallbackPath?.startsWith("/admin") ? createPageUrl("Dashboard") : fallbackPath;
+    return safeFallback || createPageUrl("Dashboard");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -74,9 +81,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
         return;
       }
       const storedUser = JSON.parse(localStorage.getItem("breakapi_user") || "null");
-      const isAdmin = storedUser?.role === "admin";
-      const safeFrom = from.startsWith("/admin") ? createPageUrl("Dashboard") : from;
-      const destination = isAdmin ? createPageUrl("Dashboard") : safeFrom;
+      const destination = resolvePostLoginRoute(storedUser, from);
       navigate(destination, { replace: true });
       clearLoginFailures(normalizedEmail);
     } catch (err) {
