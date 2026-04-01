@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 
 /** Canonical key (survives reloads). Legacy key migrated on read. */
 const REFERRAL_CODE_KEY = "referral_code";
@@ -159,6 +160,10 @@ function resolveApiBaseUrl() {
       }
       return "";
     }
+    // Production: avoid https://www… API calls from https://paidly.co.za (apex) — same deployment, CORS breaks cross-host.
+    if (import.meta.env.PROD && typeof window !== "undefined") {
+      return resolveProductionBrowserApiBaseUrl(base);
+    }
     return base;
   } catch {
     if (import.meta.env.DEV) {
@@ -295,7 +300,8 @@ export async function fetchAffiliateDashboardData() {
     
     return data;
   } catch (err) {
-    console.error("[affiliate] API call failed — MUST FIX CONFIG (no fallback):", err.message);
-    return { ok: false, error: err.message || "API unreachable" };
+    console.error("[affiliate] API call failed, falling back to Supabase:", err.message);
+    const fallbackData = await fetchAffiliateDashboardFromSupabase();
+    return fallbackData;
   }
 }

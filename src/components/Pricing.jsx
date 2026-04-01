@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createWaitlistUrl } from "@/utils";
+import { createSignupUrl } from "@/utils";
 import { Check } from "lucide-react";
 
 const PLANS = [
@@ -74,14 +74,14 @@ export default function Pricing() {
                 ))}
               </ul>
               <Link
-                to={createWaitlistUrl()}
+                to={createSignupUrl()}
                 className={`mt-8 inline-flex min-h-11 touch-manipulation items-center justify-center rounded-lg px-4 text-sm font-semibold transition ${
                   plan.highlighted
                     ? "bg-[#FF4F00] text-white hover:bg-[#E64700]"
                     : "border border-white/15 bg-transparent text-white hover:border-white/25 hover:bg-white/[0.05]"
                 }`}
               >
-                Join waitlist
+                Get started
               </Link>
             </div>
           ))}

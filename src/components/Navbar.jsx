@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createPageUrl, createWaitlistUrl, createAffiliateLandingUrl } from "@/utils";
+import { createPageUrl, createSignupUrl, createAffiliateLandingUrl } from "@/utils";
 
 /**
  * @param {{ active?: "login" | "signup" | null, onLoginClick: () => void }} props
@@ -41,10 +41,10 @@ export default function Navbar({ active = null, onLoginClick }) {
             Log In
           </button>
           <Link
-            to={createWaitlistUrl()}
+            to={createSignupUrl()}
             className="rounded-lg bg-[#FF4F00] px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-[#FF4F00]/25 transition hover:bg-[#E64700] sm:px-4"
           >
-            Join waitlist
+            Get started
           </Link>
         </div>
       </div>

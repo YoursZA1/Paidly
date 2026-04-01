@@ -23,7 +23,7 @@ import AffiliateSection from "@/components/marketing/AffiliateSection";
 export default function Home({
   authSlot = null,
   navActive = null,
-  showWaitlist = true,
+  showWaitlist = false,
 }) {
   const location = useLocation();
   const [loginOpen, setLoginOpen] = useState(false);
@@ -39,15 +39,6 @@ export default function Home({
       recordAffiliateClick(code);
     }
   }, [location.search]);
-
-  useEffect(() => {
-    if (location.hash !== "#waitlist") return;
-    const scrollToWaitlist = () =>
-      document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    scrollToWaitlist();
-    const t = window.setTimeout(scrollToWaitlist, 150);
-    return () => window.clearTimeout(t);
-  }, [location.pathname, location.hash]);
 
 
   return (

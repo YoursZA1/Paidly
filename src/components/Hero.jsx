@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createWaitlistUrl } from "@/utils";
+import { createSignupUrl } from "@/utils";
 import { PRODUCT_LAUNCH_BADGE } from "@/constants/productLaunch";
 
 /**
@@ -28,14 +28,14 @@ export default function Hero({ onLoginClick }) {
         </p>
         <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-zinc-400 sm:text-lg">
           Create invoices, send quotes, and track payments in one clean platform built for modern
-          businesses. Join the waitlist to get early access.
+          businesses. Get started free and send your first invoice in minutes.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
           <Link
-            to={createWaitlistUrl()}
+            to={createSignupUrl()}
             className="inline-flex min-h-12 w-full max-w-xs items-center justify-center rounded-lg bg-[#FF4F00] px-8 text-sm font-semibold text-white shadow-lg shadow-[#FF4F00]/30 transition hover:bg-[#E64700] sm:w-auto sm:max-w-none"
           >
-            Join the waitlist
+            Get started free
           </Link>
           <button
             type="button"
@@ -46,7 +46,7 @@ export default function Hero({ onLoginClick }) {
           </button>
         </div>
         <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-400">
-          No spam — one email before launch.
+          No credit card required to create your account.
         </p>
       </div>
     </section>

@@ -12,8 +12,6 @@ const RouteFallback = () => (
   </div>
 );
 
-const AdminFinancials = lazy(() => import("./AdminFinancials"));
-const AdminBusinesses = lazy(() => import("./AdminBusinesses"));
 const Dashboard = lazy(() => import("./Dashboard"));
 const Login = lazy(() => import("./Login"));
 const Signup = lazy(() => import("./Signup"));
@@ -52,40 +50,21 @@ const CashFlow = lazy(() => import("./CashFlow"));
 const CashFlowPDF = lazy(() => import("./CashFlowPDF"));
 const Calendar = lazy(() => import("./Calendar"));
 const Messages = lazy(() => import("./Messages"));
-const TaskSettings = lazy(() => import("./TaskSettings"));
 const ClientDetail = lazy(() => import("./ClientDetail"));
 const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
 const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
-const UserManagement = lazy(() => import("./UserManagement"));
-const UserAccessControl = lazy(() => import("./UserAccessControl"));
-const AdminControl = lazy(() => import("./AdminControl"));
-const LogsAuditTrail = lazy(() => import("./LogsAuditTrail"));
-const ExcelDataCapture = lazy(() => import("./ExcelDataCapture"));
-const SubscriptionsManagement = lazy(() => import("./SubscriptionsManagement"));
-const DocumentActivity = lazy(() => import("./DocumentActivity"));
-const AdminUsers = lazy(() => import("./AdminUsers"));
-const AdminAffiliates = lazy(() => import("./AdminAffiliates"));
-const AdminAccounts = lazy(() => import("./AdminAccounts"));
-const AdminDocumentOversight = lazy(() => import("./AdminDocumentOversight"));
-const AdminSubscriptions = lazy(() => import("./AdminSubscriptions"));
-const AdminPlans = lazy(() => import("./AdminPlans"));
-const PlatformSettings = lazy(() => import("./PlatformSettings"));
-const SupportAdminTools = lazy(() => import("./SupportAdminTools"));
-const SecurityCompliance = lazy(() => import("./SecurityCompliance"));
-const AdminRolesManagement = lazy(() => import("./AdminRolesManagement"));
+const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
+const UsersPage = lazy(() => import("./UsersPage"));
+const SubscriptionsPage = lazy(() => import("./SubscriptionsPage"));
+const AffiliatesPage = lazy(() => import("./AffiliatesPage"));
+const WaitlistPage = lazy(() => import("./WaitlistPage"));
+const SettingsPage = lazy(() => import("./SettingsPage"));
+const AuditLogPage = lazy(() => import("./AuditLogPage"));
 const ForgotPassword = lazy(() => import("./ForgotPassword"));
 const ResetPassword = lazy(() => import("./ResetPassword"));
 const AcceptInvite = lazy(() => import("./AcceptInvite"));
-const AdminTransactions = lazy(() => import("./AdminTransactions"));
-const AdminPayouts = lazy(() => import("./AdminPayouts"));
-const AdminFees = lazy(() => import("./AdminFees"));
-const AdminBilling = lazy(() => import("./AdminBilling"));
-const AdminInvoicesQuotes = lazy(() => import("./AdminInvoicesQuotes"));
-const SystemStatus = lazy(() => import("./SystemStatus"));
-const BackgroundJobs = lazy(() => import("./BackgroundJobs"));
-const BuildLogs = lazy(() => import("./BuildLogs"));
 const About = lazy(() => import("./About"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
@@ -94,6 +73,7 @@ const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
 const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
 const AffiliateApply = lazy(() => import("./AffiliateApply"));
 const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
+const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthContext";
@@ -213,84 +193,114 @@ const PAYSLIP_REPORT_ROUTES = [
 
 // --- Admin & Support Pages ---
 const ADMIN_ROUTES = [
-    { path: "/AdminFinancials", element: <RequireAuth roles={["admin"]}><AdminFinancials /></RequireAuth> },
-    { path: "/AdminBusinesses", element: <RequireAuth roles={["admin"]}><AdminBusinesses /></RequireAuth> },
-    { path: "/TaskSettings", element: <RequireAuth roles={["admin"]}><TaskSettings /></RequireAuth> },
-    { path: "/UserManagement", element: <RequireAuth roles={["admin"]}><UserManagement /></RequireAuth> },
-    { path: "/UserAccessControl", element: <RequireAuth roles={["admin"]}><UserAccessControl /></RequireAuth> },
-    { path: "/AdminControl", element: <RequireAuth roles={["admin"]}><AdminControl /></RequireAuth> },
-    { path: "/LogsAuditTrail", element: <RequireAuth roles={["admin"]}><LogsAuditTrail /></RequireAuth> },
-    { path: "/ExcelDataCapture", element: <RequireAuth roles={["admin"]}><ExcelDataCapture /></RequireAuth> },
-    { path: "/SubscriptionsManagement", element: <RequireAuth roles={["admin"]}><SubscriptionsManagement /></RequireAuth> },
-    { path: "/DocumentActivity", element: <RequireAuth roles={["admin"]}><DocumentActivity /></RequireAuth> },
-    { path: "/AdminUsers", element: <RequireAuth roles={["admin"]}><AdminUsers /></RequireAuth> },
-    { path: "/AdminAffiliates", element: <RequireAuth roles={["admin"]}><AdminAffiliates /></RequireAuth> },
-    { path: "/AdminAccounts", element: <RequireAuth roles={["admin"]}><AdminAccounts /></RequireAuth> },
-    { path: "/AdminDocumentOversight", element: <RequireAuth roles={["admin"]}><AdminDocumentOversight /></RequireAuth> },
-    { path: "/AdminSubscriptions", element: <RequireAuth roles={["admin"]}><AdminSubscriptions /></RequireAuth> },
-    { path: "/AdminPlans", element: <RequireAuth roles={["admin"]}><AdminPlans /></RequireAuth> },
-    { path: "/PlatformSettings", element: <RequireAuth roles={["admin"]}><PlatformSettings /></RequireAuth> },
-    { path: "/SupportAdminTools", element: <RequireAuth roles={["admin"]}><SupportAdminTools /></RequireAuth> },
-    { path: "/SecurityCompliance", element: <RequireAuth roles={["admin"]}><SecurityCompliance /></RequireAuth> },
-    { path: "/AdminRolesManagement", element: <RequireAuth roles={["admin"]}><AdminRolesManagement /></RequireAuth> },
+    { path: "/AdminFinancials", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/AdminBusinesses", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/TaskSettings", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/UserManagement", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/UserAccessControl", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/AdminControl", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/AdminDashboard", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/dashboard", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/LogsAuditTrail", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/ExcelDataCapture", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/SubscriptionsManagement", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/DocumentActivity", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/AdminUsers", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/AdminAffiliates", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth> },
+    { path: "/AdminAccounts", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/AdminDocumentOversight", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/AdminSubscriptions", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/AdminPlans", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/PlatformSettings", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/SupportAdminTools", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/SecurityCompliance", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/AdminRolesManagement", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
     // --- Admin Nested Routes ---
-    { path: "/admin", element: <RequireAuth roles={["admin"]}><AdminControl /></RequireAuth> },
-    { path: "/admin/users", element: <RequireAuth roles={["admin"]}><UserManagement /></RequireAuth> },
-    { path: "/admin/admin-control", element: <RequireAuth roles={["admin"]}><AdminControl /></RequireAuth> },
-    { path: "/admin/access-control", element: <RequireAuth roles={["admin"]}><UserAccessControl /></RequireAuth> },
-    { path: "/admin/logs-audit-trail", element: <RequireAuth roles={["admin"]}><LogsAuditTrail /></RequireAuth> },
-    { path: "/admin/excel-data-capture", element: <RequireAuth roles={["admin"]}><ExcelDataCapture /></RequireAuth> },
-    { path: "/admin/subscriptions", element: <RequireAuth roles={["admin"]}><AdminSubscriptions /></RequireAuth> },
-    { path: "/admin/plans-management", element: <RequireAuth roles={["admin"]}><AdminPlans /></RequireAuth> },
-    { path: "/admin/subscriptions-management", element: <RequireAuth roles={["admin"]}><SubscriptionsManagement /></RequireAuth> },
-    { path: "/admin/document-activity", element: <RequireAuth roles={["admin"]}><DocumentActivity /></RequireAuth> },
-    { path: "/admin/user-management", element: <RequireAuth roles={["admin"]}><AdminUsers /></RequireAuth> },
-    { path: "/admin/affiliates", element: <RequireAuth roles={["admin"]}><AdminAffiliates /></RequireAuth> },
-    { path: "/admin/accounts-management", element: <RequireAuth roles={["admin"]}><AdminAccounts /></RequireAuth> },
-    { path: "/admin/document-oversight", element: <RequireAuth roles={["admin"]}><AdminDocumentOversight /></RequireAuth> },
-    { path: "/admin/platform-settings", element: <RequireAuth roles={["admin"]}><PlatformSettings /></RequireAuth> },
-    { path: "/admin/support-tools", element: <RequireAuth roles={["admin"]}><SupportAdminTools /></RequireAuth> },
-    { path: "/admin/support-admin-tools", element: <RequireAuth roles={["admin"]}><SupportAdminTools /></RequireAuth> },
-    { path: "/admin/security-compliance", element: <RequireAuth roles={["admin"]}><SecurityCompliance /></RequireAuth> },
-    { path: "/admin/roles-management", element: <RequireAuth roles={["admin"]}><AdminRolesManagement /></RequireAuth> },
-    { path: "/admin/system-status", element: <RequireAuth roles={["admin"]}><SystemStatus /></RequireAuth> },
-    { path: "/admin/background-jobs", element: <RequireAuth roles={["admin"]}><BackgroundJobs /></RequireAuth> },
-    { path: "/BuildLogs", element: <RequireAuth roles={["admin"]}><BuildLogs /></RequireAuth> },
-    { path: "/admin/build-logs", element: <RequireAuth roles={["admin"]}><BuildLogs /></RequireAuth> },
+    { path: "/admin", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/users", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/admin/admin-control", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/access-control", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/logs-audit-trail", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/excel-data-capture", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/subscriptions", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/admin/plans-management", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/admin/subscriptions-management", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
+    { path: "/admin/document-activity", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/user-management", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/admin/affiliates", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth> },
+    { path: "/admin/accounts-management", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
+    { path: "/admin/document-oversight", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/platform-settings", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/support-tools", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/support-admin-tools", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/security-compliance", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/roles-management", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
+    { path: "/admin/system-status", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/background-jobs", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/BuildLogs", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
+    { path: "/admin/build-logs", element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     {
         path: "/admin/transactions",
-        element: <AdminTransactions />,
+        element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth>,
         label: "Transactions",
         showInNav: true,
         admin: true,
     },
     {
         path: "/admin/payouts",
-        element: <AdminPayouts />,
+        element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth>,
         label: "Payouts",
         showInNav: true,
         admin: true,
     },
     {
         path: "/admin/fees",
-        element: <AdminFees />,
+        element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth>,
         label: "Fees",
         showInNav: true,
         admin: true,
     },
     {
         path: "/admin/billing",
-        element: <AdminBilling />,
+        element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth>,
         label: "Billing",
         showInNav: true,
         admin: true,
     },
     {
         path: "/admin/invoices-quotes",
-        element: <AdminInvoicesQuotes />,
+        element: <RequireAuth roles={["admin"]}><Navigate to="/admin-v2" replace /></RequireAuth>,
         label: "Invoices & Quotes",
         showInNav: true,
         admin: true,
+    },
+    {
+        path: "/admin-v2",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminV2Dashboard /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/users",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><UsersPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/subscriptions",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><SubscriptionsPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/affiliates",
+        element: <RequireAuth roles={["admin", "management", "support"]}><AdminLayout><AffiliatesPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/waitlist",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><WaitlistPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/settings",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><SettingsPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/audit-log",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AuditLogPage /></AdminLayout></RequireAuth>,
     },
 ];
 

@@ -320,8 +320,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // 1. Clear local state immediately so the UI shows logged out and redirect is never blocked.
-    purgeSupabaseAuthStorage();
+    // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
     clearNodeAuthUnreachable();
     try {
       await User.logout();
@@ -335,26 +334,26 @@ export function AuthProvider({ children }) {
     setResendLoading(false);
     setResendSuccess("");
 
-    // 2. Best-effort server sign-out with timeout so this promise always resolves.
+    // 2. Revoke Supabase session while tokens still exist in storage — purging before signOut()
+    //    causes signOut to hang or time out (no refresh token for the revoke request).
+    const SIGNOUT_MS = 8000;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("signOut timeout")), SIGNOUT_MS);
+    });
+    const signOutPromise = supabase.auth.signOut({ scope: "global" }).then(({ error }) => {
+      if (error) throw error;
+    });
     try {
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("signOut timeout")), 3000)
-      );
-      await Promise.race([
-        supabase.auth.signOut({ scope: "global" }).then(({ error }) => {
-          if (error) throw error;
-        }),
-        timeout
-      ]);
+      await Promise.race([signOutPromise, timeoutPromise]);
     } catch (e) {
       if (import.meta.env?.DEV) {
         console.warn("[Auth] Supabase signOut failed or timed out.", e?.message || e);
       }
-      try {
-        await SupabaseAuthService.signOut();
-      } catch {
-        // ignore
-      }
+    } finally {
+      clearTimeout(timeoutId);
+      // 3. Always remove Supabase auth keys after signOut (or if it failed / timed out).
+      purgeSupabaseAuthStorage();
     }
   }, [purgeSupabaseAuthStorage]);
 

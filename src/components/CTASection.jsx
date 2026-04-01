@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createWaitlistUrl } from "@/utils";
+import { createSignupUrl } from "@/utils";
 import { PRODUCT_LAUNCH_BADGE } from "@/constants/productLaunch";
 
 export default function CTASection() {
@@ -8,17 +8,17 @@ export default function CTASection() {
       <div className="mx-auto max-w-3xl rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.05] to-transparent px-6 py-16 text-center sm:px-10">
         <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">{PRODUCT_LAUNCH_BADGE}</p>
         <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
-          Be first in line when we open the doors
+          Ready to get paid faster?
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-zinc-400">
-          Add your email to the waitlist — we&apos;ll only reach out with launch news and how to get
-          started.
+          Join thousands of businesses using Paidly — create your free account and send your first
+          invoice today.
         </p>
         <Link
-          to={createWaitlistUrl()}
+          to={createSignupUrl()}
           className="mt-10 inline-flex min-h-12 items-center justify-center rounded-lg bg-[#FF4F00] px-10 text-sm font-semibold text-white shadow-lg shadow-[#FF4F00]/30 transition hover:bg-[#E64700]"
         >
-          Join the waitlist
+          Get started free
         </Link>
       </div>
     </section>

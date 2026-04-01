@@ -31,7 +31,7 @@ import { useIsCompactLayout } from "@/hooks/use-mobile";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
-import { createPageUrl, createAdminPageUrl, isWelcomeTourEligible } from "@/utils";
+import { createPageUrl, isWelcomeTourEligible } from "@/utils";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import {
   Plus,
@@ -79,158 +79,53 @@ const navItemShape = PropTypes.shape({
 });
 const adminNavigationItems = [
   {
-    title: "Users",
-    url: createAdminPageUrl("Users"),
-    icon: Users,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-users"
-  },
-  {
-    title: "Affiliates",
-    url: createAdminPageUrl("Affiliates"),
-    icon: Users,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-affiliates"
-  },
-  {
-    title: "Accounts",
-    url: createAdminPageUrl("Accounts Management"),
-    icon: Building2,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-accounts"
-  },
-  {
-    title: "Reports",
-    url: createAdminPageUrl("Document Oversight"),
-    icon: BarChart3,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-reports"
-  },
-  {
-    title: "Operations",
-    icon: Wrench,
-    feature: null,
-    roles: ["admin"],
-    id: "nav-admin-operations",
-    children: [
-      {
-        title: "System Status",
-        url: createAdminPageUrl("System Status"),
-        icon: Shield,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-system-status"
-      },
-      {
-        title: "Background Jobs",
-        url: createAdminPageUrl("Background Jobs"),
-        icon: Activity,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-background-jobs"
-      },
-      {
-        title: "Build Logs",
-        url: createAdminPageUrl("Build Logs"),
-        icon: Terminal,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-build-logs"
-      },
-      {
-        title: "Logs",
-        url: createAdminPageUrl("Logs & Audit Trail"),
-        icon: History,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-logs"
-      }
-    ]
-  },
-  {
-    type: "section",
-    title: "Core Product"
-  },
-  {
     title: "Dashboard",
-    url: createPageUrl("Dashboard"),
+    url: "/admin-v2",
     icon: LayoutDashboard,
     feature: null,
     roles: ["admin"],
-    id: "nav-admin-dashboard"
+    id: "nav-admin-dashboard",
   },
   {
-    title: "Businesses",
-    icon: Building2,
+    title: "Users",
+    url: "/admin-v2/users",
+    icon: Users,
     feature: null,
     roles: ["admin"],
-    id: "nav-admin-businesses",
-    url: createPageUrl("AdminBusinesses"),
-    children: [
-      {
-        title: "Financials",
-        url: createPageUrl("AdminFinancials"),
-        icon: BarChart2,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-financials"
-      },
-      {
-        title: "Transactions",
-        url: createAdminPageUrl("Transactions"),
-        icon: Activity,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-transactions"
-      },
-      {
-        title: "Payouts",
-        url: createAdminPageUrl("Payouts"),
-        icon: TrendingUp,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-payouts"
-      },
-      {
-        title: "Fees",
-        url: createAdminPageUrl("Fees"),
-        icon: FileText,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-fees"
-      }
-    ]
+    id: "nav-admin-users",
   },
   {
-    title: "Billing",
+    title: "Subscriptions",
+    url: "/admin-v2/subscriptions",
     icon: Briefcase,
     feature: null,
     roles: ["admin"],
-    id: "nav-admin-billing",
-    url: createPageUrl("AdminBilling"),
-    children: [
-      {
-        title: "Subscriptions",
-        url: createAdminPageUrl("Subscriptions"),
-        icon: Briefcase,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-subscriptions"
-      },
-      {
-        title: "Invoices & Quotes",
-        url: "/admin/invoices-quotes",
-        icon: FileText,
-        feature: null,
-        roles: ["admin"],
-        id: "nav-admin-invoices-quotes"
-      }
-    ]
-  }
+    id: "nav-admin-subscriptions",
+  },
+  {
+    title: "Affiliates",
+    url: "/admin-v2/affiliates",
+    icon: Handshake,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-affiliates",
+  },
+  {
+    title: "Waitlist",
+    url: "/admin-v2/waitlist",
+    icon: Activity,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-waitlist",
+  },
+  {
+    title: "Settings",
+    url: "/admin-v2/settings",
+    icon: Settings,
+    feature: null,
+    roles: ["admin"],
+    id: "nav-admin-settings",
+  },
 ];
 
 const allNavigationItems = [
@@ -347,8 +242,17 @@ const allNavigationItems = [
 const getNavigationItems = (userPlan, userRole) => {
   const normalizedRole = (userRole || "user").toLowerCase();
   if (normalizedRole === "admin") {
-    // Only admin dashboard and admin nav for admin
-    return adminNavigationItems.map(item => ({
+    // Admins should see full app navigation plus admin-v2 tools.
+    const mergedAdminItems = [...allNavigationItems, ...adminNavigationItems];
+    const seenIds = new Set();
+    return mergedAdminItems
+      .filter((item) => {
+        if (!item?.id) return true;
+        if (seenIds.has(item.id)) return false;
+        seenIds.add(item.id);
+        return true;
+      })
+      .map(item => ({
       ...item,
       hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
       requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
@@ -646,7 +550,7 @@ MobileNav.propTypes = {
   resolvedTheme: PropTypes.string
 };
 
-/** Routes without app chrome use document scroll and hash sections (e.g. /Home#waitlist). */
+/** Routes without app chrome use document scroll and hash sections (e.g. /Signup#sign-up). */
 const STANDALONE_PAGE_NAMES = [
   "PayslipPDF",
   "InvoicePDF",
@@ -667,6 +571,7 @@ const STANDALONE_PAGE_NAMES = [
 export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdminV2Route = location.pathname.startsWith("/admin-v2");
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   // Default to expanded sidebar (especially after login/signup) so nav items are visible
@@ -684,12 +589,11 @@ export default function Layout({ children, currentPageName }) {
   const userProfile = useAppStore((s) => s.userProfile);
   const resetStore = useAppStore((s) => s.reset);
 
-  // Fetch shared app data when user + Supabase session are ready (non-admin). Skip if we have fresh data so navigation doesn't refetch.
+  // Fetch shared app data when user + Supabase session are ready. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
   const STALE_MS = 5 * 60 * 1000; // 5 min – same as React Query staleTime
   useEffect(() => {
     if (!user?.id) return;
     if (!authSession?.user) return;
-    if ((user?.role || "").toLowerCase() === "admin") return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
@@ -698,16 +602,16 @@ export default function Layout({ children, currentPageName }) {
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo
-  // hash scrolling (e.g. Join waitlist → /Home#waitlist).
+  // hash scrolling on marketing pages with in-page anchors.
   useEffect(() => {
-    if (STANDALONE_PAGE_NAMES.includes(currentPageName)) {
+    if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
       return;
     }
     if (mainContentRef.current) {
       mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     }
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  }, [location.pathname, currentPageName]);
+  }, [location.pathname, currentPageName, isAdminV2Route]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -755,7 +659,7 @@ export default function Layout({ children, currentPageName }) {
         try {
           const PaymentReminderService = (await import('@/components/reminders/PaymentReminderService')).default;
           await PaymentReminderService.checkAndSendReminders();
-          // Quote Reminders
+          const QuoteReminderService = (await import('@/components/quote/QuoteReminderService')).default;
           await QuoteReminderService.checkAndSendReminders();
           const ClientFollowUpService = (await import('@/components/clients/ClientFollowUpService')).default;
           await ClientFollowUpService.updateClientSegments();
@@ -787,7 +691,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
 
-  if (STANDALONE_PAGE_NAMES.includes(currentPageName)) {
+  if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
     return (
       <motion.div
         initial={{ opacity: 0 }}

@@ -25,7 +25,9 @@ export default function RequireAuth({ children, roles }) {
     );
   }
 
-  if (roles && roles.length > 0 && !roles.includes(user?.role)) {
+  const normalizedRole = String(user?.role || "").toLowerCase();
+  const normalizedAllowed = Array.isArray(roles) ? roles.map((r) => String(r).toLowerCase()) : [];
+  if (normalizedAllowed.length > 0 && !normalizedAllowed.includes(normalizedRole)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="text-center max-w-md">

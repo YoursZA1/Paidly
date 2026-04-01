@@ -1,9 +1,10 @@
 /**
  * Axios instance for the backend API (admin sync, health, etc.).
  * In dev: use same origin so Vite proxy forwards /api to VITE_SERVER_URL (avoids CORS, connection to one host).
- * In production: use VITE_SERVER_URL so requests go to the backend host.
+ * In production: VITE_SERVER_URL, but same-origin when apex vs www would otherwise break CORS (see apiOrigin.js).
  */
 import axios from "axios";
+import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -53,7 +54,7 @@ const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY
  */
 const rawServerUrl = String(import.meta.env.VITE_SERVER_URL ?? "").trim();
 const serverUrl = (rawServerUrl || "http://localhost:5179").replace(/\/$/, "");
-const baseURL = isDev ? "" : serverUrl;
+const baseURL = isDev ? "" : resolveProductionBrowserApiBaseUrl(serverUrl);
 
 /** Production bundle still points at localhost — email/password auth uses Supabase directly (see SupabaseAuthService). */
 export function isProductionBackendUrlLocalhost() {
@@ -93,12 +94,16 @@ export function getBackendBaseUrl() {
 }
 
 /**
- * Base URL for same-origin Vercel `/api/*` routes when the Node API host is unset or localhost in production.
+ * Base URL for absolute links to `/api/*` when needed. Prefer same-origin when apex/www matches apiOrigin rules.
  */
 export function getPublicApiBase() {
   if (isDev) return "";
-  const u = serverUrl;
-  if (u && !/localhost|127\.0\.0\.1/i.test(u)) return u;
+  const resolved = resolveProductionBrowserApiBaseUrl(serverUrl);
+  if (resolved === "") {
+    if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+    return serverUrl;
+  }
+  if (resolved && !/localhost|127\.0\.0\.1/i.test(resolved)) return resolved;
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
-  return u || "";
+  return serverUrl || "";
 }

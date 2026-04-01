@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createPageUrl, createSignupUrl, createWaitlistUrl, createAffiliateLandingUrl } from "@/utils";
+import { createPageUrl, createSignupUrl, createAffiliateLandingUrl } from "@/utils";
 
 /**
  * @param {{ onLoginClick: () => void }} props
@@ -10,8 +10,7 @@ export default function Footer({ onLoginClick }) {
       { label: "Features", href: "#features" },
       { label: "Pricing", href: "#pricing" },
       { label: "Affiliate", to: createAffiliateLandingUrl() },
-      { label: "Join waitlist", to: createWaitlistUrl() },
-      { label: "Create account", to: createSignupUrl() },
+      { label: "Get started", to: createSignupUrl() },
     ],
     Support: [
       { label: "Log in", action: "login" },
