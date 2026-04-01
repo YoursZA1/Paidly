@@ -43,19 +43,21 @@ export const useAppStore = create((set, get) => ({
       };
 
       // Auth is required. Resolve it first (faster failure, clearer errors).
-      // User.me() can exceed 25s on cold Supabase (getSession + profiles select with retries).
+      // Keep this bounded so a slow auth/profile round-trip cannot freeze app bootstrap.
       const userData = await safe(
         "auth.me",
         async () => {
           try {
             return await User.me();
           } catch {
-            return await User.restoreFromSupabaseSession?.();
+            const restored = await User.restoreFromSupabaseSession?.();
+            if (restored) return restored;
+            return await User.getCurrentUser?.();
           }
         },
         null,
-        70000,
-        1
+        15000,
+        0
       );
 
       if (!userData) {

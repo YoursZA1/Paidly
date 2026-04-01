@@ -515,10 +515,24 @@ export default function Dashboard() {
 
       // Use Excel user service instead of broken User entity
       const allUsers = userService.getAllUsers();
-      const [allInvoices, allPayments] = await withTimeoutRetry(() => Promise.all([
-        Invoice.list(),
-        Payment.list().catch(() => []),
-      ]), 15000, 2);
+      const [invoicesSettled, paymentsSettled] = await Promise.allSettled([
+        withTimeoutRetry(() => Invoice.list(), 25000, 1),
+        withTimeoutRetry(() => Payment.list().catch(() => []), 15000, 1),
+      ]);
+      const allInvoices =
+        invoicesSettled.status === 'fulfilled' && Array.isArray(invoicesSettled.value)
+          ? invoicesSettled.value
+          : [];
+      const allPayments =
+        paymentsSettled.status === 'fulfilled' && Array.isArray(paymentsSettled.value)
+          ? paymentsSettled.value
+          : [];
+      if (invoicesSettled.status === 'rejected') {
+        console.warn('Admin dashboard: invoices load failed, continuing with partial data.', invoicesSettled.reason);
+      }
+      if (paymentsSettled.status === 'rejected') {
+        console.warn('Admin dashboard: payments load failed, continuing with partial data.', paymentsSettled.reason);
+      }
       if (!mountedRef.current) return;
       setInvoicesState(allInvoices);
       setPaymentsState(Array.isArray(allPayments) ? allPayments : []);
@@ -705,33 +719,73 @@ export default function Dashboard() {
   const loadUserData = useCallback(async (hasCachedData = false, _authUserId = null) => {
     if (!hasCachedData) setIsLoadingState(true);
     try {
-      const [userResult, invoicesData, clientsData, expensesData, paymentsData, bankingDetailsData] = await withTimeoutRetry(
-        () =>
-          Promise.all([
-            (async () => {
-              try {
-                return await User.me();
-              } catch {
-                return await User.restoreFromSupabaseSession();
-              }
-            })(),
-            Invoice.list("-created_date"),
-            Client.list("-created_date"),
-            Expense.list("-date", 100),
-            Payment.list().catch(() => []),
-            BankingDetail.list(),
-          ]),
-        15000,
-        2
-      );
+      const userResult =
+        (await withTimeoutRetry(
+          async () => {
+            try {
+              return await User.me();
+            } catch {
+              return await User.restoreFromSupabaseSession();
+            }
+          },
+          8000,
+          0
+        ).catch(() => null)) ||
+        (await User.getCurrentUser?.().catch(() => null));
 
       if (!userResult) {
         throw new Error("Not authenticated");
       }
 
+      const [invoicesSettled, clientsSettled, expensesSettled, paymentsSettled, bankingSettled] =
+        await Promise.allSettled([
+          withTimeoutRetry(() => Invoice.list("-created_date"), 25000, 1),
+          withTimeoutRetry(() => Client.list("-created_date"), 20000, 1),
+          withTimeoutRetry(() => Expense.list("-date", 100), 20000, 1),
+          withTimeoutRetry(() => Payment.list().catch(() => []), 12000, 1),
+          withTimeoutRetry(() => BankingDetail.list(), 12000, 0),
+        ]);
+
+      const invoicesData =
+        invoicesSettled.status === 'fulfilled' && Array.isArray(invoicesSettled.value)
+          ? invoicesSettled.value
+          : [];
+      const clientsData =
+        clientsSettled.status === 'fulfilled' && Array.isArray(clientsSettled.value)
+          ? clientsSettled.value
+          : [];
+      const expensesData =
+        expensesSettled.status === 'fulfilled' && Array.isArray(expensesSettled.value)
+          ? expensesSettled.value
+          : [];
+      const paymentsData =
+        paymentsSettled.status === 'fulfilled' && Array.isArray(paymentsSettled.value)
+          ? paymentsSettled.value
+          : [];
+      const bankingDetailsData =
+        bankingSettled.status === 'fulfilled' && Array.isArray(bankingSettled.value)
+          ? bankingSettled.value
+          : [];
+
+      if (invoicesSettled.status === 'rejected') {
+        console.warn('Dashboard: invoices load failed, continuing with partial data.', invoicesSettled.reason);
+      }
+      if (clientsSettled.status === 'rejected') {
+        console.warn('Dashboard: clients load failed, continuing with partial data.', clientsSettled.reason);
+      }
+      if (expensesSettled.status === 'rejected') {
+        console.warn('Dashboard: expenses load failed, continuing with partial data.', expensesSettled.reason);
+      }
+      if (paymentsSettled.status === 'rejected') {
+        console.warn('Dashboard: payments load failed, continuing with partial data.', paymentsSettled.reason);
+      }
+      if (bankingSettled.status === 'rejected') {
+        console.warn('Dashboard: banking details load failed, continuing with partial data.', bankingSettled.reason);
+      }
+
       const goalUid = resolveBusinessGoalsUserId(userResult) || userResult.id;
       const goalRow = goalUid
-        ? await getBusinessGoal(goalUid, calendarYear).catch(() => null)
+        ? await withTimeoutRetry(() => getBusinessGoal(goalUid, calendarYear), 10000, 0).catch(() => null)
         : null;
 
       if (!mountedRef.current) return;
