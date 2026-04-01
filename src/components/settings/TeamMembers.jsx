@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { ROLE_LABELS, STAFF_ROLES } from '@/lib/permissions';
+import { ROLE_LABELS, ROLES, STAFF_ROLES } from '@/lib/permissions';
 
 const INVITE_ROLES = [...STAFF_ROLES];
 

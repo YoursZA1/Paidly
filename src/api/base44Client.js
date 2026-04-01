@@ -248,13 +248,31 @@ async function list(entityName, orderBy = '-created_date', limit = 100) {
   const table = getTable(entityName);
   const { column, ascending } = normalizeOrder(orderBy);
   const selectClause = ENTITY_SELECTS[entityName] || '*';
-  let query = supabase.from(table).select(selectClause);
-  let { data, error } = await query.order(column, { ascending }).limit(limit);
+  const runListQuery = async (selectColumns, withOrder = true) => {
+    let q = supabase.from(table).select(selectColumns).limit(limit);
+    if (withOrder) {
+      q = q.order(column, { ascending });
+    }
+    return q;
+  };
+
+  let { data, error } = await runListQuery(selectClause, true);
   if (error) {
     // Some tables do not expose the requested sort column; retry unsorted.
-    const retry = await supabase.from(table).select(selectClause).limit(limit);
-    data = retry.data;
-    error = retry.error;
+    const retryUnsorted = await runListQuery(selectClause, false);
+    data = retryUnsorted.data;
+    error = retryUnsorted.error;
+  }
+  if (error && selectClause !== '*') {
+    // Schema may differ between environments; retry with wildcard columns.
+    const retryWildcard = await runListQuery('*', true);
+    data = retryWildcard.data;
+    error = retryWildcard.error;
+    if (error) {
+      const retryWildcardUnsorted = await runListQuery('*', false);
+      data = retryWildcardUnsorted.data;
+      error = retryWildcardUnsorted.error;
+    }
   }
   if (error) throw error;
 
