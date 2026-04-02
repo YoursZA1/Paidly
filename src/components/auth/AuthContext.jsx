@@ -69,6 +69,35 @@ function minimalUserFromJwtUser(su) {
   };
 }
 
+async function consumeAuthCallbackFromUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  const hash = String(window.location.hash || "");
+  const hasPkceCode = url.searchParams.has("code");
+  const hasHashTokens = /access_token=|refresh_token=|type=/.test(hash);
+  if (!hasPkceCode && !hasHashTokens) return;
+
+  try {
+    if (hasPkceCode) {
+      const code = url.searchParams.get("code");
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+      }
+    }
+  } catch (e) {
+    console.warn("[Auth] callback exchange failed:", e?.message || e);
+  } finally {
+    // Remove callback params/token fragments from URL for reliability and privacy.
+    url.searchParams.delete("code");
+    url.searchParams.delete("type");
+    url.searchParams.delete("error");
+    url.searchParams.delete("error_code");
+    url.searchParams.delete("error_description");
+    const clean = `${url.pathname}${url.search}${url.hash && !hasHashTokens ? url.hash : ""}`;
+    window.history.replaceState({}, document.title, clean);
+  }
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -168,6 +197,7 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     (async () => {
       try {
+        await consumeAuthCallbackFromUrl();
         const initialSession = await SupabaseAuthService.getSession();
         if (cancelled) return;
         setSession(initialSession);

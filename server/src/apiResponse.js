@@ -7,7 +7,12 @@ const IS_PROD = process.env.NODE_ENV === "production";
  */
 export function sendApiError(res, status, message, extras = {}) {
   if (res.headersSent) return res;
-  return res.status(status).json({ error: message, ...extras });
+  const requestId = res?.locals?.requestId;
+  const body = { error: message, ...extras };
+  if (requestId && !body.requestId) {
+    body.requestId = requestId;
+  }
+  return res.status(status).json(body);
 }
 
 /** 400 shorthand */
@@ -26,8 +31,13 @@ export function sendUnauthorized(res, message = "Unauthorized") {
  */
 export function sendUnexpectedError(res, err, logLabel = "api", bodyExtras = {}) {
   if (res.headersSent) return res;
-  console.error(`[${logLabel}]`, err);
+  const requestId = res?.locals?.requestId || "n/a";
+  console.error(`[${logLabel}] requestId=${requestId}`, err);
   const message =
     IS_PROD ? "Request failed" : err?.message || "Request failed";
-  return res.status(500).json({ error: message, ...bodyExtras });
+  const body = { error: message, ...bodyExtras };
+  if (requestId && !body.requestId) {
+    body.requestId = requestId;
+  }
+  return res.status(500).json(body);
 }

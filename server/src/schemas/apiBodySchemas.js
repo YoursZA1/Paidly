@@ -36,6 +36,8 @@ export const signUpBodySchema = z.object({
   data: z.record(z.string(), z.unknown()).nullish(),
   /** Cloudflare Turnstile token from client widget */
   turnstile_token: z.string().trim().min(1).max(4096).optional(),
+  /** Optional email-confirmation redirect URL */
+  redirectTo: z.string().url().max(2048).optional(),
 });
 
 const optionalTrimmedLine = (max) =>

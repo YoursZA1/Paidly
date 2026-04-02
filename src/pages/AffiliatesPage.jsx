@@ -229,6 +229,19 @@ export default function AffiliatesPage() {
     () => affiliates.filter((a) => a.status === 'pending').length,
     [affiliates]
   );
+  const affiliateSourceTables = useMemo(() => {
+    const tables = new Set(
+      affiliates
+        .map((a) => String(a?.__source_table || '').trim())
+        .filter(Boolean)
+    );
+    return [...tables];
+  }, [affiliates]);
+  const sourceTableLabel = useMemo(() => {
+    if (affiliateSourceTables.length === 0) return null;
+    if (affiliateSourceTables.length === 1) return affiliateSourceTables[0];
+    return affiliateSourceTables.join(', ');
+  }, [affiliateSourceTables]);
   const pendingPayoutsTotal = useMemo(
     () =>
       payouts
@@ -248,6 +261,12 @@ export default function AffiliatesPage() {
         }}
         isRefreshing={isRefreshing}
       />
+
+      {sourceTableLabel ? (
+        <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800">
+          Data source table: <span className="font-mono">{sourceTableLabel}</span>
+        </div>
+      ) : null}
 
       <Tabs defaultValue="submissions" className="space-y-6">
         <TabsList className="bg-card border border-border">

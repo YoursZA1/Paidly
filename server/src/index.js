@@ -1,6 +1,7 @@
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -96,6 +97,11 @@ const adminBypassEmails = (process.env.ADMIN_BYPASS_EMAILS || "")
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
+function makeRequestId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function envFlag(name, defaultValue = false) {
   const raw = String(process.env[name] ?? "").trim().toLowerCase();
   if (!raw) return Boolean(defaultValue);
@@ -107,6 +113,57 @@ function envNumber(name, fallback) {
   if (!raw) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function parseConfiguredClientOrigins(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw || raw === "*") return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const OBSERVABILITY_WINDOW_MS = 60 * 1000;
+const observabilityCounters = {
+  total: [],
+  slow: [],
+  error4xx: [],
+  error5xx: [],
+  latencyMs: [],
+};
+
+function pruneObservability(now = Date.now()) {
+  const cutoff = now - OBSERVABILITY_WINDOW_MS;
+  observabilityCounters.total = observabilityCounters.total.filter((ts) => ts >= cutoff);
+  observabilityCounters.slow = observabilityCounters.slow.filter((ts) => ts >= cutoff);
+  observabilityCounters.error4xx = observabilityCounters.error4xx.filter((ts) => ts >= cutoff);
+  observabilityCounters.error5xx = observabilityCounters.error5xx.filter((ts) => ts >= cutoff);
+  observabilityCounters.latencyMs = observabilityCounters.latencyMs.filter((entry) => entry.ts >= cutoff);
+}
+
+function p95(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
+  return sorted[idx];
+}
+
+function getObservabilityAlertThresholds() {
+  return {
+    warn: {
+      errorRatePct: envNumber("OBS_ALERT_WARN_ERROR_RATE_PCT", 5),
+      error5xxLastMinute: envNumber("OBS_ALERT_WARN_5XX_PER_MIN", 3),
+      latencyP95Ms: envNumber("OBS_ALERT_WARN_P95_MS", 1200),
+      slowRequestsLastMinute: envNumber("OBS_ALERT_WARN_SLOW_PER_MIN", 10),
+    },
+    critical: {
+      errorRatePct: envNumber("OBS_ALERT_CRITICAL_ERROR_RATE_PCT", 12),
+      error5xxLastMinute: envNumber("OBS_ALERT_CRITICAL_5XX_PER_MIN", 10),
+      latencyP95Ms: envNumber("OBS_ALERT_CRITICAL_P95_MS", 2500),
+      slowRequestsLastMinute: envNumber("OBS_ALERT_CRITICAL_SLOW_PER_MIN", 25),
+    },
+  };
 }
 
 /**
@@ -166,6 +223,16 @@ function evaluateDeploymentSecurityHealth() {
   const isProd = process.env.NODE_ENV === "production";
   const supabaseUrl = String(process.env.SUPABASE_URL || "").trim();
   const clientOrigin = String(process.env.CLIENT_ORIGIN || "").trim();
+  const configuredClientOrigins = parseConfiguredClientOrigins(clientOrigin);
+  const clientOriginUnsafeInProd = configuredClientOrigins.some((origin) => {
+    try {
+      const u = new URL(origin);
+      const isLocal = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+      return u.protocol !== "https:" && !isLocal;
+    } catch {
+      return true;
+    }
+  });
   const trustProxyDisabled = String(process.env.TRUST_PROXY || "").trim().toLowerCase() === "false";
   const corsDebugAllowAll = envFlag("CORS_DEBUG_ALLOW_ALL", false);
   const enforceHttpsEnabled = !envFlag("ENFORCE_HTTPS", true) ? false : true;
@@ -204,6 +271,9 @@ function evaluateDeploymentSecurityHealth() {
     if (!clientOrigin || clientOrigin === "*") {
       issues.push("CLIENT_ORIGIN must be set to explicit trusted origins in production.");
     }
+    if (clientOriginUnsafeInProd) {
+      issues.push("CLIENT_ORIGIN must only include valid https origins in production (localhost allowed for local-only testing).");
+    }
     if (/localhost|127\.0\.0\.1/i.test(supabaseUrl)) {
       issues.push("SUPABASE_URL must not point to localhost in production.");
     }
@@ -234,6 +304,8 @@ function evaluateDeploymentSecurityHealth() {
       TRUST_PROXY_DISABLED: trustProxyDisabled,
       ADMIN_BYPASS_AUTH: adminBypassEnabled,
       CLIENT_ORIGIN_SET: Boolean(clientOrigin && clientOrigin !== "*"),
+      CLIENT_ORIGIN_VALUES_COUNT: configuredClientOrigins.length,
+      CLIENT_ORIGIN_UNSAFE_IN_PRODUCTION: clientOriginUnsafeInProd,
       PUBLIC_DB_DIRECT_ACCESS: publicDbDirectAccess,
       SUPABASE_URL_SET: Boolean(process.env.SUPABASE_URL),
       SUPABASE_URL_LOCALHOST: /localhost|127\.0\.0\.1/i.test(supabaseUrl),
@@ -366,9 +438,9 @@ const CORS_DEBUG_ALLOW_ALL = /^(1|true|yes)$/i.test(
 );
 
 function createCorsOriginHandler() {
-  const raw = (process.env.CLIENT_ORIGIN || "").trim();
-  if (raw && raw !== "*") {
-    const allowed = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+  const configured = parseConfiguredClientOrigins(process.env.CLIENT_ORIGIN);
+  if (configured.length > 0) {
+    const allowed = new Set(configured);
     return (origin, callback) => {
       if (!origin) return callback(null, true);
       callback(null, allowed.has(origin));
@@ -384,13 +456,9 @@ function createCorsOriginHandler() {
 function isCorsOriginAllowed(origin) {
   if (!origin) return true;
   if (typeof origin !== "string") return false;
-  const raw = (process.env.CLIENT_ORIGIN || "").trim();
-  if (raw && raw !== "*") {
-    return raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .includes(origin);
+  const configured = parseConfiguredClientOrigins(process.env.CLIENT_ORIGIN);
+  if (configured.length > 0) {
+    return configured.includes(origin);
   }
   return DEFAULT_CORS_ALLOW_SET.has(origin);
 }
@@ -402,10 +470,20 @@ const CORS_ALLOW_METHODS =
 app.use(enforceHttps());
 app.use(securityHeaders());
 app.use(auditHttpResponses(getClientIp));
+// Correlation id for every request (returned in responses and logs).
+app.use((req, res, next) => {
+  const incoming = String(req.headers["x-request-id"] || "").trim();
+  const requestId = incoming || makeRequestId();
+  req.requestId = requestId;
+  res.locals.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
+});
 
 // Browsers send OPTIONS first (preflight). Respond before route handlers; echo Origin when credentials are used.
 app.use((req, res, next) => {
   if (req.method !== "OPTIONS") return next();
+  res.setHeader("Vary", "Origin");
   if (CORS_DEBUG_ALLOW_ALL) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
@@ -445,6 +523,31 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    const now = Date.now();
+    const durationMs = now - startedAt;
+    observabilityCounters.total.push(now);
+    observabilityCounters.latencyMs.push({ ts: now, value: durationMs });
+    if (durationMs >= 1500) observabilityCounters.slow.push(now);
+    if (res.statusCode >= 400 && res.statusCode < 500) observabilityCounters.error4xx.push(now);
+    if (res.statusCode >= 500) observabilityCounters.error5xx.push(now);
+    pruneObservability(now);
+    if (res.statusCode >= 500 || durationMs >= 1500) {
+      logSecurity(res.statusCode >= 500 ? "error" : "warn", "http_request_observed", {
+        method: req.method,
+        path: req.originalUrl || req.url,
+        status: res.statusCode,
+        durationMs,
+        requestId: req.requestId || res.locals.requestId || null,
+        ip: getClientIp(req),
+      });
+    }
+  });
+  next();
+});
+
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({
   extended: false,
@@ -466,7 +569,11 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    requestId: req.requestId || res.locals.requestId || null,
+    uptimeSeconds: Math.floor(process.uptime()),
+  });
 });
 
 /**
@@ -505,6 +612,76 @@ app.get("/api/health/deployment-security", (req, res) => {
     area: "deployment-security",
     ...report,
   });
+});
+
+app.get("/api/health/readiness", (req, res) => {
+  const auth = evaluateAuthSecurityHealth();
+  const deployment = evaluateDeploymentSecurityHealth();
+  const ok = auth.ok && deployment.ok;
+  const payload = {
+    status: ok ? "ok" : "fail",
+    area: "readiness",
+    checks: {
+      authSecurity: auth.ok ? "pass" : "fail",
+      deploymentSecurity: deployment.ok ? "pass" : "fail",
+    },
+    requestId: req.requestId || res.locals.requestId || null,
+    uptimeSeconds: Math.floor(process.uptime()),
+  };
+  return res.status(ok ? 200 : 503).json(payload);
+});
+
+app.get("/api/health/observability", (req, res) => {
+  const now = Date.now();
+  pruneObservability(now);
+  const latencies = observabilityCounters.latencyMs.map((entry) => entry.value);
+  const requestsLastMinute = observabilityCounters.total.length;
+  const error4xxLastMinute = observabilityCounters.error4xx.length;
+  const error5xxLastMinute = observabilityCounters.error5xx.length;
+  const slowRequestsLastMinute = observabilityCounters.slow.length;
+  const errorRatePct =
+    requestsLastMinute > 0
+      ? Number((((error4xxLastMinute + error5xxLastMinute) / requestsLastMinute) * 100).toFixed(2))
+      : 0;
+  const latencyAvg = latencies.length
+    ? Number((latencies.reduce((sum, v) => sum + v, 0) / latencies.length).toFixed(2))
+    : 0;
+  const latencyP95 = p95(latencies);
+  const latencyMax = latencies.length ? Math.max(...latencies) : 0;
+  const thresholds = getObservabilityAlertThresholds();
+  const isCritical =
+    errorRatePct >= thresholds.critical.errorRatePct ||
+    error5xxLastMinute >= thresholds.critical.error5xxLastMinute ||
+    latencyP95 >= thresholds.critical.latencyP95Ms ||
+    slowRequestsLastMinute >= thresholds.critical.slowRequestsLastMinute;
+  const isWarn =
+    errorRatePct >= thresholds.warn.errorRatePct ||
+    error5xxLastMinute >= thresholds.warn.error5xxLastMinute ||
+    latencyP95 >= thresholds.warn.latencyP95Ms ||
+    slowRequestsLastMinute >= thresholds.warn.slowRequestsLastMinute;
+  const alertState = isCritical ? "critical" : isWarn ? "warn" : "ok";
+  const payload = {
+    status: "ok",
+    area: "observability",
+    windowSeconds: 60,
+    alertState,
+    counters: {
+      requestsLastMinute,
+      error4xxLastMinute,
+      error5xxLastMinute,
+      slowRequestsLastMinute,
+      errorRatePct,
+    },
+    latencyMs: {
+      avg: latencyAvg,
+      p95: latencyP95,
+      max: latencyMax,
+    },
+    thresholds,
+    requestId: req.requestId || res.locals.requestId || null,
+    uptimeSeconds: Math.floor(process.uptime()),
+  };
+  return res.status(200).json(payload);
 });
 
 app.get("/api/security/events", async (req, res) => {
@@ -818,7 +995,7 @@ app.post("/api/auth/sign-up", async (req, res) => {
       logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, password, data: profile, turnstile_token } = parsed;
+    const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo } = parsed;
 
     const slot = consumeSignupSlot(ip);
     if (!slot.ok) {
@@ -863,11 +1040,30 @@ app.post("/api/auth/sign-up", async (req, res) => {
       profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {}
     );
 
+    let safeEmailRedirectTo;
+    if (typeof redirectTo === "string" && redirectTo.trim()) {
+      try {
+        const url = new URL(redirectTo);
+        const allowedOrigins = new Set(
+          [process.env.CLIENT_ORIGIN, req.headers.origin]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+        );
+        const hostIsLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+        if (allowedOrigins.has(url.origin) && (url.protocol === "https:" || hostIsLocal)) {
+          safeEmailRedirectTo = url.toString();
+        }
+      } catch {
+        safeEmailRedirectTo = undefined;
+      }
+    }
+
     const { data, error } = await supabaseAnon.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
         data: userMetadata,
+        emailRedirectTo: safeEmailRedirectTo,
       },
     });
 
@@ -2173,7 +2369,7 @@ if (!startupAuthHealth.ok) {
     "[AUTH-SECURITY] FAILED startup checks:\n" +
       startupAuthHealth.issues.map((issue) => ` - ${issue}`).join("\n")
   );
-  if (envFlag("AUTH_HEALTH_STRICT_MODE", false)) {
+  if (envFlag("AUTH_HEALTH_STRICT_MODE", process.env.NODE_ENV === "production")) {
     throw new Error(
       "Auth security health checks failed and AUTH_HEALTH_STRICT_MODE is enabled. Refusing to start."
     );
@@ -2189,7 +2385,7 @@ if (!startupDeploymentHealth.ok) {
     "[DEPLOYMENT-SECURITY] FAILED startup checks:\n" +
       startupDeploymentHealth.issues.map((issue) => ` - ${issue}`).join("\n")
   );
-  if (envFlag("DEPLOYMENT_HEALTH_STRICT_MODE", false)) {
+  if (envFlag("DEPLOYMENT_HEALTH_STRICT_MODE", process.env.NODE_ENV === "production")) {
     throw new Error(
       "Deployment security health checks failed and DEPLOYMENT_HEALTH_STRICT_MODE is enabled. Refusing to start."
     );
@@ -2203,20 +2399,22 @@ app.use("/api", (req, res) => {
 
 app.use((err, req, res, next) => {
   const ip = getClientIp(req);
+  const requestId = res?.locals?.requestId || req?.requestId || "n/a";
   if (err instanceof SyntaxError && "body" in err) {
-    logSecurity("warn", "invalid_json_body", { ip, path: req.path });
+    logSecurity("warn", "invalid_json_body", { ip, path: req.path, requestId });
     if (!res.headersSent) {
-      return res.status(400).json({ error: "Invalid JSON body" });
+      return res.status(400).json({ error: "Invalid JSON body", requestId });
     }
     return;
   }
   logSecurity("error", "unhandled_exception", {
     ip,
     path: req.path,
+    requestId,
     message: err?.message || "error",
   });
   if (!res.headersSent) {
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error", requestId });
   }
 });
 
@@ -2226,6 +2424,8 @@ app.listen(port, "0.0.0.0", () => {
   console.log(`  Health check: ${url}/api/health`);
   console.log(`  Auth security health: ${url}/api/health/auth-security`);
   console.log(`  Deployment security health: ${url}/api/health/deployment-security`);
+  console.log(`  Readiness health: ${url}/api/health/readiness`);
+  console.log(`  Observability health: ${url}/api/health/observability`);
   if (CORS_DEBUG_ALLOW_ALL) {
     console.warn(
       "[cors] CORS_DEBUG_ALLOW_ALL is on: Access-Control-Allow-Origin: * and credentials disabled. Remove for production."

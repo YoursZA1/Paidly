@@ -69,6 +69,27 @@ function getSafeResetRedirect(redirectTo) {
   }
 }
 
+function getSafeSignupOnboardingRedirect(redirectTo) {
+  const fallback =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/Signup?signup_onboarding=1`
+      : null;
+  const candidate = redirectTo || fallback;
+  if (!candidate) return null;
+  try {
+    const url = new URL(candidate, typeof window !== "undefined" ? window.location.origin : undefined);
+    if (typeof window !== "undefined" && url.origin !== window.location.origin) {
+      return fallback;
+    }
+    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+      return fallback;
+    }
+    return url.toString();
+  } catch {
+    return fallback;
+  }
+}
+
 function isNodeAuthRouteUnsupportedStatus(status) {
   const s = Number(status);
   return s === 404 || s === 405 || s === 501;
@@ -108,12 +129,13 @@ const SupabaseAuthService = {
   async signUpWithEmail(email, password, profile = {}, options = {}) {
     const normalized = (email || "").trim().toLowerCase();
     const turnstileToken = String(options?.turnstileToken || "").trim();
+    const emailRedirectTo = getSafeSignupOnboardingRedirect(options?.emailRedirectTo || null);
 
     const signUpDirect = async () => {
       const { data, error } = await supabase.auth.signUp({
         email: normalized,
         password,
-        options: { data: profile },
+        options: { data: profile, emailRedirectTo: emailRedirectTo || undefined },
       });
       if (error) {
         const msg = mapAuthError(error);
@@ -141,7 +163,13 @@ const SupabaseAuthService = {
     try {
       const { data, status, headers } = await backendApi.post(
         "/api/auth/sign-up",
-        { email: normalized, password, data: profile, turnstile_token: turnstileToken || undefined },
+        {
+          email: normalized,
+          password,
+          data: profile,
+          turnstile_token: turnstileToken || undefined,
+          redirectTo: emailRedirectTo || undefined,
+        },
         { validateStatus: () => true }
       );
 

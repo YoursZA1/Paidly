@@ -29,10 +29,10 @@ export function buildBrandedEmailDocumentHtml(opts) {
     pixelUrl = '',
   } = opts;
 
-  const pre = esc(preheader);
-  const safeTitle = esc(title);
-  const safeSub = esc(subtitle);
-  const safeCompany = esc(companyName);
+  const pre = escapeHtml(preheader);
+  const safeTitle = escapeHtml(title);
+  const safeSub = escapeHtml(subtitle);
+  const safeCompany = escapeHtml(companyName);
 
   return `
 <!DOCTYPE html>

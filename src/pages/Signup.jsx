@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { processPendingAffiliateReferral, recordAffiliateClick, setPendingReferralCode } from "@/api/affiliateClient";
 import Home from "./Home";
@@ -35,19 +35,55 @@ import { useAuth } from "@/components/auth/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
 import TurnstileChallenge from "@/components/security/TurnstileChallenge";
+import SupabaseAuthService from "@/services/SupabaseAuthService";
 
 const USERS_STORAGE_KEY = "breakapi_users";
+const SIGNUP_ONBOARDING_DRAFT_KEY = "paidly_signup_onboarding_draft";
+const SIGNUP_ONBOARDING_QUERY_KEY = "signup_onboarding";
+const ENABLE_LOCAL_SIGNUP_MIRROR =
+  import.meta.env.DEV ||
+  String(import.meta.env.VITE_ENABLE_LOCAL_SIGNUP_MIRROR || "")
+    .trim()
+    .toLowerCase() === "true";
 const PLAN_OPTIONS = [
   { value: "starter", label: "Starter" },
   { value: "professional", label: "Professional" },
   { value: "enterprise", label: "Enterprise" }
 ];
 
+function readSignupOnboardingDraft() {
+  try {
+    const raw = localStorage.getItem(SIGNUP_ONBOARDING_DRAFT_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeSignupOnboardingDraft(value) {
+  try {
+    localStorage.setItem(SIGNUP_ONBOARDING_DRAFT_KEY, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function clearSignupOnboardingDraft() {
+  try {
+    localStorage.removeItem(SIGNUP_ONBOARDING_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function Signup() {
-  const { login } = useAuth();
+  const { login, session } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const hydratedFromDraftRef = useRef(false);
 
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -88,6 +124,36 @@ export default function Signup() {
     const t = window.setTimeout(scrollToForm, 150);
     return () => window.clearTimeout(t);
   }, [location.pathname, location.hash]);
+
+  useEffect(() => {
+    if (hydratedFromDraftRef.current) return;
+    const shouldResumeFromEmailConfirm = searchParams.get(SIGNUP_ONBOARDING_QUERY_KEY) === "1";
+    const draft = readSignupOnboardingDraft();
+    if (!shouldResumeFromEmailConfirm && !draft) return;
+
+    if (draft?.email) setEmail(String(draft.email).toLowerCase());
+    if (draft?.fullName) setFullName(String(draft.fullName));
+    if (draft?.companyName) setCompanyName(String(draft.companyName));
+    if (draft?.companyAddress) setCompanyAddress(String(draft.companyAddress));
+    if (draft?.phone) setPhone(String(draft.phone));
+    if (draft?.plan) setPlan(String(draft.plan));
+    if (draft?.createdUserId) setCreatedUserId(String(draft.createdUserId));
+
+    const confirmedAt = session?.user?.email_confirmed_at;
+    const sessionEmail = String(session?.user?.email || "").trim().toLowerCase();
+    const draftEmail = String(draft?.email || "").trim().toLowerCase();
+    const sessionMatchesDraft = !draftEmail || (sessionEmail && sessionEmail === draftEmail);
+    if (confirmedAt && sessionMatchesDraft) {
+      setStep(2);
+      setShowEmailConfirmPopup(false);
+      setError("");
+    } else if (shouldResumeFromEmailConfirm) {
+      setStep(2);
+      setShowEmailConfirmPopup(false);
+    }
+
+    hydratedFromDraftRef.current = true;
+  }, [searchParams, session?.user?.email, session?.user?.email_confirmed_at]);
 
   const validateStepOne = () => {
     if (!fullName.trim()) {
@@ -153,17 +219,19 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
-      const existingUser = userService.getUserByEmail(normalizedEmail);
+      let storedUsers = [];
+      if (ENABLE_LOCAL_SIGNUP_MIRROR) {
+        const existingUser = userService.getUserByEmail(normalizedEmail);
+        if (existingUser) {
+          setError("An account with this email already exists");
+          return;
+        }
 
-      if (existingUser) {
-        setError("An account with this email already exists");
-        return;
-      }
-
-      const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-      if (storedUsers.some((user) => user.email === normalizedEmail)) {
-        setError("An account with this email already exists");
-        return;
+        storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
+        if (storedUsers.some((user) => user.email === normalizedEmail)) {
+          setError("An account with this email already exists");
+          return;
+        }
       }
 
       // Create Supabase user (trigger creates profile + org + membership)
@@ -203,42 +271,53 @@ export default function Signup() {
         return;
       }
 
-      const now = new Date();
-      const newUserRecord = {
-        id: authUserId,
-        email: normalizedEmail,
-        full_name: fullName.trim(),
-        role: "user",
-        plan,
-        status: "pending",
-        company_name: companyName.trim(),
-        company_address: companyAddress.trim(),
-        phone: phone.trim(),
-        currency: "ZAR",
-        timezone: "UTC",
-        logo_url: null,
-        created_at: now.toISOString(),
-        updated_at: now.toISOString()
-      };
+      if (ENABLE_LOCAL_SIGNUP_MIRROR) {
+        const now = new Date();
+        const newUserRecord = {
+          id: authUserId,
+          email: normalizedEmail,
+          full_name: fullName.trim(),
+          role: "user",
+          plan,
+          status: "pending",
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim(),
+          phone: phone.trim(),
+          currency: "ZAR",
+          timezone: "UTC",
+          logo_url: null,
+          created_at: now.toISOString(),
+          updated_at: now.toISOString()
+        };
 
-      storedUsers.push(newUserRecord);
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
+        storedUsers.push(newUserRecord);
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
 
-      userService.createUser({
-        email: normalizedEmail,
-        full_name: fullName.trim(),
-        display_name: fullName.trim(),
-        company_name: companyName.trim(),
-        company_address: companyAddress.trim(),
-        role: "user",
-        plan,
-        status: "pending",
-        currency: "ZAR",
-        timezone: "UTC",
-        phone: phone.trim()
-      });
+        userService.createUser({
+          email: normalizedEmail,
+          full_name: fullName.trim(),
+          display_name: fullName.trim(),
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim(),
+          role: "user",
+          plan,
+          status: "pending",
+          currency: "ZAR",
+          timezone: "UTC",
+          phone: phone.trim()
+        });
+      }
 
       setCreatedUserId(authUserId);
+      writeSignupOnboardingDraft({
+        email: normalizedEmail,
+        fullName: fullName.trim(),
+        companyName: companyName.trim(),
+        companyAddress: companyAddress.trim(),
+        phone: phone.trim(),
+        plan,
+        createdUserId: authUserId,
+      });
       setShowEmailConfirmPopup(true);
       setStep(2);
     } catch (err) {
@@ -262,50 +341,58 @@ export default function Signup() {
       const now = new Date();
       const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       const normalizedEmail = email.trim().toLowerCase();
-      const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-      const userIndex = storedUsers.findIndex((user) => user.id === createdUserId);
+      const currentSession = await SupabaseAuthService.getSession().catch(() => null);
+      const hasVerifiedSession =
+        Boolean(currentSession?.user?.email_confirmed_at) &&
+        String(currentSession?.user?.email || "").trim().toLowerCase() === normalizedEmail;
 
-      if (userIndex === -1) {
-        throw new Error("Unable to find your account. Please try again.");
+      if (ENABLE_LOCAL_SIGNUP_MIRROR) {
+        const storedUsers = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
+        const userIndex = storedUsers.findIndex((user) => user.id === createdUserId);
+
+        if (userIndex >= 0) {
+          storedUsers[userIndex] = {
+            ...storedUsers[userIndex],
+            plan,
+            status: "trial",
+            trial_started_at: now.toISOString(),
+            trial_ends_at: trialEndsAt.toISOString(),
+            company_name: companyName.trim(),
+            company_address: companyAddress.trim(),
+            phone: phone.trim(),
+            updated_at: now.toISOString()
+          };
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
+        }
+
+        const excelUser = userService.getUserByEmail(normalizedEmail);
+        if (excelUser) {
+          userService.updateUser(excelUser.id, {
+            plan,
+            status: "trial",
+            trial_started_at: now.toISOString(),
+            trial_ends_at: trialEndsAt.toISOString(),
+            company_name: companyName.trim(),
+            company_address: companyAddress.trim(),
+            phone: phone.trim(),
+            full_name: fullName.trim(),
+            display_name: fullName.trim()
+          });
+        }
       }
 
-
-      storedUsers[userIndex] = {
-        ...storedUsers[userIndex],
-        plan,
-        status: "trial",
-        trial_started_at: now.toISOString(),
-        trial_ends_at: trialEndsAt.toISOString(),
-        company_name: companyName.trim(),
-        company_address: companyAddress.trim(),
-        phone: phone.trim(),
-        updated_at: now.toISOString()
-      };
-
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
-
-      const excelUser = userService.getUserByEmail(normalizedEmail);
-      if (excelUser) {
-        userService.updateUser(excelUser.id, {
-          plan,
-          status: "trial",
-          trial_started_at: now.toISOString(),
-          trial_ends_at: trialEndsAt.toISOString(),
-          company_name: companyName.trim(),
-          company_address: companyAddress.trim(),
-          phone: phone.trim(),
+      if (!hasVerifiedSession) {
+        if (!password.trim()) {
+          throw new Error("Please sign in with your verified account to finish setup.");
+        }
+        await login({
+          email: normalizedEmail,
+          password,
           full_name: fullName.trim(),
-          display_name: fullName.trim()
+          company_name: companyName.trim(),
+          company_address: companyAddress.trim()
         });
       }
-
-      await login({
-        email: normalizedEmail,
-        password,
-        full_name: fullName.trim(),
-        company_name: companyName.trim(),
-        company_address: companyAddress.trim()
-      });
 
       try {
         await processPendingAffiliateReferral();
@@ -321,7 +408,11 @@ export default function Signup() {
           company_name: companyName.trim(),
           company_address: companyAddress.trim(),
           phone: phone.trim(),
-          currency: "ZAR"
+          currency: "ZAR",
+          plan,
+          status: "trial",
+          trial_started_at: now.toISOString(),
+          trial_ends_at: trialEndsAt.toISOString(),
         });
       } catch (profileErr) {
         console.warn("Could not sync profile updates:", profileErr);
@@ -329,6 +420,7 @@ export default function Signup() {
       }
       
       setSuccess(true);
+      clearSignupOnboardingDraft();
       setWelcomeTourEligibleAfterSignup(createdUserId);
       setTimeout(() => {
         if (shouldRedirectToAppAfterAuth()) {

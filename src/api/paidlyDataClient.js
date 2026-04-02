@@ -139,6 +139,8 @@ const ENTITY_TABLES = {
   User: 'profiles',
 };
 
+const AFFILIATE_APPLICATION_TABLE_CANDIDATES = ['affiliate_applications', 'affiate_applications'];
+
 // Use '*' for tables whose schema differs across environments (PostgREST 400 if any column is missing).
 // Normalization below still maps fields to the app shape.
 const ENTITY_SELECTS = {
@@ -180,6 +182,13 @@ function normalizeEntity(entityName, row) {
   }
 
   if (entityName === 'AffiliateSubmission') {
+    const rawStatus = String(row.status || 'pending').toLowerCase();
+    const normalizedStatus =
+      rawStatus === 'accepted'
+        ? 'approved'
+        : rawStatus === 'rejected'
+          ? 'declined'
+          : rawStatus;
     return {
       ...row,
       applicant_name: row.applicant_name || row.full_name || row.name || '',
@@ -191,7 +200,7 @@ function normalizeEntity(entityName, row) {
       referrals_count: Number(row.referrals_count || 0),
       earnings: Number(row.earnings || 0),
       commission_rate: Number(row.commission_rate ?? 15),
-      status: row.status || 'pending',
+      status: normalizedStatus || 'pending',
       created_date: row.created_date || row.created_at || null,
     };
   }
@@ -231,11 +240,19 @@ function denormalizeEntity(entityName, payload) {
   }
 
   if (entityName === 'AffiliateSubmission') {
+    const rawStatus = String(payload.status || '').toLowerCase();
+    const denormalizedStatus =
+      rawStatus === 'approved'
+        ? 'accepted'
+        : rawStatus === 'declined'
+          ? 'rejected'
+          : payload.status;
     return {
       ...payload,
       full_name: payload.full_name || payload.applicant_name,
       email: payload.email || payload.applicant_email,
       audience_platform: payload.audience_platform || payload.audience_type,
+      status: denormalizedStatus,
       commission_rate: payload.commission_rate ?? undefined,
     };
   }
@@ -256,6 +273,13 @@ function getTable(entityName) {
   return table;
 }
 
+function getTableCandidates(entityName) {
+  if (entityName === 'AffiliateSubmission') {
+    return AFFILIATE_APPLICATION_TABLE_CANDIDATES;
+  }
+  return [getTable(entityName)];
+}
+
 function normalizeOrder(orderBy) {
   if (!orderBy) return { column: 'created_at', ascending: false };
   const descending = String(orderBy).startsWith('-');
@@ -268,7 +292,8 @@ async function list(entityName, orderBy = '-created_date', limit = 100) {
   if (entityName === 'AuditLog') {
     return listAuditLogs(limit);
   }
-  const table = getTable(entityName);
+  const tableCandidates = getTableCandidates(entityName);
+  let table = tableCandidates[0];
   const { column, ascending } = normalizeOrder(orderBy);
   const selectClause = ENTITY_SELECTS[entityName] || '*';
   const runListQuery = async (selectColumns, withOrder = true) => {
@@ -279,23 +304,29 @@ async function list(entityName, orderBy = '-created_date', limit = 100) {
     return q;
   };
 
-  let { data, error } = await runListQuery(selectClause, true);
-  if (error) {
-    // Some tables do not expose the requested sort column; retry unsorted.
-    const retryUnsorted = await runListQuery(selectClause, false);
-    data = retryUnsorted.data;
-    error = retryUnsorted.error;
-  }
-  if (error && selectClause !== '*') {
-    // Schema may differ between environments; retry with wildcard columns.
-    const retryWildcard = await runListQuery('*', true);
-    data = retryWildcard.data;
-    error = retryWildcard.error;
+  let data;
+  let error;
+  for (const candidate of tableCandidates) {
+    table = candidate;
+    ({ data, error } = await runListQuery(selectClause, true));
     if (error) {
-      const retryWildcardUnsorted = await runListQuery('*', false);
-      data = retryWildcardUnsorted.data;
-      error = retryWildcardUnsorted.error;
+      // Some tables do not expose the requested sort column; retry unsorted.
+      const retryUnsorted = await runListQuery(selectClause, false);
+      data = retryUnsorted.data;
+      error = retryUnsorted.error;
     }
+    if (error && selectClause !== '*') {
+      // Schema may differ between environments; retry with wildcard columns.
+      const retryWildcard = await runListQuery('*', true);
+      data = retryWildcard.data;
+      error = retryWildcard.error;
+      if (error) {
+        const retryWildcardUnsorted = await runListQuery('*', false);
+        data = retryWildcardUnsorted.data;
+        error = retryWildcardUnsorted.error;
+      }
+    }
+    if (!error) break;
   }
   if (error) throw error;
 
@@ -325,21 +356,53 @@ async function list(entityName, orderBy = '-created_date', limit = 100) {
     }
   }
 
-  return (data || []).map((row) => normalizeEntity(entityName, row));
+  return (data || []).map((row) =>
+    normalizeEntity(entityName, {
+      ...row,
+      __source_table: table,
+    })
+  );
 }
 
 async function create(entityName, payload) {
-  const table = getTable(entityName);
+  const tableCandidates = getTableCandidates(entityName);
   const toInsert = denormalizeEntity(entityName, payload);
-  const { data, error } = await supabase.from(table).insert(toInsert).select().single();
+  let data;
+  let error;
+  for (const table of tableCandidates) {
+    const result = await supabase.from(table).insert(toInsert).select().single();
+    data = result.data;
+    error = result.error;
+    if (!error) break;
+  }
   if (error) throw error;
   return normalizeEntity(entityName, data);
 }
 
 async function update(entityName, id, payload) {
-  const table = getTable(entityName);
   const toUpdate = denormalizeEntity(entityName, payload);
-  const { data, error } = await supabase.from(table).update(toUpdate).eq('id', id).select().single();
+  const tableCandidates = getTableCandidates(entityName);
+  let data;
+  let error;
+  for (const table of tableCandidates) {
+    const result = await supabase.from(table).update(toUpdate).eq('id', id).select().single();
+    data = result.data;
+    error = result.error;
+    if (!error) break;
+  }
+  if (error && entityName === 'AffiliateSubmission' && payload?.status) {
+    // Retry with the opposite status vocabulary if DB enum differs.
+    const retryPatch = { ...toUpdate };
+    const status = String(payload.status).toLowerCase();
+    if (status === 'approved') retryPatch.status = 'approved';
+    if (status === 'declined') retryPatch.status = 'declined';
+    for (const table of tableCandidates) {
+      const result = await supabase.from(table).update(retryPatch).eq('id', id).select().single();
+      data = result.data;
+      error = result.error;
+      if (!error) break;
+    }
+  }
   if (error) throw error;
 
   // Keep canonical affiliate profile in sync so /dashboard/affiliate reflects admin updates.
@@ -372,8 +435,13 @@ async function update(entityName, id, payload) {
 }
 
 async function remove(entityName, id) {
-  const table = getTable(entityName);
-  const { error } = await supabase.from(table).delete().eq('id', id);
+  const tableCandidates = getTableCandidates(entityName);
+  let error;
+  for (const table of tableCandidates) {
+    const result = await supabase.from(table).delete().eq('id', id);
+    error = result.error;
+    if (!error) break;
+  }
   if (error) throw error;
   return { success: true };
 }
@@ -419,5 +487,3 @@ export const paidlyClient = {
   },
 };
 
-// Backward-compatible alias during migration from legacy Base44 naming.
-export const base44 = paidlyClient;

@@ -94,7 +94,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     if (isLoading) {
         return (
             <Dialog open={true} onOpenChange={onClose}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogTitle className="sr-only">Loading email preview</DialogTitle>
                     <div className="flex items-center justify-center h-64">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -123,7 +123,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     if (error) {
         return (
             <Dialog open={true} onOpenChange={onClose}>
-                <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+                <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Email Preview</DialogTitle>
                     </DialogHeader>
@@ -150,7 +150,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
 
     return (
         <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Mail className="w-5 h-5" />

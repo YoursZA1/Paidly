@@ -40,9 +40,46 @@ The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
 1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL — **no trailing slash**; e.g. **`https://api.paidly.co.za`** if the API is on that host, or the same origin as the app if the API is colocated), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, **email/password sign-in still works** (via Supabase directly), but **waitlist, currency, and server rate limits** need the API URL set — **or** set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-only deploy and silence the production warning.
 2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
 3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
-4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` if you use an explicit allowlist; otherwise defaults allow `www.paidly.co.za`, `paidly.co.za`, legacy app.* hosts, and `*.vercel.app`.
+4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` to a comma-separated explicit allowlist (for example: `https://www.paidly.co.za,https://paidly.co.za`). In production, use `https` origins only (localhost allowed only for local testing).
 
 The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
+
+## Production Runbook (Critical)
+
+Use this checklist before every production promotion:
+
+1. Environment and secret checks
+   - Confirm `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `ADMIN_BOOTSTRAP_TOKEN`.
+   - Confirm `VITE_SERVER_URL` is set to the real API URL (not localhost).
+   - Confirm `ENFORCE_HTTPS=true`, `DISABLE_HSTS=false`, `CORS_DEBUG_ALLOW_ALL=false`.
+2. Database and policy checks
+   - Run: `npm run verify:prod`
+   - Validate required affiliate/admin migrations are present.
+   - Ensure no missing critical RLS policies for `affiliate_applications` and `affiliates`.
+3. Critical smoke checks (manual + scripted)
+   - Run: `npm run smoke:critical`
+   - Manual browser checks on production:
+     - Login/logout/session refresh
+     - Create invoice, preview invoice, send invoice email
+     - Admin affiliates list, approve affiliate, resend referral link
+4. Health endpoint checks
+   - `GET /api/health`
+   - `GET /api/health/auth-security`
+   - `GET /api/health/deployment-security`
+   - `GET /api/health/readiness`
+   - `GET /api/health/observability` (last-60s request/error/latency counters)
+5. Rollback triggers
+   - Trigger immediate rollback if any of these happen:
+     - Login failures spike or sustained 5xx on `/api/auth/*`
+     - Invoice send endpoint fails repeatedly
+     - Admin affiliate approval flow fails for valid requests
+     - New crash-level frontend runtime exceptions in critical flows
+
+### Incident Logging Standard
+
+- Always include `x-request-id` for API debugging and support handoff.
+- Log route-level failures with request id and endpoint label.
+- Return production-safe errors to clients, but keep detailed server logs with the same request id.
 
 **Affiliate dashboard API (Node):** `GET https://api.paidly.co.za/affiliate/dashboard` (alias: `GET /api/affiliate/dashboard`) requires `Authorization: Bearer <Supabase access token>`. Opening the URL in a browser without a token returns **`401`** JSON such as `{"error":"Missing bearer token"}` — that confirms the route is deployed. A successful **`200`** body includes `ok`, `affiliate`, `stats`, **`summary`** (`signups`, `paid_users`, `earnings`), and `recentCommissions`.
 
@@ -76,6 +113,17 @@ Server-side Turnstile variables (set in backend runtime/Vercel project env, neve
 - `TURNSTILE_REQUIRE_WAITLIST=true`
 - `TURNSTILE_REQUIRE_FORGOT_PASSWORD=true`
 - `TURNSTILE_SECRET_KEY=<your-turnstile-secret>`
+
+Optional observability alert thresholds for `GET /api/health/observability`:
+
+- `OBS_ALERT_WARN_ERROR_RATE_PCT` (default `5`)
+- `OBS_ALERT_WARN_5XX_PER_MIN` (default `3`)
+- `OBS_ALERT_WARN_P95_MS` (default `1200`)
+- `OBS_ALERT_WARN_SLOW_PER_MIN` (default `10`)
+- `OBS_ALERT_CRITICAL_ERROR_RATE_PCT` (default `12`)
+- `OBS_ALERT_CRITICAL_5XX_PER_MIN` (default `10`)
+- `OBS_ALERT_CRITICAL_P95_MS` (default `2500`)
+- `OBS_ALERT_CRITICAL_SLOW_PER_MIN` (default `25`)
 
 If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Don't expose keys:** Never commit `.env` or paste API keys in code, issues, or chat. Use `.env.*.example` as templates; keep real values only in local `.env` (gitignored) and in your host's environment (e.g. Vercel). The repo uses `.cursorignore` so env and auth state are not included in AI context. If a key was ever exposed, rotate it in Supabase and update env. Never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production. Run **`npm run scan-secrets`** before releases; GitHub Actions runs it plus **TruffleHog** on every push/PR to `main`/`master` (see **`.github/workflows/security-secrets.yml`**). See **`docs/SECRETS_AND_ENV.md`** for browser vs server variables, CI, and enabling **GitHub secret scanning** in repo settings. For HTTPS, CORS, monitoring, and database exposure in production, see **`docs/DEPLOYMENT_SECURITY.md`**. For API/auth rate limits and bot resistance, see **`docs/ABUSE_PROTECTION.md`**.
 
