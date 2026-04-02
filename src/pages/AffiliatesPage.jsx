@@ -16,6 +16,20 @@ import PayoutsTable from '@/components/affiliates/PayoutsTable';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { supabase } from '@/lib/supabaseClient';
+import AdminDataService from '@/services/AdminDataService';
+
+function normalizeCachedAffiliateApplication(row) {
+  return {
+    ...row,
+    applicant_name: row?.applicant_name || row?.full_name || row?.name || '',
+    applicant_email: row?.applicant_email || row?.email || '',
+    audience_type: row?.audience_type || row?.audience_platform || 'other',
+    audience_size: row?.audience_size || null,
+    description: row?.description || row?.why_promote || '',
+    status: row?.status || 'pending',
+    created_date: row?.created_date || row?.created_at || null,
+  };
+}
 
 export default function AffiliatesPage() {
   const { user: currentUser } = useCurrentUser();
@@ -31,7 +45,50 @@ export default function AffiliatesPage() {
 
   const { data: affiliates = [], isLoading } = useQuery({
     queryKey: ['affiliates'],
-    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 150),
+    queryFn: async () => {
+      const rows = await paidly.entities.AffiliateSubmission.list('-created_date', 150);
+      if (Array.isArray(rows) && rows.length > 0) return rows;
+
+      // Secondary fallback: read approved affiliates directly.
+      const { data: affiliateRows } = await supabase
+        .from('affiliates')
+        .select('id, user_id, referral_code, commission_rate, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(150);
+      if (Array.isArray(affiliateRows) && affiliateRows.length > 0) {
+        const userIds = affiliateRows.map((a) => a.user_id).filter(Boolean);
+        const profileMap = new Map();
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', userIds);
+          for (const p of profiles || []) profileMap.set(String(p.id), p);
+        }
+        return affiliateRows.map((a) => {
+          const profile = profileMap.get(String(a.user_id)) || {};
+          return normalizeCachedAffiliateApplication({
+            id: a.id,
+            user_id: a.user_id,
+            applicant_name: profile.full_name || 'Approved affiliate',
+            applicant_email: profile.email || '',
+            referral_code: a.referral_code || '',
+            commission_rate: Number(a.commission_rate ?? 0.2) <= 1
+              ? Number(a.commission_rate ?? 0.2) * 100
+              : Number(a.commission_rate ?? 20),
+            status: a.status || 'approved',
+            created_at: a.created_at,
+          });
+        });
+      }
+
+      // Fallback for environments where RLS blocks direct table reads but admin sync cache exists.
+      const cached = AdminDataService.getAllAffiliateApplications();
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached.map(normalizeCachedAffiliateApplication);
+      }
+      return [];
+    },
     refetchInterval: 45000,
     staleTime: 30000,
   });

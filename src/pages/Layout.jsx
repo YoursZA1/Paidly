@@ -595,11 +595,14 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (!user?.id) return;
     if (!authSession?.user) return;
+    // Admin V2 pages fetch their own datasets with React Query.
+    // Skipping legacy store bootstrap here avoids blocking admin loads on auth.me timeouts.
+    if (isAdminV2Route) return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
     fetchAll();
-  }, [user?.id, user?.role, authSession?.user?.id, fetchAll, lastFetchedAt, userProfile]);
+  }, [user?.id, user?.role, authSession?.user?.id, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo

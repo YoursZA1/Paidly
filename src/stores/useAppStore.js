@@ -42,23 +42,27 @@ export const useAppStore = create((set, get) => ({
         }
       };
 
-      // Auth is required. Resolve it first (faster failure, clearer errors).
-      // Keep this bounded so a slow auth/profile round-trip cannot freeze app bootstrap.
-      const userData = await safe(
-        "auth.me",
-        async () => {
-          try {
-            return await User.me();
-          } catch {
-            const restored = await User.restoreFromSupabaseSession?.();
-            if (restored) return restored;
-            return await User.getCurrentUser?.();
-          }
-        },
-        null,
-        15000,
-        0
-      );
+      // Auth resolution: prefer local session/cache first, then bounded profile calls.
+      // This avoids long 15s stalls from auth.me during app bootstrap.
+      let userData = await User.getCurrentUser?.();
+      if (!userData) {
+        try {
+          userData = await withTimeoutRetry(
+            async () => (await User.restoreFromSupabaseSession?.()) || null,
+            6000,
+            0
+          );
+        } catch {
+          userData = null;
+        }
+      }
+      if (!userData) {
+        try {
+          userData = await withApiLogging("auth.me", () => withTimeoutRetry(() => User.me(), 8000, 0));
+        } catch {
+          userData = null;
+        }
+      }
 
       if (!userData) {
         set({ isLoading: false, error: "Not authenticated" });
