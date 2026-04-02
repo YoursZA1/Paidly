@@ -16,12 +16,14 @@ import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
 import {
   consumeLoginSlot,
+  consumeSignupSlot,
   getClientIp,
   startLoginRateLimitPruner,
 } from "./loginIpRateLimit.js";
 import {
   auditHttpResponses,
   enforceHttps,
+  getSecurityEventsSnapshot,
   logSecurity,
   securityHeaders,
   startSecurityAuditPruner,
@@ -50,6 +52,7 @@ import {
 import { generateHtmlPdfBuffer, getAnvilClient } from "./anvilPdf.js";
 import { parseBody } from "./validateBody.js";
 import {
+  forgotPasswordBodySchema,
   signInBodySchema,
   signUpBodySchema,
   waitlistBodySchema,
@@ -92,6 +95,207 @@ const adminBypassEmails = (process.env.ADMIN_BYPASS_EMAILS || "")
   .split(",")
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
+
+function envFlag(name, defaultValue = false) {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return Boolean(defaultValue);
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function envNumber(name, fallback) {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Health contract for auth security settings.
+ * These are deployment assertions (env-driven), because Supabase dashboard auth toggles
+ * are not directly queryable from this API process.
+ */
+function evaluateAuthSecurityHealth() {
+  const issues = [];
+
+  if (!process.env.SUPABASE_URL) issues.push("SUPABASE_URL is missing.");
+  if (!process.env.SUPABASE_ANON_KEY) issues.push("SUPABASE_ANON_KEY is missing.");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) issues.push("SUPABASE_SERVICE_ROLE_KEY is missing.");
+
+  if (!envFlag("AUTH_REQUIRE_EMAIL_VERIFICATION", true)) {
+    issues.push("AUTH_REQUIRE_EMAIL_VERIFICATION must be true.");
+  }
+
+  const passwordMinLength = envNumber("AUTH_PASSWORD_MIN_LENGTH", 12);
+  if (!Number.isFinite(passwordMinLength) || passwordMinLength < 12) {
+    issues.push("AUTH_PASSWORD_MIN_LENGTH must be >= 12.");
+  }
+
+  const resetTokenTtlMinutes = envNumber("AUTH_PASSWORD_RESET_TOKEN_TTL_MINUTES", 60);
+  if (!Number.isFinite(resetTokenTtlMinutes) || resetTokenTtlMinutes <= 0 || resetTokenTtlMinutes > 60) {
+    issues.push("AUTH_PASSWORD_RESET_TOKEN_TTL_MINUTES must be between 1 and 60.");
+  }
+
+  const sessionTtlMinutes = envNumber("AUTH_SESSION_TTL_MINUTES", 1440);
+  if (!Number.isFinite(sessionTtlMinutes) || sessionTtlMinutes <= 0 || sessionTtlMinutes > 1440) {
+    issues.push("AUTH_SESSION_TTL_MINUTES must be between 1 and 1440.");
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    expected: {
+      AUTH_REQUIRE_EMAIL_VERIFICATION: true,
+      AUTH_PASSWORD_MIN_LENGTH_MIN: 12,
+      AUTH_PASSWORD_RESET_TOKEN_TTL_MINUTES_MAX: 60,
+      AUTH_SESSION_TTL_MINUTES_MAX: 1440,
+    },
+    observed: {
+      AUTH_REQUIRE_EMAIL_VERIFICATION: envFlag("AUTH_REQUIRE_EMAIL_VERIFICATION", true),
+      AUTH_PASSWORD_MIN_LENGTH: passwordMinLength,
+      AUTH_PASSWORD_RESET_TOKEN_TTL_MINUTES: resetTokenTtlMinutes,
+      AUTH_SESSION_TTL_MINUTES: sessionTtlMinutes,
+      SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+      SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
+      SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    },
+  };
+}
+
+function evaluateDeploymentSecurityHealth() {
+  const issues = [];
+  const isProd = process.env.NODE_ENV === "production";
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim();
+  const clientOrigin = String(process.env.CLIENT_ORIGIN || "").trim();
+  const trustProxyDisabled = String(process.env.TRUST_PROXY || "").trim().toLowerCase() === "false";
+  const corsDebugAllowAll = envFlag("CORS_DEBUG_ALLOW_ALL", false);
+  const enforceHttpsEnabled = !envFlag("ENFORCE_HTTPS", true) ? false : true;
+  const hstsDisabled = envFlag("DISABLE_HSTS", false);
+  const publicDbDirectAccess = envFlag("PUBLIC_DB_DIRECT_ACCESS", false);
+  const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
+  const turnstileRequireSignup = envFlag("TURNSTILE_REQUIRE_SIGNUP", turnstileEnabled);
+  const turnstileRequireWaitlist = envFlag("TURNSTILE_REQUIRE_WAITLIST", turnstileEnabled);
+  const turnstileRequireForgotPassword = envFlag("TURNSTILE_REQUIRE_FORGOT_PASSWORD", turnstileEnabled);
+
+  if (!process.env.SUPABASE_URL) issues.push("SUPABASE_URL is missing.");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) issues.push("SUPABASE_SERVICE_ROLE_KEY is missing.");
+  if (!process.env.SUPABASE_ANON_KEY) issues.push("SUPABASE_ANON_KEY is missing.");
+  if (!process.env.RESEND_API_KEY) issues.push("RESEND_API_KEY is missing.");
+  if (!process.env.ADMIN_BOOTSTRAP_TOKEN) issues.push("ADMIN_BOOTSTRAP_TOKEN is missing.");
+  if (turnstileEnabled && !process.env.TURNSTILE_SECRET_KEY) {
+    issues.push("TURNSTILE_SECRET_KEY is missing while TURNSTILE_ENABLED is true.");
+  }
+
+  if (isProd) {
+    if (trustProxyDisabled) {
+      issues.push("TRUST_PROXY must not be false in production (required for secure proxy headers).");
+    }
+    if (!enforceHttpsEnabled) {
+      issues.push("ENFORCE_HTTPS must be enabled in production.");
+    }
+    if (hstsDisabled) {
+      issues.push("DISABLE_HSTS must not be true in production.");
+    }
+    if (corsDebugAllowAll) {
+      issues.push("CORS_DEBUG_ALLOW_ALL must be disabled in production.");
+    }
+    if (adminBypassEnabled) {
+      issues.push("ADMIN_BYPASS_AUTH must be disabled in production.");
+    }
+    if (!clientOrigin || clientOrigin === "*") {
+      issues.push("CLIENT_ORIGIN must be set to explicit trusted origins in production.");
+    }
+    if (/localhost|127\.0\.0\.1/i.test(supabaseUrl)) {
+      issues.push("SUPABASE_URL must not point to localhost in production.");
+    }
+  }
+
+  if (publicDbDirectAccess) {
+    issues.push("PUBLIC_DB_DIRECT_ACCESS must remain false. Database access should only be via backend/Supabase RLS.");
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    expected: {
+      ENFORCE_HTTPS: true,
+      DISABLE_HSTS: false,
+      CORS_DEBUG_ALLOW_ALL: false,
+      PUBLIC_DB_DIRECT_ACCESS: false,
+      ADMIN_BYPASS_AUTH: false,
+      CLIENT_ORIGIN_EXPLICIT_IN_PRODUCTION: true,
+      TURNSTILE_SECRET_IF_ENABLED: true,
+      TURNSTILE_WAITLIST_AND_FORGOT_PASSWORD_OPTIONAL: true,
+    },
+    observed: {
+      NODE_ENV: process.env.NODE_ENV || "development",
+      ENFORCE_HTTPS: enforceHttpsEnabled,
+      DISABLE_HSTS: hstsDisabled,
+      CORS_DEBUG_ALLOW_ALL: corsDebugAllowAll,
+      TRUST_PROXY_DISABLED: trustProxyDisabled,
+      ADMIN_BYPASS_AUTH: adminBypassEnabled,
+      CLIENT_ORIGIN_SET: Boolean(clientOrigin && clientOrigin !== "*"),
+      PUBLIC_DB_DIRECT_ACCESS: publicDbDirectAccess,
+      SUPABASE_URL_SET: Boolean(process.env.SUPABASE_URL),
+      SUPABASE_URL_LOCALHOST: /localhost|127\.0\.0\.1/i.test(supabaseUrl),
+      SUPABASE_SERVICE_ROLE_KEY_SET: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      SUPABASE_ANON_KEY_SET: Boolean(process.env.SUPABASE_ANON_KEY),
+      RESEND_API_KEY_SET: Boolean(process.env.RESEND_API_KEY),
+      ADMIN_BOOTSTRAP_TOKEN_SET: Boolean(process.env.ADMIN_BOOTSTRAP_TOKEN),
+      TURNSTILE_ENABLED: turnstileEnabled,
+      TURNSTILE_REQUIRE_SIGNUP: turnstileRequireSignup,
+      TURNSTILE_REQUIRE_WAITLIST: turnstileRequireWaitlist,
+      TURNSTILE_REQUIRE_FORGOT_PASSWORD: turnstileRequireForgotPassword,
+      TURNSTILE_SECRET_KEY_SET: Boolean(process.env.TURNSTILE_SECRET_KEY),
+    },
+  };
+}
+
+function getTurnstileClientIp(req) {
+  const raw = String(req.headers["x-forwarded-for"] || "").trim();
+  if (!raw) return undefined;
+  return raw.split(",")[0].trim() || undefined;
+}
+
+async function verifyTurnstileToken(token, req) {
+  const secret = String(process.env.TURNSTILE_SECRET_KEY || "").trim();
+  if (!secret) {
+    return { ok: false, reason: "turnstile_secret_missing" };
+  }
+  const t = String(token || "").trim();
+  if (!t) {
+    return { ok: false, reason: "turnstile_token_missing" };
+  }
+
+  const body = new URLSearchParams();
+  body.set("secret", secret);
+  body.set("response", t);
+  const ip = getTurnstileClientIp(req);
+  if (ip) body.set("remoteip", ip);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: controller.signal,
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { ok: false, reason: "turnstile_http_error", detail: `status_${resp.status}` };
+    }
+    if (json?.success === true) {
+      return { ok: true };
+    }
+    const code = Array.isArray(json?.["error-codes"]) ? json["error-codes"].join(",") : "turnstile_failed";
+    return { ok: false, reason: "turnstile_failed", detail: code };
+  } catch (err) {
+    return { ok: false, reason: "turnstile_exception", detail: err?.name || err?.message || "unknown" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Log admin API calls for monitoring sync and permission issues */
 function logAdminApi(method, path, statusCode, detail = null) {
@@ -266,6 +470,59 @@ app.get("/api/health", (req, res) => {
 });
 
 /**
+ * Explicit auth-security health endpoint.
+ * Returns 503 when required auth-hardening settings are not compliant.
+ */
+app.get("/api/health/auth-security", (req, res) => {
+  const report = evaluateAuthSecurityHealth();
+  if (!report.ok) {
+    return res.status(503).json({
+      status: "fail",
+      area: "auth-security",
+      message: "Authentication security configuration is not compliant.",
+      ...report,
+    });
+  }
+  return res.status(200).json({
+    status: "ok",
+    area: "auth-security",
+    ...report,
+  });
+});
+
+app.get("/api/health/deployment-security", (req, res) => {
+  const report = evaluateDeploymentSecurityHealth();
+  if (!report.ok) {
+    return res.status(503).json({
+      status: "fail",
+      area: "deployment-security",
+      message: "Deployment security configuration is not compliant.",
+      ...report,
+    });
+  }
+  return res.status(200).json({
+    status: "ok",
+    area: "deployment-security",
+    ...report,
+  });
+});
+
+app.get("/api/security/events", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res);
+    if (!adminUser) return;
+    return res.status(200).json({
+      status: "ok",
+      area: "security-events",
+      at: new Date().toISOString(),
+      summary: getSecurityEventsSnapshot(),
+    });
+  } catch (err) {
+    return sendUnexpectedError(res, err, "security-events");
+  }
+});
+
+/**
  * Pre-launch waitlist (email + optional name). Inserts into `waitlist_signups`; duplicate email returns same success message.
  */
 app.post("/api/waitlist", async (req, res) => {
@@ -275,9 +532,26 @@ app.post("/api/waitlist", async (req, res) => {
       logSecurity("warn", "waitlist_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, name, source } = parsed;
+    const { email: normalizedEmail, name, source, turnstile_token } = parsed;
     const nameSafe = sanitizeOneLine(name != null ? name : "", 120);
     const sourceSafe = sanitizeOneLine(source != null ? source : "", 64);
+
+    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
+    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_WAITLIST", turnstileEnabled);
+    if (requireTurnstile) {
+      const verify = await verifyTurnstileToken(turnstile_token, req);
+      if (!verify.ok) {
+        logSecurity("warn", "waitlist_turnstile_failed", {
+          ip,
+          email: normalizedEmail,
+          reason: verify.reason,
+          detail: verify.detail,
+        });
+        return res.status(403).json({
+          error: "Security verification failed. Please retry and complete the challenge.",
+        });
+      }
+    }
 
     const { error } = await supabaseAdmin.from("waitlist_signups").insert({
       email: normalizedEmail,
@@ -319,6 +593,69 @@ app.post("/api/waitlist", async (req, res) => {
     if (!res.headersSent) {
       return res.status(500).json({ error: "Something went wrong. Please try again." });
     }
+  }
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const ip = getClientIp(req);
+  try {
+    const parsed = parseBody(forgotPasswordBodySchema, req, res, () =>
+      logSecurity("warn", "auth_forgot_password_bad_request", { ip, reason: "validation" })
+    );
+    if (!parsed) return;
+    const { email: normalizedEmail, redirectTo, turnstile_token } = parsed;
+
+    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
+    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_FORGOT_PASSWORD", turnstileEnabled);
+    if (requireTurnstile) {
+      const verify = await verifyTurnstileToken(turnstile_token, req);
+      if (!verify.ok) {
+        logSecurity("warn", "auth_forgot_password_turnstile_failed", {
+          ip,
+          email: normalizedEmail,
+          reason: verify.reason,
+          detail: verify.detail,
+        });
+        return res.status(403).json({
+          error: "Security verification failed. Please retry and complete the challenge.",
+        });
+      }
+    }
+
+    const supabaseAnon = getSupabaseAnonClient();
+    if (!supabaseAnon) {
+      logSecurity("error", "auth_forgot_password_misconfigured", { ip, reason: "no_supabase_anon" });
+      return res.status(503).json({
+        error:
+          "Password reset service is not configured. Set SUPABASE_ANON_KEY on the API server.",
+      });
+    }
+
+    const { error } = await supabaseAnon.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: typeof redirectTo === "string" ? redirectTo : undefined,
+    });
+
+    if (error) {
+      logSecurity("warn", "auth_forgot_password_failed", {
+        ip,
+        email: normalizedEmail,
+        reason: error.message || "forgot_password_error",
+      });
+      // Keep user-enumeration safe response.
+      return res.json({ ok: true });
+    }
+
+    logSecurity("info", "auth_forgot_password_requested", {
+      ip,
+      email: normalizedEmail,
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    logSecurity("error", "auth_forgot_password_exception", {
+      ip,
+      message: err?.message || "unknown",
+    });
+    if (!res.headersSent) return res.status(500).json({ error: "Password reset failed" });
   }
 });
 
@@ -435,6 +772,17 @@ app.post("/api/auth/sign-in", async (req, res) => {
       return res.status(401).json({ error: "Invalid login credentials" });
     }
 
+    if (!session?.user?.email_confirmed_at) {
+      logSecurity("warn", "auth_sign_in_unverified_email", {
+        ip,
+        email: normalizedEmail,
+        userId: session.user?.id || null,
+      });
+      return res.status(403).json({
+        error: "Email not verified. Please verify your email before signing in.",
+      });
+    }
+
     logSecurity("info", "auth_sign_in_success", {
       ip,
       email: normalizedEmail,
@@ -470,7 +818,20 @@ app.post("/api/auth/sign-up", async (req, res) => {
       logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, password, data: profile } = parsed;
+    const { email: normalizedEmail, password, data: profile, turnstile_token } = parsed;
+
+    const slot = consumeSignupSlot(ip);
+    if (!slot.ok) {
+      logSecurity("warn", "auth_sign_up_rate_limited", {
+        ip,
+        retryAfterSeconds: slot.retryAfterSeconds,
+      });
+      res.setHeader("Retry-After", String(slot.retryAfterSeconds));
+      return res.status(429).json({
+        error: "Too many sign-up attempts from this network. Please try again later.",
+        retryAfterSeconds: slot.retryAfterSeconds,
+      });
+    }
 
     const supabaseAnon = getSupabaseAnonClient();
     if (!supabaseAnon) {
@@ -479,6 +840,23 @@ app.post("/api/auth/sign-up", async (req, res) => {
         error:
           "Sign-up service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
       });
+    }
+
+    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
+    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_SIGNUP", turnstileEnabled);
+    if (requireTurnstile) {
+      const verify = await verifyTurnstileToken(turnstile_token, req);
+      if (!verify.ok) {
+        logSecurity("warn", "auth_sign_up_turnstile_failed", {
+          ip,
+          email: normalizedEmail,
+          reason: verify.reason,
+          detail: verify.detail,
+        });
+        return res.status(403).json({
+          error: "Security verification failed. Please retry and complete the challenge.",
+        });
+      }
     }
 
     const userMetadata = sanitizeSignUpUserMetadata(
@@ -1786,6 +2164,38 @@ startLoginRateLimitPruner();
 startSecurityAuditPruner();
 startApiAbusePruner();
 
+const startupAuthHealth = evaluateAuthSecurityHealth();
+if (!startupAuthHealth.ok) {
+  logSecurity("error", "auth_security_health_failed", {
+    issues: startupAuthHealth.issues,
+  });
+  console.error(
+    "[AUTH-SECURITY] FAILED startup checks:\n" +
+      startupAuthHealth.issues.map((issue) => ` - ${issue}`).join("\n")
+  );
+  if (envFlag("AUTH_HEALTH_STRICT_MODE", false)) {
+    throw new Error(
+      "Auth security health checks failed and AUTH_HEALTH_STRICT_MODE is enabled. Refusing to start."
+    );
+  }
+}
+
+const startupDeploymentHealth = evaluateDeploymentSecurityHealth();
+if (!startupDeploymentHealth.ok) {
+  logSecurity("error", "deployment_security_health_failed", {
+    issues: startupDeploymentHealth.issues,
+  });
+  console.error(
+    "[DEPLOYMENT-SECURITY] FAILED startup checks:\n" +
+      startupDeploymentHealth.issues.map((issue) => ` - ${issue}`).join("\n")
+  );
+  if (envFlag("DEPLOYMENT_HEALTH_STRICT_MODE", false)) {
+    throw new Error(
+      "Deployment security health checks failed and DEPLOYMENT_HEALTH_STRICT_MODE is enabled. Refusing to start."
+    );
+  }
+}
+
 // Unknown API routes (helps 404-burst anomaly detection)
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "Not found" });
@@ -1814,6 +2224,8 @@ app.listen(port, "0.0.0.0", () => {
   const url = `http://localhost:${port}`;
   console.log(`Backend running at ${url}`);
   console.log(`  Health check: ${url}/api/health`);
+  console.log(`  Auth security health: ${url}/api/health/auth-security`);
+  console.log(`  Deployment security health: ${url}/api/health/deployment-security`);
   if (CORS_DEBUG_ALLOW_ALL) {
     console.warn(
       "[cors] CORS_DEBUG_ALLOW_ALL is on: Access-Control-Allow-Origin: * and credentials disabled. Remove for production."

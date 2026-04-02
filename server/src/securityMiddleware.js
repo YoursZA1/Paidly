@@ -37,13 +37,82 @@ export function logSecurity(level, event, data = {}) {
 const NOT_FOUND_WINDOW_MS = Number(process.env.SECURITY_404_WINDOW_MS) || 10 * 60 * 1000;
 const NOT_FOUND_BURST_THRESHOLD =
   Number(process.env.SECURITY_404_BURST_THRESHOLD) || 80;
+const AUTH_FAIL_WINDOW_MS = Number(process.env.SECURITY_AUTH_FAIL_WINDOW_MS) || 10 * 60 * 1000;
+const AUTH_FAIL_BURST_THRESHOLD = Number(process.env.SECURITY_AUTH_FAIL_BURST_THRESHOLD) || 30;
+const RATE_LIMIT_WINDOW_MS = Number(process.env.SECURITY_RATE_LIMIT_WINDOW_MS) || 10 * 60 * 1000;
+const RATE_LIMIT_BURST_THRESHOLD = Number(process.env.SECURITY_RATE_LIMIT_BURST_THRESHOLD) || 40;
+const SERVER_ERROR_WINDOW_MS = Number(process.env.SECURITY_5XX_WINDOW_MS) || 10 * 60 * 1000;
+const SERVER_ERROR_BURST_THRESHOLD = Number(process.env.SECURITY_5XX_BURST_THRESHOLD) || 20;
+const EVENTS_WINDOW_MS = Number(process.env.SECURITY_EVENTS_WINDOW_MS) || 10 * 60 * 1000;
 
 const notFoundByIp = new Map();
+const authFailByIp = new Map();
+const rateLimitedByIp = new Map();
+const serverErrorByIp = new Map();
+const eventCounters = new Map();
+
+function bumpEventCounter(name) {
+  const now = Date.now();
+  let entry = eventCounters.get(name);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + EVENTS_WINDOW_MS };
+    eventCounters.set(name, entry);
+  }
+  entry.count += 1;
+}
+
+function countActiveBurstIps(map, threshold) {
+  let total = 0;
+  for (const [, entry] of map) {
+    if ((entry?.count || 0) >= threshold) total += 1;
+  }
+  return total;
+}
+
+export function getSecurityEventsSnapshot() {
+  const getCount = (k) => eventCounters.get(k)?.count || 0;
+  return {
+    windowMs: EVENTS_WINDOW_MS,
+    counts: {
+      status401: getCount("status401"),
+      status403: getCount("status403"),
+      status404: getCount("status404"),
+      status429: getCount("status429"),
+      status5xx: getCount("status5xx"),
+    },
+    bursts: {
+      thresholds: {
+        authFail: AUTH_FAIL_BURST_THRESHOLD,
+        notFound: NOT_FOUND_BURST_THRESHOLD,
+        rateLimited: RATE_LIMIT_BURST_THRESHOLD,
+        serverError: SERVER_ERROR_BURST_THRESHOLD,
+      },
+      activeIps: {
+        authFail: countActiveBurstIps(authFailByIp, AUTH_FAIL_BURST_THRESHOLD),
+        notFound: countActiveBurstIps(notFoundByIp, NOT_FOUND_BURST_THRESHOLD),
+        rateLimited: countActiveBurstIps(rateLimitedByIp, RATE_LIMIT_BURST_THRESHOLD),
+        serverError: countActiveBurstIps(serverErrorByIp, SERVER_ERROR_BURST_THRESHOLD),
+      },
+    },
+  };
+}
 
 function pruneNotFoundMap() {
   const now = Date.now();
   for (const [ip, entry] of notFoundByIp) {
     if (now > entry.resetAt) notFoundByIp.delete(ip);
+  }
+  for (const [ip, entry] of authFailByIp) {
+    if (now > entry.resetAt) authFailByIp.delete(ip);
+  }
+  for (const [ip, entry] of rateLimitedByIp) {
+    if (now > entry.resetAt) rateLimitedByIp.delete(ip);
+  }
+  for (const [ip, entry] of serverErrorByIp) {
+    if (now > entry.resetAt) serverErrorByIp.delete(ip);
+  }
+  for (const [name, entry] of eventCounters) {
+    if (now > entry.resetAt) eventCounters.delete(name);
   }
 }
 
@@ -109,6 +178,7 @@ export function auditHttpResponses(getClientIp) {
     res.on("finish", () => {
       const status = res.statusCode;
       if (status === 404) {
+        bumpEventCounter("status404");
         const now = Date.now();
         let entry = notFoundByIp.get(ip);
         if (!entry || now > entry.resetAt) {
@@ -126,12 +196,67 @@ export function auditHttpResponses(getClientIp) {
         }
       }
       if (status >= 500) {
+        bumpEventCounter("status5xx");
+        const now = Date.now();
+        let entry = serverErrorByIp.get(ip);
+        if (!entry || now > entry.resetAt) {
+          entry = { count: 0, resetAt: now + SERVER_ERROR_WINDOW_MS };
+          serverErrorByIp.set(ip, entry);
+        }
+        entry.count += 1;
+        if (entry.count === SERVER_ERROR_BURST_THRESHOLD) {
+          logSecurity("warn", "suspicious_5xx_burst", {
+            ip,
+            count: entry.count,
+            windowMs: SERVER_ERROR_WINDOW_MS,
+            lastPath: req.path,
+          });
+        }
         logSecurity("error", "http_server_error", {
           ip,
           method: req.method,
           path: req.path,
           status,
         });
+      }
+      if (status === 401 && req.path.startsWith("/api/")) {
+        bumpEventCounter("status401");
+        const now = Date.now();
+        let entry = authFailByIp.get(ip);
+        if (!entry || now > entry.resetAt) {
+          entry = { count: 0, resetAt: now + AUTH_FAIL_WINDOW_MS };
+          authFailByIp.set(ip, entry);
+        }
+        entry.count += 1;
+        if (entry.count === AUTH_FAIL_BURST_THRESHOLD) {
+          logSecurity("warn", "suspicious_auth_fail_burst", {
+            ip,
+            count: entry.count,
+            windowMs: AUTH_FAIL_WINDOW_MS,
+            lastPath: req.path,
+          });
+        }
+      }
+      if (status === 429 && req.path.startsWith("/api/")) {
+        bumpEventCounter("status429");
+        const now = Date.now();
+        let entry = rateLimitedByIp.get(ip);
+        if (!entry || now > entry.resetAt) {
+          entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+          rateLimitedByIp.set(ip, entry);
+        }
+        entry.count += 1;
+        if (entry.count === RATE_LIMIT_BURST_THRESHOLD) {
+          logSecurity("warn", "suspicious_rate_limit_burst", {
+            ip,
+            count: entry.count,
+            windowMs: RATE_LIMIT_WINDOW_MS,
+            lastPath: req.path,
+          });
+        }
+      }
+      if (status === 403 && req.path.startsWith("/api/")) {
+        bumpEventCounter("status403");
       }
       if (status === 403 && req.path.startsWith("/api/admin")) {
         logSecurity("warn", "admin_forbidden", { ip, path: req.path });

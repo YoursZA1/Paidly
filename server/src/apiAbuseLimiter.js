@@ -72,12 +72,28 @@ export function tryConsumeApiBudget(ip, reqPath, method) {
       tier: "sign_up",
     });
   }
+  if (m === "POST" && path === "/api/auth/sign-in") {
+    tiers.push({
+      key: `sign-in-api:${ip}`,
+      max: num("API_RATE_SIGNIN_MAX", 40),
+      windowMs: num("API_RATE_SIGNIN_WINDOW_MS", 15 * 60 * 1000),
+      tier: "sign_in",
+    });
+  }
   if (m === "POST" && path === "/api/waitlist") {
     tiers.push({
       key: `waitlist:${ip}`,
       max: num("API_RATE_WAITLIST_MAX", 12),
       windowMs: num("API_RATE_WAITLIST_WINDOW_MS", 60 * 60 * 1000),
       tier: "waitlist",
+    });
+  }
+  if (m === "POST" && path === "/api/auth/forgot-password") {
+    tiers.push({
+      key: `forgot-password:${ip}`,
+      max: num("API_RATE_FORGOT_PASSWORD_MAX", 10),
+      windowMs: num("API_RATE_FORGOT_PASSWORD_WINDOW_MS", 60 * 60 * 1000),
+      tier: "forgot_password",
     });
   }
   if (m === "POST" && path === "/api/track-open") {
@@ -102,6 +118,30 @@ export function tryConsumeApiBudget(ip, reqPath, method) {
       max: num("API_RATE_AI_MAX", 20),
       windowMs: num("API_RATE_AI_WINDOW_MS", 60 * 60 * 1000),
       tier: "ai_generation",
+    });
+  }
+  if (m === "POST" && path === "/api/generate-pdf-html") {
+    tiers.push({
+      key: `generate-pdf:${ip}`,
+      max: num("API_RATE_GENERATE_PDF_MAX", 10),
+      windowMs: num("API_RATE_GENERATE_PDF_WINDOW_MS", 15 * 60 * 1000),
+      tier: "generation_heavy",
+    });
+  }
+  if (m === "GET" && (path === "/api/affiliate/dashboard" || path === "/affiliate/dashboard")) {
+    tiers.push({
+      key: `affiliate-dashboard:${ip}`,
+      max: num("API_RATE_AFFILIATE_DASHBOARD_MAX", 120),
+      windowMs: num("API_RATE_AFFILIATE_DASHBOARD_WINDOW_MS", 15 * 60 * 1000),
+      tier: "anti_scrape_affiliate_dashboard",
+    });
+  }
+  if (m === "GET" && path === "/api/admin/sync") {
+    tiers.push({
+      key: `admin-sync:${ip}`,
+      max: num("API_RATE_ADMIN_SYNC_MAX", 60),
+      windowMs: num("API_RATE_ADMIN_SYNC_WINDOW_MS", 15 * 60 * 1000),
+      tier: "admin_sync",
     });
   }
 
@@ -139,7 +179,7 @@ export function apiAbuseLimiterMiddleware(getClientIp, logSecurity) {
     if (!path.startsWith("/api")) {
       return next();
     }
-    if (path === "/api/health") {
+    if (path === "/api/health" || path === "/api/health/auth-security") {
       return next();
     }
     if (path.startsWith("/api/email-track")) {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  isStrongPassword,
   isReasonablePasswordLength,
   isValidEmail,
 } from "../inputValidation.js";
@@ -27,9 +28,14 @@ export const signInBodySchema = z.object({
 /** Optional sign-up profile payload; still passed through `sanitizeSignUpUserMetadata`. */
 export const signUpBodySchema = z.object({
   email: apiEmailSchema,
-  password: apiPasswordSchema,
+  password: apiPasswordSchema.refine((p) => isStrongPassword(p), {
+    message:
+      "Password must be 12+ chars and include upper/lowercase letters, a number, and a symbol.",
+  }),
   /** Supabase user_metadata; omitted or null OK */
   data: z.record(z.string(), z.unknown()).nullish(),
+  /** Cloudflare Turnstile token from client widget */
+  turnstile_token: z.string().trim().min(1).max(4096).optional(),
 });
 
 const optionalTrimmedLine = (max) =>
@@ -42,4 +48,11 @@ export const waitlistBodySchema = z.object({
   email: apiEmailSchema,
   name: optionalTrimmedLine(120),
   source: optionalTrimmedLine(64),
+  turnstile_token: z.string().trim().min(1).max(4096).optional(),
+});
+
+export const forgotPasswordBodySchema = z.object({
+  email: apiEmailSchema,
+  redirectTo: z.string().url().max(2048).optional(),
+  turnstile_token: z.string().trim().min(1).max(4096).optional(),
 });

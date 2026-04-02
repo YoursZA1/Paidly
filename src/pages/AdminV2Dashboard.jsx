@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Users, CreditCard, ClipboardList, DollarSign, Loader2 } from 'lucide-react';
+import { Users, CreditCard, ClipboardList, DollarSign, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import StatCard from '@/components/dashboard/StatCard';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -9,12 +9,16 @@ import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
+import { supabase } from '@/lib/supabaseClient';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const DASHBOARD_QUERY_KEYS = ['platform-users', 'subscriptions', 'affiliates', 'waitlist'];
 
 export default function AdminV2Dashboard() {
   const queryClient = useQueryClient();
   const [tick, setTick] = useState(Date.now());
+  const [showSecurityDetails, setShowSecurityDetails] = useState(false);
   const dashboardRefreshing =
     useIsFetching({
       predicate: (q) => DASHBOARD_QUERY_KEYS.includes(String(q.queryKey[0])),
@@ -50,6 +54,29 @@ export default function AdminV2Dashboard() {
     queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 150),
     refetchInterval: 45000,
     staleTime: 30000,
+  });
+
+  const { data: securityEvents, isLoading: securityLoading, error: securityError } = useQuery({
+    queryKey: ['security-events'],
+    queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      const res = await fetch('/api/security/events', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error || json?.message || `Security endpoint failed (${res.status})`);
+      }
+      return json?.summary || null;
+    },
+    refetchInterval: 45000,
+    staleTime: 30000,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -112,6 +139,25 @@ export default function AdminV2Dashboard() {
       .sort((a, b) => b.invoices_sent - a.invoices_sent);
   }, [users, subscriptions]);
 
+  const securitySpike = useMemo(() => {
+    if (!securityEvents?.counts || !securityEvents?.bursts?.thresholds || !securityEvents?.bursts?.activeIps) {
+      return false;
+    }
+    const counts = securityEvents.counts;
+    const thresholds = securityEvents.bursts.thresholds;
+    const activeIps = securityEvents.bursts.activeIps;
+
+    const severe429 = Number(counts.status429 || 0) >= Math.max(10, Math.floor(Number(thresholds.rateLimited || 40) * 0.5));
+    const severe401 = Number(counts.status401 || 0) >= Math.max(10, Math.floor(Number(thresholds.authFail || 30) * 0.5));
+    const severe404 = Number(counts.status404 || 0) >= Math.max(20, Math.floor(Number(thresholds.notFound || 80) * 0.5));
+    const activeBurstIps =
+      Number(activeIps.authFail || 0) +
+      Number(activeIps.notFound || 0) +
+      Number(activeIps.rateLimited || 0) +
+      Number(activeIps.serverError || 0);
+    return severe429 || severe401 || severe404 || activeBurstIps > 0;
+  }, [securityEvents]);
+
   return (
     <div>
       <PageHeader
@@ -158,6 +204,94 @@ export default function AdminV2Dashboard() {
           pendingAffiliateCount={pendingAffiliates.length}
         />
       </div>
+
+      <div
+        className={`mb-8 overflow-hidden rounded-xl border bg-card ${
+          securitySpike ? 'border-red-500/50 bg-red-500/5' : 'border-border'
+        }`}
+      >
+        <div className="border-b border-border px-6 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="inline-flex items-center gap-2 font-semibold">
+              {securitySpike ? (
+                <ShieldAlert className="h-4 w-4 text-red-500" />
+              ) : (
+                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              )}
+              Security Events (last {Math.max(1, Math.round((Number(securityEvents?.windowMs || 600000) / 60000)))}m)
+              {securityLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+            </h2>
+            <Button
+              type="button"
+              size="sm"
+              variant={securitySpike ? 'destructive' : 'outline'}
+              className="h-8"
+              onClick={() => setShowSecurityDetails(true)}
+            >
+              View details
+            </Button>
+          </div>
+          <p className={`text-xs ${securitySpike ? 'text-red-600' : 'text-muted-foreground'}`}>
+            {securityError
+              ? `Could not load security telemetry: ${securityError?.message || 'unknown error'}`
+              : securitySpike
+                ? 'Spike detected in auth/API anomalies. Investigate logs and suspicious IPs.'
+                : 'No active anomaly spikes detected.'}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 px-6 py-4 text-sm md:grid-cols-5">
+          <div><span className="text-muted-foreground">401</span><p className="font-semibold">{securityEvents?.counts?.status401 ?? '—'}</p></div>
+          <div><span className="text-muted-foreground">403</span><p className="font-semibold">{securityEvents?.counts?.status403 ?? '—'}</p></div>
+          <div><span className="text-muted-foreground">404</span><p className="font-semibold">{securityEvents?.counts?.status404 ?? '—'}</p></div>
+          <div><span className="text-muted-foreground">429</span><p className="font-semibold">{securityEvents?.counts?.status429 ?? '—'}</p></div>
+          <div><span className="text-muted-foreground">5xx</span><p className="font-semibold">{securityEvents?.counts?.status5xx ?? '—'}</p></div>
+        </div>
+      </div>
+
+      <Dialog open={showSecurityDetails} onOpenChange={setShowSecurityDetails}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Security Burst Details</DialogTitle>
+            <DialogDescription>
+              Active burst buckets and trigger thresholds for quicker incident triage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">authFail threshold</p>
+              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.authFail ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">authFail active IPs</p>
+              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.authFail ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">notFound threshold</p>
+              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.notFound ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">notFound active IPs</p>
+              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.notFound ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">rateLimited threshold</p>
+              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.rateLimited ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">rateLimited active IPs</p>
+              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.rateLimited ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">serverError threshold</p>
+              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.serverError ?? '—'}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">serverError active IPs</p>
+              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.serverError ?? '—'}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border px-6 py-4">

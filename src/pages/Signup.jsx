@@ -33,6 +33,8 @@ function formatRetryMinutes(ms) {
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
+import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
+import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const PLAN_OPTIONS = [
@@ -63,6 +65,10 @@ export default function Signup() {
   const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const turnstile = useTurnstileChallenge({
+    requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNUP",
+    theme: "dark",
+  });
 
   // Persist ?ref= for post-signup attribution (localStorage key `referral_code`); survives reloads / step changes.
   useEffect(() => {
@@ -139,6 +145,11 @@ export default function Signup() {
       return;
     }
 
+    if (turnstile.required && !turnstile.token) {
+      setError("Please complete the security check before creating your account.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -169,7 +180,8 @@ export default function Signup() {
             phone: phone.trim(),
             plan,
             role: "user",
-          }
+          },
+          { turnstileToken: turnstile.token }
         );
         authUserId = createdAuthUser?.id || null;
         if (!authUserId) {
@@ -179,6 +191,7 @@ export default function Signup() {
         }
         clearSignupAttempts(normalizedEmail);
       } catch (supabaseErr) {
+        turnstile.reset();
         recordSignupAttempt(normalizedEmail);
         const msg = supabaseErr?.message || "Failed to create Supabase user";
         const isSchemaOrDbError = /database error saving new user|company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist|signup.*failed/i.test(msg);
@@ -491,10 +504,18 @@ export default function Signup() {
                 </div>
               )}
 
+              <TurnstileChallenge
+                siteKey={turnstile.siteKey}
+                required={turnstile.required}
+                ready={turnstile.ready}
+                containerRef={turnstile.containerRef}
+                helperClassName="text-xs text-zinc-400"
+              />
+
               <Button
                 type="submit"
                 className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/20 transition hover:bg-[#E64700] touch-manipulation"
-                disabled={isLoading}
+                disabled={isLoading || (turnstile.required && !turnstile.ready)}
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">

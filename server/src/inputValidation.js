@@ -131,6 +131,20 @@ export function isReasonablePasswordLength(password) {
   return password.length > 0 && password.length <= PASSWORD_MAX_BYTES;
 }
 
+/**
+ * Minimum baseline password strength for account creation.
+ * Sign-in keeps compatibility with existing accounts; sign-up and password updates should use this.
+ */
+export function isStrongPassword(password) {
+  if (typeof password !== "string") return false;
+  if (password.length < 12 || password.length > 256) return false;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  return hasUpper && hasLower && hasDigit && hasSymbol;
+}
+
 export function sanitizeInviteMetadata(fullName, role, plan) {
   return {
     full_name: sanitizeOneLine(typeof fullName === "string" ? fullName : "", 200),

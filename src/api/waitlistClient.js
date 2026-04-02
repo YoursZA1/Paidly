@@ -15,6 +15,13 @@ export async function submitWaitlistSignup(payload) {
     .toLowerCase();
   const name = payload.name != null ? String(payload.name).trim() : "";
   const source = payload.source != null ? String(payload.source).trim() : "landing";
+  const turnstileToken = String(payload.turnstileToken || "").trim();
+  const turnstileSiteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+  const turnstileRequireWaitlist = Boolean(
+    turnstileSiteKey &&
+      (String(import.meta.env.VITE_TURNSTILE_REQUIRE_WAITLIST || "").trim().toLowerCase() === "true" ||
+        import.meta.env.PROD)
+  );
 
   const trySupabase = async () => {
     const { error } = await supabase.from("waitlist_signups").insert({
@@ -29,15 +36,17 @@ export async function submitWaitlistSignup(payload) {
     return { ok: false, error };
   };
 
-  const supaResult = await trySupabase();
-  if (supaResult.ok) {
-    return {
-      ok: true,
-      duplicate: supaResult.duplicate === true,
-      message: supaResult.duplicate
-        ? "You're already on the list — we'll email you before we launch."
-        : undefined,
-    };
+  if (!turnstileRequireWaitlist) {
+    const supaResult = await trySupabase();
+    if (supaResult.ok) {
+      return {
+        ok: true,
+        duplicate: supaResult.duplicate === true,
+        message: supaResult.duplicate
+          ? "You're already on the list — we'll email you before we launch."
+          : undefined,
+      };
+    }
   }
 
   try {
@@ -45,12 +54,12 @@ export async function submitWaitlistSignup(payload) {
       email,
       name: name || undefined,
       source: source || "landing",
+      turnstile_token: turnstileToken || undefined,
     });
     return data;
   } catch (err) {
     const msg =
       err?.response?.data?.error ||
-      supaResult.error?.message ||
       err?.message ||
       "We couldn't save that right now. Please try again in a moment.";
     alertSupabaseWriteFailure(err, "Waitlist signup");

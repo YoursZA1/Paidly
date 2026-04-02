@@ -49,6 +49,26 @@ function looksLikeNetworkFailureText(msg) {
   );
 }
 
+function getSafeResetRedirect(redirectTo) {
+  const fallback =
+    typeof window !== "undefined" ? `${window.location.origin}/ResetPassword` : null;
+  const candidate = redirectTo || fallback;
+  if (!candidate) return null;
+  try {
+    const url = new URL(candidate, typeof window !== "undefined" ? window.location.origin : undefined);
+    // Prevent open-redirect abuse for password reset links.
+    if (typeof window !== "undefined" && url.origin !== window.location.origin) {
+      return fallback;
+    }
+    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+      return fallback;
+    }
+    return url.toString();
+  } catch {
+    return fallback;
+  }
+}
+
 function isNodeAuthRouteUnsupportedStatus(status) {
   const s = Number(status);
   return s === 404 || s === 405 || s === 501;
@@ -64,13 +84,30 @@ const normalizeSession = (session) => {
   };
 };
 
+function isTurnstileSignupRequired() {
+  const siteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+  if (!siteKey) return false;
+  const enforceRaw = String(import.meta.env.VITE_TURNSTILE_REQUIRE_SIGNUP ?? "").trim().toLowerCase();
+  if (enforceRaw) return enforceRaw === "1" || enforceRaw === "true" || enforceRaw === "yes";
+  return import.meta.env.PROD;
+}
+
+function isTurnstileForgotPasswordRequired() {
+  const siteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+  if (!siteKey) return false;
+  const raw = String(import.meta.env.VITE_TURNSTILE_REQUIRE_FORGOT_PASSWORD ?? "").trim().toLowerCase();
+  if (raw) return raw === "1" || raw === "true" || raw === "yes";
+  return import.meta.env.PROD;
+}
+
 const SupabaseAuthService = {
   /**
    * Sign-up: POST /api/auth/sign-up when shouldUseNodeAuthApi() is true; otherwise direct Supabase (default in Vite dev).
    * Falls back to direct Supabase if the API returns 5xx or is unreachable.
    */
-  async signUpWithEmail(email, password, profile = {}) {
+  async signUpWithEmail(email, password, profile = {}, options = {}) {
     const normalized = (email || "").trim().toLowerCase();
+    const turnstileToken = String(options?.turnstileToken || "").trim();
 
     const signUpDirect = async () => {
       const { data, error } = await supabase.auth.signUp({
@@ -91,14 +128,20 @@ const SupabaseAuthService = {
       };
     };
 
-    if (!shouldUseNodeAuthApi()) {
+    if (!shouldUseNodeAuthApi() && !isTurnstileSignupRequired()) {
       return signUpDirect();
+    }
+
+    if (!shouldUseNodeAuthApi() && isTurnstileSignupRequired()) {
+      throw new Error(
+        "Sign-up security challenge is enabled but Node auth API is disabled. Enable VITE_NODE_AUTH_API and configure /api/auth/sign-up."
+      );
     }
 
     try {
       const { data, status, headers } = await backendApi.post(
         "/api/auth/sign-up",
-        { email: normalized, password, data: profile },
+        { email: normalized, password, data: profile, turnstile_token: turnstileToken || undefined },
         { validateStatus: () => true }
       );
 
@@ -128,6 +171,10 @@ const SupabaseAuthService = {
               ? `Too many sign-up attempts. Try again in ${ra} second(s).`
               : "Too many sign-up attempts. Please try again later.";
         throw new Error(msg);
+      }
+
+      if (status === 403) {
+        throw new Error(data?.error || "Security verification failed. Please retry the challenge.");
       }
 
       // API down/misconfigured or route absent (404/405): allow auth via Supabase.
@@ -232,6 +279,10 @@ const SupabaseAuthService = {
         throw new Error(mapAuthError({ message: data?.error || "Invalid login credentials" }));
       }
 
+      if (status === 403) {
+        throw new Error(data?.error || "Email not verified. Please verify your email first.");
+      }
+
       // API unavailable or auth route unsupported (404/405): fall back to Supabase.
       if (status >= 500 || isNodeAuthRouteUnsupportedStatus(status)) {
         if (isNodeAuthRouteUnsupportedStatus(status)) {
@@ -306,8 +357,36 @@ const SupabaseAuthService = {
    * Redirect URL must be allowed in Supabase Auth URL configuration.
    * Does not reveal whether the email exists (best practice).
    */
-  async resetPasswordForEmail(email, redirectTo = null) {
-    const to = redirectTo || (typeof window !== "undefined" ? `${window.location.origin}/ResetPassword` : null);
+  async resetPasswordForEmail(email, redirectTo = null, options = {}) {
+    const to = getSafeResetRedirect(redirectTo);
+    const turnstileToken = String(options?.turnstileToken || "").trim();
+
+    if (shouldUseNodeAuthApi() && isTurnstileForgotPasswordRequired()) {
+      const { data, status } = await backendApi.post(
+        "/api/auth/forgot-password",
+        {
+          email: (email || "").trim().toLowerCase(),
+          redirectTo: to || undefined,
+          turnstile_token: turnstileToken || undefined,
+        },
+        { validateStatus: () => true }
+      );
+      if (status === 200 && data?.ok) return true;
+      if (status === 403) {
+        throw new Error(data?.error || "Security verification failed. Please retry the challenge.");
+      }
+      if (status === 429) {
+        throw new Error("Too many reset requests. Please try again later.");
+      }
+      throw new Error(data?.error || "Failed to send reset link. Try again later.");
+    }
+
+    if (!shouldUseNodeAuthApi() && isTurnstileForgotPasswordRequired()) {
+      throw new Error(
+        "Password reset security challenge is enabled but Node auth API is disabled. Enable VITE_NODE_AUTH_API and configure /api/auth/forgot-password."
+      );
+    }
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: to
     });

@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Mail, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
+import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
+import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -14,18 +16,29 @@ export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const turnstile = useTurnstileChallenge({
+    requiredEnvKey: "VITE_TURNSTILE_REQUIRE_FORGOT_PASSWORD",
+    theme: "light",
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (turnstile.required && !turnstile.token) {
+      setError("Please complete the security check.");
+      return;
+    }
     setIsLoading(true);
 
     try {
       const redirectTo = `${window.location.origin}${createPageUrl("ResetPassword")}`;
-      await SupabaseAuthService.resetPasswordForEmail(email.trim().toLowerCase(), redirectTo);
+      await SupabaseAuthService.resetPasswordForEmail(email.trim().toLowerCase(), redirectTo, {
+        turnstileToken: turnstile.token,
+      });
       setSubmitted(true);
     } catch (err) {
       setError(err?.message || "Failed to send reset link. Try again or contact support.");
+      turnstile.reset();
     } finally {
       setIsLoading(false);
     }
@@ -91,9 +104,16 @@ export default function ForgotPassword() {
               </div>
             </div>
 
+            <TurnstileChallenge
+              siteKey={turnstile.siteKey}
+              required={turnstile.required}
+              ready={turnstile.ready}
+              containerRef={turnstile.containerRef}
+            />
+
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (turnstile.required && !turnstile.ready)}
               className="w-full min-h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl touch-manipulation"
             >
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

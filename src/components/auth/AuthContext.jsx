@@ -266,6 +266,18 @@ export function AuthProvider({ children }) {
     setError("");
     const normalizedEmail = (email || "").trim().toLowerCase();
     const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
+    if (session?.user && session.user.email_confirmed_at == null) {
+      // Defense in depth: do not allow app login for unverified users.
+      try {
+        await SupabaseAuthService.signOut();
+      } catch {
+        // ignore
+      }
+      setSession(null);
+      setUser(null);
+      setShowVerifyDialog(true);
+      throw new Error("Email not verified. Please verify your email before signing in.");
+    }
     setSession(session);
     // Always use Supabase role if present
     const supabaseRole = session?.user?.app_metadata?.role;
@@ -282,10 +294,7 @@ export function AuthProvider({ children }) {
       });
     }
 
-    // If email is not confirmed, show dialog but allow access
-    if (session?.user && session.user.email_confirmed_at == null) {
-      setShowVerifyDialog(true);
-    }
+    // At this point email is verified.
 
     // Use current user from client to avoid extra User.me() round trip (faster login)
     const currentUser = await User.getCurrentUser();

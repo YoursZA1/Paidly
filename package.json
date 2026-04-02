@@ -6,6 +6,7 @@
   "homepage": "https://www.paidly.co.za",
   "scripts": {
     "dev": "vite",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "server": "npm --prefix server run dev",
     "react:generate-pdf": "npm --prefix server run react:generate-pdf",
     "react:generate-quote-pdf": "npm --prefix server run react:generate-quote-pdf",

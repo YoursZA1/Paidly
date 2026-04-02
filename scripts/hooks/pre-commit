@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "[pre-commit] Running secret scan..."
+npm run --silent scan-secrets
+
+echo "[pre-commit] Secret scan passed."

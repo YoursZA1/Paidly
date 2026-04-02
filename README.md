@@ -62,8 +62,20 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    | `VITE_SUPABASE_URL` | Yes | Supabase project URL (Settings → API). |
    | `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (Settings → API). |
    | `VITE_SERVER_URL` | Strongly recommended in prod | **Local:** `http://localhost:5179` (include port; backend default). **Production:** e.g. `https://api.paidly.co.za`. Without it in production, auth uses Supabase directly; waitlist/currency/admin API paths still need a real URL. |
+   | `VITE_TURNSTILE_SITE_KEY` | Recommended in prod | Cloudflare Turnstile site key for signup bot protection. |
+   | `VITE_TURNSTILE_REQUIRE_SIGNUP` | No | Set to `true` to enforce challenge on sign-up in all environments (defaults to required in prod when site key exists). |
+   | `VITE_TURNSTILE_REQUIRE_WAITLIST` | No | Set to `true` to enforce challenge on waitlist form (defaults to required in prod when site key exists). |
+   | `VITE_TURNSTILE_REQUIRE_FORGOT_PASSWORD` | No | Set to `true` to enforce challenge on forgot-password form (defaults to required in prod when site key exists). |
    | `VITE_SUPABASE_ONLY` | No | Set to `1` or `true` in production if you **do not** deploy the Node API; silences the missing-`VITE_SERVER_URL` console warning (sign-in stays direct to Supabase). |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `paidly`). Set to `invoicebreek` if your Supabase project still uses the legacy bucket. |
+
+Server-side Turnstile variables (set in backend runtime/Vercel project env, never in client code):
+
+- `TURNSTILE_ENABLED=true`
+- `TURNSTILE_REQUIRE_SIGNUP=true`
+- `TURNSTILE_REQUIRE_WAITLIST=true`
+- `TURNSTILE_REQUIRE_FORGOT_PASSWORD=true`
+- `TURNSTILE_SECRET_KEY=<your-turnstile-secret>`
 
 If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` are missing, the app will load but show a "Supabase not configured" message. **Don't expose keys:** Never commit `.env` or paste API keys in code, issues, or chat. Use `.env.*.example` as templates; keep real values only in local `.env` (gitignored) and in your host's environment (e.g. Vercel). The repo uses `.cursorignore` so env and auth state are not included in AI context. If a key was ever exposed, rotate it in Supabase and update env. Never commit `.env` files (they are gitignored); use the `.env.*.example` files as templates locally, and use your host’s environment or a secrets manager in production. Run **`npm run scan-secrets`** before releases; GitHub Actions runs it plus **TruffleHog** on every push/PR to `main`/`master` (see **`.github/workflows/security-secrets.yml`**). See **`docs/SECRETS_AND_ENV.md`** for browser vs server variables, CI, and enabling **GitHub secret scanning** in repo settings. For HTTPS, CORS, monitoring, and database exposure in production, see **`docs/DEPLOYMENT_SECURITY.md`**. For API/auth rate limits and bot resistance, see **`docs/ABUSE_PROTECTION.md`**.
 

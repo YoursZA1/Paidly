@@ -20,6 +20,8 @@ import {
   getProductLaunchTimeLeftPhrase,
   getWaitlistThankYouMessage,
 } from "@/constants/productLaunch";
+import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
+import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 
 export default function WaitlistSection() {
   const [email, setEmail] = useState("");
@@ -29,6 +31,10 @@ export default function WaitlistSection() {
   const [thanksOpen, setThanksOpen] = useState(false);
   const [thanksTitle, setThanksTitle] = useState("");
   const [thanksDescription, setThanksDescription] = useState("");
+  const turnstile = useTurnstileChallenge({
+    requiredEnvKey: "VITE_TURNSTILE_REQUIRE_WAITLIST",
+    theme: "dark",
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,12 +44,21 @@ export default function WaitlistSection() {
       setMessage("Please enter your email.");
       return;
     }
+    if (turnstile.required && !turnstile.token) {
+      setMessage("Please complete the security check.");
+      return;
+    }
     setStatus("loading");
     try {
-      const res = await submitWaitlistSignup({ email: normalized, name: name.trim() || undefined });
+      const res = await submitWaitlistSignup({
+        email: normalized,
+        name: name.trim() || undefined,
+        turnstileToken: turnstile.token,
+      });
       if (res?.ok) {
         setEmail("");
         setName("");
+        turnstile.reset();
         const timeLeft = getProductLaunchTimeLeftPhrase();
         if (res.duplicate) {
           setThanksTitle("You're already on the list");
@@ -126,9 +141,16 @@ export default function WaitlistSection() {
               {message}
             </p>
           )}
+          <TurnstileChallenge
+            siteKey={turnstile.siteKey}
+            required={turnstile.required}
+            ready={turnstile.ready}
+            containerRef={turnstile.containerRef}
+            helperClassName="text-xs text-zinc-400"
+          />
           <Button
             type="submit"
-            disabled={status === "loading"}
+            disabled={status === "loading" || (turnstile.required && !turnstile.ready)}
             className="h-12 w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700]"
           >
             {status === "loading" ? (

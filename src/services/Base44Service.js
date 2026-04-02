@@ -6,12 +6,6 @@ const PAIDLY_API_URL =
   window?.appParams?.paidly?.url ||
   window?.appParams?.base44?.url ||
   null;
-const PAIDLY_API_KEY =
-  import.meta.env.VITE_PAIDLY_API_KEY ||
-  import.meta.env.VITE_BASE44_API_KEY ||
-  window?.appParams?.paidly?.api_key ||
-  window?.appParams?.base44?.api_key ||
-  null;
 const PAIDLY_ENV = import.meta.env.VITE_PAIDLY_ENV || import.meta.env.VITE_BASE44_ENV || window?.appParams?.env || 'development';
 
 function isPaidlyApiAvailable() {
@@ -33,9 +27,10 @@ async function fetchPaidlyEntity(entityName, options = {}) {
   const query = getQueryParams(options);
   const url = `${baseUrl}${query ? `?${query}` : ''}`;
 
+  // Never send API keys from frontend runtime config. Any credentialed upstream call
+  // must go through a server endpoint that injects secrets from server-only env vars.
   const headers = {
-    'Content-Type': 'application/json',
-    ...(PAIDLY_API_KEY ? { Authorization: `Bearer ${PAIDLY_API_KEY}` } : {})
+    'Content-Type': 'application/json'
   };
 
   const response = await fetch(url, {
