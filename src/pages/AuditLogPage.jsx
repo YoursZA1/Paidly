@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { format } from 'date-fns';
@@ -13,6 +13,8 @@ import {
   Filter,
   ChevronDown,
   ChevronRight,
+  ScrollText,
+  Lock,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -146,9 +148,15 @@ function LogRow({ log }) {
   );
 }
 
+const PAGE_TITLE = 'Audit Log';
+
 export default function AuditLogPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+
+  useEffect(() => {
+    document.title = `${PAGE_TITLE} · Paidly`;
+  }, []);
 
   const { data: logs = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['audit-logs'],
@@ -171,11 +179,28 @@ export default function AuditLogPage() {
   return (
     <div className="mx-auto max-w-7xl p-6 md:p-8">
       <PageHeader
-        title="Audit Log"
+        title={PAGE_TITLE}
+        icon={<Shield className="h-6 w-6 text-primary" aria-hidden />}
         description="Full history of critical actions performed by internal team members."
+        descriptionClassName="mt-2 max-w-2xl text-sm leading-relaxed sm:text-base"
         onRefresh={() => refetch()}
         isRefreshing={isFetching}
       />
+
+      <div className="mb-6 flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3 text-sm text-muted-foreground">
+          <ScrollText className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <p className="leading-relaxed">
+            <span className="font-medium text-foreground">Internal compliance view.</span>{' '}
+            Privileged changes—user access, subscriptions, affiliates, payouts, and platform settings—are
+            listed below. This feed is read-only; expand a row when a before/after snapshot exists.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground sm:shrink-0">
+          <Lock className="h-3.5 w-3.5" aria-hidden />
+          <span>Latest 200 events from the server</span>
+        </div>
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-3">
         {Object.entries(CATEGORY_META).map(([key, meta]) => {
@@ -228,18 +253,51 @@ export default function AuditLogPage() {
         </Select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        {!isLoading && filtered.length > 0 ? (
+          <div className="hidden border-b border-border bg-muted/30 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_11rem] md:gap-4">
+            <span>Activity and target</span>
+            <span className="text-right">Actor and time</span>
+          </div>
+        ) : null}
         {isLoading ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">Loading audit log...</div>
+          <div className="space-y-0 divide-y divide-border/50 px-5 py-6">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex animate-pulse gap-4 py-4">
+                <div className="h-8 w-8 rounded-lg bg-muted" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-40 rounded bg-muted" />
+                  <div className="h-3 w-full max-w-md rounded bg-muted" />
+                </div>
+                <div className="hidden w-28 flex-col gap-2 sm:flex">
+                  <div className="ml-auto h-3 w-20 rounded bg-muted" />
+                  <div className="ml-auto h-3 w-24 rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">No audit log entries found.</div>
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/40">
+              <Shield className="h-7 w-7 text-muted-foreground" aria-hidden />
+            </div>
+            <div className="max-w-md space-y-1">
+              <p className="text-sm font-medium text-foreground">No entries match your filters</p>
+              <p className="text-sm text-muted-foreground">
+                {logs.length === 0
+                  ? 'No internal audit events have been recorded yet, or your account cannot read the audit table. Try refreshing, or widen search and category filters.'
+                  : 'Try clearing search or setting category to “All categories” to see the full internal history.'}
+              </p>
+            </div>
+          </div>
         ) : (
           filtered.map((log) => <LogRow key={log.id} log={log} />)
         )}
       </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        Showing {filtered.length} of {logs.length} entries (last 200 actions)
+        Showing {filtered.length} of {logs.length} internal audit event{logs.length === 1 ? '' : 's'} (server cap:
+        200)
       </p>
     </div>
   );
