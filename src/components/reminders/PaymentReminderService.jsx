@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
 import { supabase } from '@/lib/supabaseClient';
+import { isAbortError } from '@/utils/retryOnAbort';
 
 class PaymentReminderService {
     static async checkAndSendReminders() {
@@ -64,7 +65,7 @@ class PaymentReminderService {
             }
         } catch (error) {
             const msg = error?.message || String(error);
-            if (msg === 'Not authenticated' || /not authenticated/i.test(msg)) {
+            if (msg === 'Not authenticated' || /not authenticated/i.test(msg) || isAbortError(error)) {
                 return;
             }
             console.error('Error checking payment reminders:', error);

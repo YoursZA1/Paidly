@@ -374,11 +374,15 @@ class EntityManager {
           this.saveToStorage();
           this.notifySubscribers();
         } else if (error) {
-          console.error(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(error, "Fetch failed"));
+          if (!isAbortError(error)) {
+            console.error(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(error, "Fetch failed"));
+          }
         }
       }
     } catch (e) {
-      console.warn(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Sync failed"));
+      if (!isAbortError(e)) {
+        console.warn(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Sync failed"));
+      }
     }
   }
 

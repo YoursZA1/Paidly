@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 
 const PAIDLY_AUDIT_STORAGE_KEY = 'paidly_audit_log';
+const PAIDLY_AUDIT_DB_UNAVAILABLE_KEY = 'paidly_audit_db_unavailable';
 
 function stringifyMaybeJson(val) {
   if (val == null) return null;
@@ -39,21 +40,38 @@ async function listAuditLogs(limit = 200) {
   const out = [];
   const seenIds = new Set();
 
-  try {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (!error && data?.length) {
-      for (const row of data) {
-        const n = normalizeAuditLogRowDb(row);
-        if (n.id != null) seenIds.add(String(n.id));
-        out.push(n);
+  const skipAuditDb =
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem(PAIDLY_AUDIT_DB_UNAVAILABLE_KEY) === '1';
+
+  if (!skipAuditDb) {
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error?.code === '42P01' || /audit_logs/i.test(String(error?.message || ''))) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(PAIDLY_AUDIT_DB_UNAVAILABLE_KEY, '1');
+          }
+        } catch {
+          /* ignore */
+        }
       }
+
+      if (!error && data?.length) {
+        for (const row of data) {
+          const n = normalizeAuditLogRowDb(row);
+          if (n.id != null) seenIds.add(String(n.id));
+          out.push(n);
+        }
+      }
+    } catch {
+      /* table or policy may be missing */
     }
-  } catch {
-    /* table or policy may be missing */
   }
 
   try {
@@ -127,7 +145,7 @@ const ENTITY_SELECTS = {
   PlatformUser: '*',
   Subscription: '*',
   WaitlistEntry: '*',
-  AffiliateSubmission: 'id, user_id, email, full_name, audience_platform, status, created_at, updated_at',
+  AffiliateSubmission: '*',
   AffiliatePayout: 'id, affiliate_id, referral_id, amount, currency, status, source, created_at, updated_at',
   User: '*',
 };

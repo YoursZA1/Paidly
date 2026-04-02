@@ -9,6 +9,7 @@ import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
+import { isAbortError } from "@/utils/retryOnAbort";
 
 function getCachedUser() {
   try {
@@ -110,7 +111,9 @@ export function AuthProvider({ children }) {
         setError("");
       }
     } catch (e) {
-      console.warn("[Auth] refreshUser:", e?.message || e);
+      if (!isAbortError(e)) {
+        console.warn("[Auth] refreshUser:", e?.message || e);
+      }
       try {
         const { data } = await supabase.auth.getSession();
         const su = data?.session?.user;
@@ -190,7 +193,9 @@ export function AuthProvider({ children }) {
         setUser(currentUser ?? getCachedUser());
         setError(initialSession?.user && !currentUser ? "Failed to restore session" : "");
       } catch (err) {
-        console.warn("Auth init error:", err);
+        if (!isAbortError(err)) {
+          console.warn("Auth init error:", err);
+        }
         if (!cancelled) setSession(null);
       } finally {
         if (!cancelled) setLoading(false);

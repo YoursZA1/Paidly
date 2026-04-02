@@ -81,6 +81,8 @@ export function shouldUseNodeAuthApi() {
   if (isProductionBackendUrlLocalhost()) return false;
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) return false;
   if (isNodeAuthRememberedUnreachable()) return false;
+  // In production, prefer direct Supabase auth unless explicitly enabled.
+  if (import.meta.env.PROD && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
   if (isDev && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
   return true;
 }
