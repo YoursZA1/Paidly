@@ -36,6 +36,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { supabase } from '@/lib/supabaseClient';
 import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
+import { getPublicApiBase } from '@/api/backendClient';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -45,6 +46,16 @@ const statusOptions = [
     { value: 'overdue', label: 'Mark as Overdue', icon: AlertTriangle },
     { value: 'cancelled', label: 'Mark as Cancelled', icon: XCircle },
 ];
+
+function isLikelyNetworkFetchError(error) {
+    const msg = String(error?.message || '').toLowerCase();
+    return (
+        error?.name === 'TypeError' ||
+        msg.includes('failed to fetch') ||
+        msg.includes('networkerror') ||
+        msg.includes('load failed')
+    );
+}
 
 function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid }) {
     const [isProcessing, setIsProcessing] = useState(false);
@@ -242,8 +253,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const handleSendEmail = async (htmlContent) => {
         setIsProcessing(true);
         try {
-            const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-            const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
+            const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
             if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
 
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -284,29 +294,70 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             const subject = `Invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'Us'}`;
             const filename = `invoice-${invoice.invoice_number || invoice.reference_number || 'invoice'}.pdf`;
 
-            const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                    pdfBase64,
-                    email: client.email,
-                    subject,
-                    html: htmlContent,
-                    filename,
-                }),
-            });
+            let sent = false;
+            let primaryError = null;
+            try {
+                const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({
+                        pdfBase64,
+                        email: client.email,
+                        subject,
+                        html: htmlContent,
+                        filename,
+                    }),
+                });
 
-            if (!sendRes.ok) {
-                let details = '';
-                try {
-                    details = await sendRes.text();
-                } catch {
-                    details = '';
+                if (!sendRes.ok) {
+                    let details = '';
+                    try {
+                        details = await sendRes.text();
+                    } catch {
+                        details = '';
+                    }
+                    throw new Error(details || 'Failed to send email via edge function.');
                 }
-                throw new Error(details || 'Failed to send email via backend.');
+                sent = true;
+            } catch (edgeErr) {
+                primaryError = edgeErr;
+                // Fallback to Node API route for production resiliency.
+                const apiBase = getPublicApiBase() || '';
+                const fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({
+                        base64PDF: pdfBase64,
+                        clientEmail: client.email,
+                        invoiceNum: String(invoice.invoice_number || invoice.reference_number || ''),
+                        fromName: String(userData?.company_name || userData?.full_name || 'Paidly'),
+                        clientName: String(client?.name || 'there'),
+                        amountDue: String(invoice?.total_amount ?? ''),
+                        dueDate: String(invoice?.delivery_date || ''),
+                    }),
+                });
+                if (!fallbackRes.ok) {
+                    let details = '';
+                    try {
+                        details = await fallbackRes.text();
+                    } catch {
+                        details = '';
+                    }
+                    const fallbackMsg = details || `Fallback send failed (${fallbackRes.status})`;
+                    const primaryMsg = primaryError?.message || 'Edge send failed';
+                    throw new Error(`${primaryMsg} | ${fallbackMsg}`);
+                }
+                sent = true;
+            }
+
+            if (!sent) {
+                throw new Error('Failed to send email.');
             }
             
             // Mark as sent (with retry on spurious AbortError)
@@ -342,7 +393,11 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             });
         } catch (error) {
             console.error("Failed to send email:", error);
-            const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || "Please try again.");
+            const message = isAbortError(error)
+                ? "Request was interrupted. Please try again."
+                : isLikelyNetworkFetchError(error)
+                    ? "Could not reach email service. Please verify network/API settings and try again."
+                    : (error.message || "Please try again.");
             toast({
                 title: "Failed to send email",
                 description: message,
