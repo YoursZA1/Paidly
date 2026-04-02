@@ -75,9 +75,11 @@ export const useAppStore = create((set, get) => ({
         safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
         safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
         safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+        safe("quotes.list", () => Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 }), [], 20000, 1),
+        safe("payslips.list", () => Payroll.list("-created_date", { limit: 100, maxWaitMs: 12000 }), [], 20000, 1),
       ]);
 
-      const [invoicesData, clientsData, paymentsData, expensesData] = settled.map((r) =>
+      const [invoicesData, clientsData, paymentsData, expensesData, quotesData, payslipsData] = settled.map((r) =>
         r.status === "fulfilled" ? r.value : []
       );
 
@@ -95,10 +97,9 @@ export const useAppStore = create((set, get) => ({
 
       set({
         invoices: resolvedInvoices,
-        // Quotes and payslips are now loaded on-demand by their pages using store-first + background refresh.
-        quotes: get().quotes || [],
+        quotes: Array.isArray(quotesData) ? quotesData : [],
         clients: Array.isArray(clientsData) ? clientsData : [],
-        payslips: get().payslips || [],
+        payslips: Array.isArray(payslipsData) ? payslipsData : [],
         userProfile: userData,
         payments: Array.isArray(paymentsData) ? paymentsData : [],
         // Invoice views are hydrated lazily on the Invoices page.

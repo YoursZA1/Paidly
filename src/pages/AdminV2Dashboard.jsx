@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Users, CreditCard, ClipboardList, DollarSign, Loader2, ShieldAlert, ShieldCheck, FileText } from 'lucide-react';
+import {
+  Users,
+  CreditCard,
+  ClipboardList,
+  DollarSign,
+  Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  FileText,
+  ScrollText,
+  Banknote,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import StatCard from '@/components/dashboard/StatCard';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -10,10 +21,19 @@ import PlanBadge from '@/components/dashboard/PlanBadge';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import { supabase } from '@/lib/supabaseClient';
+import { countByUserId } from '@/utils/documentOwnership';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const DASHBOARD_QUERY_KEYS = ['platform-users', 'subscriptions', 'affiliates', 'waitlist', 'invoices'];
+const DASHBOARD_QUERY_KEYS = [
+  'platform-users',
+  'subscriptions',
+  'affiliates',
+  'waitlist',
+  'invoices',
+  'quotes',
+  'payslips',
+];
 
 export default function AdminV2Dashboard() {
   const queryClient = useQueryClient();
@@ -63,6 +83,20 @@ export default function AdminV2Dashboard() {
     staleTime: 30000,
   });
 
+  const { data: quotes = [], dataUpdatedAt: quotesUpdatedAt } = useQuery({
+    queryKey: ['quotes'],
+    queryFn: () => paidly.entities.Quote.list('-created_date', 500),
+    refetchInterval: 45000,
+    staleTime: 30000,
+  });
+
+  const { data: payslips = [], dataUpdatedAt: payslipsUpdatedAt } = useQuery({
+    queryKey: ['payslips'],
+    queryFn: () => paidly.entities.Payroll.list('-created_date', 500),
+    refetchInterval: 45000,
+    staleTime: 30000,
+  });
+
   const { data: securityEvents, isLoading: securityLoading, error: securityError } = useQuery({
     queryKey: ['security-events'],
     queryFn: async () => {
@@ -98,9 +132,19 @@ export default function AdminV2Dashboard() {
         subscriptionsUpdatedAt || 0,
         affiliatesUpdatedAt || 0,
         waitlistUpdatedAt || 0,
-        invoicesUpdatedAt || 0
+        invoicesUpdatedAt || 0,
+        quotesUpdatedAt || 0,
+        payslipsUpdatedAt || 0
       ),
-    [usersUpdatedAt, subscriptionsUpdatedAt, affiliatesUpdatedAt, waitlistUpdatedAt, invoicesUpdatedAt]
+    [
+      usersUpdatedAt,
+      subscriptionsUpdatedAt,
+      affiliatesUpdatedAt,
+      waitlistUpdatedAt,
+      invoicesUpdatedAt,
+      quotesUpdatedAt,
+      payslipsUpdatedAt,
+    ]
   );
 
   const lastUpdatedLabel = useMemo(() => {
@@ -118,6 +162,8 @@ export default function AdminV2Dashboard() {
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
   const pendingAffiliates = affiliates.filter((a) => a.status === 'pending');
   const totalInvoicesSent = invoices.length;
+  const totalQuotes = quotes.length;
+  const totalPayslips = payslips.length;
   const userBehaviorRows = useMemo(() => {
     const subByUserId = new Map(
       subscriptions
@@ -129,12 +175,12 @@ export default function AdminV2Dashboard() {
         .filter((s) => s.user_email || s.email)
         .map((s) => [String(s.user_email || s.email).toLowerCase(), s])
     );
-    const invoiceCountByUser = new Map();
+    const invoiceCountByUser = countByUserId(invoices);
+    const quoteCountByUser = countByUserId(quotes);
+    const payslipCountByUser = countByUserId(payslips);
     const invoiceCountByEmail = new Map();
     for (const inv of invoices) {
-      const uid = String(inv?.user_id || inv?.created_by || '').trim();
       const email = String(inv?.user_email || inv?.owner_email || '').trim().toLowerCase();
-      if (uid) invoiceCountByUser.set(uid, Number(invoiceCountByUser.get(uid) || 0) + 1);
       if (email) invoiceCountByEmail.set(email, Number(invoiceCountByEmail.get(email) || 0) + 1);
     }
 
@@ -145,6 +191,9 @@ export default function AdminV2Dashboard() {
           subByUserId.get(String(u.id)) ||
           (email ? subByEmail.get(email) : null) ||
           null;
+        const byUid = Number(invoiceCountByUser.get(String(u.id)) || 0);
+        const byEmail = Number(invoiceCountByEmail.get(email) || 0);
+        const profileFallback = Number(u.invoices_sent ?? u.invoices_count ?? 0);
         return {
           id: u.id,
           full_name: u.full_name || '—',
@@ -152,10 +201,9 @@ export default function AdminV2Dashboard() {
           company_name: u.company_name || u.company || '—',
           plan: u.plan || u.subscription_plan || 'none',
           status: u.status || 'active',
-          invoices_sent:
-            Number(invoiceCountByUser.get(String(u.id)) || 0) ||
-            Number(invoiceCountByEmail.get(email) || 0) ||
-            Number(u.invoices_sent ?? u.invoices_count ?? 0),
+          invoices_sent: byUid || byEmail || profileFallback,
+          quotes_created: Number(quoteCountByUser.get(String(u.id)) || 0),
+          payslips_created: Number(payslipCountByUser.get(String(u.id)) || 0),
           subscription_status: sub?.status || 'none',
           next_billing_date: sub?.next_billing_date || null,
           updated_at: u.updated_at || null,
@@ -163,7 +211,7 @@ export default function AdminV2Dashboard() {
         };
       })
       .sort((a, b) => b.invoices_sent - a.invoices_sent);
-  }, [users, subscriptions, invoices]);
+  }, [users, subscriptions, invoices, quotes, payslips]);
 
   const securitySpike = useMemo(() => {
     if (!securityEvents?.counts || !securityEvents?.bursts?.thresholds || !securityEvents?.bursts?.activeIps) {
@@ -223,6 +271,21 @@ export default function AdminV2Dashboard() {
           value={totalInvoicesSent}
           change={`+${Math.min(totalInvoicesSent, 20)}`}
           icon={FileText}
+        />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard
+          title="Quotes (platform)"
+          value={totalQuotes}
+          change={`+${Math.min(totalQuotes, 20)}`}
+          icon={ScrollText}
+        />
+        <StatCard
+          title="Payslips (platform)"
+          value={totalPayslips}
+          change={`+${Math.min(totalPayslips, 20)}`}
+          icon={Banknote}
         />
       </div>
 
@@ -383,7 +446,7 @@ export default function AdminV2Dashboard() {
             {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Per-user profile details, invoices sent, plan, and billing behavior.
+            Per-user activity from invoices, quotes, and payslips (linked by user id), plus plan and billing.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -394,7 +457,9 @@ export default function AdminV2Dashboard() {
                 <th className="px-6 py-3 text-left font-medium">Company</th>
                 <th className="px-6 py-3 text-left font-medium">Plan</th>
                 <th className="px-6 py-3 text-left font-medium">Profile Status</th>
-                <th className="px-6 py-3 text-left font-medium">Invoices Sent</th>
+                <th className="px-6 py-3 text-left font-medium">Invoices</th>
+                <th className="px-6 py-3 text-left font-medium">Quotes</th>
+                <th className="px-6 py-3 text-left font-medium">Payslips</th>
                 <th className="px-6 py-3 text-left font-medium">Subscription</th>
                 <th className="px-6 py-3 text-left font-medium">Next Billing</th>
                 <th className="px-6 py-3 text-left font-medium">Created</th>
@@ -416,6 +481,8 @@ export default function AdminV2Dashboard() {
                     <StatusBadge status={row.status} />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">{row.invoices_sent}</td>
+                  <td className="px-6 py-4 text-sm font-medium">{row.quotes_created}</td>
+                  <td className="px-6 py-4 text-sm font-medium">{row.payslips_created}</td>
                   <td className="px-6 py-4">
                     <StatusBadge status={row.subscription_status} />
                   </td>
@@ -436,7 +503,7 @@ export default function AdminV2Dashboard() {
               ))}
               {userBehaviorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={11} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No user behavior data yet
                   </td>
                 </tr>

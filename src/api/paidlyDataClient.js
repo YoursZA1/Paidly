@@ -137,6 +137,10 @@ const ENTITY_TABLES = {
   AffiliatePayout: 'commissions',
   WaitlistEntry: 'waitlist_signups',
   User: 'profiles',
+  /** Platform documents — keyed by auth user for reporting (see documentOwnership.js). */
+  Invoice: 'invoices',
+  Quote: 'quotes',
+  Payroll: 'payslips',
 };
 
 const AFFILIATE_APPLICATION_TABLE_CANDIDATES = ['affiliate_applications', 'affiate_applications'];
@@ -150,6 +154,9 @@ const ENTITY_SELECTS = {
   AffiliateSubmission: '*',
   AffiliatePayout: 'id, affiliate_id, referral_id, amount, currency, status, source, created_at, updated_at',
   User: '*',
+  Invoice: '*',
+  Quote: '*',
+  Payroll: '*',
 };
 
 function normalizeEntity(entityName, row) {
@@ -212,6 +219,22 @@ function normalizeEntity(entityName, row) {
       name: (row.name || row.full_name || '').trim() || '',
       converted: Boolean(row.converted),
       created_date: row.created_at || row.created_date || null,
+    };
+  }
+
+  if (entityName === 'Invoice' || entityName === 'Quote') {
+    return {
+      ...row,
+      created_date: row.created_date || row.created_at || null,
+      user_id: row.user_id || row.created_by || null,
+    };
+  }
+
+  if (entityName === 'Payroll') {
+    return {
+      ...row,
+      created_date: row.created_date || row.created_at || null,
+      user_id: row.user_id || row.created_by_id || null,
     };
   }
 

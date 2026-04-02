@@ -121,3 +121,44 @@ export async function uploadLogo(file, companyId) {
 
   return data.publicUrl;
 }
+
+/**
+ * Upload a logo used only for a specific invoice/quote (does not replace profile logo).
+ * Stored under `document-logos/{userId}/{uuid}.{ext}` in the company-logos bucket.
+ *
+ * @param {File} file
+ * @param {string} userId - auth user id
+ * @returns {Promise<string>} Public URL
+ */
+export async function uploadDocumentLogo(file, userId) {
+  const validation = validateLogoFile(file);
+  if (!validation.valid) {
+    throw new Error(validation.message);
+  }
+  const uid = String(userId || "").trim();
+  if (!uid) {
+    throw new Error("You must be signed in to upload a document logo.");
+  }
+
+  let ext = logoExtension(file).replace(/[^a-z0-9]/g, "");
+  if (ext === "jpeg") ext = "jpg";
+  if (!["png", "jpg", "svg"].includes(ext)) {
+    const ct = inferredLogoContentType(file);
+    ext = ct === "image/svg+xml" ? "svg" : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : "png";
+  }
+  const unique =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const fileName = `document-logos/${uid}/${unique}.${ext}`;
+
+  const { error } = await supabase.storage.from(COMPANY_LOGOS_BUCKET).upload(fileName, file, {
+    upsert: true,
+    contentType: inferredLogoContentType(file) || file.type || undefined,
+  });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(COMPANY_LOGOS_BUCKET).getPublicUrl(fileName);
+  return data.publicUrl;
+}

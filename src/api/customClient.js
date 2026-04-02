@@ -82,7 +82,7 @@ async function getAuthUserIdForWrites() {
 const SUPABASE_SELECT_COLUMNS = {
   invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
-  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, document_brand_primary, document_brand_secondary, public_share_token",
+  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
   quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
@@ -96,7 +96,7 @@ const SUPABASE_SELECT_COLUMNS = {
   invoice_views: "id, org_id, invoice_id, client_id, viewed_at, ip_address, user_agent, is_read, created_at, updated_at",
   document_sends: "id, org_id, document_type, document_id, client_id, channel, sent_at, created_at",
   message_logs: "id, org_id, document_type, document_id, client_id, channel, recipient, sent_at, opened_at, viewed, paid, payment_date, tracking_token, clicked_at, created_at",
-  payslips: "id, org_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, gross_pay, tax_deduction, uif_deduction, total_deductions, net_pay, status, public_share_token, created_at, updated_at",
+  payslips: "id, org_id, user_id, created_by_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, gross_pay, tax_deduction, uif_deduction, total_deductions, net_pay, status, public_share_token, created_at, updated_at",
   expenses: "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, created_at, updated_at",
   tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
   notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
@@ -834,6 +834,7 @@ class EntityManager {
       }
       if (supabaseTable === 'payslips') {
         if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
+        supabaseData.user_id = userId;
       }
       if (supabaseTable === 'expenses') {
         if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
@@ -1002,7 +1003,7 @@ class EntityManager {
       }
 
       const PAYSLIP_INSERT_COLUMNS = [
-        'org_id', 'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
+        'org_id', 'user_id', 'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
         'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
@@ -1067,6 +1068,7 @@ class EntityManager {
         'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
         'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
         'document_brand_primary', 'document_brand_secondary',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(supabaseData).forEach(key => {
@@ -1277,6 +1279,7 @@ class EntityManager {
         'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
         'notes', 'terms_conditions', 'updated_at',
         'document_brand_primary', 'document_brand_secondary',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(updateData).forEach(key => {

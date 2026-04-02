@@ -30,7 +30,9 @@ import {
   DollarSign,
   TrendingUp,
   Receipt,
-  Landmark
+  Landmark,
+  ScrollText,
+  Banknote,
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
@@ -53,6 +55,7 @@ import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanne
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
+import { countDocumentsForUser } from '@/utils/documentOwnership';
 
 const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
@@ -319,13 +322,29 @@ export default function Dashboard() {
   const storeUser = useAppStore((s) => s.userProfile);
   const storeIsLoading = useAppStore((s) => s.isLoading);
   const fetchAll = useAppStore((s) => s.fetchAll);
+  const storeQuotes = useAppStore((s) => s.quotes);
+  const storePayslips = useAppStore((s) => s.payslips);
 
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
   const payments = isAdmin ? paymentsState : storePayments;
+  const quotes = isAdmin ? [] : storeQuotes;
+  const payslips = isAdmin ? [] : storePayslips;
   const user = isAdmin ? userState : storeUser ?? authUser;
   const isLoading = isAdmin ? isLoadingState : storeIsLoading;
+
+  const documentActivity = useMemo(() => {
+    const uid = authUser?.id;
+    if (!uid || isAdmin) {
+      return { invoices: 0, quotes: 0, payslips: 0 };
+    }
+    return {
+      invoices: countDocumentsForUser(invoices, uid),
+      quotes: countDocumentsForUser(quotes, uid),
+      payslips: countDocumentsForUser(payslips, uid),
+    };
+  }, [authUser?.id, isAdmin, invoices, quotes, payslips]);
 
   const openAccount = (user) => {
     const params = new URLSearchParams();
@@ -836,7 +855,7 @@ export default function Dashboard() {
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
   useSupabaseRealtime(
-    ["invoices", "payments", "expenses"],
+    ["invoices", "payments", "expenses", "quotes", "payslips"],
     () => {
       if (isAdmin) {
         loadAdminData();
@@ -1573,6 +1592,57 @@ export default function Dashboard() {
         </motion.div>
 
         <AffiliateProgramBanner />
+
+        {/* Document activity — totals attributed to your user (user_id / created_by) */}
+        {!isAdmin && (
+          <div className="mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Link
+              to={createPageUrl("Invoices")}
+              className="glass-card rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary/40 transition-colors"
+            >
+              <div className="rounded-lg bg-primary/10 p-2.5">
+                <FileText className="h-5 w-5 text-primary" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Invoices</p>
+                <p className="text-xl font-bold tabular-nums text-foreground">
+                  {isLoading ? '—' : documentActivity.invoices}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">Created by you</p>
+              </div>
+            </Link>
+            <Link
+              to={createPageUrl("Quotes")}
+              className="glass-card rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary/40 transition-colors"
+            >
+              <div className="rounded-lg bg-violet-500/10 p-2.5">
+                <ScrollText className="h-5 w-5 text-violet-600 dark:text-violet-400" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Quotes</p>
+                <p className="text-xl font-bold tabular-nums text-foreground">
+                  {isLoading ? '—' : documentActivity.quotes}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">Created by you</p>
+              </div>
+            </Link>
+            <Link
+              to={createPageUrl("Payslips")}
+              className="glass-card rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary/40 transition-colors"
+            >
+              <div className="rounded-lg bg-emerald-500/10 p-2.5">
+                <Banknote className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Payslips</p>
+                <p className="text-xl font-bold tabular-nums text-foreground">
+                  {isLoading ? '—' : documentActivity.payslips}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">Created by you</p>
+              </div>
+            </Link>
+          </div>
+        )}
 
         {/* KPI Carousel — Framer Motion swipe on mobile, grid on desktop */}
         <div className="mb-4 sm:mb-6">

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Loader2, Send, Download } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Send, Download, ImageIcon, RotateCcw } from "lucide-react";
 import LineItemsEditor from "@/components/LineItemsEditor";
 import DocumentPreview from "@/components/DocumentPreview";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
@@ -23,6 +23,7 @@ import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { withApiLogging } from "@/utils/apiLogger";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
+import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -97,8 +98,10 @@ export default function CreateDocument() {
   const { user } = useAuth();
   const profileDefaultsApplied = useRef(false);
   const previewPdfRef = useRef(null);
+  const documentLogoInputRef = useRef(null);
 
   const [saving, setSaving] = useState(false);
+  const [documentLogoUploading, setDocumentLogoUploading] = useState(false);
   const [pdfExportPending, setPdfExportPending] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [clients, setClients] = useState([]);
@@ -125,6 +128,8 @@ export default function CreateDocument() {
     company_email: "",
     company_address: "",
     terms_conditions: initialTerms,
+    /** Public URL for logo on this document only; empty = use profile logo */
+    document_logo_url: "",
   });
 
   useEffect(() => {
@@ -243,6 +248,7 @@ export default function CreateDocument() {
           terms_conditions: quote.terms_conditions || DEFAULT_INVOICE_TERMS_BODY,
           currency: quote.currency || f.currency || user?.currency || "ZAR",
           number: generateNumber("invoice", clientName),
+          document_logo_url: (quote.owner_logo_url && String(quote.owner_logo_url).trim()) || "",
         }));
         toast({
           title: "Quote loaded",
@@ -393,6 +399,7 @@ export default function CreateDocument() {
           terms_conditions: full.terms_conditions || "",
           currency: full.currency || f.currency || user?.currency || "ZAR",
           number: generateNumber("quote", clientName),
+          document_logo_url: (full.owner_logo_url && String(full.owner_logo_url).trim()) || "",
         }));
         toast({
           title: "Last quote duplicated",
@@ -452,6 +459,33 @@ export default function CreateDocument() {
     [clients]
   );
 
+  const handleDocumentLogoChange = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file || !user?.id) return;
+      setDocumentLogoUploading(true);
+      try {
+        const url = await uploadDocumentLogo(file, user.id);
+        setForm((f) => ({ ...f, document_logo_url: url }));
+        toast({
+          title: "Document logo",
+          description: "This logo is used on this invoice or quote only. Your profile logo is unchanged.",
+          variant: "default",
+        });
+      } catch (err) {
+        toast({
+          title: "Upload failed",
+          description: err?.message || "Could not upload image.",
+          variant: "destructive",
+        });
+      } finally {
+        setDocumentLogoUploading(false);
+      }
+    },
+    [toast, user?.id]
+  );
+
   const computed = useMemo(() => {
     const subtotal = (form.line_items || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
     const afterDiscount = Math.max(0, subtotal - (Number(form.discount) || 0));
@@ -460,15 +494,21 @@ export default function CreateDocument() {
     return { subtotal, subtotal_before_discount: subtotal, afterDiscount, tax_amount: taxAmount, total };
   }, [form.line_items, form.tax_rate, form.discount]);
 
+  const profileLogoUrl = user?.logo_url || user?.company_logo_url || null;
+  const effectiveOwnerLogoUrl = useMemo(() => {
+    const override = (form.document_logo_url || "").trim();
+    return override || profileLogoUrl || null;
+  }, [form.document_logo_url, profileLogoUrl]);
+
   const previewDoc = useMemo(
     () => ({
       ...form,
       subtotal: computed.afterDiscount,
       tax_amount: computed.tax_amount,
       total: computed.total,
-      owner_logo_url: user?.logo_url || user?.company_logo_url || null,
+      owner_logo_url: effectiveOwnerLogoUrl,
     }),
-    [form, computed, user?.logo_url, user?.company_logo_url]
+    [form, computed, effectiveOwnerLogoUrl]
   );
 
   const resolveClientId = async () => {
@@ -507,6 +547,7 @@ export default function CreateDocument() {
     const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
     const owner_email = (form.company_email || "").trim() || user?.email || null;
     const owner_currency = form.currency || user?.currency || "ZAR";
+    const owner_logo_url = effectiveOwnerLogoUrl;
 
     const delivery_date =
       (form.due_date || "").trim() ||
@@ -534,7 +575,7 @@ export default function CreateDocument() {
       owner_company_address,
       owner_email,
       owner_currency,
-      owner_logo_url: user?.logo_url || user?.company_logo_url || null,
+      owner_logo_url,
       items,
     };
 
@@ -621,6 +662,7 @@ export default function CreateDocument() {
         const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
         const owner_email = (form.company_email || "").trim() || user?.email || null;
         const owner_currency = form.currency || user?.currency || "ZAR";
+        const owner_logo_url = effectiveOwnerLogoUrl;
 
         const valid_until =
           (form.due_date || "").trim() ||
@@ -640,6 +682,11 @@ export default function CreateDocument() {
           currency: form.currency || "ZAR",
           notes: form.notes || "",
           terms_conditions: form.terms_conditions || "",
+          owner_company_name,
+          owner_company_address,
+          owner_email,
+          owner_currency,
+          owner_logo_url,
           ...snapshotDocumentBrandForPersist(user),
           items,
         };
@@ -867,6 +914,68 @@ export default function CreateDocument() {
                     placeholder={user?.company_address || "Business address"}
                     rows={2}
                   />
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                  <div>
+                    <Label className="text-foreground">Logo on this document</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Optional. Use a different logo than your profile (e.g. sub-brand) for this invoice or quote
+                      only. Max {logoMaxSizeLabel()}, PNG, JPEG, or SVG.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
+                      {effectiveOwnerLogoUrl ? (
+                        <img
+                          src={effectiveOwnerLogoUrl}
+                          alt=""
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <ImageIcon className="h-6 w-6 text-muted-foreground" aria-hidden />
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        ref={documentLogoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                        className="hidden"
+                        onChange={handleDocumentLogoChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={documentLogoUploading || !user?.id}
+                        onClick={() => documentLogoInputRef.current?.click()}
+                      >
+                        {documentLogoUploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Upload"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!(form.document_logo_url || "").trim()}
+                        onClick={() => update("document_logo_url", "")}
+                      >
+                        <RotateCcw className="h-4 w-4 mr-1" />
+                        Use profile logo
+                      </Button>
+                    </div>
+                  </div>
+                  {(form.document_logo_url || "").trim() ? (
+                    <p className="text-xs text-muted-foreground">Using a document-only logo for this draft.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Using your profile logo{profileLogoUrl ? "" : " (add one in Settings)"}.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
