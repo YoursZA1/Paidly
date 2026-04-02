@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Users, CreditCard, ClipboardList, DollarSign, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Users, CreditCard, ClipboardList, DollarSign, Loader2, ShieldAlert, ShieldCheck, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import StatCard from '@/components/dashboard/StatCard';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const DASHBOARD_QUERY_KEYS = ['platform-users', 'subscriptions', 'affiliates', 'waitlist'];
+const DASHBOARD_QUERY_KEYS = ['platform-users', 'subscriptions', 'affiliates', 'waitlist', 'invoices'];
 
 export default function AdminV2Dashboard() {
   const queryClient = useQueryClient();
@@ -56,6 +56,13 @@ export default function AdminV2Dashboard() {
     staleTime: 30000,
   });
 
+  const { data: invoices = [], dataUpdatedAt: invoicesUpdatedAt } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => paidly.entities.Invoice.list('-created_date', 500),
+    refetchInterval: 45000,
+    staleTime: 30000,
+  });
+
   const { data: securityEvents, isLoading: securityLoading, error: securityError } = useQuery({
     queryKey: ['security-events'],
     queryFn: async () => {
@@ -85,8 +92,15 @@ export default function AdminV2Dashboard() {
   }, []);
 
   const lastUpdatedAt = useMemo(
-    () => Math.max(usersUpdatedAt || 0, subscriptionsUpdatedAt || 0, affiliatesUpdatedAt || 0, waitlistUpdatedAt || 0),
-    [usersUpdatedAt, subscriptionsUpdatedAt, affiliatesUpdatedAt, waitlistUpdatedAt]
+    () =>
+      Math.max(
+        usersUpdatedAt || 0,
+        subscriptionsUpdatedAt || 0,
+        affiliatesUpdatedAt || 0,
+        waitlistUpdatedAt || 0,
+        invoicesUpdatedAt || 0
+      ),
+    [usersUpdatedAt, subscriptionsUpdatedAt, affiliatesUpdatedAt, waitlistUpdatedAt, invoicesUpdatedAt]
   );
 
   const lastUpdatedLabel = useMemo(() => {
@@ -103,6 +117,7 @@ export default function AdminV2Dashboard() {
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
   const pendingAffiliates = affiliates.filter((a) => a.status === 'pending');
+  const totalInvoicesSent = invoices.length;
   const userBehaviorRows = useMemo(() => {
     const subByUserId = new Map(
       subscriptions
@@ -114,6 +129,14 @@ export default function AdminV2Dashboard() {
         .filter((s) => s.user_email || s.email)
         .map((s) => [String(s.user_email || s.email).toLowerCase(), s])
     );
+    const invoiceCountByUser = new Map();
+    const invoiceCountByEmail = new Map();
+    for (const inv of invoices) {
+      const uid = String(inv?.user_id || inv?.created_by || '').trim();
+      const email = String(inv?.user_email || inv?.owner_email || '').trim().toLowerCase();
+      if (uid) invoiceCountByUser.set(uid, Number(invoiceCountByUser.get(uid) || 0) + 1);
+      if (email) invoiceCountByEmail.set(email, Number(invoiceCountByEmail.get(email) || 0) + 1);
+    }
 
     return users
       .map((u) => {
@@ -129,7 +152,10 @@ export default function AdminV2Dashboard() {
           company_name: u.company_name || u.company || '—',
           plan: u.plan || u.subscription_plan || 'none',
           status: u.status || 'active',
-          invoices_sent: Number(u.invoices_sent ?? u.invoices_count ?? 0),
+          invoices_sent:
+            Number(invoiceCountByUser.get(String(u.id)) || 0) ||
+            Number(invoiceCountByEmail.get(email) || 0) ||
+            Number(u.invoices_sent ?? u.invoices_count ?? 0),
           subscription_status: sub?.status || 'none',
           next_billing_date: sub?.next_billing_date || null,
           updated_at: u.updated_at || null,
@@ -137,7 +163,7 @@ export default function AdminV2Dashboard() {
         };
       })
       .sort((a, b) => b.invoices_sent - a.invoices_sent);
-  }, [users, subscriptions]);
+  }, [users, subscriptions, invoices]);
 
   const securitySpike = useMemo(() => {
     if (!securityEvents?.counts || !securityEvents?.bursts?.thresholds || !securityEvents?.bursts?.activeIps) {
@@ -167,7 +193,7 @@ export default function AdminV2Dashboard() {
         isRefreshing={dashboardRefreshing}
       />
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Users"
           value={users.length}
@@ -191,6 +217,12 @@ export default function AdminV2Dashboard() {
           value={waitlist.length}
           change={`+${Math.min(waitlist.length, 5)}`}
           icon={ClipboardList}
+        />
+        <StatCard
+          title="Invoices Sent"
+          value={totalInvoicesSent}
+          change={`+${Math.min(totalInvoicesSent, 20)}`}
+          icon={FileText}
         />
       </div>
 
@@ -365,6 +397,7 @@ export default function AdminV2Dashboard() {
                 <th className="px-6 py-3 text-left font-medium">Invoices Sent</th>
                 <th className="px-6 py-3 text-left font-medium">Subscription</th>
                 <th className="px-6 py-3 text-left font-medium">Next Billing</th>
+                <th className="px-6 py-3 text-left font-medium">Created</th>
                 <th className="px-6 py-3 text-left font-medium">Last Activity</th>
               </tr>
             </thead>
@@ -390,6 +423,9 @@ export default function AdminV2Dashboard() {
                     {row.next_billing_date ? format(new Date(row.next_billing_date), 'dd MMM yyyy') : '—'}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
+                    {row.created_date ? format(new Date(row.created_date), 'dd MMM yyyy') : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
                     {row.updated_at
                       ? `Updated ${format(new Date(row.updated_at), 'dd MMM yyyy')}`
                       : row.created_date
@@ -400,7 +436,7 @@ export default function AdminV2Dashboard() {
               ))}
               {userBehaviorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No user behavior data yet
                   </td>
                 </tr>
