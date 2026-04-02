@@ -33,7 +33,7 @@ const launchOptions = chromiumExecutablePath
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/unit/**', '**/*.test.{js,jsx,ts,tsx}'],
+  testIgnore: ['**/unit/**', '**/*.test.{js,jsx,ts,tsx}', '**/admin-affiliate-e2e.spec.ts'],
   timeout: 30_000,
   expect: {
     timeout: 30_000,

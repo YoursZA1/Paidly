@@ -24,6 +24,7 @@ import {
   recordLoginFailure,
   clearLoginFailures,
 } from "@/utils/loginRateLimit";
+import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -54,7 +55,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
 
   const resolvePostLoginRoute = (userLike, fallbackPath) => {
     const role = String(userLike?.role || "").toLowerCase();
-    if (role === "admin") return "/admin-v2";
+    if (isStaffDashboardRole(role)) return staffDashboardHomePath();
     const safeFallback = fallbackPath?.startsWith("/admin") ? createPageUrl("Dashboard") : fallbackPath;
     return safeFallback || createPageUrl("Dashboard");
   };

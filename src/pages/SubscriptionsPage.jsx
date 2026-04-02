@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
@@ -98,7 +99,12 @@ export default function SubscriptionsPage() {
     refetchInterval: 30000,
   });
 
-  const { data: platformUsers = [], isLoading: usersLoading } = useQuery({
+  const {
+    data: platformUsers = [],
+    isLoading: usersLoading,
+    isError: platformUsersError,
+    error: platformUsersErr,
+  } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(LIST_LIMIT),
     refetchInterval: 30000,
@@ -168,6 +174,15 @@ export default function SubscriptionsPage() {
           <Plus className="mr-2 h-4 w-4" /> Add Subscription
         </Button>
       </PageHeader>
+
+      {platformUsersError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            Could not load platform users from the backend (needed for subscription rows):{' '}
+            {platformUsersErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[

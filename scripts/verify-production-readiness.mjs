@@ -33,6 +33,7 @@ const supabase = createClient(supabaseUrl, serviceRole, {
 const requiredMigrations = [
   "20260401150000_admin_query_indexes.sql",
   "20260402143000_affiliate_internal_team_access.sql",
+  "20260406100000_affiliate_applications_select_rls_jwt_admin.sql",
 ];
 
 const requiredIndexes = [
@@ -42,6 +43,7 @@ const requiredIndexes = [
 
 const requiredPolicies = [
   "affiliate_applications_team_select",
+  "affiliate_applications_jwt_admin_select",
   "affiliate_applications_management_update",
   "affiliate_applications_management_delete",
   "affiliates_team_select",

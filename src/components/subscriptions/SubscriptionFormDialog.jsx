@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -67,7 +68,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
   const isEdit = Boolean(subscription?.id);
-  const { data: users = [] } = useQuery({
+  const { data: users = [], isError: platformUsersError, error: platformUsersErr } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(500),
     enabled: open,
@@ -181,6 +182,13 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit subscription' : 'Add subscription'}</DialogTitle>
         </DialogHeader>
+        {platformUsersError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Could not load users from the backend: {platformUsersErr?.message || 'Unknown error'}.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <form id="subscription-form" onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="sub-user">Select user</Label>

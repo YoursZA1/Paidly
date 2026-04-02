@@ -72,9 +72,15 @@ import {
   trackOpenBodySchema,
 } from "./schemas/mutationSchemas.js";
 import { sendUnexpectedError } from "./apiResponse.js";
+import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
 import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
 import { recordSubscriptionPaymentCommission } from "./affiliateSubscriptionCommission.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
+import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
+import {
+  handlePostAffiliateApplicationApprove,
+  handlePostAffiliateApplicationDecline,
+} from "./affiliateApplicationAdminActions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from server directory (so it works when run from project root or server/)
@@ -93,10 +99,6 @@ const storageBucket = process.env.SUPABASE_STORAGE_BUCKET || "paidly";
 // Parse ADMIN_BYPASS_AUTH: accept "true", "1", "yes", "on" (case-insensitive)
 const adminBypassEnv = (process.env.ADMIN_BYPASS_AUTH || "").toLowerCase().trim();
 const adminBypassEnabled = ["true", "1", "yes", "on"].includes(adminBypassEnv);
-const adminBypassEmails = (process.env.ADMIN_BYPASS_EMAILS || "")
-  .split(",")
-  .map((value) => value.trim().toLowerCase())
-  .filter(Boolean);
 
 function makeRequestId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -388,24 +390,15 @@ function logAdminApi(method, path, statusCode, detail = null) {
 }
 
 /**
- * Normalize profiles.role / user_role (matches SQL public.profile_role_value).
- */
-function dashboardRoleFromProfileRow(profile) {
-  if (!profile || typeof profile !== "object") return "";
-  const raw = profile.role ?? profile.user_role ?? "";
-  return String(raw).trim().toLowerCase();
-}
-
-/**
  * Resolve admin caller from request: must be authenticated, then either
  * app_metadata.role === "admin" OR (when ADMIN_BYPASS_AUTH is true) email in ADMIN_BYPASS_EMAILS.
  * Bypass is only allowed when both ADMIN_BYPASS_AUTH is true AND email is in the list.
  *
- * @param {{ allowInternalTeam?: boolean }} [opts] When true, profiles with role admin|management|support may access read-style admin routes (dashboard data).
+ * @param {{ allowInternalTeam?: boolean, allowTeamManagement?: boolean }} [opts]
+ *   allowInternalTeam — profiles with admin|management|support|sales may access read-style admin routes.
+ *   allowTeamManagement — profiles with admin|management may POST team invites (same as JWT admin for this action).
  */
 const getAdminFromRequest = async (req, res, opts = {}) => {
-  const allowInternalTeam = opts.allowInternalTeam === true;
-
   const { user, error } = await getUserFromRequest(req);
   if (error) {
     logAdminApi(req.method, req.path, 401, error);
@@ -413,33 +406,14 @@ const getAdminFromRequest = async (req, res, opts = {}) => {
     return null;
   }
 
-  const requesterRole = user?.app_metadata?.role || user?.app_metadata?.claims?.role;
-  if (requesterRole === "admin") {
-    return user;
+  const deny = await assertCallerForAdminRoute(supabaseAdmin, user, opts);
+  if (deny) {
+    logAdminApi(req.method, req.path, deny.status, deny.body?.error);
+    res.status(deny.status).json(deny.body);
+    return null;
   }
 
-  const email = user?.email?.toLowerCase();
-  const bypassAllowed =
-    adminBypassEnabled && !!email && adminBypassEmails.includes(email);
-  if (bypassAllowed) {
-    return user;
-  }
-
-  if (allowInternalTeam && user?.id) {
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-    const pr = dashboardRoleFromProfileRow(profile);
-    if (pr === "admin" || pr === "management" || pr === "support") {
-      return user;
-    }
-  }
-
-  logAdminApi(req.method, req.path, 403, "Admin access required");
-  res.status(403).json({ error: "Admin access required" });
-  return null;
+  return user;
 };
 
 /**
@@ -1731,7 +1705,7 @@ app.post("/api/admin/roles", async (req, res) => {
  */
 app.post("/api/admin/invite-user", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowTeamManagement: true });
     if (!adminUser) {
       return;
     }
@@ -1749,7 +1723,11 @@ app.post("/api/admin/invite-user", async (req, res) => {
       return res.status(400).json({ error: "Invalid redirect URL" });
     }
 
-    const meta = sanitizeInviteMetadata(parsed.full_name, parsed.role, parsed.plan);
+    const staffInviteRoles = new Set(["management", "sales", "support"]);
+    let inviteRole = String(parsed.role || "management").trim().toLowerCase();
+    if (!staffInviteRoles.has(inviteRole)) inviteRole = "management";
+
+    const meta = sanitizeInviteMetadata(parsed.full_name, inviteRole, parsed.plan);
 
     const origin =
       (typeof parsed.redirect_to === "string" &&
@@ -2135,7 +2113,11 @@ app.get("/api/admin/platform-users", async (req, res) => {
       const plan = profile?.subscription_plan || authUser.user_metadata?.plan || "free";
       const status = profile?.status ?? "active";
       const role = String(
-        authUser.app_metadata?.role || profile?.role || profile?.user_role || "user"
+        authUser.app_metadata?.role ||
+          profile?.role ||
+          profile?.user_role ||
+          authUser.user_metadata?.role ||
+          "user"
       ).toLowerCase();
       return {
         id: authUser.id,
@@ -2169,6 +2151,138 @@ app.get("/api/admin/platform-users", async (req, res) => {
     logAdminApi(req.method, req.path, 500, err?.message);
     return res.status(500).json({
       error: err?.message || "Failed to list platform users"
+    });
+  }
+});
+
+function parseAffiliateAdminListLimit(req) {
+  let limit = 150;
+  if (req.query.limit != null && String(req.query.limit).trim() !== "") {
+    const n = Number(String(req.query.limit).trim());
+    if (!Number.isInteger(n) || n < 1 || n > 500) {
+      return { error: "Invalid limit (use integer 1–500)" };
+    }
+    limit = n;
+  }
+  return { limit };
+}
+
+/**
+ * GET /api/affiliates and GET /api/admin/affiliates — admin bundle: `affiliate_applications` + `affiliates` (partner rows). Service role; no user_id filter.
+ */
+async function handleAdminAffiliateBundleGet(req, res) {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const parsed = parseAffiliateAdminListLimit(req);
+    if (parsed.error) {
+      return res.status(400).json({ error: parsed.error });
+    }
+    const { limit } = parsed;
+
+    const [appsRes, partnersRes] = await Promise.all([
+      supabaseAdmin
+        .from("affiliate_applications")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit),
+      supabaseAdmin.from("affiliates").select("*").order("created_at", { ascending: false }).limit(limit),
+    ]);
+
+    if (appsRes.error) {
+      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${appsRes.error.message}`);
+      return res.status(500).json({ error: appsRes.error.message });
+    }
+
+    const applications = appsRes.data || [];
+    const partners = partnersRes.error ? [] : partnersRes.data || [];
+    const counts = countAffiliateApplicationsByStatus(applications);
+    const data = {
+      ok: true,
+      applications,
+      partners,
+      counts,
+      ...(partnersRes.error ? { partnerError: partnersRes.error.message } : {}),
+    };
+
+    console.log(
+      `[GET ${req.path}] applications=${applications.length} partners=${partners.length} pending=${counts.pending}` +
+        (partnersRes.error ? ` partner_fetch_error=${partnersRes.error.message}` : "")
+    );
+    logAdminApi(
+      req.method,
+      req.path,
+      200,
+      `bundle apps=${applications.length} partners=${partners.length} pending=${counts.pending}`
+    );
+    return res.json(data);
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({
+      error: err?.message || "Failed to list affiliate data",
+    });
+  }
+}
+
+app.get("/api/affiliates", handleAdminAffiliateBundleGet);
+app.get("/api/admin/affiliates", handleAdminAffiliateBundleGet);
+
+const affiliateAdminMutationDeps = { supabaseAdmin, getAdminFromRequest, logAdminApi };
+app.post("/api/affiliates/approve", (req, res) =>
+  handlePostAffiliateApplicationApprove(req, res, affiliateAdminMutationDeps)
+);
+app.post("/api/admin/approve", (req, res) =>
+  handlePostAffiliateApplicationApprove(req, res, affiliateAdminMutationDeps)
+);
+app.post("/api/admin/decline", (req, res) =>
+  handlePostAffiliateApplicationDecline(req, res, affiliateAdminMutationDeps)
+);
+
+/**
+ * Full affiliate application queue for admin UI: service role read — no `user_id = current user` filter.
+ * (Pending rows often have user_id NULL; RLS on the browser client can hide them.)
+ */
+app.get("/api/admin/affiliate-applications", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const parsed = parseAffiliateAdminListLimit(req);
+    if (parsed.error) {
+      return res.status(400).json({ error: parsed.error });
+    }
+    const { limit } = parsed;
+
+    const { data: applications, error } = await supabaseAdmin
+      .from("affiliate_applications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${error.message}`);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const list = applications || [];
+    const counts = countAffiliateApplicationsByStatus(list);
+    logAdminApi(req.method, req.path, 200, `${list.length} affiliate applications (pending=${counts.pending})`);
+    return res.json({ applications: list, counts });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({
+      error: err?.message || "Failed to list affiliate applications",
     });
   }
 });

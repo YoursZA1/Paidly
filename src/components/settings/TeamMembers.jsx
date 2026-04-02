@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { ROLE_LABELS, ROLES, STAFF_ROLES } from '@/lib/permissions';
 
 const INVITE_ROLES = [...STAFF_ROLES];
 
 export default function TeamMembers() {
+  const queryClient = useQueryClient();
   const { sendUserInvite } = useAuth();
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -18,7 +20,12 @@ export default function TeamMembers() {
   const [plan, setPlan] = useState('none');
   const [pending, setPending] = useState(false);
 
-  const { data: users = [], isLoading } = useQuery({
+  const {
+    data: users = [],
+    isLoading,
+    isError: platformUsersError,
+    error: platformUsersErr,
+  } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(200),
     refetchInterval: 60000,
@@ -39,6 +46,7 @@ export default function TeamMembers() {
     try {
       const msg = await sendUserInvite(trimmed, fullName.trim() || trimmed.split('@')[0], role, plan);
       toast.success(msg || 'Invitation sent');
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       setEmail('');
       setFullName('');
     } catch (err) {
@@ -50,10 +58,17 @@ export default function TeamMembers() {
 
   return (
     <div className="space-y-8">
+      {platformUsersError ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Could not load team directory from the backend: {platformUsersErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <form onSubmit={handleInvite} className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
         <p className="text-sm text-muted-foreground">
-          Sends a Supabase invite email so they can set a password and access the dashboard. Requires a working{' '}
-          <code className="text-xs">/api/admin/invite-user</code> backend.
+          Sends a Supabase invite email. After they set a password, their role (management, sales, or support) is
+          applied from the invite and they can open the staff dashboard and sidebar links for that role.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">

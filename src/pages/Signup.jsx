@@ -33,6 +33,7 @@ function formatRetryMinutes(ms) {
 }
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
+import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
 import TurnstileChallenge from "@/components/security/TurnstileChallenge";
@@ -438,7 +439,7 @@ export default function Signup() {
         } else {
           const storedUser = JSON.parse(localStorage.getItem("breakapi_user") || "null");
           const role = String(storedUser?.role || "").toLowerCase();
-          navigate(role === "admin" ? "/admin-v2" : createPageUrl("Dashboard"));
+          navigate(isStaffDashboardRole(role) ? staffDashboardHomePath() : createPageUrl("Dashboard"));
         }
       }, 800);
     } catch (err) {

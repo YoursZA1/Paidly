@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { adminUserNameEmailLines } from '@/utils/adminUserDisplay';
 import {
@@ -24,8 +25,13 @@ import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import { supabase } from '@/lib/supabaseClient';
 import { countByUserId } from '@/utils/documentOwnership';
+import {
+  EMPTY_AFFILIATE_ADMIN_BUNDLE,
+  normalizeAffiliateAdminQueryResult,
+} from '@/utils/affiliateApplicationCounts';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const DASHBOARD_QUERY_KEYS = [
   'platform-users',
@@ -50,7 +56,12 @@ export default function AdminV2Dashboard() {
     DASHBOARD_QUERY_KEYS.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   };
 
-  const { data: users = [], dataUpdatedAt: usersUpdatedAt } = useQuery({
+  const {
+    data: users = [],
+    dataUpdatedAt: usersUpdatedAt,
+    isError: platformUsersQueryError,
+    error: platformUsersQueryErr,
+  } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(500),
     refetchInterval: 45000,
@@ -64,12 +75,20 @@ export default function AdminV2Dashboard() {
     staleTime: 30000,
   });
 
-  const { data: affiliates = [], dataUpdatedAt: affiliatesUpdatedAt } = useQuery({
+  const {
+    data: affiliateAdmin = EMPTY_AFFILIATE_ADMIN_BUNDLE,
+    dataUpdatedAt: affiliatesUpdatedAt,
+    isError: affiliatesQueryError,
+    error: affiliatesQueryErr,
+  } = useQuery({
     queryKey: ['affiliates'],
-    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 150),
+    select: normalizeAffiliateAdminQueryResult,
+    queryFn: () => affiliateApplicationsAdminQueryFn(150),
     refetchInterval: 45000,
     staleTime: 30000,
   });
+  const affiliates = affiliateAdmin.applications;
+  const affiliateStatusCounts = affiliateAdmin.counts;
 
   const { data: waitlist = [], dataUpdatedAt: waitlistUpdatedAt } = useQuery({
     queryKey: ['waitlist'],
@@ -162,7 +181,8 @@ export default function AdminV2Dashboard() {
 
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
-  const pendingAffiliates = affiliates.filter((a) => a.status === 'pending');
+  /** Same source as admin API `counts.pending` (not `affiliates.filter` on an RLS-truncated list). */
+  const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
   const totalPayslips = payslips.length;
@@ -244,6 +264,24 @@ export default function AdminV2Dashboard() {
         isRefreshing={dashboardRefreshing}
       />
 
+      {platformUsersQueryError ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>
+            Could not load platform users from the backend (admin directory is API-only):{' '}
+            {platformUsersQueryErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {affiliatesQueryError ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>
+            Could not load affiliate submissions from the backend (admin data is API-only):{' '}
+            {affiliatesQueryErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Users"
@@ -299,7 +337,7 @@ export default function AdminV2Dashboard() {
         <RecentActivity
           users={users}
           affiliates={affiliates}
-          pendingAffiliateCount={pendingAffiliates.length}
+          pendingAffiliateCount={pendingAffiliateReviewCount}
         />
       </div>
 

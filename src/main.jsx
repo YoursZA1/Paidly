@@ -3,33 +3,15 @@ import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '@/App.jsx'
+import ApplicationErrorPage from '@/pages/ApplicationErrorPage.jsx'
 import '@/index.css'
 import { logUnhandledError, getCurrentPage } from '@/utils/apiLogger'
+import {
+    installGlobalAsyncErrorHandlers,
+    PAIDLY_APPLICATION_ERROR_EVENT,
+} from '@/utils/globalAsyncErrorHandlers'
 
-// WebKit/Chromium often emit this during layout (Radix, tables); it is harmless and floods the console.
-const RESIZE_OBSERVER_LOOP_RE = /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)/i
-if (typeof window !== 'undefined') {
-  // After a new deploy, cached HTML can reference old chunk names.
-  // Let Vite signal this and do one safe reload to pick up fresh assets.
-  window.addEventListener('vite:preloadError', (event) => {
-    event.preventDefault()
-    const k = 'paidly_preload_reload_once'
-    const hasReloaded = sessionStorage.getItem(k) === '1'
-    if (hasReloaded) return
-    sessionStorage.setItem(k, '1')
-    window.location.reload()
-  })
-
-  window.addEventListener(
-    'error',
-    (event) => {
-      if (RESIZE_OBSERVER_LOOP_RE.test(String(event?.message || ''))) {
-        event.stopImmediatePropagation()
-      }
-    },
-    true
-  )
-}
+installGlobalAsyncErrorHandlers()
 
 class AppErrorBoundary extends React.Component {
     constructor(props) {
@@ -41,6 +23,19 @@ class AppErrorBoundary extends React.Component {
         return { hasError: true, error };
     }
 
+    componentDidMount() {
+        this._onApplicationError = (e) => {
+            const err = e?.detail?.error;
+            if (!(err instanceof Error)) return;
+            this.setState({ hasError: true, error: err });
+        };
+        window.addEventListener(PAIDLY_APPLICATION_ERROR_EVENT, this._onApplicationError);
+    }
+
+    componentWillUnmount() {
+        window.removeEventListener(PAIDLY_APPLICATION_ERROR_EVENT, this._onApplicationError);
+    }
+
     componentDidCatch(error, info) {
         logUnhandledError(error, getCurrentPage());
         console.error('App crashed:', error, info);
@@ -49,15 +44,10 @@ class AppErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-                    <div className="max-w-xl text-center">
-                        <h1 className="text-2xl font-semibold mb-2">Application error</h1>
-                        <p className="text-sm text-muted-foreground mb-4">Open the browser console for details.</p>
-                        <pre className="text-left text-xs bg-muted rounded-md p-3 overflow-auto text-foreground">
-                            {String(this.state.error?.message || this.state.error)}
-                        </pre>
-                    </div>
-                </div>
+                <ApplicationErrorPage
+                    error={this.state.error}
+                    onReset={() => this.setState({ hasError: false, error: null })}
+                />
             );
         }
 
@@ -80,11 +70,11 @@ const queryClient = new QueryClient({
 })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-    <AppErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
-            <App />
-          </ThemeProvider>
-        </QueryClientProvider>
-    </AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
+      </ThemeProvider>
+    </QueryClientProvider>
 )

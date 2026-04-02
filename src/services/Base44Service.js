@@ -57,6 +57,7 @@ async function fetchSupabaseEntity(entityName, filters = {}) {
       query = supabase.from('subscriptions').select('*');
       break;
     case 'AffiliateSubmission':
+      // public.affiliate_applications — applications queue; do not use affiliates / affiliate_submissions.
       query = supabase.from('affiliate_applications').select('*').order('created_at', { ascending: false });
       break;
     case 'AffiliatePayout':

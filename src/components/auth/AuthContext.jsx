@@ -10,6 +10,7 @@ import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
+import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 
 function getCachedUser() {
   try {
@@ -58,7 +59,7 @@ function minimalUserFromJwtUser(su) {
     supabase_id: su.id,
     auth_id: su.id,
     email,
-    role: su.app_metadata?.role || "user",
+    role: resolveUserRoleFromSessionAndProfile(su, {}),
     full_name: fullName,
     display_name: fullName,
     company_name: "",
@@ -357,11 +358,8 @@ export function AuthProvider({ children }) {
       throw new Error("Email not verified. Please verify your email before signing in.");
     }
     setSession(session);
-    // Always use Supabase role if present
-    const supabaseRole = session?.user?.app_metadata?.role;
-    const effectiveRole = supabaseRole || role || undefined;
 
-    await User.login({ email: normalizedEmail, password, role: effectiveRole });
+    await User.login({ email: normalizedEmail, password, role: role || undefined });
 
     // At this point email is verified — surface the session in React state immediately.
     // Do not await profiles upsert: a stuck network/DB write must not freeze the sign-in button or RequireAuth.
@@ -372,7 +370,7 @@ export function AuthProvider({ children }) {
       const patch = {
         supabase_id: session.user.id,
         auth_id: session.user.id,
-        role: effectiveRole,
+        role: currentUser?.role || resolveUserRoleFromSessionAndProfile(session.user, {}),
         permissions: session.user.app_metadata?.permissions || [],
       };
       void User.updateMyUserData(patch).catch((e) => {

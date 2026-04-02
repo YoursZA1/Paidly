@@ -32,6 +32,8 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible } from "@/utils";
+import { ROLES, STAFF_ROLES } from "@/lib/permissions";
+import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
@@ -78,13 +80,18 @@ const navItemShape = PropTypes.shape({
   type: PropTypes.string,
   children: PropTypes.arrayOf(PropTypes.any),
 });
+
+const ADMIN_V2_NAV_ROLES = [ROLES.ADMIN, ...STAFF_ROLES];
+/** Main app sidebar: customers + internal staff (staff also get admin-v2 merged below). */
+const MAIN_APP_NAV_ROLES = ["user", ...DASHBOARD_STAFF_ROLES];
+
 const adminNavigationItems = [
   {
     title: "Dashboard",
     url: "/admin-v2",
     icon: LayoutDashboard,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-dashboard",
   },
   {
@@ -92,7 +99,7 @@ const adminNavigationItems = [
     url: "/admin-v2/users",
     icon: Users,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-users",
   },
   {
@@ -100,7 +107,7 @@ const adminNavigationItems = [
     url: "/admin-v2/subscriptions",
     icon: Briefcase,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-subscriptions",
   },
   {
@@ -108,7 +115,7 @@ const adminNavigationItems = [
     url: "/admin-v2/affiliates",
     icon: Handshake,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-affiliates",
   },
   {
@@ -116,7 +123,7 @@ const adminNavigationItems = [
     url: "/admin-v2/waitlist",
     icon: Activity,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-waitlist",
   },
   {
@@ -124,7 +131,7 @@ const adminNavigationItems = [
     url: "/admin-v2/settings",
     icon: Settings,
     feature: null,
-    roles: ["admin"],
+    roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-settings",
   },
 ];
@@ -135,7 +142,7 @@ const allNavigationItems = [
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-dashboard",
   },
   { type: "section", title: "Overview", id: "nav-section-overview" },
@@ -144,7 +151,7 @@ const allNavigationItems = [
     url: createPageUrl("Clients"),
     icon: Users,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-clients",
   },
   {
@@ -152,7 +159,7 @@ const allNavigationItems = [
     url: createPageUrl("Invoices"),
     icon: FileText,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-invoices",
   },
   {
@@ -160,7 +167,7 @@ const allNavigationItems = [
     url: createPageUrl("Quotes"),
     icon: FileText,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-quotes",
   },
   {
@@ -168,7 +175,7 @@ const allNavigationItems = [
     url: createPageUrl("Services"),
     icon: Briefcase,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-services",
   },
   { type: "section", title: "Finance", id: "nav-section-finance" },
@@ -177,7 +184,7 @@ const allNavigationItems = [
     url: createPageUrl("Payslips"),
     icon: Receipt,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-payslips",
   },
   {
@@ -185,7 +192,7 @@ const allNavigationItems = [
     url: createPageUrl("CashFlow"),
     icon: TrendingUp,
     feature: "cashflow",
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-cashflow",
   },
   {
@@ -193,7 +200,7 @@ const allNavigationItems = [
     url: createPageUrl("Reports"),
     icon: BarChart2,
     feature: "reports",
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-reports",
   },
   { type: "section", title: "Workspace", id: "nav-section-workspace" },
@@ -202,7 +209,7 @@ const allNavigationItems = [
     url: createPageUrl("Notes"),
     icon: FileText,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-notes",
   },
   {
@@ -210,7 +217,7 @@ const allNavigationItems = [
     url: createPageUrl("Calendar"),
     icon: Activity,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-calendar",
   },
   {
@@ -218,7 +225,7 @@ const allNavigationItems = [
     url: createPageUrl("Messages"),
     icon: Bell,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-messages",
   },
   {
@@ -226,7 +233,7 @@ const allNavigationItems = [
     url: "/dashboard/affiliate",
     icon: Handshake,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-affiliate",
   },
   { type: "section", title: "Settings", id: "nav-section-settings" },
@@ -235,15 +242,15 @@ const allNavigationItems = [
     url: createPageUrl("Settings"),
     icon: Settings,
     feature: null,
-    roles: ["user", "admin"],
+    roles: MAIN_APP_NAV_ROLES,
     id: "nav-settings",
   },
 ];
 
 const getNavigationItems = (userPlan, userRole) => {
   const normalizedRole = (userRole || "user").toLowerCase();
-  if (normalizedRole === "admin") {
-    // Admins should see full app navigation plus admin-v2 tools.
+  if (isStaffDashboardRole(normalizedRole)) {
+    // Internal staff see full app navigation plus admin-v2 tools (scoped by per-page permissions inside admin-v2).
     const mergedAdminItems = [...allNavigationItems, ...adminNavigationItems];
     const seenIds = new Set();
     return mergedAdminItems

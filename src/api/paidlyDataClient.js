@@ -148,9 +148,11 @@ async function listAuditLogs(limit = 200) {
   return out.slice(0, cap);
 }
 
+/** App entity name → Supabase public table. Affiliate pipeline rows: only `affiliate_applications` (not `affiliates`). */
 const ENTITY_TABLES = {
   PlatformUser: 'profiles',
   Subscription: 'subscriptions',
+  /** DB: public.affiliate_applications (not affiliate_submissions / not affiliates). */
   AffiliateSubmission: 'affiliate_applications',
   AffiliatePayout: 'commissions',
   WaitlistEntry: 'waitlist_signups',
@@ -161,7 +163,8 @@ const ENTITY_TABLES = {
   Payroll: 'payslips',
 };
 
-const AFFILIATE_APPLICATION_TABLE_CANDIDATES = ['affiliate_applications', 'affiate_applications'];
+/** Single canonical table name (no status filter on list). */
+const AFFILIATE_APPLICATION_TABLE_CANDIDATES = ['affiliate_applications'];
 
 // Use '*' for tables whose schema differs across environments (PostgREST 400 if any column is missing).
 // Normalization below still maps fields to the app shape.
@@ -285,10 +288,11 @@ function denormalizeEntity(entityName, payload) {
 
   if (entityName === 'AffiliateSubmission') {
     const rawStatus = String(payload.status || '').toLowerCase();
-    const denormalizedStatus =
-      rawStatus === 'approved'
-        ? 'accepted'
-        : rawStatus === 'declined'
+    // DB CHECK: pending | approved | rejected (not accepted/declined).
+    const dbStatus =
+      rawStatus === 'approved' || rawStatus === 'accepted'
+        ? 'approved'
+        : rawStatus === 'declined' || rawStatus === 'rejected'
           ? 'rejected'
           : payload.status;
     return {
@@ -296,7 +300,7 @@ function denormalizeEntity(entityName, payload) {
       full_name: payload.full_name || payload.applicant_name,
       email: payload.email || payload.applicant_email,
       audience_platform: payload.audience_platform || payload.audience_type,
-      status: denormalizedStatus,
+      status: dbStatus,
       commission_rate: payload.commission_rate ?? undefined,
     };
   }
@@ -341,6 +345,80 @@ function coerceListLimit(limitOrOpts, fallback = 100) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Join referral_code / commission from `affiliates` by application.user_id. */
+async function enrichAffiliateSubmissionsRows(rows) {
+  const userIds = [...new Set((rows || []).map((a) => a.user_id).filter(Boolean))];
+  if (!userIds.length) return rows || [];
+  const { data: affiliateRows, error: affiliatesEnrichError } = await supabase
+    .from('affiliates')
+    .select('*')
+    .in('user_id', userIds);
+  if (import.meta.env.DEV) {
+    console.log(affiliateRows, affiliatesEnrichError);
+    if (!affiliatesEnrichError && userIds.length && (!affiliateRows || affiliateRows.length === 0)) {
+      console.warn(
+        '[affiliate debug] affiliates enrichment: 0 rows for known user_ids → check RLS on public.affiliates (team_select).'
+      );
+    }
+  }
+  const affiliateByUser = new Map((affiliateRows || []).map((r) => [r.user_id, r]));
+  return (rows || []).map((row) => ({
+    ...row,
+    referral_code: row.referral_code || affiliateByUser.get(row.user_id)?.referral_code || '',
+    commission_rate: Number(
+      row.commission_rate ??
+        (() => {
+          const v = affiliateByUser.get(row.user_id)?.commission_rate;
+          const n = Number(v);
+          if (!Number.isFinite(n)) return undefined;
+          return n <= 1 ? n * 100 : n;
+        })() ??
+        15
+    ),
+  }));
+}
+
+/**
+ * Shape raw `affiliate_applications` rows for admin UI (enrich from `affiliates` + normalize fields).
+ * Use after service-role API fetch — no `user_id = auth.uid()` filter on the application rows themselves.
+ */
+export async function finalizeAffiliateApplicationsForAdmin(rawRows) {
+  const enriched = await enrichAffiliateSubmissionsRows(rawRows || []);
+  return enriched.map((row) =>
+    normalizeEntity('AffiliateSubmission', {
+      ...row,
+      __source_table: 'affiliate_applications',
+    })
+  );
+}
+
+/**
+ * Admin affiliate pipeline via **logged-in Supabase client** (RLS applies).
+ * Prefer `fetchAdminAffiliateApplications` (Node API + service role) when available — full queue without session RLS quirks.
+ */
+export async function loadAffiliateSubmissionsForAdmin(orderBy = '-created_date', limitOrOpts = 150) {
+  const limit = coerceListLimit(limitOrOpts, 150);
+  const { column, ascending } = normalizeOrder(orderBy);
+  const { data, error } = await supabase
+    .from('affiliate_applications')
+    .select('*')
+    .order(column, { ascending })
+    .limit(limit);
+  if (import.meta.env.DEV) {
+    console.log(data, error);
+    if (!error && (!data || data.length === 0)) {
+      console.warn(
+        '[affiliate debug] affiliate_applications empty + no error → almost always RLS (not query filters). Check Supabase → Table → affiliate_applications → policies (team_select, jwt_admin_select).'
+      );
+    }
+    if (error) {
+      console.warn('[affiliate debug] affiliate_applications query error:', error.message);
+    }
+  }
+  if (error) throw error;
+  return finalizeAffiliateApplicationsForAdmin(data || []);
+}
+
 async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
   if (entityName === 'AuditLog') {
     return listAuditLogs(coerceListLimit(limitOrOpts, 200));
@@ -382,32 +460,18 @@ async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
     }
     if (!error) break;
   }
+  if (import.meta.env.DEV && entityName === 'AffiliateSubmission') {
+    console.log(data, error);
+    if (!error && Array.isArray(data) && data.length === 0) {
+      console.warn(
+        '[affiliate debug] AffiliateSubmission.list: 0 rows, no error → check RLS on affiliate_applications. If rows appear here after fixing RLS, any old .eq() filters in callers were the issue.'
+      );
+    }
+  }
   if (error) throw error;
 
   if (entityName === 'AffiliateSubmission') {
-    const userIds = [...new Set((data || []).map((a) => a.user_id).filter(Boolean))];
-    if (userIds.length) {
-      const { data: affiliateRows } = await supabase
-        .from('affiliates')
-        .select('id, user_id, application_id, referral_code, commission_rate')
-        .in('user_id', userIds);
-      const affiliateByUser = new Map((affiliateRows || []).map((r) => [r.user_id, r]));
-      data = (data || []).map((row) => ({
-        ...row,
-        referral_code: row.referral_code || affiliateByUser.get(row.user_id)?.referral_code || '',
-        // Admin UI uses percent; canonical `affiliates.commission_rate` is a fraction (0.2 = 20%).
-        commission_rate: Number(
-          row.commission_rate ??
-            (() => {
-              const v = affiliateByUser.get(row.user_id)?.commission_rate;
-              const n = Number(v);
-              if (!Number.isFinite(n)) return undefined;
-              return n <= 1 ? n * 100 : n;
-            })() ??
-            15
-        ),
-      }));
-    }
+    data = await enrichAffiliateSubmissionsRows(data || []);
   }
 
   return (data || []).map((row) =>
@@ -445,11 +509,11 @@ async function update(entityName, id, payload) {
     if (!error) break;
   }
   if (error && entityName === 'AffiliateSubmission' && payload?.status) {
-    // Retry with the opposite status vocabulary if DB enum differs.
+    // Retry if an older client sent wrong vocabulary.
     const retryPatch = { ...toUpdate };
     const status = String(payload.status).toLowerCase();
     if (status === 'approved') retryPatch.status = 'approved';
-    if (status === 'declined') retryPatch.status = 'declined';
+    if (status === 'declined') retryPatch.status = 'rejected';
     for (const table of tableCandidates) {
       const result = await supabase.from(table).update(retryPatch).eq('id', id).select().single();
       data = result.data;
@@ -473,7 +537,9 @@ async function update(entityName, id, payload) {
         commission_rate: toAffiliateRateFraction(payload?.commission_rate ?? data?.commission_rate) ?? 0.2,
       };
       if (payload?.referral_code) affiliatePatch.referral_code = payload.referral_code;
-      if (payload?.status) affiliatePatch.status = payload.status;
+      const st = String(payload?.status || '').toLowerCase();
+      if (st === 'approved' || st === 'accepted') affiliatePatch.status = 'approved';
+      else if (st === 'declined' || st === 'rejected') affiliatePatch.status = 'pending';
       if (data?.id) affiliatePatch.application_id = data.id;
       await supabase.from('affiliates').upsert(
         {

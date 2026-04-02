@@ -136,6 +136,14 @@ export function tryConsumeApiBudget(ip, reqPath, method) {
       tier: "anti_scrape_affiliate_dashboard",
     });
   }
+  if (m === "GET" && (path === "/api/affiliates" || path === "/api/admin/affiliates")) {
+    tiers.push({
+      key: `affiliate-admin-bundle:${ip}`,
+      max: num("API_RATE_AFFILIATES_ADMIN_MAX", 120),
+      windowMs: num("API_RATE_AFFILIATES_ADMIN_WINDOW_MS", 15 * 60 * 1000),
+      tier: "admin_affiliates_list",
+    });
+  }
   if (m === "GET" && path === "/api/admin/sync") {
     tiers.push({
       key: `admin-sync:${ip}`,

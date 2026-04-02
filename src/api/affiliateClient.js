@@ -125,6 +125,12 @@ export async function recordAffiliateClick(referralCode) {
 }
 
 /**
+ * Admin: load every affiliate application (all statuses). Uses `select('*')` with no status filter.
+ * Implemented in paidlyDataClient (enrichment + normalization).
+ */
+export { loadAffiliateSubmissionsForAdmin } from "@/api/paidlyDataClient";
+
+/**
  * Submit public affiliate application (insert affiliate_applications).
  */
 export async function submitAffiliateApplication({ email, fullName, whyPromote, audiencePlatform }) {

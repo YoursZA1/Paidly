@@ -120,15 +120,13 @@ export function getPublicApiBase() {
 }
 
 /**
- * Base URL for Node-only admin routes (e.g. GET /api/admin/platform-users).
- * In production, prefer `VITE_SERVER_URL` when it is a non-localhost URL so requests do not hit the
- * static SPA host (same tab origin) and receive `index.html` instead of JSON.
+ * Base URL for Node admin routes (e.g. GET /api/admin/platform-users).
+ * Must match {@link getPublicApiBase} for apex vs www: if env is `https://www…` but the user is on
+ * `https://paidly.co.za`, forcing the raw env URL causes cross-origin requests and CORS preflight
+ * failures. When `VITE_SERVER_URL` is a different host (e.g. `https://api.…`), `getPublicApiBase`
+ * already resolves to that host.
  */
 export function getAdminDataApiBase() {
   if (isDev) return "";
-  const raw = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
-  if (raw && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(raw)) {
-    return raw;
-  }
   return String(getPublicApiBase()).replace(/\/$/, "");
 }

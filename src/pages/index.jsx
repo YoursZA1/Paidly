@@ -74,6 +74,9 @@ const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
 const AffiliateApply = lazy(() => import("./AffiliateApply"));
 const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
 const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
+const NotFoundPage = lazy(() =>
+  import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
+);
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthContext";
@@ -335,6 +338,7 @@ function PagesContent() {
                 {PAYSLIP_REPORT_ROUTES.map((route, i) => <Route key={"pay-"+i} {...route} />)}
                 {/* Admin & Support */}
                 {ADMIN_ROUTES.map((route, i) => <Route key={"admin-"+i} {...route} />)}
+                <Route path="*" element={<NotFoundPage />} />
             </Routes>
             </Suspense>
         </Layout>

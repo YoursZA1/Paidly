@@ -16,6 +16,7 @@ import {
 } from "@/utils/fileUploadValidation";
 import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
+import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -89,7 +90,7 @@ const SUPABASE_SELECT_COLUMNS = {
   services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
-    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, created_at, updated_at",
+    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
@@ -107,15 +108,15 @@ function getSelectColumns(table) {
 
 /** Full list minus optional jsonb (scripts/add-profiles-business-jsonb.sql). */
 const PROFILES_SELECT_WITHOUT_BUSINESS =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, invoice_template, invoice_header, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, created_at, updated_at";
 
 /** Older DBs without invoice_template / invoice_header. */
 const PROFILES_SELECT_LEGACY =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, role, user_role, created_at, updated_at";
 
 /** Minimal read still useful for app shell (Settings merges defaults). */
 const PROFILES_SELECT_MINIMAL =
-  "id, full_name, email, logo_url, company_name, company_address, currency, timezone, created_at, updated_at";
+  "id, full_name, email, logo_url, company_name, company_address, currency, timezone, role, user_role, created_at, updated_at";
 
 function shouldRetryProfileSelectOnSchemaError(error) {
   const m = String(error?.message || error?.details || error?.hint || "").toLowerCase();
@@ -150,6 +151,8 @@ export async function selectProfileByUserId(supabase, authUserId) {
         if (d.company_website === undefined) d.company_website = null;
         if (d.subscription_plan === undefined) d.subscription_plan = null;
         if (d.avatar_url === undefined) d.avatar_url = null;
+        if (d.role === undefined) d.role = null;
+        if (d.user_role === undefined) d.user_role = null;
       }
       return { data: d, error: null };
     }
@@ -1614,19 +1617,19 @@ class AuthManager {
 
     let companyProfile = {};
     let supabaseUserId = null;
+    let resolvedRole = credentials.role || "user";
     try {
       const { data: sessionData, error: sessionError } = await getSessionWithRetry();
       if (sessionError) {
         console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
       } else if (sessionData?.session?.user?.id) {
-        supabaseUserId = sessionData.session.user.id;
-        const { data: profile, error: profileError } = await selectProfileByUserId(
-          supabase,
-          sessionData.session.user.id
-        );
+        const su = sessionData.session.user;
+        supabaseUserId = su.id;
+        const { data: profile, error: profileError } = await selectProfileByUserId(supabase, su.id);
         if (profileError) {
           console.warn("Failed to load profile for login:", getSupabaseErrorMessage(profileError, "Load profile failed"));
         }
+        resolvedRole = resolveUserRoleFromSessionAndProfile(su, profile || {});
         if (profile) {
           companyProfile = {
             full_name: profile.full_name,
@@ -1655,7 +1658,7 @@ class AuthManager {
     this.user = {
       id: supabaseUserId || userId,
       email,
-      role: credentials.role || 'user',
+      role: resolvedRole,
       full_name: companyProfile.full_name || credentials.full_name || credentials.email?.split('@')[0] || 'User',
       display_name: companyProfile.full_name || credentials.full_name || credentials.email?.split('@')[0] || 'User',
       company_name: companyProfile.company_name || credentials.company_name || 'Company Name',
@@ -1894,7 +1897,7 @@ class AuthManager {
         supabase_id: su.id,
         auth_id: su.id,
         email: (su.email || "").toLowerCase(),
-        role: su.app_metadata?.role || "user",
+        role: resolveUserRoleFromSessionAndProfile(su, profileData),
         full_name: fullName,
         display_name: fullName,
         company_name: profileData.company_name || "",

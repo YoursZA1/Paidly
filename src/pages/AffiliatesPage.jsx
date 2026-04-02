@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import {
+  affiliateApplicationsAdminQueryFn,
+  resolveAffiliateAdminMutationUrl,
+} from '@/api/fetchAdminAffiliateApplications';
 import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -8,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import StatusBadge from '@/components/dashboard/StatusBadge';
@@ -16,20 +21,10 @@ import PayoutsTable from '@/components/affiliates/PayoutsTable';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { supabase } from '@/lib/supabaseClient';
-import AdminDataService from '@/services/AdminDataService';
-
-function normalizeCachedAffiliateApplication(row) {
-  return {
-    ...row,
-    applicant_name: row?.applicant_name || row?.full_name || row?.name || '',
-    applicant_email: row?.applicant_email || row?.email || '',
-    audience_type: row?.audience_type || row?.audience_platform || 'other',
-    audience_size: row?.audience_size || null,
-    description: row?.description || row?.why_promote || '',
-    status: row?.status || 'pending',
-    created_date: row?.created_date || row?.created_at || null,
-  };
-}
+import {
+  EMPTY_AFFILIATE_ADMIN_BUNDLE,
+  normalizeAffiliateAdminQueryResult,
+} from '@/utils/affiliateApplicationCounts';
 
 export default function AffiliatesPage() {
   const { user: currentUser } = useCurrentUser();
@@ -43,55 +38,20 @@ export default function AffiliatesPage() {
       predicate: (q) => ['affiliates', 'affiliate-payouts'].includes(String(q.queryKey[0])),
     }) > 0;
 
-  const { data: affiliates = [], isLoading } = useQuery({
+  const {
+    data: affiliateAdmin = EMPTY_AFFILIATE_ADMIN_BUNDLE,
+    isLoading,
+    isError: affiliatesFetchError,
+    error: affiliatesFetchErr,
+  } = useQuery({
     queryKey: ['affiliates'],
-    queryFn: async () => {
-      const rows = await paidly.entities.AffiliateSubmission.list('-created_date', 150);
-      if (Array.isArray(rows) && rows.length > 0) return rows;
-
-      // Secondary fallback: read approved affiliates directly.
-      const { data: affiliateRows } = await supabase
-        .from('affiliates')
-        .select('id, user_id, referral_code, commission_rate, status, created_at')
-        .order('created_at', { ascending: false })
-        .limit(150);
-      if (Array.isArray(affiliateRows) && affiliateRows.length > 0) {
-        const userIds = affiliateRows.map((a) => a.user_id).filter(Boolean);
-        const profileMap = new Map();
-        if (userIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', userIds);
-          for (const p of profiles || []) profileMap.set(String(p.id), p);
-        }
-        return affiliateRows.map((a) => {
-          const profile = profileMap.get(String(a.user_id)) || {};
-          return normalizeCachedAffiliateApplication({
-            id: a.id,
-            user_id: a.user_id,
-            applicant_name: profile.full_name || 'Approved affiliate',
-            applicant_email: profile.email || '',
-            referral_code: a.referral_code || '',
-            commission_rate: Number(a.commission_rate ?? 0.2) <= 1
-              ? Number(a.commission_rate ?? 0.2) * 100
-              : Number(a.commission_rate ?? 20),
-            status: a.status || 'approved',
-            created_at: a.created_at,
-          });
-        });
-      }
-
-      // Fallback for environments where RLS blocks direct table reads but admin sync cache exists.
-      const cached = AdminDataService.getAllAffiliateApplications();
-      if (Array.isArray(cached) && cached.length > 0) {
-        return cached.map(normalizeCachedAffiliateApplication);
-      }
-      return [];
-    },
+    select: normalizeAffiliateAdminQueryResult,
+    queryFn: () => affiliateApplicationsAdminQueryFn(150),
     refetchInterval: 45000,
     staleTime: 30000,
   });
+  const affiliates = affiliateAdmin.applications;
+  const affiliateStatusCounts = affiliateAdmin.counts;
 
   const { data: payouts = [] } = useQuery({
     queryKey: ['affiliate-payouts'],
@@ -116,7 +76,8 @@ export default function AffiliatesPage() {
   const callAdminAffiliateApi = async (path, body) => {
     const token = await getAccessToken();
     if (!token) throw new Error('Not authenticated');
-    const res = await fetch(path, {
+    const url = resolveAffiliateAdminMutationUrl(path);
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -139,7 +100,7 @@ export default function AffiliatesPage() {
 
   const handleApprove = async (aff) => {
     try {
-      const result = await callAdminAffiliateApi('/api/affiliates/approve', {
+      const result = await callAdminAffiliateApi('/api/admin/approve', {
         applicationId: aff.id,
         commissionRate: Number(aff.commission_rate ?? 15),
       });
@@ -188,18 +149,26 @@ export default function AffiliatesPage() {
     updateMutation.mutate({ id: aff.id, data: { commission_rate: parsed } });
   };
 
-  const handleDecline = (aff) => {
-    updateMutation.mutate({ id: aff.id, data: { status: 'declined' } });
-    logAction({
-      actor: currentUser,
-      action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
-      category: 'affiliates',
-      description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
-      targetId: aff.id,
-      targetLabel: aff.applicant_email,
-      before: { status: 'pending' },
-      after: { status: 'declined' },
-    });
+  const handleDecline = async (aff) => {
+    try {
+      await callAdminAffiliateApi('/api/admin/decline', { applicationId: aff.id });
+      queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+      toast.success('Application declined');
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
+        category: 'affiliates',
+        description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
+        targetId: aff.id,
+        targetLabel: aff.applicant_email,
+        before: { status: 'pending' },
+        after: { status: 'declined' },
+      });
+      return true;
+    } catch (e) {
+      toast.error(e?.message || 'Could not decline application');
+      return false;
+    }
   };
 
   const payoutsByAffiliateId = useMemo(() => {
@@ -225,10 +194,7 @@ export default function AffiliatesPage() {
     });
   }, [affiliates, search, statusFilter]);
 
-  const pendingCount = useMemo(
-    () => affiliates.filter((a) => a.status === 'pending').length,
-    [affiliates]
-  );
+  const pendingCount = affiliateStatusCounts.pending;
   const affiliateSourceTables = useMemo(() => {
     const tables = new Set(
       affiliates
@@ -262,6 +228,17 @@ export default function AffiliatesPage() {
         isRefreshing={isRefreshing}
       />
 
+      {affiliatesFetchError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            Could not load affiliate submissions from the backend (admin queue is not loaded via Supabase):{' '}
+            {affiliatesFetchErr?.message || 'Unknown error'}. Ensure the Node API is running and{' '}
+            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> is reachable (
+            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> in production).
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {sourceTableLabel ? (
         <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800">
           Data source table: <span className="font-mono">{sourceTableLabel}</span>
@@ -291,9 +268,9 @@ export default function AffiliatesPage() {
         <TabsContent value="submissions" className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Pending', count: affiliates.filter((a) => a.status === 'pending').length, color: 'border-blue-500/30' },
-              { label: 'Approved', count: affiliates.filter((a) => a.status === 'approved').length, color: 'border-emerald-500/30' },
-              { label: 'Declined', count: affiliates.filter((a) => a.status === 'declined').length, color: 'border-red-500/30' },
+              { label: 'Pending', count: affiliateStatusCounts.pending, color: 'border-blue-500/30' },
+              { label: 'Approved', count: affiliateStatusCounts.approved, color: 'border-emerald-500/30' },
+              { label: 'Declined', count: affiliateStatusCounts.declined, color: 'border-red-500/30' },
             ].map((s) => (
               <div key={s.label} className={`bg-card rounded-xl border-2 ${s.color} p-5`}>
                 <p className="text-sm text-muted-foreground">{s.label}</p>
@@ -415,10 +392,22 @@ export default function AffiliatesPage() {
                             )}
                             {aff.status === 'pending' && (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-400" onClick={() => handleApprove(aff)}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-emerald-500 hover:text-emerald-400"
+                                  aria-label="Approve application"
+                                  onClick={() => handleApprove(aff)}
+                                >
                                   <CheckCircle className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-400" onClick={() => handleDecline(aff)}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-500 hover:text-red-400"
+                                  aria-label="Decline application"
+                                  onClick={() => handleDecline(aff)}
+                                >
                                   <XCircle className="w-4 h-4" />
                                 </Button>
                               </>
@@ -436,8 +425,20 @@ export default function AffiliatesPage() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading affiliates...
                           </span>
+                        ) : affiliates.length === 0 ? (
+                          <span className="block max-w-md mx-auto space-y-2">
+                            <span className="block">No submissions loaded yet.</span>
+                            <span className="block text-xs">
+                              The admin queue is loaded only from the backend. Confirm the Node API is deployed and{' '}
+                              <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> points to it so{' '}
+                              <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns the full queue (service role). If the API returns an empty list, the
+                              table is empty or check server logs.
+                            </span>
+                          </span>
                         ) : (
-                          'No submissions found'
+                          <span>
+                            No rows match your search or status filter. Try &quot;All Status&quot; or clear the search box.
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -475,10 +476,24 @@ export default function AffiliatesPage() {
               </div>
               {viewingApp.status === 'pending' && (
                 <div className="flex gap-3 pt-2">
-                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { handleApprove(viewingApp); setViewingApp(null); }}>
+                  <Button
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    aria-label="Approve application"
+                    onClick={() => {
+                      handleApprove(viewingApp);
+                      setViewingApp(null);
+                    }}
+                  >
                     <CheckCircle className="w-4 h-4 mr-2" /> Approve
                   </Button>
-                  <Button variant="outline" className="flex-1 text-red-500 border-red-500/30 hover:bg-red-500/10" onClick={() => { handleDecline(viewingApp); setViewingApp(null); }}>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-red-500 border-red-500/30 hover:bg-red-500/10"
+                    aria-label="Decline application"
+                    onClick={async () => {
+                      if (await handleDecline(viewingApp)) setViewingApp(null);
+                    }}
+                  >
                     <XCircle className="w-4 h-4 mr-2" /> Decline
                   </Button>
                 </div>

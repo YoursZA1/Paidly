@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import UserFormDialog from '@/components/users/UserFormDialog';
@@ -30,7 +31,13 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState(null);
   const queryClient = useQueryClient();
 
-  const { data: users = [], isLoading, refetch } = useQuery({
+  const {
+    data: users = [],
+    isLoading,
+    refetch,
+    isError: platformUsersError,
+    error: platformUsersErr,
+  } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(500),
     refetchInterval: 30000,
@@ -89,6 +96,14 @@ export default function UsersPage() {
           <UserPlus className="mr-2 h-4 w-4" /> Add User
         </Button>
       </PageHeader>
+
+      {platformUsersError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            Could not load users from the backend (API-only): {platformUsersErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
