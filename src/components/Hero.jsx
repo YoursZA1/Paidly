@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { createSignupUrl } from "@/utils";
-import { PRODUCT_LAUNCH_BADGE } from "@/constants/productLaunch";
 
 /**
  * @param {{ onLoginClick: () => void }} props
@@ -23,9 +22,6 @@ export default function Hero({ onLoginClick }) {
             Without the Admin.
           </span>
         </h1>
-        <p className="mx-auto mt-4 inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-zinc-300">
-          {PRODUCT_LAUNCH_BADGE}
-        </p>
         <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-zinc-400 sm:text-lg">
           Create invoices, send quotes, and track payments in one clean platform built for modern
           businesses. Get started free and send your first invoice in minutes.

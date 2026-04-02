@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { submitWaitlistSignup } from "@/api/waitlistClient";
 import {
-  PRODUCT_LAUNCH_BADGE,
   PRODUCT_LAUNCH_DATE_LABEL,
   PRODUCT_LAUNCH_SUBTITLE,
   getProductLaunchTimeLeftPhrase,
@@ -91,10 +90,7 @@ export default function WaitlistSection() {
       className="scroll-mt-28 border-t border-white/[0.06] bg-[#080808] px-4 py-14 sm:px-6 sm:py-20"
     >
       <div className="mx-auto max-w-lg text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">
-          {PRODUCT_LAUNCH_BADGE}
-        </p>
-        <h2 className="mt-3 font-sans text-2xl font-bold tracking-tight text-white sm:text-3xl">
+        <h2 className="font-sans text-2xl font-bold tracking-tight text-white sm:text-3xl">
           Join the waitlist
         </h2>
         <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">

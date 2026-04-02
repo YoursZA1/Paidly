@@ -109,7 +109,14 @@ export default function ProjectDetails({
             description: 'Designed for manufacturers and suppliers'
         }
     };
-    
+
+    const handleInputChange = (field, value) => {
+        setInvoiceData((prev) => ({
+            ...prev,
+            [field]: value,
+        }));
+    };
+
     useEffect(() => {
         if (authUser?.default_tax_rate && !invoiceData.tax_rate) {
             setInvoiceData((prev) => ({
@@ -186,13 +193,6 @@ export default function ProjectDetails({
             console.error("Error creating new service:", error);
             alert("Failed to create service.");
         }
-    };
-
-    const handleInputChange = (field, value) => {
-        setInvoiceData(prev => ({
-            ...prev,
-            [field]: value
-        }));
     };
 
     const updateTotals = (items) => {

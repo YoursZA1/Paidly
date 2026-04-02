@@ -12,7 +12,6 @@ import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
 import LandingLoginModal from "@/components/auth/LandingLoginModal";
 import WaitlistSection from "@/components/WaitlistSection";
-import LaunchCountdownFloat from "@/components/LaunchCountdownFloat";
 import AffiliateSection from "@/components/marketing/AffiliateSection";
 
 /**
@@ -56,7 +55,6 @@ export default function Home({
       <CTASection />
       <Footer onLoginClick={openLogin} />
       <LandingLoginModal open={loginOpen} onOpenChange={setLoginOpen} />
-      <LaunchCountdownFloat />
     </div>
   );
 }
