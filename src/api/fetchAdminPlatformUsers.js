@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { getPublicApiBase } from "@/api/backendClient";
+import { getAdminDataApiBase } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 function viteEnvFlag(name) {
@@ -25,7 +25,7 @@ export async function fetchAdminPlatformUsers(limit = 500) {
     throw new Error("Not authenticated");
   }
 
-  const base = getPublicApiBase();
+  const base = getAdminDataApiBase();
   const url = `${String(base).replace(/\/$/, "")}/api/admin/platform-users?limit=${encodeURIComponent(String(limit))}`;
 
   const res = await fetch(url, {
@@ -38,11 +38,13 @@ export async function fetchAdminPlatformUsers(limit = 500) {
   });
 
   const contentType = res.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json") ? await res.json().catch(() => ({})) : {};
+  const looksJson = /json/i.test(contentType);
+  const text = looksJson ? null : await res.text().catch(() => "");
+  const payload = looksJson ? await res.json().catch(() => ({})) : {};
 
   if (!res.ok) {
     const msg =
-      payload.error ||
+      (looksJson && payload.error) ||
       (res.status === 401
         ? "Session expired or invalid. Please log in again."
         : res.status === 403
@@ -51,5 +53,18 @@ export async function fetchAdminPlatformUsers(limit = 500) {
     throw new Error(msg);
   }
 
-  return Array.isArray(payload.users) ? payload.users : [];
+  if (!looksJson) {
+    const preview = String(text || "").slice(0, 80).replace(/\s+/g, " ");
+    throw new Error(
+      preview.startsWith("<!") || preview.startsWith("<html")
+        ? "Platform users API returned HTML, not JSON — set VITE_SERVER_URL to your Node API host (e.g. https://api.example.com)."
+        : "Platform users API returned non-JSON."
+    );
+  }
+
+  if (!Array.isArray(payload.users)) {
+    throw new Error("Invalid platform users response (expected { users: array }).");
+  }
+
+  return payload.users;
 }

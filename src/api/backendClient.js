@@ -118,3 +118,17 @@ export function getPublicApiBase() {
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
   return serverUrl || "";
 }
+
+/**
+ * Base URL for Node-only admin routes (e.g. GET /api/admin/platform-users).
+ * In production, prefer `VITE_SERVER_URL` when it is a non-localhost URL so requests do not hit the
+ * static SPA host (same tab origin) and receive `index.html` instead of JSON.
+ */
+export function getAdminDataApiBase() {
+  if (isDev) return "";
+  const raw = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
+  if (raw && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(raw)) {
+    return raw;
+  }
+  return String(getPublicApiBase()).replace(/\/$/, "");
+}

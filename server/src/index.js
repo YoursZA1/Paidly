@@ -388,11 +388,24 @@ function logAdminApi(method, path, statusCode, detail = null) {
 }
 
 /**
+ * Normalize profiles.role / user_role (matches SQL public.profile_role_value).
+ */
+function dashboardRoleFromProfileRow(profile) {
+  if (!profile || typeof profile !== "object") return "";
+  const raw = profile.role ?? profile.user_role ?? "";
+  return String(raw).trim().toLowerCase();
+}
+
+/**
  * Resolve admin caller from request: must be authenticated, then either
  * app_metadata.role === "admin" OR (when ADMIN_BYPASS_AUTH is true) email in ADMIN_BYPASS_EMAILS.
  * Bypass is only allowed when both ADMIN_BYPASS_AUTH is true AND email is in the list.
+ *
+ * @param {{ allowInternalTeam?: boolean }} [opts] When true, profiles with role admin|management|support may access read-style admin routes (dashboard data).
  */
-const getAdminFromRequest = async (req, res) => {
+const getAdminFromRequest = async (req, res, opts = {}) => {
+  const allowInternalTeam = opts.allowInternalTeam === true;
+
   const { user, error } = await getUserFromRequest(req);
   if (error) {
     logAdminApi(req.method, req.path, 401, error);
@@ -401,20 +414,32 @@ const getAdminFromRequest = async (req, res) => {
   }
 
   const requesterRole = user?.app_metadata?.role || user?.app_metadata?.claims?.role;
-  const isAdminByRole = requesterRole === "admin";
+  if (requesterRole === "admin") {
+    return user;
+  }
 
-  if (!isAdminByRole) {
-    const email = user?.email?.toLowerCase();
-    const bypassAllowed =
-      adminBypassEnabled && !!email && adminBypassEmails.includes(email);
-    if (!bypassAllowed) {
-      logAdminApi(req.method, req.path, 403, "Admin access required");
-      res.status(403).json({ error: "Admin access required" });
-      return null;
+  const email = user?.email?.toLowerCase();
+  const bypassAllowed =
+    adminBypassEnabled && !!email && adminBypassEmails.includes(email);
+  if (bypassAllowed) {
+    return user;
+  }
+
+  if (allowInternalTeam && user?.id) {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+    const pr = dashboardRoleFromProfileRow(profile);
+    if (pr === "admin" || pr === "management" || pr === "support") {
+      return user;
     }
   }
 
-  return user;
+  logAdminApi(req.method, req.path, 403, "Admin access required");
+  res.status(403).json({ error: "Admin access required" });
+  return null;
 };
 
 /**
@@ -687,7 +712,7 @@ app.get("/api/health/observability", (req, res) => {
 
 app.get("/api/security/events", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) return;
     return res.status(200).json({
       status: "ok",
@@ -1854,7 +1879,7 @@ function authEmailVerificationFields(authUser) {
 
 app.get("/api/admin/users", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) {
       return;
     }
@@ -2061,7 +2086,7 @@ app.post("/api/account/delete", async (req, res) => {
 
 app.get("/api/admin/platform-users", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) {
       return;
     }
@@ -2177,7 +2202,7 @@ app.post("/api/admin/clean-orphaned-users", async (req, res) => {
 
 app.get("/api/admin/sync-users", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) {
       return;
     }
@@ -2268,7 +2293,7 @@ app.get("/api/admin/sync-users", async (req, res) => {
 
 app.get("/api/admin/sync-data", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res);
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) {
       return;
     }
