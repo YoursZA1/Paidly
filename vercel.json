@@ -23,6 +23,10 @@
     {
       "source": "/affiliate/dashboard",
       "destination": "/api/affiliate/dashboard"
+    },
+    {
+      "source": "/api/security/events",
+      "destination": "/api/admin/security-events"
     }
   ],
   "headers": [
