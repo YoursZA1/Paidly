@@ -400,20 +400,26 @@ export default function Signup() {
         /* non-fatal */
       }
 
-      // After login, sync Step 2 company updates to Supabase profile
+      // After login, sync Step 2 company updates to Supabase profile (bounded — never block success UI)
       try {
         const { User } = await import("@/api/entities");
-        await User.updateMyUserData({
-          full_name: fullName.trim(),
-          company_name: companyName.trim(),
-          company_address: companyAddress.trim(),
-          phone: phone.trim(),
-          currency: "ZAR",
-          plan,
-          status: "trial",
-          trial_started_at: now.toISOString(),
-          trial_ends_at: trialEndsAt.toISOString(),
-        });
+        const PROFILE_SYNC_MS = 12000;
+        await Promise.race([
+          User.updateMyUserData({
+            full_name: fullName.trim(),
+            company_name: companyName.trim(),
+            company_address: companyAddress.trim(),
+            phone: phone.trim(),
+            currency: "ZAR",
+            plan,
+            status: "trial",
+            trial_started_at: now.toISOString(),
+            trial_ends_at: trialEndsAt.toISOString(),
+          }),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Profile sync timed out")), PROFILE_SYNC_MS);
+          }),
+        ]);
       } catch (profileErr) {
         console.warn("Could not sync profile updates:", profileErr);
         // Don't fail signup if profile sync fails; user can update in Settings later

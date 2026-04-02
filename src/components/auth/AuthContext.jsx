@@ -112,16 +112,33 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      let sessionNorm = await readSessionSafe();
+      const SESSION_READ_MS = 8000;
+      let sessionNorm = await Promise.race([
+        readSessionSafe(),
+        new Promise((resolve) => {
+          setTimeout(() => resolve(null), SESSION_READ_MS);
+        }),
+      ]);
       if (!sessionNorm?.user) {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ data: { session: null } }), 5000);
+          }),
+        ]);
         if (data?.session?.user) {
           sessionNorm = normalizeSessionFromClient(data.session);
         }
       }
 
       if (sessionNorm?.user) {
-        const currentUser = await User.restoreFromSupabaseSession(sessionNorm);
+        const PROFILE_RESTORE_MS = 10000;
+        const currentUser = await Promise.race([
+          User.restoreFromSupabaseSession(sessionNorm),
+          new Promise((resolve) => {
+            setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
+          }),
+        ]);
         if (currentUser) {
           setUser(currentUser);
         } else {
@@ -144,7 +161,12 @@ export function AuthProvider({ children }) {
         console.warn("[Auth] refreshUser:", e?.message || e);
       }
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ data: { session: null } }), 5000);
+          }),
+        ]);
         const su = data?.session?.user;
         if (su) {
           const fb = getCachedUser();
@@ -195,17 +217,43 @@ export function AuthProvider({ children }) {
   // Initialize: one getSession, then restore user from profile (avoids duplicate getSession + User.me round trips)
   useEffect(() => {
     let cancelled = false;
+    const SESSION_INIT_MS = 12000;
     (async () => {
       try {
         await consumeAuthCallbackFromUrl();
-        const initialSession = await SupabaseAuthService.getSession();
+        let initialSession = null;
+        try {
+          initialSession = await Promise.race([
+            SupabaseAuthService.getSession(),
+            new Promise((_, reject) => {
+              setTimeout(() => reject(new Error("getSession timeout")), SESSION_INIT_MS);
+            }),
+          ]);
+        } catch (e) {
+          if (!cancelled && import.meta.env?.DEV) {
+            console.warn("[Auth] getSession slow or failed during init:", e?.message || e);
+          }
+          try {
+            const { data, error } = await supabase.auth.getSession();
+            if (!error && data?.session?.user) {
+              initialSession = normalizeSessionFromClient(data.session);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
         if (cancelled) return;
         setSession(initialSession);
         let currentUser = null;
 
         if (initialSession?.user) {
           try {
-            currentUser = await User.restoreFromSupabaseSession(initialSession);
+            currentUser = await Promise.race([
+              User.restoreFromSupabaseSession(initialSession),
+              new Promise((resolve) => {
+                setTimeout(() => resolve(null), 10000);
+              }),
+            ]);
           } catch (restoreErr) {
             console.warn("Restore from session failed:", restoreErr);
           }
@@ -315,20 +363,22 @@ export function AuthProvider({ children }) {
 
     await User.login({ email: normalizedEmail, password, role: effectiveRole });
 
+    // At this point email is verified — surface the session in React state immediately.
+    // Do not await profiles upsert: a stuck network/DB write must not freeze the sign-in button or RequireAuth.
+    const currentUser = await User.getCurrentUser();
+    setUser(currentUser ?? null);
+
     if (session?.user?.id) {
-      await User.updateMyUserData({
+      const patch = {
         supabase_id: session.user.id,
         auth_id: session.user.id,
         role: effectiveRole,
         permissions: session.user.app_metadata?.permissions || [],
+      };
+      void User.updateMyUserData(patch).catch((e) => {
+        console.warn("[Auth] updateMyUserData after login (non-blocking):", e?.message || e);
       });
     }
-
-    // At this point email is verified.
-
-    // Use current user from client to avoid extra User.me() round trip (faster login)
-    const currentUser = await User.getCurrentUser();
-    setUser(currentUser ?? null);
   }, []);
 
   const purgeSupabaseAuthStorage = useCallback(() => {

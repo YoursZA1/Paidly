@@ -582,7 +582,7 @@ export default function Layout({ children, currentPageName }) {
   const mainContentRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
-  const { user, logout, session: authSession } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fetchAll = useAppStore((s) => s.fetchAll);
@@ -590,11 +590,12 @@ export default function Layout({ children, currentPageName }) {
   const userProfile = useAppStore((s) => s.userProfile);
   const resetStore = useAppStore((s) => s.reset);
 
-  // Fetch shared app data when user + Supabase session are ready. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
+  // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
   const STALE_MS = 5 * 60 * 1000; // 5 min – same as React Query staleTime
   useEffect(() => {
     if (!user?.id) return;
-    if (!authSession?.user) return;
+    // Do not gate on authSession: after password login, session and user update in the same tick, but a
+    // stuck profile write must not block store hydration. fetchAll resolves the user from the client layer.
     // Admin V2 pages fetch their own datasets with React Query.
     // Skipping legacy store bootstrap here avoids blocking admin loads on auth.me timeouts.
     if (isAdminV2Route) return;
@@ -602,7 +603,7 @@ export default function Layout({ children, currentPageName }) {
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
     fetchAll();
-  }, [user?.id, user?.role, authSession?.user?.id, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo
