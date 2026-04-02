@@ -11,6 +11,23 @@
         document.documentElement.classList.toggle('light', !dark);
       })();
     </script>
+    <script>
+      (function () {
+        try {
+          var h = window.location.hostname;
+          if (h === 'paidly.co.za') {
+            window.location.replace(
+              'https://www.paidly.co.za' +
+                window.location.pathname +
+                window.location.search +
+                window.location.hash
+            );
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/logo_icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place." />

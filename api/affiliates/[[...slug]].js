@@ -4,13 +4,10 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
 
 function cors(res, req) {
-  const origin = req.headers.origin;
-  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  applyPaidlyServerlessCors(req, res, { methods: "GET, POST, OPTIONS" });
 }
 
 function getSupabaseAdmin() {

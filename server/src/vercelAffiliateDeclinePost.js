@@ -2,13 +2,10 @@
  * POST decline affiliate application — shared by Express patterns; used from Vercel admin/[resource].js.
  */
 import { createClient } from "@supabase/supabase-js";
+import { applyPaidlyServerlessCors } from "./vercelPaidlyCors.js";
 
 function cors(res, req) {
-  const origin = req.headers.origin;
-  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
 }
 
 function getSupabaseAdmin() {

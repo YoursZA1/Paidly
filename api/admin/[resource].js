@@ -13,13 +13,27 @@ import { getSecurityEventsSnapshot } from "../../server/src/securityMiddleware.j
 import { handleVercelAffiliateDeclinePost } from "../../server/src/vercelAffiliateDeclinePost.js";
 import { handleVercelAdminInviteUserPost } from "../../server/src/vercelAdminInviteUserPost.js";
 import affiliateApproveHandler from "../affiliates/approve.js";
+import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+
+/** Vercel usually sets `query.resource`; fall back to path if missing (rewrites / some runtimes). */
+function adminResourceFromRequest(req) {
+  const fromQuery = String(req.query?.resource ?? "").trim();
+  if (fromQuery) return fromQuery;
+  try {
+    const path = String(req.url || "").split("?")[0] || "";
+    const marker = "/api/admin/";
+    const i = path.indexOf(marker);
+    if (i === -1) return "";
+    const rest = path.slice(i + marker.length).replace(/\/$/, "");
+    const seg = rest.split("/")[0];
+    return decodeURIComponent(seg || "").trim();
+  } catch {
+    return "";
+  }
+}
 
 function cors(res, req) {
-  const origin = req.headers.origin;
-  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  applyPaidlyServerlessCors(req, res, { methods: "GET, POST, OPTIONS" });
 }
 
 function getSupabaseAdmin() {
@@ -91,7 +105,7 @@ function handleSecurityEvents(res) {
 }
 
 export default async function handler(req, res) {
-  const resource = String(req.query?.resource || "").trim();
+  const resource = adminResourceFromRequest(req);
   const getResources = new Set(["affiliates", "platform-users", "security-events"]);
   const postResources = new Set(["approve", "decline", "invite-user"]);
 
@@ -100,11 +114,7 @@ export default async function handler(req, res) {
       return handleVercelAdminInviteUserPost(req, res);
     }
     if (req.method === "OPTIONS") {
-      const origin = req.headers.origin;
-      if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-      res.setHeader("Access-Control-Allow-Credentials", "true");
+      applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
       return res.status(200).end();
     }
     if (req.method === "POST") {

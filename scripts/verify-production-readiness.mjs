@@ -36,6 +36,7 @@ const requiredMigrations = [
   "20260406100000_affiliate_applications_select_rls_jwt_admin.sql",
   "20260406120000_affiliate_applications_submit_rpc_and_insert_repair.sql",
   "20260407150000_organizations_bootstrap_rls.sql",
+  "20260408120000_profiles_user_role_column.sql",
 ];
 
 const requiredIndexes = [

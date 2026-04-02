@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
+import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
 function viteEnvFlag(name) {
@@ -13,6 +14,7 @@ function buildPlatformUsersFetchUrls(limit) {
   const seen = new Set();
   const push = (u) => {
     if (!u || seen.has(u)) return;
+    if (shouldSkipAdminFetchAbsoluteUrl(u)) return;
     seen.add(u);
     out.push(u);
   };
@@ -20,9 +22,9 @@ function buildPlatformUsersFetchUrls(limit) {
   const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
   const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
 
+  push(`/api/admin/platform-users${q}`);
   if (vite) push(`${vite}/api/admin/platform-users${q}`);
   if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/platform-users${q}`);
-  push(`/api/admin/platform-users${q}`);
 
   return out;
 }
@@ -32,14 +34,20 @@ async function fetchPlatformUsersPayloadFromApi(token, lim) {
   let lastError = null;
 
   for (const url of candidates) {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      credentials: "include",
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        credentials: "include",
+      });
+    } catch (e) {
+      lastError = e?.message || "Network error (Failed to fetch)";
+      continue;
+    }
 
     const contentType = res.headers.get("content-type") || "";
     const looksJson = /json/i.test(contentType);

@@ -1,21 +1,24 @@
 /**
  * Admin affiliate control plane (backend-only — no browser Supabase reads for the admin queue):
- * 1) `GET ${VITE_SERVER_URL}/api/admin/affiliates` (or same-origin via proxy), then legacy bundle paths.
+ * 1) Same-origin `GET /api/admin/affiliates` first (Vercel serverless / Vite proxy), then `VITE_SERVER_URL` / admin base fallbacks.
  * 2) **Counts** come from the same payload as the list.
  * 3) **Approve / decline** are `POST /api/admin/approve` and `POST /api/admin/decline` (see AffiliatesPage).
  */
 import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
+import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { countAffiliateApplicationsByStatus } from "@/utils/affiliateApplicationCounts";
 import { finalizeAffiliateApplicationsForAdmin } from "@/api/paidlyDataClient";
 
-/** Absolute URL for admin affiliate POST routes when the API is on another host (production). */
+/**
+ * URL for admin affiliate POST routes. Prefer {@link getAdminDataApiBase} (apex/www-safe); otherwise same-origin
+ * `path` — do not force `VITE_SERVER_URL` when the app already serves `/api/*` (e.g. Vercel serverless).
+ */
 export function resolveAffiliateAdminMutationUrl(pathname) {
   const p = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
+  if (import.meta.env.DEV) return p;
   const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
-  if (vite) return `${vite}${p}`;
   if (adminBase) return `${adminBase}${p}`;
   return p;
 }
@@ -26,6 +29,7 @@ function buildAffiliateAdminFetchUrls(limit) {
   const seen = new Set();
   const push = (u) => {
     if (!u || seen.has(u)) return;
+    if (shouldSkipAdminFetchAbsoluteUrl(u)) return;
     seen.add(u);
     out.push(u);
   };
@@ -33,20 +37,23 @@ function buildAffiliateAdminFetchUrls(limit) {
   const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
   const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
 
-  if (vite) push(`${vite}/api/admin/affiliates${q}`);
-  if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/affiliates${q}`);
+  // Same-origin (or Vite dev proxy) first — production often serves /api/* via Vercel serverless while
+  // VITE_SERVER_URL still points at a legacy Node host; hitting that first makes fetch() throw (Failed to fetch)
+  // before we ever try the working route.
   push(`/api/admin/affiliates${q}`);
+  push(`/api/affiliates${q}`);
+  push(`/api/admin/affiliate-applications${q}`);
 
   if (vite) {
+    push(`${vite}/api/admin/affiliates${q}`);
     push(`${vite}/api/affiliates${q}`);
     push(`${vite}/api/admin/affiliate-applications${q}`);
   }
   if (adminBase && adminBase !== vite) {
+    push(`${adminBase}/api/admin/affiliates${q}`);
     push(`${adminBase}/api/affiliates${q}`);
     push(`${adminBase}/api/admin/affiliate-applications${q}`);
   }
-  push(`/api/affiliates${q}`);
-  push(`/api/admin/affiliate-applications${q}`);
 
   return out;
 }
@@ -60,14 +67,20 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
   let lastError = null;
 
   for (const url of candidates) {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      credentials: "include",
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        credentials: "include",
+      });
+    } catch (e) {
+      lastError = e?.message || "Network error (Failed to fetch)";
+      continue;
+    }
 
     const contentType = res.headers.get("content-type") || "";
     const looksJson = /json/i.test(contentType);

@@ -37,3 +37,22 @@ export function resolveProductionBrowserApiBaseUrl(configuredServerUrl) {
 
   return base;
 }
+
+const stripWwwHost = (h) => String(h || "").replace(/^www\./i, "").toLowerCase();
+
+/**
+ * True when `url` is an absolute http(s) URL on the same registrable host as the current page but a
+ * different origin (e.g. page on https://paidly.co.za and url on https://www.paidly.co.za). Using that
+ * URL in fetch() triggers CORS; prefer a relative `/api/...` path instead.
+ */
+export function shouldSkipAdminFetchAbsoluteUrl(url) {
+  if (typeof window === "undefined" || !String(url).startsWith("http")) return false;
+  try {
+    const u = new URL(url);
+    const w = new URL(window.location.href);
+    if (u.origin === w.origin) return false;
+    return stripWwwHost(u.hostname) === stripWwwHost(w.hostname);
+  } catch {
+    return false;
+  }
+}

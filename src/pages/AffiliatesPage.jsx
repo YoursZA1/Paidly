@@ -232,9 +232,11 @@ export default function AffiliatesPage() {
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>
             Could not load affiliate submissions from the backend (admin queue is not loaded via Supabase):{' '}
-            {affiliatesFetchErr?.message || 'Unknown error'}. Ensure the Node API is running and{' '}
-            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> is reachable (
-            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> in production).
+            {affiliatesFetchErr?.message || 'Unknown error'}. Check that{' '}
+            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns JSON on this
+            host (Vercel serverless) or your <code className="rounded bg-muted px-1">VITE_SERVER_URL</code>{' '}
+            API. If the app and API are the same deployment, try clearing or updating{' '}
+            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> so it does not point at a dead host.
           </AlertDescription>
         </Alert>
       ) : null}

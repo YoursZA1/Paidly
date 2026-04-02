@@ -1,21 +1,21 @@
 {
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/((?!api/).*)",
       "has": [{ "type": "host", "value": "app.paidly.co.za" }],
-      "destination": "https://www.paidly.co.za/:path*",
+      "destination": "https://www.paidly.co.za/$1",
       "permanent": true
     },
     {
-      "source": "/:path*",
+      "source": "/((?!api/).*)",
       "has": [{ "type": "host", "value": "www.app.paidly.co.za" }],
-      "destination": "https://www.paidly.co.za/:path*",
+      "destination": "https://www.paidly.co.za/$1",
       "permanent": true
     },
     {
-      "source": "/:path*",
+      "source": "/((?!api/).*)",
       "has": [{ "type": "host", "value": "paidly.co.za" }],
-      "destination": "https://www.paidly.co.za/:path*",
+      "destination": "https://www.paidly.co.za/$1",
       "permanent": true
     }
   ],
