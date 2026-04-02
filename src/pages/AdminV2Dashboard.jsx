@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Users, CreditCard, ClipboardList, DollarSign } from 'lucide-react';
+import { Users, CreditCard, ClipboardList, DollarSign, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import StatCard from '@/components/dashboard/StatCard';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -26,26 +26,30 @@ export default function AdminV2Dashboard() {
 
   const { data: users = [], dataUpdatedAt: usersUpdatedAt } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 100),
-    refetchInterval: 30000,
+    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   const { data: subscriptions = [], dataUpdatedAt: subscriptionsUpdatedAt } = useQuery({
     queryKey: ['subscriptions'],
-    queryFn: () => paidly.entities.Subscription.list('-created_date', 100),
-    refetchInterval: 30000,
+    queryFn: () => paidly.entities.Subscription.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   const { data: affiliates = [], dataUpdatedAt: affiliatesUpdatedAt } = useQuery({
     queryKey: ['affiliates'],
-    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 100),
-    refetchInterval: 30000,
+    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   const { data: waitlist = [], dataUpdatedAt: waitlistUpdatedAt } = useQuery({
     queryKey: ['waitlist'],
-    queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 100),
-    refetchInterval: 30000,
+    queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   useEffect(() => {
@@ -157,7 +161,10 @@ export default function AdminV2Dashboard() {
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border px-6 py-4">
-          <h2 className="font-semibold">Recent Subscriptions</h2>
+          <h2 className="font-semibold inline-flex items-center gap-2">
+            Recent Subscriptions
+            {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -205,7 +212,10 @@ export default function AdminV2Dashboard() {
 
       <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border px-6 py-4">
-          <h2 className="font-semibold">User Behavior</h2>
+          <h2 className="font-semibold inline-flex items-center gap-2">
+            User Behavior
+            {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          </h2>
           <p className="text-xs text-muted-foreground">
             Per-user profile details, invoices sent, plan, and billing behavior.
           </p>

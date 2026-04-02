@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,20 +24,23 @@ export default function AffiliatesPage() {
   const [viewingApp, setViewingApp] = useState(null);
   const [calculatingFor, setCalculatingFor] = useState(null);
   const queryClient = useQueryClient();
+  const isRefreshing =
+    useIsFetching({
+      predicate: (q) => ['affiliates', 'affiliate-payouts'].includes(String(q.queryKey[0])),
+    }) > 0;
 
   const { data: affiliates = [], isLoading } = useQuery({
     queryKey: ['affiliates'],
-    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 200),
-  });
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 500),
+    queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   const { data: payouts = [] } = useQuery({
     queryKey: ['affiliate-payouts'],
-    queryFn: () => paidly.entities.AffiliatePayout.list('-created_date', 200),
+    queryFn: () => paidly.entities.AffiliatePayout.list('-created_date', 150),
+    refetchInterval: 45000,
+    staleTime: 30000,
   });
 
   const updateMutation = useMutation({
@@ -142,24 +145,51 @@ export default function AffiliatesPage() {
     });
   };
 
-  const filtered = affiliates.filter((a) => {
-    const matchSearch = !search ||
-      (a.applicant_name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (a.applicant_email || '').toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || a.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const payoutsByAffiliateId = useMemo(() => {
+    const map = new Map();
+    for (const p of payouts) {
+      const key = String(p.affiliate_id || p.referral_id || '');
+      if (!key) continue;
+      const arr = map.get(key) || [];
+      arr.push(p);
+      map.set(key, arr);
+    }
+    return map;
+  }, [payouts]);
 
-  const pendingCount = affiliates.filter((a) => a.status === 'pending').length;
-  const pendingPayoutsTotal = payouts
-    .filter((p) => p.status === 'pending' || p.status === 'approved')
-    .reduce((s, p) => s + Number(p.commission_amount ?? p.amount ?? 0), 0);
+  const filtered = useMemo(() => {
+    return affiliates.filter((a) => {
+      const matchSearch =
+        !search ||
+        (a.applicant_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (a.applicant_email || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [affiliates, search, statusFilter]);
+
+  const pendingCount = useMemo(
+    () => affiliates.filter((a) => a.status === 'pending').length,
+    [affiliates]
+  );
+  const pendingPayoutsTotal = useMemo(
+    () =>
+      payouts
+        .filter((p) => p.status === 'pending' || p.status === 'approved')
+        .reduce((s, p) => s + Number(p.commission_amount ?? p.amount ?? 0), 0),
+    [payouts]
+  );
 
   return (
     <div>
       <PageHeader
         title="Affiliates"
         description={`${pendingCount} pending reviews · R ${pendingPayoutsTotal.toFixed(2)} in unpaid payouts`}
+        onRefresh={() => {
+          queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+          queryClient.invalidateQueries({ queryKey: ['affiliate-payouts'] });
+        }}
+        isRefreshing={isRefreshing}
       />
 
       <Tabs defaultValue="submissions" className="space-y-6">
@@ -234,7 +264,7 @@ export default function AffiliatesPage() {
                 </thead>
                 <tbody>
                   {filtered.map((aff) => {
-                    const affPayouts = payouts.filter((p) => p.affiliate_id === aff.id);
+                    const affPayouts = payoutsByAffiliateId.get(String(aff.id)) || [];
                     const totalEarnings = affPayouts.reduce((s, p) => s + Number(p.commission_amount ?? p.amount ?? 0), 0);
                     return (
                       <tr key={aff.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
@@ -325,7 +355,14 @@ export default function AffiliatesPage() {
                   {filtered.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                        {isLoading ? 'Loading...' : 'No submissions found'}
+                        {isLoading ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading affiliates...
+                          </span>
+                        ) : (
+                          'No submissions found'
+                        )}
                       </td>
                     </tr>
                   )}
