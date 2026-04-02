@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Search, CheckCircle, XCircle, Eye, Filter, Calculator } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import PayoutCalculator from '@/components/affiliates/PayoutCalculator';
 import PayoutsTable from '@/components/affiliates/PayoutsTable';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function AffiliatesPage() {
   const { user: currentUser } = useCurrentUser();
@@ -27,6 +28,11 @@ export default function AffiliatesPage() {
   const { data: affiliates = [], isLoading } = useQuery({
     queryKey: ['affiliates'],
     queryFn: () => paidly.entities.AffiliateSubmission.list('-created_date', 200),
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['platform-users'],
+    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 500),
   });
 
   const { data: payouts = [] } = useQuery({
@@ -42,22 +48,75 @@ export default function AffiliatesPage() {
     },
   });
 
-  const handleApprove = (aff) => {
-    const code = `PAIDLY-${aff.applicant_name?.replace(/\s/g, '').toUpperCase().slice(0, 6) || 'REF'}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    updateMutation.mutate({
-      id: aff.id,
-      data: { status: 'approved', referral_code: code, commission_rate: Number(aff.commission_rate ?? 15) },
+  const getAccessToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  };
+
+  const callAdminAffiliateApi = async (path, body) => {
+    const token = await getAccessToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body || {}),
     });
-    logAction({
-      actor: currentUser,
-      action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
-      category: 'affiliates',
-      description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
-      targetId: aff.id,
-      targetLabel: aff.applicant_email,
-      before: { status: 'pending' },
-      after: { status: 'approved', referral_code: code },
-    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.message || json?.error || `Request failed (${res.status})`);
+    return json;
+  };
+
+  const copyReferralLink = async (code) => {
+    if (!code) return;
+    const base = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+    const url = `${base}/Signup#sign-up?ref=${encodeURIComponent(code)}`;
+    await navigator.clipboard.writeText(url);
+    toast.success('Link copied');
+  };
+
+  const handleApprove = async (aff) => {
+    try {
+      const result = await callAdminAffiliateApi('/api/affiliates/approve', {
+        applicationId: aff.id,
+        commissionRate: Number(aff.commission_rate ?? 15),
+      });
+      queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+      toast.success(result?.email_sent === false ? 'Approved (email failed)' : 'Approved & emailed link');
+
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
+        category: 'affiliates',
+        description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
+        targetId: aff.id,
+        targetLabel: aff.applicant_email,
+        before: { status: 'pending' },
+        after: {
+          status: 'approved',
+          referral_code: result?.referral_code,
+          referral_link: result?.referral_link,
+          user_id: result?.user_id,
+          email_sent: result?.email_sent,
+        },
+      });
+    } catch (e) {
+      toast.error(e?.message || 'Could not approve affiliate');
+    }
+  };
+
+  const handleResend = async (aff) => {
+    try {
+      const result = await callAdminAffiliateApi('/api/affiliates/resend-link', { applicationId: aff.id });
+      toast.success('Referral link resent');
+      if (result?.referral_code) {
+        await copyReferralLink(result.referral_code).catch(() => {});
+      }
+    } catch (e) {
+      toast.error(e?.message || 'Could not resend link');
+    }
   };
 
   const handleCommissionUpdate = (aff, nextRate) => {
@@ -164,6 +223,7 @@ export default function AffiliatesPage() {
                     <th className="text-left px-6 py-3 font-medium">Applicant</th>
                     <th className="text-left px-6 py-3 font-medium">Type</th>
                     <th className="text-left px-6 py-3 font-medium">Status</th>
+                    <th className="text-left px-6 py-3 font-medium">Linked User</th>
                     <th className="text-left px-6 py-3 font-medium">Referral Code</th>
                     <th className="text-left px-6 py-3 font-medium">Commission</th>
                     <th className="text-left px-6 py-3 font-medium">Referrals</th>
@@ -184,6 +244,13 @@ export default function AffiliatesPage() {
                         </td>
                         <td className="px-6 py-4 text-sm capitalize text-muted-foreground">{aff.audience_type || '—'}</td>
                         <td className="px-6 py-4"><StatusBadge status={aff.status} /></td>
+                        <td className="px-6 py-4 text-xs">
+                          {aff.user_id ? (
+                            <span className="text-emerald-500">Linked</span>
+                          ) : (
+                            <span className="text-amber-500">Not linked</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-xs font-mono text-muted-foreground">{aff.referral_code || '—'}</td>
                         <td className="px-6 py-4">
                           <Input
@@ -204,9 +271,31 @@ export default function AffiliatesPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {aff.referral_code ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Copy referral link"
+                                onClick={() => copyReferralLink(aff.referral_code)}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            ) : null}
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewingApp(aff)}>
                               <Eye className="w-4 h-4" />
                             </Button>
+                            {aff.status === 'approved' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Resend referral link"
+                                onClick={() => handleResend(aff)}
+                              >
+                                <Mail className="w-4 h-4" />
+                              </Button>
+                            ) : null}
                             {aff.status === 'approved' && (
                               <Button
                                 variant="ghost"
@@ -235,7 +324,7 @@ export default function AffiliatesPage() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                      <td colSpan={10} className="px-6 py-12 text-center text-muted-foreground text-sm">
                         {isLoading ? 'Loading...' : 'No submissions found'}
                       </td>
                     </tr>
@@ -264,6 +353,8 @@ export default function AffiliatesPage() {
                 <div><p className="text-xs text-muted-foreground">Email</p><p className="font-medium">{viewingApp.applicant_email}</p></div>
                 <div><p className="text-xs text-muted-foreground">Audience Type</p><p className="font-medium capitalize">{viewingApp.audience_type || '—'}</p></div>
                 <div><p className="text-xs text-muted-foreground">Audience Size</p><p className="font-medium">{viewingApp.audience_size || '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Linked User</p><p className="font-medium">{viewingApp.user_id ? 'Yes' : 'No (email match required)'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Referral Code</p><p className="font-mono text-xs">{viewingApp.referral_code || 'Will be generated on approval'}</p></div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Description</p>

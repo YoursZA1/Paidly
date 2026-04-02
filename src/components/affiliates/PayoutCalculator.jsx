@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,20 +9,40 @@ import { toast } from 'sonner';
 
 export default function PayoutCalculator({ open, onClose, affiliate }) {
   const queryClient = useQueryClient();
-  const [grossAmount, setGrossAmount] = useState(0);
-  const [referralsCount, setReferralsCount] = useState(0);
-  const [commissionRate, setCommissionRate] = useState(15);
   const [notes, setNotes] = useState('');
+  const commissionRate = Number(affiliate?.commission_rate ?? 15);
 
-  useEffect(() => {
-    if (!open) return;
-    setCommissionRate(Number(affiliate?.commission_rate ?? 15));
-  }, [affiliate?.commission_rate, open]);
+  const { data: payouts = [] } = useQuery({
+    queryKey: ['affiliate-payouts'],
+    queryFn: () => paidly.entities.AffiliatePayout.list('-created_date', 500),
+    enabled: open,
+  });
+
+  const eligibleCommissions = useMemo(
+    () =>
+      (payouts || []).filter(
+        (p) =>
+          p.affiliate_id === affiliate?.id &&
+          (p.status === 'pending' || p.status === 'approved') &&
+          String(p.source || '').toLowerCase().includes('subscription')
+      ),
+    [payouts, affiliate?.id]
+  );
 
   const commissionAmount = useMemo(
-    () => (Number(grossAmount || 0) * Number(commissionRate || 0)) / 100,
-    [grossAmount, commissionRate]
+    () => eligibleCommissions.reduce((sum, p) => sum + Number(p.amount ?? p.commission_amount ?? 0), 0),
+    [eligibleCommissions]
   );
+
+  const paidUsersCount = useMemo(
+    () => new Set(eligibleCommissions.map((p) => p.referral_id).filter(Boolean)).size,
+    [eligibleCommissions]
+  );
+
+  const grossAmount = useMemo(() => {
+    if (!commissionRate) return 0;
+    return (commissionAmount * 100) / commissionRate;
+  }, [commissionAmount, commissionRate]);
 
   const createMutation = useMutation({
     mutationFn: (payload) => paidly.entities.AffiliatePayout.create(payload),
@@ -36,13 +56,17 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
 
   const handleCreate = () => {
     if (!affiliate?.id) return;
+    if (commissionAmount <= 0 || paidUsersCount <= 0) {
+      toast.error('No eligible paid first-month referrals available for payout.');
+      return;
+    }
     createMutation.mutate({
       affiliate_id: affiliate.id,
       affiliate_name: affiliate.applicant_name,
       affiliate_email: affiliate.applicant_email,
       referral_code: affiliate.referral_code || null,
       gross_amount: Number(grossAmount || 0),
-      referrals_count: Number(referralsCount || 0),
+      referrals_count: Number(paidUsersCount || 0),
       commission_rate: Number(commissionRate || 0),
       commission_amount: Number(commissionAmount || 0),
       amount: Number(commissionAmount || 0),
@@ -66,17 +90,17 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="gross">Gross amount</Label>
-              <Input id="gross" type="number" min={0} value={grossAmount} onChange={(e) => setGrossAmount(Number(e.target.value))} />
+              <Label>Gross amount (derived)</Label>
+              <Input type="number" value={Number(grossAmount || 0).toFixed(2)} disabled />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="referrals">Referrals</Label>
-              <Input id="referrals" type="number" min={0} value={referralsCount} onChange={(e) => setReferralsCount(Number(e.target.value))} />
+              <Label>Paid first-month referrals</Label>
+              <Input type="number" value={paidUsersCount} disabled />
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="rate">Commission rate (%)</Label>
-            <Input id="rate" type="number" min={0} max={100} value={commissionRate} onChange={(e) => setCommissionRate(Number(e.target.value))} />
+            <Label>Commission rate (%)</Label>
+            <Input type="number" min={0} max={100} value={commissionRate} disabled />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="notes">Notes</Label>

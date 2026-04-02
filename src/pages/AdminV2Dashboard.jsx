@@ -72,6 +72,41 @@ export default function AdminV2Dashboard() {
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
   const pendingAffiliates = affiliates.filter((a) => a.status === 'pending');
+  const userBehaviorRows = useMemo(() => {
+    const subByUserId = new Map(
+      subscriptions
+        .filter((s) => s.user_id)
+        .map((s) => [String(s.user_id), s])
+    );
+    const subByEmail = new Map(
+      subscriptions
+        .filter((s) => s.user_email || s.email)
+        .map((s) => [String(s.user_email || s.email).toLowerCase(), s])
+    );
+
+    return users
+      .map((u) => {
+        const email = String(u.email || '').toLowerCase();
+        const sub =
+          subByUserId.get(String(u.id)) ||
+          (email ? subByEmail.get(email) : null) ||
+          null;
+        return {
+          id: u.id,
+          full_name: u.full_name || '—',
+          email: u.email || '—',
+          company_name: u.company_name || u.company || '—',
+          plan: u.plan || u.subscription_plan || 'none',
+          status: u.status || 'active',
+          invoices_sent: Number(u.invoices_sent ?? u.invoices_count ?? 0),
+          subscription_status: sub?.status || 'none',
+          next_billing_date: sub?.next_billing_date || null,
+          updated_at: u.updated_at || null,
+          created_date: u.created_date || u.created_at || null,
+        };
+      })
+      .sort((a, b) => b.invoices_sent - a.invoices_sent);
+  }, [users, subscriptions]);
 
   return (
     <div>
@@ -160,6 +195,69 @@ export default function AdminV2Dashboard() {
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No subscriptions yet
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="font-semibold">User Behavior</h2>
+          <p className="text-xs text-muted-foreground">
+            Per-user profile details, invoices sent, plan, and billing behavior.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border text-xs text-muted-foreground">
+                <th className="px-6 py-3 text-left font-medium">User</th>
+                <th className="px-6 py-3 text-left font-medium">Company</th>
+                <th className="px-6 py-3 text-left font-medium">Plan</th>
+                <th className="px-6 py-3 text-left font-medium">Profile Status</th>
+                <th className="px-6 py-3 text-left font-medium">Invoices Sent</th>
+                <th className="px-6 py-3 text-left font-medium">Subscription</th>
+                <th className="px-6 py-3 text-left font-medium">Next Billing</th>
+                <th className="px-6 py-3 text-left font-medium">Last Activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {userBehaviorRows.map((row) => (
+                <tr key={row.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                  <td className="px-6 py-4">
+                    <p className="text-sm font-medium">{row.full_name}</p>
+                    <p className="text-xs text-muted-foreground">{row.email}</p>
+                  </td>
+                  <td className="px-6 py-4 text-sm">{row.company_name}</td>
+                  <td className="px-6 py-4">
+                    <PlanBadge plan={row.plan} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium">{row.invoices_sent}</td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={row.subscription_status} />
+                  </td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                    {row.next_billing_date ? format(new Date(row.next_billing_date), 'dd MMM yyyy') : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                    {row.updated_at
+                      ? `Updated ${format(new Date(row.updated_at), 'dd MMM yyyy')}`
+                      : row.created_date
+                        ? `Joined ${format(new Date(row.created_date), 'dd MMM yyyy')}`
+                        : '—'}
+                  </td>
+                </tr>
+              ))}
+              {userBehaviorRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                    No user behavior data yet
                   </td>
                 </tr>
               ) : null}

@@ -128,7 +128,7 @@ const ENTITY_SELECTS = {
   Subscription: '*',
   WaitlistEntry: '*',
   AffiliateSubmission: 'id, user_id, email, full_name, audience_platform, status, created_at, updated_at',
-  AffiliatePayout: 'id, affiliate_id, amount, currency, status, source, created_at, updated_at',
+  AffiliatePayout: 'id, affiliate_id, referral_id, amount, currency, status, source, created_at, updated_at',
   User: '*',
 };
 
@@ -167,6 +167,9 @@ function normalizeEntity(entityName, row) {
       applicant_name: row.applicant_name || row.full_name || row.name || '',
       applicant_email: row.applicant_email || row.email || '',
       audience_type: row.audience_type || row.audience_platform || 'other',
+      audience_size: row.audience_size || null,
+      why_promote: row.why_promote || null,
+      description: row.description || row.why_promote || '',
       referrals_count: Number(row.referrals_count || 0),
       earnings: Number(row.earnings || 0),
       commission_rate: Number(row.commission_rate ?? 15),
@@ -289,7 +292,17 @@ async function list(entityName, orderBy = '-created_date', limit = 100) {
       data = (data || []).map((row) => ({
         ...row,
         referral_code: row.referral_code || affiliateByUser.get(row.user_id)?.referral_code || '',
-        commission_rate: Number(row.commission_rate ?? affiliateByUser.get(row.user_id)?.commission_rate ?? 15),
+        // Admin UI uses percent; canonical `affiliates.commission_rate` is a fraction (0.2 = 20%).
+        commission_rate: Number(
+          row.commission_rate ??
+            (() => {
+              const v = affiliateByUser.get(row.user_id)?.commission_rate;
+              const n = Number(v);
+              if (!Number.isFinite(n)) return undefined;
+              return n <= 1 ? n * 100 : n;
+            })() ??
+            15
+        ),
       }));
     }
   }
@@ -315,8 +328,14 @@ async function update(entityName, id, payload) {
   if (entityName === 'AffiliateSubmission') {
     const userId = data?.user_id || payload?.user_id;
     if (userId) {
+      const toAffiliateRateFraction = (maybePercent) => {
+        const n = Number(maybePercent);
+        if (!Number.isFinite(n)) return undefined;
+        if (n <= 0) return undefined;
+        return n <= 1 ? n : n / 100;
+      };
       const affiliatePatch = {
-        commission_rate: Number(payload?.commission_rate ?? data?.commission_rate ?? 15),
+        commission_rate: toAffiliateRateFraction(payload?.commission_rate ?? data?.commission_rate) ?? 0.2,
       };
       if (payload?.referral_code) affiliatePatch.referral_code = payload.referral_code;
       if (payload?.status) affiliatePatch.status = payload.status;

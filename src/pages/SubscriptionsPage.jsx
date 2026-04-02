@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
@@ -41,7 +43,15 @@ function buildSubscriptionRows(users, subscriptions) {
     const sub = pickLatestSubscriptionForUser(subscriptions, u.id);
     if (sub) {
       assignedSubIds.add(sub.id);
-      rows.push({ ...sub, _rowKey: sub.id });
+      rows.push({
+        ...sub,
+        user_name: sub.user_name || u.full_name || '',
+        user_email: sub.user_email || u.email || '',
+        company_name: u.company_name || u.company || '',
+        company_address: u.company_address || '',
+        phone: u.phone || '',
+        _rowKey: sub.id,
+      });
     } else {
       const plan = mapProfilePlanToSubPlan(u.plan || u.subscription_plan);
       rows.push({
@@ -49,6 +59,9 @@ function buildSubscriptionRows(users, subscriptions) {
         user_id: u.id,
         user_name: u.full_name || '',
         user_email: u.email || '',
+        company_name: u.company_name || u.company || '',
+        company_address: u.company_address || '',
+        phone: u.phone || '',
         plan,
         amount: PLAN_DEFAULT_AMOUNT[plan] ?? 0,
         billing_cycle: 'monthly',
@@ -68,8 +81,6 @@ function buildSubscriptionRows(users, subscriptions) {
 
   return rows;
 }
-import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
-import { useCurrentUser } from '@/lib/useCurrentUser';
 
 export default function SubscriptionsPage() {
   const { user: currentUser } = useCurrentUser();
@@ -115,7 +126,9 @@ export default function SubscriptionsPage() {
     const matchSearch =
       !search ||
       (s.user_name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (s.user_email || '').toLowerCase().includes(search.toLowerCase());
+      (s.user_email || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.company_address || '').toLowerCase().includes(search.toLowerCase());
     const matchPlan = planFilter === 'all' || s.plan === planFilter;
     const matchStatus = statusFilter === 'all' || s.status === statusFilter;
     return matchSearch && matchPlan && matchStatus;
@@ -217,6 +230,7 @@ export default function SubscriptionsPage() {
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
                 <th className="px-6 py-3 text-left font-medium">User</th>
+                <th className="px-6 py-3 text-left font-medium">Company</th>
                 <th className="px-6 py-3 text-left font-medium">Plan</th>
                 <th className="px-6 py-3 text-left font-medium">Amount</th>
                 <th className="px-6 py-3 text-left font-medium">Billing</th>
@@ -234,6 +248,11 @@ export default function SubscriptionsPage() {
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium">{sub.user_name || '—'}</p>
                     <p className="text-xs text-muted-foreground">{sub.user_email}</p>
+                    {sub.phone ? <p className="text-xs text-muted-foreground">{sub.phone}</p> : null}
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm">{sub.company_name || '—'}</p>
+                    <p className="text-xs text-muted-foreground">{sub.company_address || '—'}</p>
                   </td>
                   <td className="px-6 py-4">
                     <PlanBadge plan={sub.plan} />
@@ -311,7 +330,7 @@ export default function SubscriptionsPage() {
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading...' : 'No subscriptions found'}
                   </td>
                 </tr>
