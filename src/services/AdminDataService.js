@@ -20,6 +20,13 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'breakapi_unified_audit_logs'
 };
 
+/** Skip noisy "Loaded 0 …" lines in production; empty sync cache is normal before admin sync. */
+function logSyncedRowCount(count, label) {
+  if (import.meta.env?.DEV || count > 0) {
+    console.log(`📊 AdminDataService: Loaded ${count} ${label} from storage`);
+  }
+}
+
 const SUPABASE_KEYS = {
   USERS: 'breakapi_supabase_users',
   ORGANIZATIONS: 'breakapi_supabase_organizations',
@@ -126,7 +133,7 @@ class AdminDataService {
   static getAllAffiliates() {
     try {
       const affiliates = this.getSupabaseData(SUPABASE_KEYS.AFFILIATES);
-      console.log(`📊 AdminDataService: Loaded ${affiliates.length} affiliates from storage`);
+      logSyncedRowCount(affiliates.length, 'affiliates');
       return affiliates;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading affiliates:', error);
@@ -137,7 +144,7 @@ class AdminDataService {
   static getAllAffiliateApplications() {
     try {
       const applications = this.getSupabaseData(SUPABASE_KEYS.AFFILIATE_APPLICATIONS);
-      console.log(`📊 AdminDataService: Loaded ${applications.length} affiliate applications from storage`);
+      logSyncedRowCount(applications.length, 'affiliate applications');
       return applications;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading affiliate applications:', error);
@@ -148,7 +155,7 @@ class AdminDataService {
   static getAllReferrals() {
     try {
       const referrals = this.getSupabaseData(SUPABASE_KEYS.REFERRALS);
-      console.log(`📊 AdminDataService: Loaded ${referrals.length} referrals from storage`);
+      logSyncedRowCount(referrals.length, 'referrals');
       return referrals;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading referrals:', error);
@@ -159,7 +166,7 @@ class AdminDataService {
   static getAllCommissions() {
     try {
       const commissions = this.getSupabaseData(SUPABASE_KEYS.COMMISSIONS);
-      console.log(`📊 AdminDataService: Loaded ${commissions.length} commissions from storage`);
+      logSyncedRowCount(commissions.length, 'commissions');
       return commissions;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading commissions:', error);
@@ -170,7 +177,7 @@ class AdminDataService {
   static getAllAffiliateClicks() {
     try {
       const clicks = this.getSupabaseData(SUPABASE_KEYS.AFFILIATE_CLICKS);
-      console.log(`📊 AdminDataService: Loaded ${clicks.length} affiliate clicks from storage`);
+      logSyncedRowCount(clicks.length, 'affiliate clicks');
       return clicks;
     } catch (error) {
       console.error('❌ AdminDataService: Error loading affiliate clicks:', error);
