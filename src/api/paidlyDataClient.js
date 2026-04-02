@@ -187,6 +187,9 @@ function normalizeEntity(entityName, row) {
       company: row.company || row.company_name || '',
       plan: row.plan || row.subscription_plan || 'none',
       status: row.status || 'active',
+      role: row.role || row.user_role || '',
+      email_verified: row.email_verified,
+      email_confirmed_at: row.email_confirmed_at ?? null,
       invoices_sent: Number(row.invoices_sent ?? row.invoices_count ?? 0),
       created_date: row.created_date || row.created_at || null,
     };

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
+import { adminUserNameEmailLines } from '@/utils/adminUserDisplay';
 import { Search, MoreHorizontal, UserPlus, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -30,7 +32,7 @@ export default function UsersPage() {
 
   const { data: users = [], isLoading, refetch } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 200),
+    queryFn: () => platformUsersQueryFn(500),
     refetchInterval: 30000,
   });
 
@@ -119,6 +121,7 @@ export default function UsersPage() {
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
                 <th className="px-6 py-3 text-left font-medium">User</th>
+                <th className="px-6 py-3 text-left font-medium">Email</th>
                 <th className="px-6 py-3 text-left font-medium">Status</th>
                 <th className="px-6 py-3 text-left font-medium">Plan</th>
                 <th className="px-6 py-3 text-left font-medium">Invoices Sent</th>
@@ -127,18 +130,31 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
+              {filtered.map((u) => {
+                const { primary, secondary } = adminUserNameEmailLines(u.full_name, u.email);
+                return (
                 <tr key={u.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                        {(u.full_name || u.email || '?')[0].toUpperCase()}
+                        {(primary || '?')[0].toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{u.full_name || '—'}</p>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                        <p className="text-sm font-medium">{primary}</p>
+                        {secondary ? (
+                          <p className="text-xs text-muted-foreground">{secondary}</p>
+                        ) : null}
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {u.email_verified === false ? (
+                      <StatusBadge status="unverified" />
+                    ) : u.email_verified === true ? (
+                      <StatusBadge status="verified" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <StatusBadge status={u.status} />
@@ -188,10 +204,11 @@ export default function UsersPage() {
                     </DropdownMenu>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading users...' : 'No users found'}
                   </td>
                 </tr>

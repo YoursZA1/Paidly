@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { paidly } from '@/api/paidlyClient';
+import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ export default function TeamMembers() {
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 200),
+    queryFn: () => platformUsersQueryFn(200),
     refetchInterval: 60000,
   });
 

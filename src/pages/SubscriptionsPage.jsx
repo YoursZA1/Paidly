@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { Search, MoreHorizontal, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -99,7 +100,7 @@ export default function SubscriptionsPage() {
 
   const { data: platformUsers = [], isLoading: usersLoading } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', LIST_LIMIT),
+    queryFn: () => platformUsersQueryFn(LIST_LIMIT),
     refetchInterval: 30000,
   });
 

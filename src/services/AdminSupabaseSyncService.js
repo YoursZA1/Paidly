@@ -115,6 +115,10 @@ const mergeUsers = (existingUsers, supabaseUsers) => {
   const supabaseIds = new Set(supabaseUsers.map((user) => user.id));
   const supabaseEmails = new Set(supabaseUsers.map((user) => (user.email || "").toLowerCase()));
   const untouched = existingUsers.filter((user) => {
+    const sid = user?.supabase_id || user?.auth_id;
+    if (sid && !supabaseIds.has(String(sid))) {
+      return false;
+    }
     const email = (user?.email || "").toLowerCase();
     if (user?.supabase_id && supabaseIds.has(user.supabase_id)) {
       return false;

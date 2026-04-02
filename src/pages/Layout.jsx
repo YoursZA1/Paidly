@@ -679,9 +679,27 @@ export default function Layout({ children, currentPageName }) {
       // Implement recurring invoice logic here if needed
     };
 
+    const checkTrialSubscriptionNotifications = async () => {
+      const last = localStorage.getItem("lastTrialSubscriptionNotifCheck");
+      const nowMs = Date.now();
+      const sixHours = 6 * 60 * 60 * 1000;
+      if (!last || nowMs - parseInt(last, 10) > sixHours) {
+        try {
+          const { checkTrialSubscriptionNotifications: runTrialNotifs } = await import(
+            "@/services/TrialSubscriptionNotificationService"
+          );
+          await runTrialNotifs();
+          localStorage.setItem("lastTrialSubscriptionNotifCheck", String(nowMs));
+        } catch (error) {
+          console.error("Failed to check trial subscription notifications:", error);
+        }
+      }
+    };
+
     checkRecurringInvoices();
     checkDueDateReminders();
     checkClientFollowUps();
+    checkTrialSubscriptionNotifications();
   }, [user]);
 
   const handleLogout = async () => {

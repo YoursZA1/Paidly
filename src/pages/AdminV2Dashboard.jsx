@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
+import { adminUserNameEmailLines } from '@/utils/adminUserDisplay';
 import {
   Users,
   CreditCard,
@@ -50,7 +52,7 @@ export default function AdminV2Dashboard() {
 
   const { data: users = [], dataUpdatedAt: usersUpdatedAt } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 150),
+    queryFn: () => platformUsersQueryFn(500),
     refetchInterval: 45000,
     staleTime: 30000,
   });
@@ -198,6 +200,7 @@ export default function AdminV2Dashboard() {
           id: u.id,
           full_name: u.full_name || '—',
           email: u.email || '—',
+          email_verified: u.email_verified,
           company_name: u.company_name || u.company || '—',
           plan: u.plan || u.subscription_plan || 'none',
           status: u.status || 'active',
@@ -456,7 +459,8 @@ export default function AdminV2Dashboard() {
                 <th className="px-6 py-3 text-left font-medium">User</th>
                 <th className="px-6 py-3 text-left font-medium">Company</th>
                 <th className="px-6 py-3 text-left font-medium">Plan</th>
-                <th className="px-6 py-3 text-left font-medium">Profile Status</th>
+                <th className="px-6 py-3 text-left font-medium">Profile</th>
+                <th className="px-6 py-3 text-left font-medium">Email</th>
                 <th className="px-6 py-3 text-left font-medium">Invoices</th>
                 <th className="px-6 py-3 text-left font-medium">Quotes</th>
                 <th className="px-6 py-3 text-left font-medium">Payslips</th>
@@ -467,11 +471,15 @@ export default function AdminV2Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {userBehaviorRows.map((row) => (
+              {userBehaviorRows.map((row) => {
+                const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
+                return (
                 <tr key={row.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium">{row.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{row.email}</p>
+                    <p className="text-sm font-medium">{primary}</p>
+                    {secondary ? (
+                      <p className="text-xs text-muted-foreground">{secondary}</p>
+                    ) : null}
                   </td>
                   <td className="px-6 py-4 text-sm">{row.company_name}</td>
                   <td className="px-6 py-4">
@@ -479,6 +487,15 @@ export default function AdminV2Dashboard() {
                   </td>
                   <td className="px-6 py-4">
                     <StatusBadge status={row.status} />
+                  </td>
+                  <td className="px-6 py-4">
+                    {row.email_verified === false ? (
+                      <StatusBadge status="unverified" />
+                    ) : row.email_verified === true ? (
+                      <StatusBadge status="verified" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">{row.invoices_sent}</td>
                   <td className="px-6 py-4 text-sm font-medium">{row.quotes_created}</td>
@@ -500,10 +517,11 @@ export default function AdminV2Dashboard() {
                         : '—'}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
               {userBehaviorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={12} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No user behavior data yet
                   </td>
                 </tr>

@@ -11,6 +11,9 @@ const statusStyles = {
   approved: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
   declined: 'bg-red-500/10 text-red-500 border-red-500/20',
   none: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  /** Email confirmation (admin user directory) */
+  unverified: 'bg-amber-500/10 text-amber-600 border-amber-500/25',
+  verified: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
 };
 
 export default function StatusBadge({ status }) {

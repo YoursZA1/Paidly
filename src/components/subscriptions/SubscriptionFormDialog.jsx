@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
+import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import {
   Dialog,
   DialogContent,
@@ -68,7 +69,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   const isEdit = Boolean(subscription?.id);
   const { data: users = [] } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => paidly.entities.PlatformUser.list('-created_date', 500),
+    queryFn: () => platformUsersQueryFn(500),
     enabled: open,
   });
 

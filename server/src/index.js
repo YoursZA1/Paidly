@@ -1802,6 +1802,56 @@ app.post("/api/admin/bootstrap", async (req, res) => {
   }
 });
 
+/** Paginate through all Supabase Auth users (admin API). */
+async function listAllAuthUsersAdmin() {
+  const perPage = 200;
+  let page = 1;
+  const authUsers = [];
+  while (true) {
+    const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage
+    });
+    if (listError) {
+      throw new Error(listError.message);
+    }
+    const batch = data?.users || [];
+    authUsers.push(...batch);
+    if (batch.length < perPage) {
+      break;
+    }
+    page += 1;
+  }
+  return authUsers;
+}
+
+function dedupeAuthUsersByEmail(authUsers) {
+  const sorted = [...authUsers].sort(
+    (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  );
+  const byEmail = new Map();
+  const withoutEmail = [];
+  for (const u of sorted) {
+    const key = String(u.email || "").trim().toLowerCase();
+    if (!key) {
+      withoutEmail.push(u);
+      continue;
+    }
+    if (!byEmail.has(key)) {
+      byEmail.set(key, u);
+    }
+  }
+  return [...byEmail.values(), ...withoutEmail];
+}
+
+function authEmailVerificationFields(authUser) {
+  const at = authUser?.email_confirmed_at || authUser?.confirmed_at;
+  return {
+    email_verified: Boolean(at),
+    email_confirmed_at: at || null
+  };
+}
+
 app.get("/api/admin/users", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res);
@@ -1825,13 +1875,20 @@ app.get("/api/admin/users", async (req, res) => {
       }
 
       const batch = data?.users || [];
-      users.push(...batch.map((u) => ({
-        id: u.id,
-        email: u.email,
-        app_metadata: u.app_metadata || {},
-        user_metadata: u.user_metadata || {},
-        created_at: u.created_at
-      })));
+      users.push(
+        ...batch.map((u) => {
+          const ev = authEmailVerificationFields(u);
+          return {
+            id: u.id,
+            email: u.email,
+            app_metadata: u.app_metadata || {},
+            user_metadata: u.user_metadata || {},
+            created_at: u.created_at,
+            email_verified: ev.email_verified,
+            email_confirmed_at: ev.email_confirmed_at
+          };
+        })
+      );
 
       if (batch.length < perPage) {
         break;
@@ -2002,6 +2059,122 @@ app.post("/api/account/delete", async (req, res) => {
   }
 });
 
+app.get("/api/admin/platform-users", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res);
+    if (!adminUser) {
+      return;
+    }
+
+    let limit = 500;
+    if (req.query.limit != null && String(req.query.limit).trim() !== "") {
+      const n = Number(String(req.query.limit).trim());
+      if (!Number.isInteger(n) || n < 1 || n > 2000) {
+        return res.status(400).json({ error: "Invalid limit (use integer 1–2000)" });
+      }
+      limit = n;
+    }
+
+    let authUsers;
+    try {
+      authUsers = await listAllAuthUsersAdmin();
+    } catch (e) {
+      logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
+      return res.status(500).json({ error: e?.message || "listUsers failed" });
+    }
+    authUsers = dedupeAuthUsersByEmail(authUsers);
+    authUsers.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    authUsers = authUsers.slice(0, limit);
+
+    const userIds = authUsers.map((u) => u.id);
+    const { data: profiles, error: profilesError } = userIds.length
+      ? await supabaseAdmin.from("profiles").select("*").in("id", userIds)
+      : { data: [], error: null };
+
+    if (profilesError) {
+      logAdminApi(req.method, req.path, 500, `profiles: ${profilesError.message}`);
+      return res.status(500).json({ error: profilesError.message });
+    }
+
+    const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+    const users = authUsers.map((authUser) => {
+      const profile = profileMap.get(authUser.id) || null;
+      const ev = authEmailVerificationFields(authUser);
+      const email = String(authUser.email || profile?.email || "").trim();
+      const full_name = String(
+        profile?.full_name ||
+          authUser.user_metadata?.full_name ||
+          authUser.user_metadata?.name ||
+          ""
+      ).trim();
+      const plan = profile?.subscription_plan || authUser.user_metadata?.plan || "free";
+      const status = profile?.status ?? "active";
+      const role = String(
+        authUser.app_metadata?.role || profile?.role || profile?.user_role || "user"
+      ).toLowerCase();
+      return {
+        id: authUser.id,
+        email,
+        full_name: full_name || email || "—",
+        role,
+        email_verified: ev.email_verified,
+        email_confirmed_at: ev.email_confirmed_at,
+        app_metadata: authUser.app_metadata || {},
+        user_metadata: authUser.user_metadata || {},
+        created_at: authUser.created_at,
+        created_date: authUser.created_at,
+        last_sign_in_at: authUser.last_sign_in_at || null,
+        profile,
+        plan,
+        status,
+        company_name: profile?.company_name || "",
+        company: profile?.company_name || "",
+        subscription_plan: profile?.subscription_plan,
+        invoices_sent: Number(profile?.invoices_sent ?? profile?.invoices_count ?? 0),
+        updated_at: profile?.updated_at || null
+      };
+    });
+
+    logAdminApi(req.method, req.path, 200, `${users.length} platform users`);
+    return res.json({ users });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({
+      error: err?.message || "Failed to list platform users"
+    });
+  }
+});
+
+app.post("/api/admin/clean-orphaned-users", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res);
+    if (!adminUser) {
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin.rpc("admin_delete_orphan_profiles");
+    if (error) {
+      logAdminApi(req.method, req.path, 500, error.message);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const deleted = typeof data === "number" ? data : Number(data) || 0;
+    logAdminApi(req.method, req.path, 200, `orphan profiles removed: ${deleted}`);
+    return res.json({ deleted });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({
+      error: err?.message || "Failed to clean orphaned profiles"
+    });
+  }
+});
+
 app.get("/api/admin/sync-users", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res);
@@ -2009,29 +2182,12 @@ app.get("/api/admin/sync-users", async (req, res) => {
       return;
     }
 
-    const perPage = 200;
-    let page = 1;
-    const authUsers = [];
-
-    while (true) {
-      const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers({
-        page,
-        perPage
-      });
-
-      if (listError) {
-        logAdminApi(req.method, req.path, 500, `listUsers: ${listError.message}`);
-        return res.status(500).json({ error: listError.message });
-      }
-
-      const batch = data?.users || [];
-      authUsers.push(...batch);
-
-      if (batch.length < perPage) {
-        break;
-      }
-
-      page += 1;
+    let authUsers;
+    try {
+      authUsers = await listAllAuthUsersAdmin();
+    } catch (e) {
+      logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
+      return res.status(500).json({ error: e?.message });
     }
 
     const userIds = authUsers.map((u) => u.id);
@@ -2082,15 +2238,20 @@ app.get("/api/admin/sync-users", async (req, res) => {
       return acc;
     }, {});
 
-    const users = authUsers.map((authUser) => ({
-      id: authUser.id,
-      email: authUser.email,
-      app_metadata: authUser.app_metadata || {},
-      user_metadata: authUser.user_metadata || {},
-      created_at: authUser.created_at,
-      profile: profileMap.get(authUser.id) || null,
-      memberships: membershipsByUser[authUser.id] || []
-    }));
+    const users = authUsers.map((authUser) => {
+      const ev = authEmailVerificationFields(authUser);
+      return {
+        id: authUser.id,
+        email: authUser.email,
+        app_metadata: authUser.app_metadata || {},
+        user_metadata: authUser.user_metadata || {},
+        created_at: authUser.created_at,
+        email_verified: ev.email_verified,
+        email_confirmed_at: ev.email_confirmed_at,
+        profile: profileMap.get(authUser.id) || null,
+        memberships: membershipsByUser[authUser.id] || []
+      };
+    });
 
     logAdminApi(req.method, req.path, 200, `${users.length} users`);
     return res.json({ users });
@@ -2121,30 +2282,16 @@ app.get("/api/admin/sync-data", async (req, res) => {
       limit = n;
     }
 
-    const users = [];
-    const perPage = 200;
-    let page = 1;
-
-    while (true) {
-      const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers({
-        page,
-        perPage
-      });
-
-      if (listError) {
-        logAdminApi(req.method, req.path, 500, `listUsers: ${listError.message}`);
-        return res.status(500).json({ error: listError.message });
-      }
-
-      const batch = data?.users || [];
-      users.push(...batch);
-
-      if (batch.length < perPage) {
-        break;
-      }
-
-      page += 1;
+    let users;
+    try {
+      users = await listAllAuthUsersAdmin();
+    } catch (e) {
+      logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
+      return res.status(500).json({ error: e?.message });
     }
+    users = dedupeAuthUsersByEmail(users);
+    users.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    users = users.slice(0, limit);
 
     const userIds = users.map((u) => u.id);
 
@@ -2346,15 +2493,20 @@ app.get("/api/admin/sync-data", async (req, res) => {
       return acc;
     }, {});
 
-    const enrichedUsers = (users || []).map((authUser) => ({
-      id: authUser.id,
-      email: authUser.email,
-      app_metadata: authUser.app_metadata || {},
-      user_metadata: authUser.user_metadata || {},
-      created_at: authUser.created_at,
-      profile: profileMap.get(authUser.id) || null,
-      memberships: membershipsByUser[authUser.id] || []
-    }));
+    const enrichedUsers = (users || []).map((authUser) => {
+      const ev = authEmailVerificationFields(authUser);
+      return {
+        id: authUser.id,
+        email: authUser.email,
+        app_metadata: authUser.app_metadata || {},
+        user_metadata: authUser.user_metadata || {},
+        created_at: authUser.created_at,
+        email_verified: ev.email_verified,
+        email_confirmed_at: ev.email_confirmed_at,
+        profile: profileMap.get(authUser.id) || null,
+        memberships: membershipsByUser[authUser.id] || []
+      };
+    });
 
     const counts = {
       users: enrichedUsers.length,
