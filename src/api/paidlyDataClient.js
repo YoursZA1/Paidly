@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
 const PAIDLY_AUDIT_STORAGE_KEY = 'paidly_audit_log';
-const PAIDLY_AUDIT_DB_UNAVAILABLE_KEY = 'paidly_audit_db_unavailable';
 
 function stringifyMaybeJson(val) {
   if (val == null) return null;
@@ -35,43 +34,62 @@ function mapLegacyEntityToCategory(entityType) {
   return 'settings';
 }
 
+/** Pulls Supabase `audit_logs` (never permanently skipped — old localStorage flag caused empty DB forever). */
+async function fetchAuditLogRowsFromSupabase(limit) {
+  try {
+    const ordered = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (!ordered.error && Array.isArray(ordered.data)) {
+      return ordered.data;
+    }
+
+    if (import.meta.env?.DEV && ordered.error) {
+      console.warn('[paidly] audit_logs query:', ordered.error.code, ordered.error.message);
+    }
+
+    // e.g. missing sort column in an old fork — still return rows
+    const fallback = await supabase.from('audit_logs').select('*').limit(limit);
+    if (!fallback.error && Array.isArray(fallback.data)) {
+      return fallback.data.sort(
+        (a, b) => new Date(b.created_at || b.created_date || 0) - new Date(a.created_at || a.created_date || 0)
+      );
+    }
+
+    if (import.meta.env?.DEV && fallback.error) {
+      console.warn('[paidly] audit_logs fallback:', fallback.error.message);
+    }
+  } catch (e) {
+    if (import.meta.env?.DEV) {
+      console.warn('[paidly] audit_logs:', e?.message || e);
+    }
+  }
+  return [];
+}
+
 /** Merges Supabase `audit_logs`, Settings `paidly_audit_log`, and unified AuditLogService entries. */
 async function listAuditLogs(limit = 200) {
+  const cap = Number(limit) > 0 ? Math.min(Number(limit), 500) : 200;
   const out = [];
   const seenIds = new Set();
 
-  const skipAuditDb =
-    typeof localStorage !== 'undefined' &&
-    localStorage.getItem(PAIDLY_AUDIT_DB_UNAVAILABLE_KEY) === '1';
-
-  if (!skipAuditDb) {
-    try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (error?.code === '42P01' || /audit_logs/i.test(String(error?.message || ''))) {
-        try {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(PAIDLY_AUDIT_DB_UNAVAILABLE_KEY, '1');
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-
-      if (!error && data?.length) {
-        for (const row of data) {
-          const n = normalizeAuditLogRowDb(row);
-          if (n.id != null) seenIds.add(String(n.id));
-          out.push(n);
-        }
-      }
-    } catch {
-      /* table or policy may be missing */
+  // Legacy: older builds set this when `audit_logs` was missing and never retried after the table existed.
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('paidly_audit_db_unavailable');
     }
+  } catch {
+    /* ignore */
+  }
+
+  const dbRows = await fetchAuditLogRowsFromSupabase(cap);
+  for (const row of dbRows) {
+    const n = normalizeAuditLogRowDb(row);
+    if (n.id != null) seenIds.add(String(n.id));
+    out.push(n);
   }
 
   try {
@@ -103,7 +121,7 @@ async function listAuditLogs(limit = 200) {
 
   try {
     const { default: AuditLogService } = await import('@/services/AuditLogService');
-    const legacy = AuditLogService.getLogs({ limit: 150 });
+    const legacy = AuditLogService.getLogs({ limit: Math.min(cap, 400) });
     for (const log of legacy) {
       const lid = log.id ? String(log.id) : null;
       if (lid && seenIds.has(lid)) continue;
@@ -127,7 +145,7 @@ async function listAuditLogs(limit = 200) {
   }
 
   out.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
-  return out.slice(0, limit);
+  return out.slice(0, cap);
 }
 
 const ENTITY_TABLES = {
@@ -311,10 +329,20 @@ function normalizeOrder(orderBy) {
   return { column, ascending: !descending };
 }
 
-async function list(entityName, orderBy = '-created_date', limit = 100) {
-  if (entityName === 'AuditLog') {
-    return listAuditLogs(limit);
+function coerceListLimit(limitOrOpts, fallback = 100) {
+  if (limitOrOpts != null && typeof limitOrOpts === 'object' && !Array.isArray(limitOrOpts)) {
+    const n = Number(limitOrOpts.limit);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
   }
+  const n = Number(limitOrOpts);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
+  if (entityName === 'AuditLog') {
+    return listAuditLogs(coerceListLimit(limitOrOpts, 200));
+  }
+  const limit = coerceListLimit(limitOrOpts, 100);
   const tableCandidates = getTableCandidates(entityName);
   let table = tableCandidates[0];
   const { column, ascending } = normalizeOrder(orderBy);
