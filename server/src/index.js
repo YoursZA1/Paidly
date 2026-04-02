@@ -13,6 +13,12 @@ import {
 } from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
+import {
+  authEmailVerificationFields,
+  dedupeAuthUsersByEmail,
+  fetchMergedPlatformUsersForAdmin,
+  listAllAuthUsersAdmin,
+} from "./adminPlatformUsersList.js";
 import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
@@ -1805,56 +1811,6 @@ app.post("/api/admin/bootstrap", async (req, res) => {
   }
 });
 
-/** Paginate through all Supabase Auth users (admin API). */
-async function listAllAuthUsersAdmin() {
-  const perPage = 200;
-  let page = 1;
-  const authUsers = [];
-  while (true) {
-    const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage
-    });
-    if (listError) {
-      throw new Error(listError.message);
-    }
-    const batch = data?.users || [];
-    authUsers.push(...batch);
-    if (batch.length < perPage) {
-      break;
-    }
-    page += 1;
-  }
-  return authUsers;
-}
-
-function dedupeAuthUsersByEmail(authUsers) {
-  const sorted = [...authUsers].sort(
-    (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-  );
-  const byEmail = new Map();
-  const withoutEmail = [];
-  for (const u of sorted) {
-    const key = String(u.email || "").trim().toLowerCase();
-    if (!key) {
-      withoutEmail.push(u);
-      continue;
-    }
-    if (!byEmail.has(key)) {
-      byEmail.set(key, u);
-    }
-  }
-  return [...byEmail.values(), ...withoutEmail];
-}
-
-function authEmailVerificationFields(authUser) {
-  const at = authUser?.email_confirmed_at || authUser?.confirmed_at;
-  return {
-    email_verified: Boolean(at),
-    email_confirmed_at: at || null
-  };
-}
-
 app.get("/api/admin/users", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
@@ -2078,69 +2034,13 @@ app.get("/api/admin/platform-users", async (req, res) => {
       limit = n;
     }
 
-    let authUsers;
+    let users;
     try {
-      authUsers = await listAllAuthUsersAdmin();
+      ({ users } = await fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit));
     } catch (e) {
-      logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
-      return res.status(500).json({ error: e?.message || "listUsers failed" });
+      logAdminApi(req.method, req.path, 500, `platform-users: ${e?.message}`);
+      return res.status(500).json({ error: e?.message || "Failed to list platform users" });
     }
-    authUsers = dedupeAuthUsersByEmail(authUsers);
-    authUsers.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    authUsers = authUsers.slice(0, limit);
-
-    const userIds = authUsers.map((u) => u.id);
-    const { data: profiles, error: profilesError } = userIds.length
-      ? await supabaseAdmin.from("profiles").select("*").in("id", userIds)
-      : { data: [], error: null };
-
-    if (profilesError) {
-      logAdminApi(req.method, req.path, 500, `profiles: ${profilesError.message}`);
-      return res.status(500).json({ error: profilesError.message });
-    }
-
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-    const users = authUsers.map((authUser) => {
-      const profile = profileMap.get(authUser.id) || null;
-      const ev = authEmailVerificationFields(authUser);
-      const email = String(authUser.email || profile?.email || "").trim();
-      const full_name = String(
-        profile?.full_name ||
-          authUser.user_metadata?.full_name ||
-          authUser.user_metadata?.name ||
-          ""
-      ).trim();
-      const plan = profile?.subscription_plan || authUser.user_metadata?.plan || "free";
-      const status = profile?.status ?? "active";
-      const role = String(
-        authUser.app_metadata?.role ||
-          profile?.role ||
-          profile?.user_role ||
-          authUser.user_metadata?.role ||
-          "user"
-      ).toLowerCase();
-      return {
-        id: authUser.id,
-        email,
-        full_name: full_name || email || "—",
-        role,
-        email_verified: ev.email_verified,
-        email_confirmed_at: ev.email_confirmed_at,
-        app_metadata: authUser.app_metadata || {},
-        user_metadata: authUser.user_metadata || {},
-        created_at: authUser.created_at,
-        created_date: authUser.created_at,
-        last_sign_in_at: authUser.last_sign_in_at || null,
-        profile,
-        plan,
-        status,
-        company_name: profile?.company_name || "",
-        company: profile?.company_name || "",
-        subscription_plan: profile?.subscription_plan,
-        invoices_sent: Number(profile?.invoices_sent ?? profile?.invoices_count ?? 0),
-        updated_at: profile?.updated_at || null
-      };
-    });
 
     logAdminApi(req.method, req.path, 200, `${users.length} platform users`);
     return res.json({ users });
@@ -2323,7 +2223,7 @@ app.get("/api/admin/sync-users", async (req, res) => {
 
     let authUsers;
     try {
-      authUsers = await listAllAuthUsersAdmin();
+      authUsers = await listAllAuthUsersAdmin(supabaseAdmin);
     } catch (e) {
       logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
       return res.status(500).json({ error: e?.message });
@@ -2423,7 +2323,7 @@ app.get("/api/admin/sync-data", async (req, res) => {
 
     let users;
     try {
-      users = await listAllAuthUsersAdmin();
+      users = await listAllAuthUsersAdmin(supabaseAdmin);
     } catch (e) {
       logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
       return res.status(500).json({ error: e?.message });

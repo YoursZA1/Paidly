@@ -56,7 +56,9 @@ async function getSessionDataForProfileWrite(cachedUser) {
   } catch (e) {
     if (isAbortError(e) && (cachedUser?.supabase_id || cachedUser?.id)) {
       const id = String(cachedUser.supabase_id || cachedUser.id);
-      return { data: { session: { user: { id } } }, error: null };
+      if (isSupabaseAuthUuid(id)) {
+        return { data: { session: { user: { id } } }, error: null };
+      }
     }
     throw e;
   }
@@ -77,6 +79,16 @@ async function getAuthUserIdForWrites() {
   }
   const { data: sessionData } = await getSessionWithRetry();
   return sessionData?.session?.user?.id ?? null;
+}
+
+/**
+ * Legacy `AuthManager.login` used `user_${hash}` when no Supabase session existed.
+ * Never pass those strings to Postgres uuid columns (profiles.id, memberships.user_id, …).
+ */
+function isSupabaseAuthUuid(id) {
+  if (id == null) return false;
+  const s = String(id).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
@@ -604,7 +616,57 @@ class EntityManager {
   }
 
   async ensureUserHasOrganization(userId) {
-    if (userId && orgIdCache[userId]) return orgIdCache[userId];
+    if (!userId || !isSupabaseAuthUuid(String(userId))) {
+      throw new Error("Organization setup requires a valid signed-in user (Supabase auth id).");
+    }
+    if (orgIdCache[userId]) return orgIdCache[userId];
+
+    let sessionUid = null;
+    try {
+      const { data: gu } = await supabase.auth.getUser();
+      sessionUid = gu?.user?.id ?? null;
+    } catch {
+      /* fall through */
+    }
+    if (!sessionUid) {
+      const { data: sd } = await getSessionWithRetry();
+      sessionUid = sd?.session?.user?.id ?? null;
+    }
+    if (!sessionUid || sessionUid !== userId) {
+      throw new Error("Organization setup requires the active session user. Sign in again and retry.");
+    }
+
+    let orgName = "My Organization";
+    try {
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("company_name, full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      if (userProfile) {
+        orgName = userProfile.company_name || userProfile.full_name || orgName;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const { data: rpcOrgId, error: rpcErr } = await supabase.rpc("bootstrap_user_organization", {
+      p_name: orgName,
+    });
+    const rpcMsg = rpcErr ? String(rpcErr.message || "") : "";
+    const missingRpc =
+      rpcErr &&
+      (/does not exist|schema cache|42883|function.*not.*found/i.test(rpcMsg) ||
+        String(rpcErr.code || "") === "42883");
+
+    if (!rpcErr && rpcOrgId) {
+      orgIdCache[userId] = rpcOrgId;
+      return rpcOrgId;
+    }
+    if (rpcErr && !missingRpc) {
+      console.warn("bootstrap_user_organization:", getSupabaseErrorMessage(rpcErr, "Org bootstrap failed"));
+    }
+
     try {
       // Check if user has a membership
       const { data: existingMembership, error: membershipCheckError } = await supabase
@@ -641,22 +703,6 @@ class EntityManager {
 
       // Create organization if it doesn't exist
       if (!orgId) {
-        // Try to get user profile, but don't fail if it doesn't exist
-        let orgName = 'My Organization';
-        try {
-          const { data: userProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('company_name, full_name')
-            .eq('id', userId)
-            .maybeSingle();
-
-          if (!profileError && userProfile) {
-            orgName = userProfile.company_name || userProfile.full_name || 'My Organization';
-          }
-        } catch (profileErr) {
-          console.warn('Could not fetch profile for org name, using default:', profileErr);
-        }
-        
         const { data: newOrg, error: orgError } = await supabase
           .from('organizations')
           .insert({
@@ -1657,6 +1703,7 @@ class AuthManager {
     this.isAuthenticated = true;
     this.user = {
       id: supabaseUserId || userId,
+      supabase_id: supabaseUserId ?? null,
       email,
       role: resolvedRole,
       full_name: companyProfile.full_name || credentials.full_name || credentials.email?.split('@')[0] || 'User',
@@ -1692,7 +1739,8 @@ class AuthManager {
       throw new Error('Not authenticated');
     }
 
-    const cachedAuthId = this.user.supabase_id || this.user.id;
+    const rawCached = this.user.supabase_id || this.user.id;
+    const cachedAuthId = isSupabaseAuthUuid(rawCached) ? rawCached : null;
 
     const withLocalTimeout = async (promise, ms, label) => {
       let timer;
@@ -1947,8 +1995,9 @@ class AuthManager {
 
     const { data: sessionData } = await getSessionDataForProfileWrite(this.user);
     // Same fallback as me(): avoid skipping DB writes when getSession is slow/empty but we already have the auth id.
-    const authUserId =
+    const rawAuth =
       sessionData?.session?.user?.id ?? this.user?.supabase_id ?? this.user?.id ?? null;
+    const authUserId = isSupabaseAuthUuid(rawAuth) ? rawAuth : null;
 
     // Keep id as auth user id when available so all consumers get the real user id
     const updatedUser = {
@@ -2125,6 +2174,42 @@ class IntegrationManager {
     };
 
     const getOrgIdForUser = async (userId) => {
+      if (!userId || !isSupabaseAuthUuid(String(userId))) {
+        throw new Error("Invalid user id for organization resolution.");
+      }
+
+      let orgName = "My Organization";
+      try {
+        const { data: userProfile } = await supabase
+          .from("profiles")
+          .select("company_name, full_name")
+          .eq("id", userId)
+          .maybeSingle();
+        if (userProfile) {
+          orgName = userProfile.company_name || userProfile.full_name || orgName;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      const { data: rpcOrgId, error: rpcErr } = await supabase.rpc("bootstrap_user_organization", {
+        p_name: orgName,
+      });
+      const rpcMsg = rpcErr ? String(rpcErr.message || "") : "";
+      const missingRpc =
+        rpcErr &&
+        (/does not exist|schema cache|42883|function.*not.*found/i.test(rpcMsg) ||
+          String(rpcErr.code || "") === "42883");
+      if (!rpcErr && rpcOrgId) {
+        return rpcOrgId;
+      }
+      if (rpcErr && !missingRpc) {
+        console.warn(
+          "IntegrationManager bootstrap_user_organization:",
+          getSupabaseErrorMessage(rpcErr, "Org bootstrap failed")
+        );
+      }
+
       const { data: existingMembership, error: membershipCheckError } = await supabase
         .from('memberships')
         .select('org_id')
@@ -2150,21 +2235,6 @@ class IntegrationManager {
 
       // Create organization if it doesn't exist
       if (!orgId) {
-        let orgName = 'My Organization';
-        try {
-          const { data: userProfile } = await supabase
-            .from('profiles')
-            .select('company_name, full_name')
-            .eq('id', userId)
-            .maybeSingle();
-
-          if (userProfile) {
-            orgName = userProfile.company_name || userProfile.full_name || 'My Organization';
-          }
-        } catch (profileErr) {
-          console.warn('Could not fetch profile for org name:', profileErr);
-        }
-        
         const { data: newOrg, error: orgError } = await supabase
           .from('organizations')
           .insert({

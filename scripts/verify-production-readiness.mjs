@@ -34,6 +34,8 @@ const requiredMigrations = [
   "20260401150000_admin_query_indexes.sql",
   "20260402143000_affiliate_internal_team_access.sql",
   "20260406100000_affiliate_applications_select_rls_jwt_admin.sql",
+  "20260406120000_affiliate_applications_submit_rpc_and_insert_repair.sql",
+  "20260407150000_organizations_bootstrap_rls.sql",
 ];
 
 const requiredIndexes = [
@@ -42,6 +44,8 @@ const requiredIndexes = [
 ];
 
 const requiredPolicies = [
+  "affiliate_applications_anon_insert",
+  "affiliate_applications_auth_insert",
   "affiliate_applications_team_select",
   "affiliate_applications_jwt_admin_select",
   "affiliate_applications_management_update",

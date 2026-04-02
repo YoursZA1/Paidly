@@ -132,22 +132,34 @@ export { loadAffiliateSubmissionsForAdmin } from "@/api/paidlyDataClient";
 
 /**
  * Submit public affiliate application (insert affiliate_applications).
+ * Uses RPC `submit_affiliate_application` (SECURITY DEFINER) so applies succeed even when direct INSERT RLS is misconfigured.
  */
 export async function submitAffiliateApplication({ email, fullName, whyPromote, audiencePlatform }) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const uid = sessionData?.session?.user?.id ?? null;
-
-  const row = {
-    email: String(email).trim().toLowerCase(),
-    full_name: String(fullName).trim(),
-    why_promote: whyPromote != null ? String(whyPromote).trim() : null,
-    audience_platform: audiencePlatform != null ? String(audiencePlatform).trim() : null,
-    status: "pending",
-    ...(uid ? { user_id: uid } : {}),
+  const payload = {
+    p_email: String(email).trim().toLowerCase(),
+    p_full_name: String(fullName).trim(),
+    p_why_promote:
+      whyPromote != null && String(whyPromote).trim() !== "" ? String(whyPromote).trim() : null,
+    p_audience_platform:
+      audiencePlatform != null && String(audiencePlatform).trim() !== ""
+        ? String(audiencePlatform).trim()
+        : null,
   };
-  const { error } = await supabase.from("affiliate_applications").insert(row);
+
+  const { data, error } = await supabase.rpc("submit_affiliate_application", payload);
+
   if (error) {
     return { ok: false, error: error.message };
+  }
+  if (data && typeof data === "object" && data.ok === false) {
+    const code = data.error;
+    if (code === "invalid_email") {
+      return { ok: false, error: "Please enter a valid email address." };
+    }
+    if (code === "invalid_name") {
+      return { ok: false, error: "Please enter your name." };
+    }
+    return { ok: false, error: typeof code === "string" ? code : "Submission failed" };
   }
   return { ok: true };
 }
