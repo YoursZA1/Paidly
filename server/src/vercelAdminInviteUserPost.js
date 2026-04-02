@@ -1,11 +1,10 @@
 /**
- * Vercel serverless: POST /api/admin/invite-user
- * Same contract as Express (server/src/index.js) — service role invite + auth aligned with getAdminFromRequest.
+ * POST /api/admin/invite-user — logic extracted for Vercel admin/[resource].js (single function budget).
  */
 import { createClient } from "@supabase/supabase-js";
-import { assertCallerForAdminRoute } from "../../server/src/adminRouteAccess.js";
-import { adminInviteBodySchema } from "../../server/src/schemas/mutationSchemas.js";
-import { sanitizeInviteMetadata, isSafeHttpUrl } from "../../server/src/inputValidation.js";
+import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
+import { adminInviteBodySchema } from "./schemas/mutationSchemas.js";
+import { sanitizeInviteMetadata, isSafeHttpUrl } from "./inputValidation.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -21,7 +20,7 @@ function parseConfiguredClientOrigins(raw) {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-function applyCors(req, res) {
+export function applyAdminInviteCors(req, res) {
   const origin = req.headers.origin;
   const configured = parseConfiguredClientOrigins(process.env.CLIENT_ORIGIN);
   const allowed = new Set([
@@ -38,8 +37,8 @@ function applyCors(req, res) {
   }
 }
 
-export default async function handler(req, res) {
-  applyCors(req, res);
+export async function handleVercelAdminInviteUserPost(req, res) {
+  applyAdminInviteCors(req, res);
 
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");

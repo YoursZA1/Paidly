@@ -1,24 +1,23 @@
 /**
- * Vercel serverless: GET /api/admin/:resource
+ * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
  *
- * Single function (Hobby plan function-count limit) for:
- * - affiliates — same bundle as legacy api/admin/affiliates.js
- * - platform-users — Auth + profiles merge
- * - security-events — in-process security snapshot
+ * GET: affiliates | platform-users | security-events
+ * POST: approve | decline | invite-user
  *
- * /api/security/events rewrites here via vercel.json → /api/admin/security-events
- *
- * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
 import { createClient } from "@supabase/supabase-js";
 import { assertCallerForAdminRoute } from "../../server/src/adminRouteAccess.js";
 import { fetchMergedPlatformUsersForAdmin } from "../../server/src/adminPlatformUsersList.js";
 import { getSecurityEventsSnapshot } from "../../server/src/securityMiddleware.js";
+import { handleVercelAffiliateDeclinePost } from "../../server/src/vercelAffiliateDeclinePost.js";
+import { handleVercelAdminInviteUserPost } from "../../server/src/vercelAdminInviteUserPost.js";
+import affiliateApproveHandler from "../affiliates/approve.js";
 
 function cors(res, req) {
   const origin = req.headers.origin;
   if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 }
@@ -41,11 +40,6 @@ function countAffiliateApplicationsByStatus(rows) {
     else if (s === "declined" || s === "rejected") declined += 1;
   }
   return { pending, approved, declined, total: (rows || []).length };
-}
-
-async function requireAdminTeam(supabase, authUser) {
-  const deny = await assertCallerForAdminRoute(supabase, authUser, { allowInternalTeam: true });
-  return deny;
 }
 
 async function handleAffiliates(req, res, supabase, limit) {
@@ -97,13 +91,34 @@ function handleSecurityEvents(res) {
 }
 
 export default async function handler(req, res) {
+  const resource = String(req.query?.resource || "").trim();
+  const getResources = new Set(["affiliates", "platform-users", "security-events"]);
+  const postResources = new Set(["approve", "decline", "invite-user"]);
+
+  if (postResources.has(resource)) {
+    if (resource === "invite-user") {
+      return handleVercelAdminInviteUserPost(req, res);
+    }
+    if (req.method === "OPTIONS") {
+      const origin = req.headers.origin;
+      if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      return res.status(200).end();
+    }
+    if (req.method === "POST") {
+      if (resource === "approve") return affiliateApproveHandler(req, res);
+      if (resource === "decline") return handleVercelAffiliateDeclinePost(req, res);
+    }
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  const resource = String(req.query?.resource || "").trim();
-  const allowed = new Set(["affiliates", "platform-users", "security-events"]);
-  if (!resource || !allowed.has(resource)) {
+  if (!resource || !getResources.has(resource)) {
     return res.status(404).json({ error: "Not found" });
   }
 
@@ -117,7 +132,7 @@ export default async function handler(req, res) {
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
-  const deny = await requireAdminTeam(supabase, authData.user);
+  const deny = await assertCallerForAdminRoute(supabase, authData.user, { allowInternalTeam: true });
   if (deny) return res.status(deny.status).json(deny.body);
 
   if (resource === "security-events") {
@@ -137,7 +152,6 @@ export default async function handler(req, res) {
     return handleAffiliates(req, res, supabase, limit);
   }
 
-  // platform-users
   let limit = 500;
   if (req.query?.limit != null && String(req.query.limit).trim() !== "") {
     const n = Number(String(req.query.limit).trim());

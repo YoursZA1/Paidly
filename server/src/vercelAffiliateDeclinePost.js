@@ -1,10 +1,5 @@
 /**
- * Vercel serverless: POST /api/admin/decline
- *
- * Sets affiliate_applications.status = rejected for a pending application (service role).
- * Auth: Bearer JWT + profiles.role in admin|management (same gate as approve).
- *
- * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * POST decline affiliate application — shared by Express patterns; used from Vercel admin/[resource].js.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -30,7 +25,7 @@ async function requireAdmin(supabase, userId) {
   return r === "admin" || r === "management";
 }
 
-export default async function handler(req, res) {
+export async function handleVercelAffiliateDeclinePost(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
