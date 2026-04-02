@@ -30,8 +30,14 @@ export default function LogoImage({
     if (!src) {
       setHasError(true);
       setIsLoading(false);
+      setImageSrc("");
       return;
     }
+
+    // New `src` must clear prior failure/loading state — otherwise a logo change never renders
+    // (preview stays blank and html2pdf capture can fail after swapping URLs).
+    setHasError(false);
+    setIsLoading(true);
 
     // If it's a blob URL or data URL, use it directly
     if (src.startsWith('blob:') || src.startsWith('data:')) {
@@ -90,7 +96,7 @@ export default function LogoImage({
         };
         img.src = src;
       } else {
-        // Regular URL, use directly
+        // Regular URL, use directly (public bucket URLs, CDNs, etc.)
         setImageSrc(src);
         setIsLoading(false);
       }
@@ -125,12 +131,19 @@ export default function LogoImage({
     );
   }
 
+  // html2canvas needs CORS-safe images; limit to Supabase storage so other hosts still load without CORS.
+  const needsCorsForCapture =
+    typeof imageSrc === "string" &&
+    imageSrc.includes("supabase.co") &&
+    (imageSrc.startsWith("https://") || imageSrc.startsWith("http://"));
+
   return (
     <img
       src={imageSrc}
       alt={alt}
       className={className}
       style={style}
+      {...(needsCorsForCapture ? { crossOrigin: "anonymous" } : {})}
       onError={() => {
         setHasError(true);
         setIsLoading(false);

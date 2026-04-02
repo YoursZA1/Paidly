@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
   uploadLogo,
@@ -27,6 +28,17 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { deleteMyAccount } from "@/api/accountApi";
 import CurrencySelector from "@/components/CurrencySelector";
 import PaymentReminderSettings from "@/components/reminders/PaymentReminderSettings";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
@@ -458,6 +470,7 @@ function CompanyProfileSettings() {
     };
 
     return (
+        <>
         <form onSubmit={handleSave} className="space-y-6">
             <SettingsCard
                 title="Company Profile"
@@ -853,6 +866,107 @@ function CompanyProfileSettings() {
                 </Button>
             </div>
         </form>
+            <DeleteAccountSection />
+        </>
+    );
+}
+
+function DeleteAccountSection() {
+    const { logout } = useAuth();
+    const { toast } = useToast();
+    const navigate = useNavigate();
+    const [open, setOpen] = useState(false);
+    const [typed, setTyped] = useState("");
+    const [busy, setBusy] = useState(false);
+
+    const handleDelete = async () => {
+        if (typed !== "DELETE") return;
+        setBusy(true);
+        try {
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token) {
+                throw new Error("Session expired. Sign in again.");
+            }
+            await deleteMyAccount(token);
+            toast({
+                title: "Account deleted",
+                description: "Your account and owned data have been removed.",
+                variant: "success",
+            });
+            setOpen(false);
+            setTyped("");
+            await logout();
+            navigate(createPageUrl("Login"));
+        } catch (e) {
+            toast({
+                title: "Could not delete account",
+                description:
+                    e?.message ||
+                    "Ensure the Paidly API is deployed and VITE_SERVER_URL is set, or contact support.",
+                variant: "destructive",
+            });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <SettingsCard
+            title="Danger zone"
+            description="Permanently delete your Paidly account and data tied to it."
+        >
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+                Deletes your auth account, profile, and every organization you own (invoices, clients, quotes, services,
+                banking details, and related records). Uploaded logos in storage are removed. Platform subscription and
+                waitlist rows for your email are cleared. If you only belong to someone else&apos;s organization, that
+                organization is unchanged and your membership is removed.
+            </p>
+            <AlertDialog
+                open={open}
+                onOpenChange={(next) => {
+                    setOpen(next);
+                    if (!next) setTyped("");
+                }}
+            >
+                <AlertDialogTrigger asChild>
+                    <Button type="button" variant="destructive" className="mt-4">
+                        Delete my account
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete account permanently?</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3 text-left">
+                            <span className="block">
+                                This cannot be undone. Type <strong>DELETE</strong> below to confirm.
+                            </span>
+                            <Input
+                                value={typed}
+                                onChange={(e) => setTyped(e.target.value)}
+                                placeholder="DELETE"
+                                autoComplete="off"
+                                aria-label="Type DELETE to confirm"
+                                className="font-mono"
+                            />
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={busy || typed !== "DELETE"}
+                            onClick={() => void handleDelete()}
+                        >
+                            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete forever"}
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </SettingsCard>
     );
 }
 

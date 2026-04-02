@@ -56,4 +56,7 @@ secret = "env(APPLE_CLIENT_SECRET)"
 # To set verify_jwt per function, add e.g.:
 #   [functions.payfast-itn]
 #   verify_jwt = false
-[functions]
+
+# Called with shared secret (Database Webhook / scripts), not end-user JWT.
+[functions.purge-user-storage]
+verify_jwt = false

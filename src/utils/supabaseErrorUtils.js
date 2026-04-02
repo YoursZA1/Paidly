@@ -3,6 +3,43 @@
  * Use for all async operations involving Supabase (auth, storage, database).
  */
 
+/** Shown when GoTrue / Supabase Auth blocks sign-up or confirmation emails (per-email or project limits). */
+export const AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE =
+  "Too many sign-up or confirmation emails were sent recently. Wait 30-60 minutes and try again. If you already started, use \"Resend confirmation\" on the login page. For heavy testing, space out attempts or raise limits in Supabase (Authentication → Rate limits).";
+
+/**
+ * True for Supabase auth email throttling, API sign-up 429, etc. Used to avoid stacking client-side signup counters.
+ * @param {unknown} error - Error, AuthApiError, or `{ message, code, status, cause }`
+ */
+export function isAuthSignupEmailRateLimitError(error) {
+  if (error == null) return false;
+  const chain = [];
+  let cur = error;
+  for (let i = 0; i < 8 && cur; i++) {
+    chain.push(cur);
+    cur = typeof cur === "object" && cur !== null && "cause" in cur ? cur.cause : null;
+  }
+  for (const c of chain) {
+    const msg = String(
+      typeof c === "string" ? c : (c?.message ?? c?.error_description ?? "")
+    ).trim();
+    if (msg === AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE) return true;
+    const low = msg.toLowerCase();
+    if (/email rate limit exceeded|over_email_send_rate|for security purposes, you can only request this/i.test(low)) {
+      return true;
+    }
+    if (/too many sign-up attempts from this network/i.test(low)) return true;
+    if (/too many sign-up attempts\. try again/i.test(low)) return true;
+    const code = String(
+      typeof c === "object" && c !== null && c.code != null ? c.code : ""
+    ).toLowerCase();
+    if (/over_email_send|email_send_rate/i.test(code)) return true;
+    const status = typeof c === "object" && c !== null ? Number(c.status) : NaN;
+    if (status === 429 && /sign|auth|email|attempt/i.test(low)) return true;
+  }
+  return false;
+}
+
 /**
  * Get a safe, user-friendly message from a Supabase or generic error.
  * Handles PostgrestError, AuthError, StorageError, and plain Error.
@@ -12,13 +49,28 @@
  */
 export function getSupabaseErrorMessage(error, fallback = "Something went wrong") {
   if (error == null) return fallback;
-  if (typeof error === "string") return error;
+  if (typeof error === "string") {
+    const s = error.trim();
+    if (/email rate limit exceeded|over_email_send_rate/i.test(s.toLowerCase())) {
+      return AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE;
+    }
+    return s;
+  }
   const raw =
     error?.message ??
     error?.error_description ??
     (typeof error?.toString === "function" ? error.toString() : null);
   const msg = typeof raw === "string" ? raw.trim() : "";
+  const code = String(error?.code ?? "").toLowerCase();
   if (msg && msg !== "[object Object]") {
+    if (
+      /over_email_send|email_send_rate/i.test(code) ||
+      /email rate limit exceeded|over_email_send_rate|for security purposes, you can only request this/i.test(
+        msg.toLowerCase()
+      )
+    ) {
+      return AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE;
+    }
     if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg) || /load failed/i.test(msg)) {
       return (
         "Could not reach Supabase (network). Check your connection, VPN or ad blockers, and that " +

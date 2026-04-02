@@ -128,12 +128,16 @@ export async function recordAffiliateClick(referralCode) {
  * Submit public affiliate application (insert affiliate_applications).
  */
 export async function submitAffiliateApplication({ email, fullName, whyPromote, audiencePlatform }) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const uid = sessionData?.session?.user?.id ?? null;
+
   const row = {
     email: String(email).trim().toLowerCase(),
     full_name: String(fullName).trim(),
     why_promote: whyPromote != null ? String(whyPromote).trim() : null,
     audience_platform: audiencePlatform != null ? String(audiencePlatform).trim() : null,
     status: "pending",
+    ...(uid ? { user_id: uid } : {}),
   };
   const { error } = await supabase.from("affiliate_applications").insert(row);
   if (error) {

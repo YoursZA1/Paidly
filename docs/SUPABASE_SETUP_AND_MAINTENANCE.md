@@ -235,6 +235,7 @@ Use it together with **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_
 | [MONITORING_LOGS_AND_SYNC.md](MONITORING_LOGS_AND_SYNC.md) | Where to look for logs, common sync/permission issues and fixes. |
 | [SUPABASE_DATA_MODEL.md](SUPABASE_DATA_MODEL.md) | Table ↔ entity mapping, CRUD flow, schema alignment, applying schema. |
 | [SUPABASE_STORAGE.md](SUPABASE_STORAGE.md) | Buckets, RLS policies, path conventions, app integration (logos, activities, bank-details). |
+| [SUPABASE_PURGE_USER_STORAGE.md](SUPABASE_PURGE_USER_STORAGE.md) | Purge logo files after auth user delete (Edge Function `purge-user-storage`, CLI script, webhooks). |
 | [SUPABASE_REALTIME.md](SUPABASE_REALTIME.md) | Realtime publication, `useSupabaseRealtime` hook, enabling new tables. |
 | [SUPABASE_SECURITY.md](SUPABASE_SECURITY.md) | RLS, anon vs service key, checklist for not exposing the service key. |
 | [SUPABASE_UI_REVIEW.md](SUPABASE_UI_REVIEW.md) | Map of Supabase API calls to UI actions and error handling. |

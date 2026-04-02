@@ -24,6 +24,7 @@ import { withApiLogging } from "@/utils/apiLogger";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
+import { lineItemHasContent } from "@/utils/lineItemContent";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -57,7 +58,7 @@ function generateNumber(docType, clientName) {
 function buildPaidLineItems(lineItems, discount) {
   const rows = Array.isArray(lineItems) ? lineItems : [];
   const mapped = rows
-    .filter((row) => (row.description || "").trim() || (Number(row.quantity) && Number(row.unit_price)))
+    .filter(lineItemHasContent)
     .map((row) => {
       const qty = Number(row.quantity) || 1;
       const unit = Number(row.unit_price) || 0;
@@ -65,7 +66,7 @@ function buildPaidLineItems(lineItems, discount) {
         Number(row.total) != null && !Number.isNaN(Number(row.total))
           ? Number(row.total)
           : Math.round(qty * unit * 100) / 100;
-      const desc = (row.description || "").trim() || "Item";
+      const desc = (row.description || row.service_name || row.name || "").trim() || "Item";
       return {
         service_name: desc.split("\n")[0].slice(0, 200),
         description: desc.includes("\n") ? desc.split("\n").slice(1).join("\n").trim() : "",

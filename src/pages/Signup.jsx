@@ -26,6 +26,7 @@ import {
   recordSignupAttempt,
   clearSignupAttempts,
 } from "@/utils/signupRateLimit";
+import { getSupabaseErrorMessage, isAuthSignupEmailRateLimitError } from "@/utils/supabaseErrorUtils";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -260,8 +261,11 @@ export default function Signup() {
         clearSignupAttempts(normalizedEmail);
       } catch (supabaseErr) {
         turnstile.reset();
-        recordSignupAttempt(normalizedEmail);
-        const msg = supabaseErr?.message || "Failed to create Supabase user";
+        // Do not stack the per-email sessionStorage counter when Supabase/API already rate-limited.
+        if (!isAuthSignupEmailRateLimitError(supabaseErr)) {
+          recordSignupAttempt(normalizedEmail);
+        }
+        const msg = getSupabaseErrorMessage(supabaseErr, "Failed to create account");
         const isSchemaOrDbError = /database error saving new user|company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist|signup.*failed/i.test(msg);
         setError(
           isSchemaOrDbError

@@ -13,6 +13,7 @@ import {
 } from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
+import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
 import {
@@ -1939,6 +1940,8 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
       return res.status(400).json({ error: "Invalid user id" });
     }
 
+    await purgeUserStorageAssets(supabaseAdmin, delId);
+
     const { error } = await supabaseAdmin.auth.admin.deleteUser(delId);
     if (error) {
       logAdminApi(req.method, req.path, 500, `deleteUser: ${error.message}`);
@@ -1955,6 +1958,47 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
     return res.status(500).json({
       error: err?.message || "Failed to delete user"
     });
+  }
+});
+
+/**
+ * Authenticated user deletes their own account. Removes storage assets, then auth user row.
+ * DB trigger purge_public_user_data_on_auth_delete clears subscriptions / affiliate applications / waitlist PII.
+ * Owned organizations cascade-delete with all org-scoped business data (invoices, clients, etc.).
+ */
+app.post("/api/account/delete", async (req, res) => {
+  try {
+    const { user, error: authErr } = await getUserFromRequest(req);
+    if (authErr || !user?.id) {
+      return res.status(401).json({ error: authErr || "Unauthorized" });
+    }
+
+    const phrase = String(req.body?.confirmPhrase ?? "").trim();
+    if (phrase !== "DELETE") {
+      return res.status(400).json({
+        error: 'To delete your account, send JSON body { "confirmPhrase": "DELETE" }.',
+      });
+    }
+
+    await purgeUserStorageAssets(supabaseAdmin, user.id);
+
+    const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+    if (delErr) {
+      logSecurity("error", "account_self_delete_failed", {
+        userId: user.id,
+        message: delErr.message,
+      });
+      return res.status(500).json({ error: delErr.message });
+    }
+
+    logSecurity("info", "account_self_deleted", { userId: user.id });
+    return res.json({ success: true });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    logSecurity("error", "account_self_delete_exception", { message: err?.message });
+    return res.status(500).json({ error: err?.message || "Failed to delete account" });
   }
 });
 

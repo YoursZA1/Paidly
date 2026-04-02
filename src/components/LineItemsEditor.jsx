@@ -11,6 +11,7 @@ import { createPageUrl } from "@/utils";
 import { normalizeCatalogItemForMap } from "@/utils/catalogLineItemMap";
 import { SavedCatalogCommand } from "@/components/catalog/DocumentCatalogPicker";
 import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
+import { lineItemHasContent } from "@/utils/lineItemContent";
 
 const emptyRow = () => ({
   description: "",
@@ -107,10 +108,7 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
 
   const appendFromCatalog = (rawItem) => {
     const row = catalogItemToLineRow(rawItem, user, 1);
-    const hasOnlyBlank =
-      list.length === 1 &&
-      !(list[0].description || "").trim() &&
-      !(Number(list[0].quantity) && Number(list[0].unit_price));
+    const hasOnlyBlank = list.length === 1 && !lineItemHasContent(list[0]);
     if (hasOnlyBlank) {
       onChange([row]);
     } else {
