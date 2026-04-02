@@ -49,6 +49,15 @@ function buildReferralCode(name) {
   return `PAIDLY-${base}-${suffix}`;
 }
 
+function escapeHtml(v) {
+  return String(v || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function toAffiliateRateFraction(maybePercent) {
   const n = Number(maybePercent);
   if (!Number.isFinite(n) || n <= 0) return 0.2;
@@ -167,6 +176,7 @@ export default async function handler(req, res) {
   const shareLink = `${origin}/Signup#sign-up?ref=${encodeURIComponent(referralCode)}`;
   const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
+  const safeName = escapeHtml(appRow.full_name || "there");
   try {
     await resend.emails.send({
       from: fromAddress,
@@ -175,10 +185,11 @@ export default async function handler(req, res) {
       html: `
         <div style="font-family:Inter,Arial,sans-serif;line-height:1.6;color:#0f172a;">
           <h2 style="margin:0 0 12px;">You are approved!</h2>
-          <p>Hi ${appRow.full_name || "there"}, your Paidly affiliate account has been approved.</p>
+          <p>Hi ${safeName}, your Paidly affiliate account has been approved.</p>
           <p><strong>Your referral code:</strong> ${referralCode}</p>
           <p><strong>Your share link:</strong><br/><a href="${shareLink}">${shareLink}</a></p>
-          <p>We automatically track signups and first-month paid subscriptions from your referrals to calculate payouts.</p>
+          <p>Every signup and first-month paid subscription from this link is tied to your profile so we can track invited users and calculate your payout.</p>
+          <p style="margin-top:14px;">Welcome to Paidly partners 🚀</p>
         </div>
       `,
     });
