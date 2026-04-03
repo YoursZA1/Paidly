@@ -6,14 +6,51 @@
  *
  * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
-import { createClient } from "@supabase/supabase-js";
-import { assertCallerForAdminRoute } from "../../server/src/adminRouteAccess.js";
-import { fetchMergedPlatformUsersForAdmin } from "../../server/src/adminPlatformUsersList.js";
-import { getSecurityEventsSnapshot } from "../../server/src/securityMiddleware.js";
-import { handleVercelAffiliateDeclinePost } from "../../server/src/vercelAffiliateDeclinePost.js";
-import { handleVercelAdminInviteUserPost } from "../../server/src/vercelAdminInviteUserPost.js";
-import affiliateApproveHandler from "../affiliates/approve.js";
-import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+// Lazy-deps: avoids Vercel import-time crashes in some runtimes.
+// If any dependency fails to load, our handler catch will return JSON.
+let createClient;
+let assertCallerForAdminRoute;
+let fetchMergedPlatformUsersForAdmin;
+let getSecurityEventsSnapshot;
+let handleVercelAffiliateDeclinePost;
+let handleVercelAdminInviteUserPost;
+let affiliateApproveHandler;
+let applyPaidlyServerlessCors;
+
+let depsPromise = null;
+async function ensureDeps() {
+  if (applyPaidlyServerlessCors) return;
+  if (depsPromise) return depsPromise;
+  depsPromise = Promise.all([
+    import("@supabase/supabase-js"),
+    import("../../server/src/adminRouteAccess.js"),
+    import("../../server/src/adminPlatformUsersList.js"),
+    import("../../server/src/securityMiddleware.js"),
+    import("../../server/src/vercelAffiliateDeclinePost.js"),
+    import("../../server/src/vercelAdminInviteUserPost.js"),
+    import("../affiliates/approve.js"),
+    import("../../server/src/vercelPaidlyCors.js"),
+  ]).then(([
+    supabaseMod,
+    adminRouteAccessMod,
+    adminPlatformUsersMod,
+    securityMiddlewareMod,
+    affiliateDeclineMod,
+    adminInviteMod,
+    affiliateApproveMod,
+    corsMod,
+  ]) => {
+    createClient = supabaseMod.createClient;
+    assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
+    fetchMergedPlatformUsersForAdmin = adminPlatformUsersMod.fetchMergedPlatformUsersForAdmin;
+    getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
+    handleVercelAffiliateDeclinePost = affiliateDeclineMod.handleVercelAffiliateDeclinePost;
+    handleVercelAdminInviteUserPost = adminInviteMod.handleVercelAdminInviteUserPost;
+    affiliateApproveHandler = affiliateApproveMod.default;
+    applyPaidlyServerlessCors = corsMod.applyPaidlyServerlessCors;
+  });
+  return depsPromise;
+}
 
 /** Vercel usually sets `query.resource`; fall back to path if missing (rewrites / some runtimes). */
 function adminResourceFromRequest(req) {
@@ -106,6 +143,7 @@ function handleSecurityEvents(res) {
 
 export default async function handler(req, res) {
   try {
+    await ensureDeps();
     const resource = adminResourceFromRequest(req);
     const getResources = new Set(["affiliates", "platform-users", "security-events"]);
     const postResources = new Set(["approve", "decline", "invite-user"]);
