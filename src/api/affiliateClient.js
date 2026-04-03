@@ -12,6 +12,17 @@ function shouldUseNodeAffiliateApi() {
   return true;
 }
 
+function affiliateDevLog(...args) {
+  if (import.meta.env.DEV) console.log(...args);
+}
+
+function affiliateDevError(...args) {
+  if (import.meta.env.DEV) console.error(...args);
+}
+
+/** Stored referral codes; caps size to avoid abusing localStorage. */
+export const MAX_SIGNUP_REFERRAL_CODE_LEN = 128;
+
 /** Canonical key (survives reloads). Legacy key migrated on read. */
 const REFERRAL_CODE_KEY = "referral_code";
 const LEGACY_REF_KEY = "paidly_pending_ref";
@@ -29,8 +40,9 @@ export function getPendingReferralCodeFromStorage() {
 export function setPendingReferralCode(code) {
   const c = code && String(code).trim();
   if (!c) return;
+  const safe = c.length > MAX_SIGNUP_REFERRAL_CODE_LEN ? c.slice(0, MAX_SIGNUP_REFERRAL_CODE_LEN) : c;
   try {
-    window.localStorage.setItem(REFERRAL_CODE_KEY, c);
+    window.localStorage.setItem(REFERRAL_CODE_KEY, safe);
     try {
       window.localStorage.removeItem(LEGACY_REF_KEY);
     } catch {
@@ -47,6 +59,37 @@ export function clearPendingReferralCode() {
     window.localStorage.removeItem(LEGACY_REF_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * Referral code from signup URL: prefers `?ref=` (search) so React Router sees it;
+ * also parses legacy `#sign-up?ref=` hashes.
+ */
+export function parseSignupReferralRef(searchParams, locationHash) {
+  const clamp = (s) => {
+    const t = String(s || "").trim();
+    if (!t) return null;
+    return t.length > MAX_SIGNUP_REFERRAL_CODE_LEN ? t.slice(0, MAX_SIGNUP_REFERRAL_CODE_LEN) : t;
+  };
+  try {
+    const fromSearch = searchParams?.get?.("ref");
+    const fromQuery = clamp(fromSearch);
+    if (fromQuery) return fromQuery;
+  } catch {
+    /* ignore */
+  }
+  const hash = String(locationHash || "");
+  if (!hash || hash.length < 2) return null;
+  const h = hash.startsWith("#") ? hash.slice(1) : hash;
+  const qi = h.indexOf("?");
+  if (qi === -1) return null;
+  try {
+    const params = new URLSearchParams(h.slice(qi + 1));
+    const ref = params.get("ref");
+    return clamp(ref);
+  } catch {
+    return null;
   }
 }
 
@@ -210,7 +253,10 @@ function getAffiliateDashboardApiUrl() {
   const resolved = resolveApiBaseUrl();
   /** Prefer `/api/affiliate/dashboard` — Vercel serverless; `/affiliate/dashboard` can be served as SPA HTML if rewrites order differs. */
   const path = "/api/affiliate/dashboard";
-  console.log("[affiliate] API URL resolution:", { resolved, viteServerUrl: import.meta.env.VITE_SERVER_URL });
+  affiliateDevLog("[affiliate] API URL resolution:", {
+    resolved,
+    viteServerUrl: import.meta.env.VITE_SERVER_URL,
+  });
   if (resolved) {
     return `${resolved.replace(/\/$/, "")}${path}`;
   }
@@ -317,7 +363,7 @@ export async function fetchAffiliateDashboardData() {
   }
 
   const url = getAffiliateDashboardApiUrl();
-  console.log("Fetching affiliate data from API...", url);
+  affiliateDevLog("Fetching affiliate data from API...", url);
 
   try {
     const res = await fetch(url, {
@@ -329,7 +375,7 @@ export async function fetchAffiliateDashboardData() {
     });
 
     if (!res.ok) {
-      console.error(`[affiliate] API failed with status ${res.status}`);
+      affiliateDevError(`[affiliate] API failed with status ${res.status}`);
       throw new Error(`API failed (${res.status})`);
     }
 
@@ -344,10 +390,14 @@ export async function fetchAffiliateDashboardData() {
     } catch (e) {
       throw new Error(`affiliate_api_invalid_json: ${e?.message || e}`);
     }
-    console.log("[affiliate] Dashboard API success", { ok: data?.ok, affiliate: !!data?.affiliate, stats: !!data?.stats });
-    
+    affiliateDevLog("[affiliate] Dashboard API success", {
+      ok: data?.ok,
+      affiliate: !!data?.affiliate,
+      stats: !!data?.stats,
+    });
+
     if (!data?.ok) {
-      console.error("[affiliate] API returned error:", data?.error);
+      affiliateDevError("[affiliate] API returned error:", data?.error);
       return data;
     }
     

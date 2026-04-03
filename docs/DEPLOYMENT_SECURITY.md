@@ -65,6 +65,9 @@ Security-related lines are **single-line JSON** (`type: "security"`) for easy in
 | `admin_forbidden` | warn | **403** on `/api/admin/*`. |
 | `http_server_error` | error | Any response **status ≥ 500** (`path`, `method`, `ip`). |
 | `suspicious_404_burst` | warn | Same IP hit **404** at least **`SECURITY_404_BURST_THRESHOLD`** times (default **80**) within **`SECURITY_404_WINDOW_MS`** (default **10 minutes**). |
+| `suspicious_auth_fail_burst` | warn | Same IP got **401** on **`/api/*`** at least **`SECURITY_AUTH_FAIL_BURST_THRESHOLD`** times (default **30**) within **`SECURITY_AUTH_FAIL_WINDOW_MS`** (default **10 minutes**). |
+| `suspicious_rate_limit_burst` | warn | Same IP hit **429** on **`/api/*`** at least **`SECURITY_RATE_LIMIT_BURST_THRESHOLD`** times (default **40**) within **`SECURITY_RATE_LIMIT_WINDOW_MS`** (default **10 minutes**). |
+| `suspicious_5xx_burst` | warn | Same IP received **≥500** responses at least **`SECURITY_5XX_BURST_THRESHOLD`** times (default **30**) within **`SECURITY_5XX_WINDOW_MS`** (default **10 minutes**). |
 | `invalid_json_body` | warn | Malformed JSON body. |
 | `unhandled_exception` | error | Express error handler. |
 

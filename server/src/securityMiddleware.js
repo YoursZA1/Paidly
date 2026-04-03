@@ -44,7 +44,8 @@ const AUTH_FAIL_BURST_THRESHOLD = Number(process.env.SECURITY_AUTH_FAIL_BURST_TH
 const RATE_LIMIT_WINDOW_MS = Number(process.env.SECURITY_RATE_LIMIT_WINDOW_MS) || 10 * 60 * 1000;
 const RATE_LIMIT_BURST_THRESHOLD = Number(process.env.SECURITY_RATE_LIMIT_BURST_THRESHOLD) || 40;
 const SERVER_ERROR_WINDOW_MS = Number(process.env.SECURITY_5XX_WINDOW_MS) || 10 * 60 * 1000;
-const SERVER_ERROR_BURST_THRESHOLD = Number(process.env.SECURITY_5XX_BURST_THRESHOLD) || 20;
+/** Per-IP rolling count of HTTP ≥500 before suspicious_5xx_burst (aligned with auth-fail default 30). */
+const SERVER_ERROR_BURST_THRESHOLD = Number(process.env.SECURITY_5XX_BURST_THRESHOLD) || 30;
 const EVENTS_WINDOW_MS = Number(process.env.SECURITY_EVENTS_WINDOW_MS) || 10 * 60 * 1000;
 
 const notFoundByIp = new Map();
@@ -83,6 +84,13 @@ export function getSecurityEventsSnapshot() {
       status5xx: getCount("status5xx"),
     },
     bursts: {
+      /** Rolling window length (ms) per burst bucket — same keys as thresholds / activeIps. */
+      windowsMs: {
+        authFail: AUTH_FAIL_WINDOW_MS,
+        notFound: NOT_FOUND_WINDOW_MS,
+        rateLimited: RATE_LIMIT_WINDOW_MS,
+        serverError: SERVER_ERROR_WINDOW_MS,
+      },
       thresholds: {
         authFail: AUTH_FAIL_BURST_THRESHOLD,
         notFound: NOT_FOUND_BURST_THRESHOLD,

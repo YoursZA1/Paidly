@@ -13,6 +13,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+import {
+  buildAffiliateSignupShareUrl,
+  resolvePublicAppOriginForShareLinks,
+} from "../../server/src/affiliateShareLink.js";
+import { canMutateAffiliateApplication } from "../../server/src/adminRouteAccess.js";
 
 function cors(res, req) {
   applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
@@ -28,13 +33,6 @@ function getSupabaseAdmin() {
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   return new Resend(process.env.RESEND_API_KEY);
-}
-
-function buildOrigin(req) {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  if (!host) return "";
-  return `${proto}://${host}`;
 }
 
 function buildReferralCode(name) {
@@ -62,13 +60,6 @@ function toAffiliateRateFraction(maybePercent) {
   return n / 100;
 }
 
-async function requireAdmin(supabase, userId) {
-  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  if (error) return false;
-  const r = String(data?.role || "").toLowerCase();
-  return r === "admin" || r === "management";
-}
-
 export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -93,8 +84,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  const requesterId = authData.user.id;
-  if (!(await requireAdmin(supabase, requesterId))) {
+  if (!(await canMutateAffiliateApplication(supabase, authData.user))) {
     return res.status(403).json({ error: "Access restricted" });
   }
 
@@ -169,8 +159,13 @@ export default async function handler(req, res) {
     .update({ status: "approved", user_id: userId, updated_at: new Date().toISOString() })
     .eq("id", appRow.id);
 
-  const origin = buildOrigin(req);
-  const shareLink = `${origin}/Signup#sign-up?ref=${encodeURIComponent(referralCode)}`;
+  const origin = resolvePublicAppOriginForShareLinks(req);
+  const shareLink = buildAffiliateSignupShareUrl(origin, referralCode);
+  if (!origin) {
+    console.warn(
+      "[affiliates/approve] Share link has no absolute origin; set PUBLIC_APP_ORIGIN or CLIENT_ORIGIN so email links work."
+    );
+  }
   const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
   const safeName = escapeHtml(appRow.full_name || "there");
@@ -184,9 +179,10 @@ export default async function handler(req, res) {
           <h2 style="margin:0 0 12px;">You are approved!</h2>
           <p>Hi ${safeName}, your Paidly affiliate account has been approved.</p>
           <p><strong>Your referral code:</strong> ${referralCode}</p>
-          <p><strong>Your share link:</strong><br/><a href="${shareLink}">${shareLink}</a></p>
-          <p>Every signup and first-month paid subscription from this link is tied to your profile so we can track invited users and calculate your payout.</p>
-          <p style="margin-top:14px;">Welcome to Paidly partners 🚀</p>
+          <p><strong>Your unique share link</strong> (bookmark or share this URL):<br/><a href="${shareLink}">${shareLink}</a></p>
+          <p>Anyone who creates a Paidly account through that link is attributed to you; eligible paid plans can earn commissions per program terms.</p>
+          <p style="font-size:13px;color:#64748b;">Didn&apos;t get this message? Check spam/junk, or contact Paidly support and ask to resend your affiliate link.</p>
+          <p style="margin-top:14px;">Welcome to Paidly partners.</p>
         </div>
       `,
     });

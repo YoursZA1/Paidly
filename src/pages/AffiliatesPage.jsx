@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import {
-  affiliateApplicationsAdminQueryFn,
-  resolveAffiliateAdminMutationUrl,
-} from '@/api/fetchAdminAffiliateApplications';
+import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
+import { callAdminAffiliateMutation } from '@/api/adminAffiliateMutations';
+import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
 import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -20,12 +19,13 @@ import PayoutCalculator from '@/components/affiliates/PayoutCalculator';
 import PayoutsTable from '@/components/affiliates/PayoutsTable';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
-import { supabase } from '@/lib/supabaseClient';
 import {
   EMPTY_AFFILIATE_ADMIN_BUNDLE,
   normalizeAffiliateAdminQueryResult,
 } from '@/utils/affiliateApplicationCounts';
 import { formatQueryError } from '@/utils/apiErrorText';
+import { SystemSettingsService } from '@/services/SystemSettingsService';
+import { createAffiliateSignupShareUrl } from '@/utils';
 
 export default function AffiliatesPage() {
   const { user: currentUser } = useCurrentUser();
@@ -33,6 +33,8 @@ export default function AffiliatesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewingApp, setViewingApp] = useState(null);
   const [calculatingFor, setCalculatingFor] = useState(null);
+  /** Set after successful POST /api/admin/approve — admin confirmation + same link emailed to the affiliate. */
+  const [approvalNotice, setApprovalNotice] = useState(null);
   const queryClient = useQueryClient();
   const hasAlertedErrorRef = useRef(false);
   const isRefreshing =
@@ -48,7 +50,7 @@ export default function AffiliatesPage() {
   } = useQuery({
     queryKey: ['affiliates'],
     select: normalizeAffiliateAdminQueryResult,
-    queryFn: () => affiliateApplicationsAdminQueryFn(150),
+    queryFn: () => affiliateApplicationsAdminQueryFn(),
     refetchInterval: 45000,
     staleTime: 30000,
   });
@@ -91,44 +93,45 @@ export default function AffiliatesPage() {
     },
   });
 
-  const getAccessToken = async () => {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  };
-
-  const callAdminAffiliateApi = async (path, body) => {
-    const token = await getAccessToken();
-    if (!token) throw new Error('Not authenticated');
-    const url = resolveAffiliateAdminMutationUrl(path);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body || {}),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json?.message || json?.error || `Request failed (${res.status})`);
-    return json;
-  };
-
   const copyReferralLink = async (code) => {
     if (!code) return;
-    const base = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
-    const url = `${base}/Signup#sign-up?ref=${encodeURIComponent(code)}`;
+    const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+    const url = createAffiliateSignupShareUrl(code, origin);
     await navigator.clipboard.writeText(url);
     toast.success('Link copied');
   };
 
+  const defaultCommissionPct = SystemSettingsService.getAffiliateDefaultCommissionPercent();
+
   const handleApprove = async (aff) => {
     try {
-      const result = await callAdminAffiliateApi('/api/admin/approve', {
+      const result = await callAdminAffiliateMutation('/api/admin/approve', {
         applicationId: aff.id,
-        commissionRate: Number(aff.commission_rate ?? 15),
+        commissionRate: Number(aff.commission_rate ?? defaultCommissionPct),
       });
       queryClient.invalidateQueries({ queryKey: ['affiliates'] });
-      toast.success(result?.email_sent === false ? 'Approved (email failed)' : 'Approved & emailed link');
+
+      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+      const code = String(result?.referral_code || '').trim();
+      const link =
+        String(result?.referral_link || '').trim() ||
+        (code ? createAffiliateSignupShareUrl(code, origin) : '');
+
+      setApprovalNotice({
+        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
+        applicantEmail: String(aff.applicant_email || '').trim(),
+        referralCode: code,
+        referralLink: link,
+        emailSent: result?.email_sent !== false,
+        emailError: result?.email_error != null ? String(result.email_error) : null,
+      });
+
+      toast.success('Affiliate approved', {
+        description:
+          result?.email_sent === false
+            ? 'Approval saved — email could not be sent. Use the dialog to copy their link.'
+            : `Confirmation email sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
+      });
 
       logAction({
         actor: currentUser,
@@ -146,18 +149,33 @@ export default function AffiliatesPage() {
           email_sent: result?.email_sent,
         },
       });
+      return true;
     } catch (e) {
       toast.error(e?.message || 'Could not approve affiliate');
+      return false;
     }
   };
 
   const handleResend = async (aff) => {
     try {
-      const result = await callAdminAffiliateApi('/api/affiliates/resend-link', { applicationId: aff.id });
-      toast.success('Referral link resent');
-      if (result?.referral_code) {
-        await copyReferralLink(result.referral_code).catch(() => {});
-      }
+      const result = await callAdminAffiliateMutation('/api/affiliates/resend-link', { applicationId: aff.id });
+      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+      const code = String(result?.referral_code || '').trim();
+      const link =
+        String(result?.referral_link || '').trim() ||
+        (code ? createAffiliateSignupShareUrl(code, origin) : '');
+      setApprovalNotice({
+        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
+        applicantEmail: String(aff.applicant_email || '').trim(),
+        referralCode: code,
+        referralLink: link,
+        emailSent: true,
+        emailError: null,
+        isResend: true,
+      });
+      toast.success('Referral link emailed again', {
+        description: `Sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
+      });
     } catch (e) {
       toast.error(e?.message || 'Could not resend link');
     }
@@ -174,7 +192,7 @@ export default function AffiliatesPage() {
 
   const handleDecline = async (aff) => {
     try {
-      await callAdminAffiliateApi('/api/admin/decline', { applicationId: aff.id });
+      await callAdminAffiliateMutation('/api/admin/decline', { applicationId: aff.id });
       queryClient.invalidateQueries({ queryKey: ['affiliates'] });
       toast.success('Application declined');
       logAction({
@@ -218,19 +236,6 @@ export default function AffiliatesPage() {
   }, [affiliates, search, statusFilter]);
 
   const pendingCount = affiliateStatusCounts.pending;
-  const affiliateSourceTables = useMemo(() => {
-    const tables = new Set(
-      affiliates
-        .map((a) => String(a?.__source_table || '').trim())
-        .filter(Boolean)
-    );
-    return [...tables];
-  }, [affiliates]);
-  const sourceTableLabel = useMemo(() => {
-    if (affiliateSourceTables.length === 0) return null;
-    if (affiliateSourceTables.length === 1) return affiliateSourceTables[0];
-    return affiliateSourceTables.join(', ');
-  }, [affiliateSourceTables]);
   const pendingPayoutsTotal = useMemo(
     () =>
       payouts
@@ -254,21 +259,27 @@ export default function AffiliatesPage() {
       {affiliatesFetchError ? (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>
-            Could not load affiliate submissions from the backend (admin queue is not loaded via Supabase):{' '}
-            {formatQueryError(affiliatesFetchErr)}. To test the API directly, open{' '}
-            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> (with auth), not this page
-            URL — <code className="rounded bg-muted px-1">/admin-v2/affiliates</code> is the SPA and returns HTML.
-            Check that <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns JSON on
-            this host (Vercel serverless) or your <code className="rounded bg-muted px-1">VITE_SERVER_URL</code>{' '}
-            API. If the app and API are the same deployment, try clearing or updating{' '}
-            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> so it does not point at a dead host.
+            Could not load affiliate submissions (admin queue is not read from Supabase in the browser):{' '}
+            {formatQueryError(affiliatesFetchErr)}. Test{' '}
+            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> with a Bearer token — not this page URL (
+            <code className="rounded bg-muted px-1">/admin-v2/affiliates</code> is the SPA). Prefer same-origin{' '}
+            <code className="rounded bg-muted px-1">/api/admin/affiliates</code> when app and API share one deployment (leave{' '}
+            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> unset). Otherwise point{' '}
+            <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> at your API and ensure Vercel has{' '}
+            <code className="rounded bg-muted px-1">SUPABASE_URL</code> and a valid service-role{' '}
+            <code className="rounded bg-muted px-1">SUPABASE_SERVICE_ROLE_KEY</code>.
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {sourceTableLabel ? (
-        <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800">
-          Data source table: <span className="font-mono">{sourceTableLabel}</span>
+      {!affiliatesFetchError ? (
+        <div className="mb-4 rounded-md border border-border bg-muted/25 px-4 py-2 text-xs text-muted-foreground">
+          Data source table:{' '}
+          <code className="rounded bg-muted px-1 font-mono text-foreground">affiliate_applications</code>
+          <span className="mx-1 text-muted-foreground/80">·</span>
+          Partner profiles (when shown) come from <code className="rounded bg-muted px-1 font-mono text-foreground">affiliates</code>
+          <span className="mx-1 text-muted-foreground/80">·</span>
+          <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code>
         </div>
       ) : null}
 
@@ -368,7 +379,7 @@ export default function AffiliatesPage() {
                             min={0}
                             max={100}
                             className="h-8 w-20"
-                            defaultValue={Number(aff.commission_rate ?? 15)}
+                            defaultValue={Number(aff.commission_rate ?? defaultCommissionPct)}
                             onBlur={(e) => handleCommissionUpdate(aff, e.target.value)}
                           />
                         </td>
@@ -453,13 +464,10 @@ export default function AffiliatesPage() {
                             Loading affiliates...
                           </span>
                         ) : affiliates.length === 0 ? (
-                          <span className="block max-w-md mx-auto space-y-2">
-                            <span className="block">No submissions loaded yet.</span>
-                            <span className="block text-xs">
-                              The admin queue is loaded only from the backend. Confirm the Node API is deployed and{' '}
-                              <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> points to it so{' '}
-                              <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns the full queue (service role). If the API returns an empty list, the
-                              table is empty or check server logs.
+                          <span className="block max-w-md mx-auto space-y-2 text-left">
+                            <span className="block font-medium text-foreground">No submissions in the queue yet.</span>
+                            <span className="block text-xs leading-relaxed text-muted-foreground">
+                              The list is everything in <code className="rounded bg-muted px-1 font-mono text-foreground">affiliate_applications</code> returned by the admin API (see the data source note above). Empty usually means no applications yet, or this deployment points at a Supabase project that does not have those rows.
                             </span>
                           </span>
                         ) : (
@@ -506,9 +514,11 @@ export default function AffiliatesPage() {
                   <Button
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                     aria-label="Approve application"
-                    onClick={() => {
-                      handleApprove(viewingApp);
-                      setViewingApp(null);
+                    onClick={async () => {
+                      const app = viewingApp;
+                      if (!app) return;
+                      const ok = await handleApprove(app);
+                      if (ok) setViewingApp(null);
                     }}
                   >
                     <CheckCircle className="w-4 h-4 mr-2" /> Approve
@@ -534,6 +544,13 @@ export default function AffiliatesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AffiliateApprovalResultDialog
+        notice={approvalNotice}
+        onOpenChange={(open) => {
+          if (!open) setApprovalNotice(null);
+        }}
+      />
 
       <PayoutCalculator
         open={!!calculatingFor}

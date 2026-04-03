@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Service } from "@/api/entities";
 import { User } from "@/api/entities";
@@ -30,10 +31,12 @@ const Inventory = lazy(() => import("./Inventory"));
 export default function Services() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
+    const [searchParams] = useSearchParams();
     const userProfileFromStore = useAppStore((s) => s.userProfile);
     const { data: services = [], isLoading } = useServicesCatalogQuery();
     const [user, setUser] = useState(userProfileFromStore ?? null);
-    const [searchTerm, setSearchTerm] = useState("");
+    const qFromUrl = searchParams.get("q") ?? "";
+    const [searchTerm, setSearchTerm] = useState(qFromUrl);
     const [showForm, setShowForm] = useState(false);
     const [editingService, setEditingService] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -55,6 +58,13 @@ export default function Services() {
             loadUser();
         }
     }, []);
+
+    useEffect(() => {
+        const q = searchParams.get("q");
+        if (q != null && q !== "") {
+            setSearchTerm(q);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         if (userProfileFromStore != null && user === null) setUser(userProfileFromStore);

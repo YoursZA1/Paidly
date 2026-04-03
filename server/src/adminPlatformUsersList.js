@@ -13,7 +13,13 @@ export async function listAllAuthUsersAdmin(supabaseAdmin) {
       perPage,
     });
     if (listError) {
-      throw new Error(listError.message);
+      const m = String(listError.message || listError || "");
+      if (/user not allowed/i.test(m)) {
+        throw new Error(
+          `${m} Server must call Auth Admin with the real service_role secret for the same project as SUPABASE_URL (Vercel: Project Settings → Environment Variables; local: server/.env).`
+        );
+      }
+      throw new Error(m);
     }
     const batch = data?.users || [];
     authUsers.push(...batch);

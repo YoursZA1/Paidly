@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { SystemSettingsService } from '@/services/SystemSettingsService';
 
 export default function PayoutCalculator({ open, onClose, affiliate }) {
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState('');
-  const commissionRate = Number(affiliate?.commission_rate ?? 15);
+  const commissionRate = Number(
+    affiliate?.commission_rate ?? SystemSettingsService.getAffiliateDefaultCommissionPercent()
+  );
 
   const { data: payouts = [] } = useQuery({
     queryKey: ['affiliate-payouts'],

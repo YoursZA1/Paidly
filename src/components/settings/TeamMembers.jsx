@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint';
 import { toast } from 'sonner';
 import { ROLE_LABELS, ROLES, STAFF_ROLES } from '@/lib/permissions';
 
@@ -62,6 +63,7 @@ export default function TeamMembers() {
         <Alert variant="destructive">
           <AlertDescription>
             Could not load team directory from the backend: {platformUsersErr?.message || 'Unknown error'}.
+            <PlatformUsersLoadErrorHint message={platformUsersErr?.message} />
           </AlertDescription>
         </Alert>
       ) : null}

@@ -1,8 +1,10 @@
+import { postgrestErrorToApiBody } from "../../server/src/postgrestErrorToApiBody.js";
+
 /**
  * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
  *
- * GET: affiliates | platform-users | security-events
- * POST: approve | decline | invite-user
+ * GET: affiliates | platform-users | sync-users | security-events
+ * POST: approve | decline | invite-user | clean-orphaned-users
  *
  * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
@@ -11,12 +13,14 @@
 let createClient;
 let assertCallerForAdminRoute;
 let fetchMergedPlatformUsersForAdmin;
+let fetchSyncUsersForAdmin;
 let getSecurityEventsSnapshot;
 let handleVercelAffiliateDeclinePost;
 let handleVercelAdminInviteUserPost;
 let affiliateApproveHandler;
 let applyPaidlyServerlessCors;
 let validateServiceRoleKey;
+let runAdminDeleteOrphanProfiles;
 
 let corsPromise = null;
 let getDepsPromise = null;
@@ -40,15 +44,29 @@ async function ensureGetDeps() {
     import("@supabase/supabase-js"),
     import("../../server/src/adminRouteAccess.js"),
     import("../../server/src/adminPlatformUsersList.js"),
+    import("../../server/src/adminSyncUsersList.js"),
+    import("../../server/src/adminCleanOrphanProfiles.js"),
     import("../../server/src/securityMiddleware.js"),
     import("../../server/src/supabaseServiceRoleGuard.js"),
-  ]).then(([supabaseMod, adminRouteAccessMod, adminPlatformUsersMod, securityMiddlewareMod, roleGuardMod]) => {
-    createClient = supabaseMod.createClient;
-    assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
-    fetchMergedPlatformUsersForAdmin = adminPlatformUsersMod.fetchMergedPlatformUsersForAdmin;
-    getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
-    validateServiceRoleKey = roleGuardMod.validateServiceRoleKey;
-  });
+  ]).then(
+    ([
+      supabaseMod,
+      adminRouteAccessMod,
+      adminPlatformUsersMod,
+      adminSyncUsersMod,
+      adminCleanMod,
+      securityMiddlewareMod,
+      roleGuardMod,
+    ]) => {
+      createClient = supabaseMod.createClient;
+      assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
+      fetchMergedPlatformUsersForAdmin = adminPlatformUsersMod.fetchMergedPlatformUsersForAdmin;
+      fetchSyncUsersForAdmin = adminSyncUsersMod.fetchSyncUsersForAdmin;
+      runAdminDeleteOrphanProfiles = adminCleanMod.runAdminDeleteOrphanProfiles;
+      getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
+      validateServiceRoleKey = roleGuardMod.validateServiceRoleKey;
+    }
+  );
   return getDepsPromise;
 }
 
@@ -129,7 +147,14 @@ async function handleAffiliates(req, res, supabase, limit) {
   ]);
 
   if (appsRes.error) {
-    return res.status(500).json({ error: appsRes.error.message });
+    console.error(
+      "[GET /api/admin/affiliates] affiliate_applications:",
+      appsRes.error.code,
+      appsRes.error.message,
+      appsRes.error.details
+    );
+    const body = postgrestErrorToApiBody(appsRes.error);
+    return res.status(500).json(body || { error: "affiliate_applications query failed" });
   }
 
   const applications = appsRes.data || [];
@@ -161,6 +186,17 @@ async function handlePlatformUsers(req, res, supabase, limit) {
   }
 }
 
+async function handleSyncUsers(req, res, supabase) {
+  try {
+    const { users } = await fetchSyncUsersForAdmin(supabase);
+    console.log(`[GET /api/admin/sync-users] ${users.length} users`);
+    return res.status(200).json({ users });
+  } catch (e) {
+    console.error("[GET /api/admin/sync-users]", e?.message || e);
+    return res.status(500).json({ error: e?.message || "Failed to sync users" });
+  }
+}
+
 function handleSecurityEvents(res) {
   return res.status(200).json({
     status: "ok",
@@ -173,8 +209,8 @@ function handleSecurityEvents(res) {
 export default async function handler(req, res) {
   try {
     const resource = adminResourceFromRequest(req);
-    const getResources = new Set(["affiliates", "platform-users", "security-events"]);
-    const postResources = new Set(["approve", "decline", "invite-user"]);
+    const getResources = new Set(["affiliates", "platform-users", "sync-users", "security-events"]);
+    const postResources = new Set(["approve", "decline", "invite-user", "clean-orphaned-users"]);
 
     if (postResources.has(resource)) {
       if (req.method === "OPTIONS") {
@@ -183,6 +219,31 @@ export default async function handler(req, res) {
         return res.status(200).end();
       }
       if (req.method === "POST") {
+        if (resource === "clean-orphaned-users") {
+          await ensureGetDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+
+          const authHeader = req.headers.authorization || "";
+          const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+          if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+          const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+          if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
+
+          const deny = await assertCallerForAdminRoute(supabase, authData.user, {});
+          if (deny) return res.status(deny.status).json(deny.body);
+
+          try {
+            const result = await runAdminDeleteOrphanProfiles(supabase);
+            console.log(`[POST /api/admin/clean-orphaned-users] deleted=${result.deleted}`);
+            return res.status(200).json(result);
+          } catch (e) {
+            console.error("[POST /api/admin/clean-orphaned-users]", e?.message || e);
+            return res.status(500).json({ error: e?.message || "Failed to clean orphaned profiles" });
+          }
+        }
         if (resource === "approve") {
           await ensureApproveDeclineDeps();
           return affiliateApproveHandler(req, res);
@@ -223,6 +284,10 @@ export default async function handler(req, res) {
 
     if (resource === "security-events") {
       return handleSecurityEvents(res);
+    }
+
+    if (resource === "sync-users") {
+      return handleSyncUsers(req, res, supabase);
     }
 
     if (resource === "affiliates") {

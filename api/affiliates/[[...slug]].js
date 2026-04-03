@@ -5,6 +5,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+import {
+  buildAffiliateSignupShareUrl,
+  resolvePublicAppOriginForShareLinks,
+} from "../../server/src/affiliateShareLink.js";
+import { postgrestErrorToApiBody } from "../../server/src/postgrestErrorToApiBody.js";
+import { canReadAffiliateAdminBundle } from "../../server/src/adminRouteAccess.js";
 
 function cors(res, req) {
   applyPaidlyServerlessCors(req, res, { methods: "GET, POST, OPTIONS" });
@@ -30,36 +36,9 @@ function countAffiliateApplicationsByStatus(rows) {
   return { pending, approved, declined, total: (rows || []).length };
 }
 
-async function canAccessAffiliateAdminBundle(supabase, userId, jwtUser) {
-  const jwtRole = String(jwtUser?.app_metadata?.role || "").toLowerCase();
-  if (jwtRole === "admin") return true;
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("role, user_role")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) return false;
-  const r = String(data?.role || data?.user_role || "").toLowerCase();
-  return r === "admin" || r === "management" || r === "support";
-}
-
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   return new Resend(process.env.RESEND_API_KEY);
-}
-
-function buildOrigin(req) {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  if (!host) return "";
-  return `${proto}://${host}`;
-}
-
-async function requireAdmin(supabase, userId) {
-  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  if (error) return false;
-  const r = String(data?.role || "").toLowerCase();
-  return r === "admin" || r === "management";
 }
 
 function normalizeSlug(req) {
@@ -85,7 +64,14 @@ async function handleGetAffiliateBundle(req, res, supabase) {
   ]);
 
   if (appsRes.error) {
-    return res.status(500).json({ error: appsRes.error.message });
+    console.error(
+      "[GET /api/affiliates] affiliate_applications:",
+      appsRes.error.code,
+      appsRes.error.message,
+      appsRes.error.details
+    );
+    const body = postgrestErrorToApiBody(appsRes.error);
+    return res.status(500).json(body || { error: "affiliate_applications query failed" });
   }
 
   const applications = appsRes.data || [];
@@ -117,8 +103,9 @@ async function handlePostResendLink(req, res, supabase) {
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
-  const requesterId = authData.user.id;
-  if (!(await requireAdmin(supabase, requesterId))) return res.status(403).json({ error: "Access restricted" });
+  if (!(await canReadAffiliateAdminBundle(supabase, authData.user))) {
+    return res.status(403).json({ error: "Access restricted" });
+  }
 
   const applicationId = req.body?.applicationId || req.body?.application_id || req.body?.id;
   if (!applicationId) return res.status(400).json({ error: "Missing applicationId" });
@@ -149,9 +136,14 @@ async function handlePostResendLink(req, res, supabase) {
     return res.status(404).json({ error: "Affiliate profile not found" });
   }
 
-  const origin = buildOrigin(req);
+  const origin = resolvePublicAppOriginForShareLinks(req);
   const referralCode = String(affRow.referral_code);
-  const shareLink = `${origin}/Signup#sign-up?ref=${encodeURIComponent(referralCode)}`;
+  const shareLink = buildAffiliateSignupShareUrl(origin, referralCode);
+  if (!origin) {
+    console.warn(
+      "[api/affiliates] resend-link: no absolute origin; set PUBLIC_APP_ORIGIN or CLIENT_ORIGIN for email links."
+    );
+  }
   const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
   await resend.emails.send({
@@ -190,8 +182,7 @@ export default async function handler(req, res) {
     const { data: authData, error: authErr } = await supabase.auth.getUser(token);
     if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
-    const requesterId = authData.user.id;
-    if (!(await canAccessAffiliateAdminBundle(supabase, requesterId, authData.user))) {
+    if (!(await canReadAffiliateAdminBundle(supabase, authData.user))) {
       return res.status(403).json({ error: "Access restricted" });
     }
 

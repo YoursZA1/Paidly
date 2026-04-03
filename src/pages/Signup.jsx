@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { processPendingAffiliateReferral, recordAffiliateClick, setPendingReferralCode } from "@/api/affiliateClient";
+import {
+  parseSignupReferralRef,
+  processPendingAffiliateReferral,
+  recordAffiliateClick,
+  setPendingReferralCode,
+} from "@/api/affiliateClient";
 import Home from "./Home";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -108,15 +113,14 @@ export default function Signup() {
     theme: "dark",
   });
 
-  // Persist ?ref= for post-signup attribution (localStorage key `referral_code`); survives reloads / step changes.
+  // Persist ?ref= for post-signup attribution (localStorage); also support legacy #sign-up?ref= URLs.
   useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (ref?.trim()) {
-      const code = ref.trim();
-      setPendingReferralCode(code);
-      recordAffiliateClick(code);
+    const ref = parseSignupReferralRef(searchParams, location.hash);
+    if (ref) {
+      setPendingReferralCode(ref);
+      recordAffiliateClick(ref);
     }
-  }, [searchParams]);
+  }, [searchParams, location.hash]);
 
   useEffect(() => {
     if (location.hash !== "#sign-up") return;
@@ -314,6 +318,16 @@ export default function Signup() {
       }
 
       setCreatedUserId(authUserId);
+
+      try {
+        const sessionWrap = await SupabaseAuthService.getSession();
+        if (sessionWrap?.session?.user?.id) {
+          await processPendingAffiliateReferral();
+        }
+      } catch {
+        /* non-fatal — e.g. email confirmation required before session */
+      }
+
       writeSignupOnboardingDraft({
         email: normalizedEmail,
         fullName: fullName.trim(),

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -186,6 +187,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
           <Alert variant="destructive">
             <AlertDescription>
               Could not load users from the backend: {platformUsersErr?.message || 'Unknown error'}.
+              <PlatformUsersLoadErrorHint message={platformUsersErr?.message} />
             </AlertDescription>
           </Alert>
         ) : null}

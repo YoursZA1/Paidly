@@ -92,6 +92,12 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
         if (raw != null && raw !== "") {
           fromJson = apiErrorFieldToString(raw);
         }
+        if (!fromJson.trim()) {
+          const parts = [payload.code, payload.details, payload.hint]
+            .map((x) => apiErrorFieldToString(x))
+            .filter((s) => s && s.trim());
+          fromJson = parts.length ? parts.join(" — ") : "";
+        }
       }
       lastError =
         fromJson ||
@@ -149,7 +155,7 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
  * Admin affiliate queue: backend uses service role + **status counts** from the same `select('*')` result.
  * Shape: `{ applications, counts: { pending, approved, declined, total } }`.
  */
-export async function fetchAdminAffiliateApplications(limit = 150) {
+export async function fetchAdminAffiliateApplications(limit = 500) {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
     throw new Error(getSupabaseErrorMessage(sessionError, "Session error"));
@@ -159,7 +165,7 @@ export async function fetchAdminAffiliateApplications(limit = 150) {
     throw new Error("Not authenticated");
   }
 
-  const lim = Math.min(Math.max(1, Number(limit) || 150), 500);
+  const lim = Math.min(Math.max(1, Number(limit) || 500), 500);
   const payload = await fetchAffiliateAdminPayloadFromApi(token, lim);
   const rawApps = payload.applications || [];
   const counts = payload.counts ?? countAffiliateApplicationsByStatus(rawApps);
@@ -169,7 +175,8 @@ export async function fetchAdminAffiliateApplications(limit = 150) {
 
 /**
  * React Query loader for `['affiliates']` on admin surfaces (errors propagate — no Supabase list fallback).
+ * @param {number} [limit] — API allows up to 500
  */
-export async function affiliateApplicationsAdminQueryFn(limit = 150) {
+export async function affiliateApplicationsAdminQueryFn(limit = 500) {
   return fetchAdminAffiliateApplications(limit);
 }

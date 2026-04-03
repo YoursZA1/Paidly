@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import UserFormDialog from '@/components/users/UserFormDialog';
@@ -39,7 +40,7 @@ export default function UsersPage() {
     error: platformUsersErr,
   } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => platformUsersQueryFn(500),
+    queryFn: () => platformUsersQueryFn(),
     refetchInterval: 30000,
   });
 
@@ -101,6 +102,7 @@ export default function UsersPage() {
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>
             Could not load users from the backend (API-only): {platformUsersErr?.message || 'Unknown error'}.
+            <PlatformUsersLoadErrorHint message={platformUsersErr?.message} />
           </AlertDescription>
         </Alert>
       ) : null}

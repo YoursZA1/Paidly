@@ -5,7 +5,6 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
 
 import Button from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -28,6 +27,11 @@ import SetupWizard from "@/components/SetupWizard";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
+import {
+  AppQuickSearchDesktop,
+  AppQuickSearchMobileDialog,
+  OPEN_EVENT as QUICK_SEARCH_OPEN_EVENT,
+} from "@/components/layout/AppQuickSearch";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
@@ -582,6 +586,7 @@ export default function Layout({ children, currentPageName }) {
   const isAdminV2Route = location.pathname.startsWith("/admin-v2");
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   // Default to expanded sidebar (especially after login/signup) so nav items are visible
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showTour, setShowTour] = useState(false);
@@ -590,6 +595,19 @@ export default function Layout({ children, currentPageName }) {
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
   const { user, logout } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        if (isCompactLayout) setQuickSearchOpen(true);
+        else window.dispatchEvent(new Event(QUICK_SEARCH_OPEN_EVENT));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [user?.id, isCompactLayout]);
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fetchAll = useAppStore((s) => s.fetchAll);
@@ -897,7 +915,7 @@ export default function Layout({ children, currentPageName }) {
             fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8"
         >
           {/* Mobile (< lg): Hamburger | Paidly | Avatar */}
-          <div className="flex items-center justify-between w-full lg:hidden">
+          <div className="flex items-center gap-2 w-full lg:hidden">
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
@@ -906,7 +924,21 @@ export default function Layout({ children, currentPageName }) {
             >
               <Menu className="size-6 pointer-events-none" aria-hidden />
             </button>
-            <span className="font-black text-foreground tracking-tight text-lg">Paidly</span>
+            <span className="flex-1 text-center font-black text-foreground tracking-tight text-lg truncate">
+              Paidly
+            </span>
+            {user && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-11 min-w-11"
+                aria-label="Search"
+                onClick={() => setQuickSearchOpen(true)}
+              >
+                <Search className="size-5" aria-hidden />
+              </Button>
+            )}
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -946,13 +978,7 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Desktop (lg+): Search, theme, notifications, profile */}
           <div className="hidden lg:flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-            <div className="relative max-w-md flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-              <Input
-                placeholder="Search invoices, clients…"
-                className="pl-10 bg-muted/50 border-border rounded-xl text-foreground placeholder:text-muted-foreground h-10 text-sm focus-visible:ring-2 focus-visible:ring-primary/20"
-              />
-            </div>
+            <AppQuickSearchDesktop />
           </div>
 
           <div className="hidden lg:flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -1082,6 +1108,9 @@ export default function Layout({ children, currentPageName }) {
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
         <MobileBottomNav onOpenMenu={() => setIsMobileMenuOpen(true)} />
+        {user?.id && isCompactLayout ? (
+          <AppQuickSearchMobileDialog open={quickSearchOpen} onOpenChange={setQuickSearchOpen} />
+        ) : null}
         </div>
         </div>
       );

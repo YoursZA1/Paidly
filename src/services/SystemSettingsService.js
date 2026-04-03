@@ -279,6 +279,12 @@ const DEFAULT_SETTINGS = {
     privacyPolicyUrl: ''
   },
 
+  /** Admin dashboard (Settings): defaults for affiliate program UI; persisted with system settings. */
+  affiliateProgram: {
+    defaultCommissionPercent: 15,
+    autoApproveApplications: false,
+  },
+
   // Last updated timestamp
   lastUpdated: new Date().toISOString(),
   updatedBy: null
@@ -440,6 +446,14 @@ export class SystemSettingsService {
   static isMaintenanceMode() {
     const settings = this.getSettings();
     return settings.system?.maintenanceMode || false;
+  }
+
+  /** Default affiliate commission (%) from admin Settings; falls back to 15. */
+  static getAffiliateDefaultCommissionPercent() {
+    const ap = this.getSettings().affiliateProgram || {};
+    const n = Number(ap.defaultCommissionPercent);
+    if (!Number.isFinite(n) || n < 0) return 15;
+    return Math.min(100, n);
   }
 
   /**

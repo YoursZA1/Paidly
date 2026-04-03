@@ -3,6 +3,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { applyPaidlyServerlessCors } from "./vercelPaidlyCors.js";
+import { canMutateAffiliateApplication } from "./adminRouteAccess.js";
 
 function cors(res, req) {
   applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
@@ -13,13 +14,6 @@ function getSupabaseAdmin() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-async function requireAdmin(supabase, userId) {
-  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  if (error) return false;
-  const r = String(data?.role || "").toLowerCase();
-  return r === "admin" || r === "management";
 }
 
 export async function handleVercelAffiliateDeclinePost(req, res) {
@@ -37,8 +31,7 @@ export async function handleVercelAffiliateDeclinePost(req, res) {
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
-  const jwtRole = String(authData.user?.app_metadata?.role || "").toLowerCase();
-  if (jwtRole !== "admin" && !(await requireAdmin(supabase, authData.user.id))) {
+  if (!(await canMutateAffiliateApplication(supabase, authData.user))) {
     return res.status(403).json({ error: "Access restricted" });
   }
 

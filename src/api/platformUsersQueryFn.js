@@ -9,7 +9,8 @@ function viteEnvFlag(name) {
 /**
  * React Query loader for `['platform-users']`: prefers Node/Vercel admin API; falls back to profiles list when API is missing or errors (not in VITE_SUPABASE_ONLY mode).
  */
-export async function platformUsersQueryFn(limit = 500) {
+/** @param {number} [limit] — server accepts up to 2000 for GET /api/admin/platform-users */
+export async function platformUsersQueryFn(limit = 2000) {
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
     return fetchAdminPlatformUsers(limit);
   }

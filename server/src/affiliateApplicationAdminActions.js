@@ -3,17 +3,14 @@
  * Mounted at POST /api/admin/approve, POST /api/admin/decline and legacy POST /api/affiliates/approve.
  */
 import { Resend } from "resend";
+import {
+  buildAffiliateSignupShareUrl,
+  resolvePublicAppOriginForShareLinks,
+} from "./affiliateShareLink.js";
 
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   return new Resend(process.env.RESEND_API_KEY);
-}
-
-function buildOrigin(req) {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  if (!host) return "";
-  return `${proto}://${host}`;
 }
 
 function buildReferralCode(name) {
@@ -135,8 +132,13 @@ export async function handlePostAffiliateApplicationApprove(req, res, deps) {
       .update({ status: "approved", user_id: userId, updated_at: new Date().toISOString() })
       .eq("id", appRow.id);
 
-    const origin = buildOrigin(req);
-    const shareLink = `${origin}/Signup#sign-up?ref=${encodeURIComponent(referralCode)}`;
+    const origin = resolvePublicAppOriginForShareLinks(req);
+    const shareLink = buildAffiliateSignupShareUrl(origin, referralCode);
+    if (!origin) {
+      console.warn(
+        "[affiliate/approve] Share link is relative (no absolute origin). Set PUBLIC_APP_ORIGIN or CLIENT_ORIGIN so email clients open the correct site."
+      );
+    }
     const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
     const safeName = escapeHtml(appRow.full_name || "there");
@@ -150,9 +152,10 @@ export async function handlePostAffiliateApplicationApprove(req, res, deps) {
           <h2 style="margin:0 0 12px;">You are approved!</h2>
           <p>Hi ${safeName}, your Paidly affiliate account has been approved.</p>
           <p><strong>Your referral code:</strong> ${referralCode}</p>
-          <p><strong>Your share link:</strong><br/><a href="${shareLink}">${shareLink}</a></p>
-          <p>Every signup and first-month paid subscription from this link is tied to your profile so we can track invited users and calculate your payout.</p>
-          <p style="margin-top:14px;">Welcome to Paidly partners 🚀</p>
+          <p><strong>Your unique share link</strong> (bookmark or share this URL):<br/><a href="${shareLink}">${shareLink}</a></p>
+          <p>Anyone who creates a Paidly account through that link is attributed to you; eligible paid plans can earn commissions per program terms.</p>
+          <p style="font-size:13px;color:#64748b;">Didn&apos;t get this message? Check spam/junk, or contact Paidly support and ask to resend your affiliate link.</p>
+          <p style="margin-top:14px;">Welcome to Paidly partners.</p>
         </div>
       `,
       });

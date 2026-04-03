@@ -1,6 +1,7 @@
 import { OutstandingBalanceService } from "@/services/OutstandingBalanceService";
 import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
+import { formatQueryError } from "@/utils/apiErrorText";
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
@@ -238,11 +239,18 @@ export default function Dashboard() {
           const users = await fetchSupabaseUsers();
           setSupabaseUsers(users);
         } catch (err) {
-          console.warn("Admin users fetch failed (backend may be stopped):", err?.message || err);
+          console.warn("Admin users fetch failed:", err?.message || err);
           setSupabaseUsers([]);
+          const detail = formatQueryError(err, "Could not load admin user list.");
+          const localHint =
+            import.meta.env.DEV &&
+            (String(err?.code || "").includes("ERR_NETWORK") ||
+              /network error|connection refused|failed to fetch/i.test(String(err?.message || "")));
           toast({
-            title: "Backend unavailable",
-            description: "Start the backend with: npm run server",
+            title: localHint ? "Backend unreachable (dev)" : "Admin user list failed",
+            description: localHint
+              ? "Start the API from the project root: npm run server"
+              : detail,
             variant: "destructive",
           });
         } finally {

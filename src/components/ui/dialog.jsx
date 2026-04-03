@@ -98,9 +98,6 @@ const DialogContent = React.forwardRef((allProps, ref) => {
     ...rest
   } = allProps
 
-  /** Stable id so Content `aria-describedby` always points at the injected sr-only Description (Radix may not merge when Content props were touched). */
-  const fallbackDescriptionId = React.useId()
-
   /** hasOwnProperty distinguishes explicit undefined (opt-out) from omitted; empty string matches legacy “not provided”. */
   const hasAriaDescribedbyKey = Object.prototype.hasOwnProperty.call(allProps, "aria-describedby")
   const rawAriaDescribedBy = hasAriaDescribedbyKey ? allProps["aria-describedby"] : undefined
@@ -112,23 +109,24 @@ const DialogContent = React.forwardRef((allProps, ref) => {
   const hasTitle = hasDialogChild(children, DialogTitle)
   const hasUserDescription = hasDialogChild(children, DialogDescription)
   /**
-   * Safety-first: unless caller provides a non-empty custom id, wire a fallback
-   * Description + aria-describedby target. This avoids Radix warnings even when
-   * child detection fails in wrapped/HMR edge cases.
-   * Skip injection when a real {@link DialogDescription} is present (e.g. under DialogHeader).
+   * Inject sr-only Description when none detected. Do not set a custom id or override Content
+   * aria-describedby: Radix links context.descriptionId to the Description node; mismatched ids
+   * trigger DescriptionWarning in @radix-ui/react-dialog.
    */
   const injectFallbackDescription = !hasNonEmptyAriaDescribedBy && !hasUserDescription
 
   /**
    * Non-empty aria-describedby: caller controls the id.
-   * Fallback Description: wire explicitly — do not pass aria-describedby={undefined} (that clears the link).
-   * Otherwise omit the prop and let Radix handle Description supplied by the caller.
+   * Fallback: omit aria-describedby here so DialogContentImpl keeps context.descriptionId.
+   * Explicit undefined: caller opts out of description (spread onto Content after Radix defaults).
    */
   const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
     ? { "aria-describedby": rawAriaDescribedBy }
     : injectFallbackDescription
-      ? { "aria-describedby": fallbackDescriptionId }
-      : {}
+      ? {}
+      : hasAriaDescribedbyKey
+        ? { "aria-describedby": rawAriaDescribedBy }
+        : {}
 
   return (
     <DialogPortal>
@@ -151,7 +149,7 @@ const DialogContent = React.forwardRef((allProps, ref) => {
         {...props}>
         {!hasTitle && <DialogPrimitive.Title className="sr-only">Dialog</DialogPrimitive.Title>}
         {injectFallbackDescription && (
-          <DialogPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+          <DialogPrimitive.Description className="sr-only">
             Dialog content
           </DialogPrimitive.Description>
         )}

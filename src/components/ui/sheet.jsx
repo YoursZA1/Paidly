@@ -86,7 +86,6 @@ const SheetContent = React.forwardRef((allProps, ref) => {
     children,
     ...rest
   } = allProps
-  const fallbackDescriptionId = React.useId()
   const hasAriaDescribedbyKey = Object.prototype.hasOwnProperty.call(allProps, "aria-describedby")
   const rawAriaDescribedBy = hasAriaDescribedbyKey ? allProps["aria-describedby"] : undefined
   const { "aria-describedby": _ariaOmit, ...props } = rest
@@ -98,8 +97,10 @@ const SheetContent = React.forwardRef((allProps, ref) => {
   const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
     ? { "aria-describedby": rawAriaDescribedBy }
     : injectFallbackDescription
-      ? { "aria-describedby": fallbackDescriptionId }
-      : {}
+      ? {}
+      : hasAriaDescribedbyKey
+        ? { "aria-describedby": rawAriaDescribedBy }
+        : {}
 
   return (
     <SheetPortal>
@@ -114,7 +115,7 @@ const SheetContent = React.forwardRef((allProps, ref) => {
           <SheetPrimitive.Title className="sr-only">Panel</SheetPrimitive.Title>
         )}
         {injectFallbackDescription && (
-          <SheetPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+          <SheetPrimitive.Description className="sr-only">
             Panel content
           </SheetPrimitive.Description>
         )}

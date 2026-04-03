@@ -29,6 +29,27 @@ export function createSignupUrl(): string {
     return `${createPageUrl("Signup")}#sign-up`;
 }
 
+/**
+ * Affiliate share link: `?ref=` in the query (parsed by the SPA) + `#sign-up` to scroll to the form.
+ * Must stay aligned with `buildAffiliateSignupShareUrl` in `server/src/affiliateShareLink.js`.
+ * @param referralCode Raw code (not URL-encoded)
+ * @param origin Optional base, e.g. from `VITE_APP_URL` or `window.location.origin` (no trailing slash)
+ */
+export function createAffiliateSignupShareUrl(referralCode: string, origin?: string): string {
+    const o = String(origin ?? (typeof window !== "undefined" ? window.location.origin : ""))
+        .trim()
+        .replace(/\/$/, "");
+    const raw = String(referralCode || "").trim();
+    const signup = createPageUrl("Signup");
+    if (!raw) {
+        const path = `${signup}#sign-up`;
+        return o ? `${o}${path}` : path;
+    }
+    const code = encodeURIComponent(raw);
+    const path = `${signup}?ref=${code}#sign-up`;
+    return o ? `${o}${path}` : path;
+}
+
 /** Waitlist section on the marketing home page. */
 export function createWaitlistUrl(): string {
     return `${createPageUrl("Home")}#waitlist`;

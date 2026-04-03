@@ -23,6 +23,13 @@ import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
+import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
+import { callAdminAffiliateMutation } from '@/api/adminAffiliateMutations';
+import { SystemSettingsService } from '@/services/SystemSettingsService';
+import { createAffiliateSignupShareUrl } from '@/utils';
+import { toast } from 'sonner';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 import { supabase } from '@/lib/supabaseClient';
 import { countByUserId } from '@/utils/documentOwnership';
 import {
@@ -43,10 +50,21 @@ const DASHBOARD_QUERY_KEYS = [
   'payslips',
 ];
 
+function burstWindowMinutes(securityEvents, kind) {
+  const ms = securityEvents?.bursts?.windowsMs?.[kind];
+  if (typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
+    return Math.max(1, Math.round(ms / 60000));
+  }
+  return 10;
+}
+
 export default function AdminV2Dashboard() {
+  const { user: currentUser } = useCurrentUser();
   const queryClient = useQueryClient();
   const [tick, setTick] = useState(Date.now());
   const [showSecurityDetails, setShowSecurityDetails] = useState(false);
+  const [affiliateApprovalNotice, setAffiliateApprovalNotice] = useState(null);
+  const [busyAffiliateId, setBusyAffiliateId] = useState(null);
   const dashboardRefreshing =
     useIsFetching({
       predicate: (q) => DASHBOARD_QUERY_KEYS.includes(String(q.queryKey[0])),
@@ -63,7 +81,7 @@ export default function AdminV2Dashboard() {
     error: platformUsersQueryErr,
   } = useQuery({
     queryKey: ['platform-users'],
-    queryFn: () => platformUsersQueryFn(500),
+    queryFn: () => platformUsersQueryFn(),
     refetchInterval: 45000,
     staleTime: 30000,
   });
@@ -83,12 +101,123 @@ export default function AdminV2Dashboard() {
   } = useQuery({
     queryKey: ['affiliates'],
     select: normalizeAffiliateAdminQueryResult,
-    queryFn: () => affiliateApplicationsAdminQueryFn(150),
+    queryFn: () => affiliateApplicationsAdminQueryFn(),
     refetchInterval: 45000,
     staleTime: 30000,
   });
   const affiliates = affiliateAdmin.applications;
   const affiliateStatusCounts = affiliateAdmin.counts;
+
+  const defaultAffiliateCommissionPct = SystemSettingsService.getAffiliateDefaultCommissionPercent();
+
+  const handleDashboardApproveAffiliate = async (aff) => {
+    setBusyAffiliateId(aff.id);
+    try {
+      const result = await callAdminAffiliateMutation('/api/admin/approve', {
+        applicationId: aff.id,
+        commissionRate: Number(aff.commission_rate ?? defaultAffiliateCommissionPct),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+
+      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+      const code = String(result?.referral_code || '').trim();
+      const link =
+        String(result?.referral_link || '').trim() ||
+        (code ? createAffiliateSignupShareUrl(code, origin) : '');
+
+      setAffiliateApprovalNotice({
+        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
+        applicantEmail: String(aff.applicant_email || '').trim(),
+        referralCode: code,
+        referralLink: link,
+        emailSent: result?.email_sent !== false,
+        emailError: result?.email_error != null ? String(result.email_error) : null,
+      });
+
+      toast.success('Affiliate approved', {
+        description:
+          result?.email_sent === false
+            ? 'Saved — email failed. Copy the link from the dialog.'
+            : `Confirmation email sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
+      });
+
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
+        category: 'affiliates',
+        description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
+        targetId: aff.id,
+        targetLabel: aff.applicant_email,
+        before: { status: 'pending' },
+        after: {
+          status: 'approved',
+          referral_code: result?.referral_code,
+          referral_link: result?.referral_link,
+          email_sent: result?.email_sent,
+        },
+      });
+    } catch (e) {
+      toast.error(e?.message || 'Could not approve affiliate');
+    } finally {
+      setBusyAffiliateId(null);
+    }
+  };
+
+  const handleDashboardDeclineAffiliate = async (aff) => {
+    const name = String(aff.applicant_name || aff.applicant_email || 'this applicant');
+    if (!window.confirm(`Decline affiliate application for ${name}?`)) return;
+    setBusyAffiliateId(aff.id);
+    try {
+      await callAdminAffiliateMutation('/api/admin/decline', { applicationId: aff.id });
+      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+      toast.success('Application declined', {
+        description: `${String(aff.applicant_email || '').trim() || 'Applicant'} was not approved. Queue updated.`,
+      });
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
+        category: 'affiliates',
+        description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
+        targetId: aff.id,
+        targetLabel: aff.applicant_email,
+        before: { status: 'pending' },
+        after: { status: 'declined' },
+      });
+    } catch (e) {
+      toast.error(e?.message || 'Could not decline application');
+    } finally {
+      setBusyAffiliateId(null);
+    }
+  };
+
+  const handleDashboardResendAffiliateLink = async (aff) => {
+    setBusyAffiliateId(aff.id);
+    try {
+      const result = await callAdminAffiliateMutation('/api/affiliates/resend-link', { applicationId: aff.id });
+      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
+      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+      const code = String(result?.referral_code || '').trim();
+      const link =
+        String(result?.referral_link || '').trim() ||
+        (code ? createAffiliateSignupShareUrl(code, origin) : '');
+      setAffiliateApprovalNotice({
+        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
+        applicantEmail: String(aff.applicant_email || '').trim(),
+        referralCode: code,
+        referralLink: link,
+        emailSent: true,
+        emailError: null,
+        isResend: true,
+      });
+      toast.success('Referral link emailed again', {
+        description: `Sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
+      });
+    } catch (e) {
+      toast.error(e?.message || 'Could not resend link');
+    } finally {
+      setBusyAffiliateId(null);
+    }
+  };
 
   const { data: waitlist = [], dataUpdatedAt: waitlistUpdatedAt } = useQuery({
     queryKey: ['waitlist'],
@@ -181,7 +310,7 @@ export default function AdminV2Dashboard() {
 
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
-  /** Same source as admin API `counts.pending` (not `affiliates.filter` on an RLS-truncated list). */
+  /** Pending count from `affiliate_applications` via GET /api/admin/affiliates (not a client-side filter on a truncated list). */
   const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
@@ -247,12 +376,15 @@ export default function AdminV2Dashboard() {
     const severe429 = Number(counts.status429 || 0) >= Math.max(10, Math.floor(Number(thresholds.rateLimited || 40) * 0.5));
     const severe401 = Number(counts.status401 || 0) >= Math.max(10, Math.floor(Number(thresholds.authFail || 30) * 0.5));
     const severe404 = Number(counts.status404 || 0) >= Math.max(20, Math.floor(Number(thresholds.notFound || 80) * 0.5));
+    const seTh = Number(thresholds.serverError || 30);
+    const severe5xx =
+      Number(counts.status5xx || 0) >= Math.max(5, Math.floor(seTh * 0.5));
     const activeBurstIps =
       Number(activeIps.authFail || 0) +
       Number(activeIps.notFound || 0) +
       Number(activeIps.rateLimited || 0) +
       Number(activeIps.serverError || 0);
-    return severe429 || severe401 || severe404 || activeBurstIps > 0;
+    return severe429 || severe401 || severe404 || severe5xx || activeBurstIps > 0;
   }, [securityEvents]);
 
   return (
@@ -338,6 +470,16 @@ export default function AdminV2Dashboard() {
           users={users}
           affiliates={affiliates}
           pendingAffiliateCount={pendingAffiliateReviewCount}
+          busyAffiliateId={busyAffiliateId}
+          onApproveAffiliate={
+            affiliatesQueryError ? undefined : handleDashboardApproveAffiliate
+          }
+          onDeclineAffiliate={
+            affiliatesQueryError ? undefined : handleDashboardDeclineAffiliate
+          }
+          onResendAffiliateLink={
+            affiliatesQueryError ? undefined : handleDashboardResendAffiliateLink
+          }
         />
       </div>
 
@@ -371,7 +513,7 @@ export default function AdminV2Dashboard() {
             {securityError
               ? `Could not load security telemetry: ${securityError?.message || 'unknown error'}`
               : securitySpike
-                ? 'Spike detected in auth/API anomalies. Investigate logs and suspicious IPs.'
+                ? 'Spike detected in auth/API traffic, 5xx volume, or per-IP burst buckets. Investigate logs and suspicious IPs.'
                 : 'No active anomaly spikes detected.'}
           </p>
         </div>
@@ -384,46 +526,62 @@ export default function AdminV2Dashboard() {
         </div>
       </div>
 
+      <AffiliateApprovalResultDialog
+        notice={affiliateApprovalNotice}
+        onOpenChange={(open) => {
+          if (!open) setAffiliateApprovalNotice(null);
+        }}
+      />
+
       <Dialog open={showSecurityDetails} onOpenChange={setShowSecurityDetails}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Security Burst Details</DialogTitle>
+            <DialogTitle>Security burst details</DialogTitle>
             <DialogDescription>
-              Active burst buckets and trigger thresholds for quicker incident triage.
+              Per–client-IP rolling windows on the Node API. When an IP hits the threshold, a warning is logged.
+              Override with <code className="text-xs">SECURITY_*</code> env vars (see server security middleware).
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">authFail threshold</p>
-              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.authFail ?? '—'}</p>
+              <p className="text-xs font-medium text-foreground">401 API failures (per IP)</p>
+              <p className="text-[10px] text-muted-foreground">
+                {burstWindowMinutes(securityEvents, 'authFail')} min window · warn at threshold (
+                <code className="text-[10px]">SECURITY_AUTH_FAIL_BURST_THRESHOLD</code>, default 30)
+              </p>
+              <p className="mt-1 font-semibold tabular-nums">{securityEvents?.bursts?.thresholds?.authFail ?? '—'}</p>
+              <p className="text-[10px] text-muted-foreground">IPs at/above threshold</p>
+              <p className="font-semibold tabular-nums">{securityEvents?.bursts?.activeIps?.authFail ?? '—'}</p>
             </div>
             <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">authFail active IPs</p>
-              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.authFail ?? '—'}</p>
+              <p className="text-xs font-medium text-foreground">404 responses (per IP)</p>
+              <p className="text-[10px] text-muted-foreground">
+                {burstWindowMinutes(securityEvents, 'notFound')} min window · warn at threshold (
+                <code className="text-[10px]">SECURITY_404_BURST_THRESHOLD</code>, default 80)
+              </p>
+              <p className="mt-1 font-semibold tabular-nums">{securityEvents?.bursts?.thresholds?.notFound ?? '—'}</p>
+              <p className="text-[10px] text-muted-foreground">IPs at/above threshold</p>
+              <p className="font-semibold tabular-nums">{securityEvents?.bursts?.activeIps?.notFound ?? '—'}</p>
             </div>
             <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">notFound threshold</p>
-              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.notFound ?? '—'}</p>
+              <p className="text-xs font-medium text-foreground">429 rate limits (per IP)</p>
+              <p className="text-[10px] text-muted-foreground">
+                {burstWindowMinutes(securityEvents, 'rateLimited')} min window · warn at threshold (
+                <code className="text-[10px]">SECURITY_RATE_LIMIT_BURST_THRESHOLD</code>, default 40)
+              </p>
+              <p className="mt-1 font-semibold tabular-nums">{securityEvents?.bursts?.thresholds?.rateLimited ?? '—'}</p>
+              <p className="text-[10px] text-muted-foreground">IPs at/above threshold</p>
+              <p className="font-semibold tabular-nums">{securityEvents?.bursts?.activeIps?.rateLimited ?? '—'}</p>
             </div>
             <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">notFound active IPs</p>
-              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.notFound ?? '—'}</p>
-            </div>
-            <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">rateLimited threshold</p>
-              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.rateLimited ?? '—'}</p>
-            </div>
-            <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">rateLimited active IPs</p>
-              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.rateLimited ?? '—'}</p>
-            </div>
-            <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">serverError threshold</p>
-              <p className="font-semibold">{securityEvents?.bursts?.thresholds?.serverError ?? '—'}</p>
-            </div>
-            <div className="rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">serverError active IPs</p>
-              <p className="font-semibold">{securityEvents?.bursts?.activeIps?.serverError ?? '—'}</p>
+              <p className="text-xs font-medium text-foreground">5xx server errors (per IP)</p>
+              <p className="text-[10px] text-muted-foreground">
+                {burstWindowMinutes(securityEvents, 'serverError')} min window · warn at threshold (
+                <code className="text-[10px]">SECURITY_5XX_BURST_THRESHOLD</code>, default 30)
+              </p>
+              <p className="mt-1 font-semibold tabular-nums">{securityEvents?.bursts?.thresholds?.serverError ?? '—'}</p>
+              <p className="text-[10px] text-muted-foreground">IPs at/above threshold</p>
+              <p className="font-semibold tabular-nums">{securityEvents?.bursts?.activeIps?.serverError ?? '—'}</p>
             </div>
           </div>
         </DialogContent>

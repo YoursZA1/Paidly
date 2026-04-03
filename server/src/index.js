@@ -13,12 +13,15 @@ import {
 } from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
+import { postgrestErrorToApiBody } from "./postgrestErrorToApiBody.js";
 import {
   authEmailVerificationFields,
   dedupeAuthUsersByEmail,
   fetchMergedPlatformUsersForAdmin,
   listAllAuthUsersAdmin,
 } from "./adminPlatformUsersList.js";
+import { fetchSyncUsersForAdmin } from "./adminSyncUsersList.js";
+import { runAdminDeleteOrphanProfiles } from "./adminCleanOrphanProfiles.js";
 import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
@@ -2093,8 +2096,20 @@ async function handleAdminAffiliateBundleGet(req, res) {
     ]);
 
     if (appsRes.error) {
-      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${appsRes.error.message}`);
-      return res.status(500).json({ error: appsRes.error.message });
+      console.error(
+        `[GET ${req.path}] affiliate_applications:`,
+        appsRes.error.code,
+        appsRes.error.message,
+        appsRes.error.details
+      );
+      logAdminApi(
+        req.method,
+        req.path,
+        500,
+        `affiliate_applications: ${appsRes.error.message || appsRes.error.code || "query failed"}`
+      );
+      const body = postgrestErrorToApiBody(appsRes.error);
+      return res.status(500).json(body || { error: "affiliate_applications query failed" });
     }
 
     const applications = appsRes.data || [];
@@ -2168,8 +2183,20 @@ app.get("/api/admin/affiliate-applications", async (req, res) => {
       .limit(limit);
 
     if (error) {
-      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${error.message}`);
-      return res.status(500).json({ error: error.message });
+      console.error(
+        `[GET ${req.path}] affiliate_applications:`,
+        error.code,
+        error.message,
+        error.details
+      );
+      logAdminApi(
+        req.method,
+        req.path,
+        500,
+        `affiliate_applications: ${error.message || error.code || "query failed"}`
+      );
+      const body = postgrestErrorToApiBody(error);
+      return res.status(500).json(body || { error: "affiliate_applications query failed" });
     }
 
     const list = applications || [];
@@ -2194,15 +2221,16 @@ app.post("/api/admin/clean-orphaned-users", async (req, res) => {
       return;
     }
 
-    const { data, error } = await supabaseAdmin.rpc("admin_delete_orphan_profiles");
-    if (error) {
-      logAdminApi(req.method, req.path, 500, error.message);
-      return res.status(500).json({ error: error.message });
+    let result;
+    try {
+      result = await runAdminDeleteOrphanProfiles(supabaseAdmin);
+    } catch (e) {
+      logAdminApi(req.method, req.path, 500, e?.message);
+      return res.status(500).json({ error: e?.message });
     }
 
-    const deleted = typeof data === "number" ? data : Number(data) || 0;
-    logAdminApi(req.method, req.path, 200, `orphan profiles removed: ${deleted}`);
-    return res.json({ deleted });
+    logAdminApi(req.method, req.path, 200, `orphan profiles removed: ${result.deleted}`);
+    return res.json(result);
   } catch (err) {
     if (res.headersSent) {
       return;
@@ -2221,86 +2249,23 @@ app.get("/api/admin/sync-users", async (req, res) => {
       return;
     }
 
-    let authUsers;
+    let payload;
     try {
-      authUsers = await listAllAuthUsersAdmin(supabaseAdmin);
+      payload = await fetchSyncUsersForAdmin(supabaseAdmin);
     } catch (e) {
-      logAdminApi(req.method, req.path, 500, `listUsers: ${e?.message}`);
+      logAdminApi(req.method, req.path, 500, `sync-users: ${e?.message}`);
       return res.status(500).json({ error: e?.message });
     }
 
-    const userIds = authUsers.map((u) => u.id);
-    if (userIds.length === 0) {
-      logAdminApi(req.method, req.path, 200, "0 users");
-      return res.json({ users: [] });
-    }
-
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from("profiles")
-      .select("id, full_name, email, avatar_url, logo_url, subscription_plan")
-      .in("id", userIds);
-
-    if (profilesError) {
-      logAdminApi(req.method, req.path, 500, `profiles: ${profilesError.message}`);
-      return res.status(500).json({ error: profilesError.message });
-    }
-
-    const { data: memberships, error: membershipsError } = await supabaseAdmin
-      .from("memberships")
-      .select("user_id, role, org_id")
-      .in("user_id", userIds);
-
-    if (membershipsError) {
-      logAdminApi(req.method, req.path, 500, `memberships: ${membershipsError.message}`);
-      return res.status(500).json({ error: membershipsError.message });
-    }
-
-    const orgIds = Array.from(new Set((memberships || []).map((m) => m.org_id).filter(Boolean)));
-    const { data: organizations, error: orgsError } = orgIds.length
-      ? await supabaseAdmin.from("organizations").select("id, name, owner_id").in("id", orgIds)
-      : { data: [], error: null };
-
-    if (orgsError) {
-      logAdminApi(req.method, req.path, 500, `organizations: ${orgsError.message}`);
-      return res.status(500).json({ error: orgsError.message });
-    }
-
-    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
-    const orgMap = new Map((organizations || []).map((org) => [org.id, org]));
-    const membershipsByUser = (memberships || []).reduce((acc, membership) => {
-      const list = acc[membership.user_id] || [];
-      list.push({
-        ...membership,
-        organization: orgMap.get(membership.org_id) || null
-      });
-      acc[membership.user_id] = list;
-      return acc;
-    }, {});
-
-    const users = authUsers.map((authUser) => {
-      const ev = authEmailVerificationFields(authUser);
-      return {
-        id: authUser.id,
-        email: authUser.email,
-        app_metadata: authUser.app_metadata || {},
-        user_metadata: authUser.user_metadata || {},
-        created_at: authUser.created_at,
-        email_verified: ev.email_verified,
-        email_confirmed_at: ev.email_confirmed_at,
-        profile: profileMap.get(authUser.id) || null,
-        memberships: membershipsByUser[authUser.id] || []
-      };
-    });
-
-    logAdminApi(req.method, req.path, 200, `${users.length} users`);
-    return res.json({ users });
+    logAdminApi(req.method, req.path, 200, `${payload.users.length} users`);
+    return res.json(payload);
   } catch (err) {
     if (res.headersSent) {
       return;
     }
     logAdminApi(req.method, req.path, 500, err?.message);
     return res.status(500).json({
-      error: err?.message || "Failed to sync users"
+      error: err?.message || "Failed to sync users",
     });
   }
 });

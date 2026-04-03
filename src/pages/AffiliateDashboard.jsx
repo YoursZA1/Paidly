@@ -17,7 +17,11 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { createAffiliateApplyUrl, createAffiliateLandingUrl, createPageUrl } from "@/utils";
+import {
+  createAffiliateApplyUrl,
+  createAffiliateLandingUrl,
+  createAffiliateSignupShareUrl,
+} from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
@@ -74,33 +78,45 @@ export default function AffiliateDashboard() {
   const setLoadError = useAffiliateDashboardStore((s) => s.setLoadError);
 
   useEffect(() => {
-    console.log("[AffiliateDashboard] Mount: fetching dashboard data");
+    if (import.meta.env.DEV) {
+      console.log("[AffiliateDashboard] Mount: fetching dashboard data");
+    }
     setLoading(true);
     setLoadError(null);
 
     fetchAffiliateDashboardData()
       .then((data) => {
-        console.log("[AffiliateDashboard] Fetch returned", { ok: data?.ok, hasData: !!data });
+        if (import.meta.env.DEV) {
+          console.log("[AffiliateDashboard] Fetch returned", { ok: data?.ok, hasData: !!data });
+        }
         if (data?.ok) {
-          console.log("[AffiliateDashboard] Setting state with fresh data", { affiliate: !!data.affiliate });
+          if (import.meta.env.DEV) {
+            console.log("[AffiliateDashboard] Setting state with fresh data", { affiliate: !!data.affiliate });
+          }
           setAffiliateDashboard(data);
           setLoadError(null);
         } else {
-          console.error("[AffiliateDashboard] API returned error:", data?.error);
+          if (import.meta.env.DEV) {
+            console.error("[AffiliateDashboard] API returned error:", data?.error);
+          }
           setAffiliateDashboard(null);
           setLoadError(data?.error || "Could not load affiliate data");
         }
       })
       .catch((err) => {
-        console.error("[AffiliateDashboard] Fetch threw error:", err);
+        if (import.meta.env.DEV) {
+          console.error("[AffiliateDashboard] Fetch threw error:", err);
+        }
         setAffiliateDashboard(null);
         setLoadError(err?.message || "Failed to fetch affiliate data");
       })
       .finally(() => {
-        console.log("[AffiliateDashboard] Fetch complete, setting loading=false");
+        if (import.meta.env.DEV) {
+          console.log("[AffiliateDashboard] Fetch complete, setting loading=false");
+        }
         setLoading(false);
       });
-  }, []);
+  }, [setAffiliateDashboard, setLoadError, setLoading]);
 
   const affiliate = payload?.affiliate;
   const stats = payload?.stats;
@@ -114,9 +130,7 @@ export default function AffiliateDashboard() {
 
   const referralUrl = useMemo(() => {
     if (!affiliate?.referral_code) return "";
-    const origin = shareOrigin();
-    const path = createPageUrl("Signup");
-    return `${origin}${path}?ref=${encodeURIComponent(affiliate.referral_code)}`;
+    return createAffiliateSignupShareUrl(affiliate.referral_code, shareOrigin());
   }, [affiliate?.referral_code]);
 
   const copyLink = useCallback(async () => {
@@ -313,11 +327,8 @@ export default function AffiliateDashboard() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tip: append{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
-                    ?ref={affiliate.referral_code}
-                  </code>{" "}
-                  to any marketing URL on this site so visits are tracked.
+                  Anyone who creates a Paidly account through this link is attributed to you; eligible subscriptions can
+                  generate commissions per program terms.
                 </p>
               </CardContent>
             </Card>

@@ -50,6 +50,9 @@ async function readSessionSafe() {
   return normalizeSessionFromClient(data.session);
 }
 
+/** Sentinel for Promise.race — must never be mistaken for “no Supabase session”. */
+const SESSION_READ_TIMEOUT = Symbol("sessionReadTimeout");
+
 function minimalUserFromJwtUser(su) {
   if (!su?.id) return null;
   const email = (su.email || "").toLowerCase();
@@ -114,22 +117,22 @@ export function AuthProvider({ children }) {
   const refreshUser = useCallback(async () => {
     try {
       const SESSION_READ_MS = 8000;
-      let sessionNorm = await Promise.race([
+      const first = await Promise.race([
         readSessionSafe(),
         new Promise((resolve) => {
-          setTimeout(() => resolve(null), SESSION_READ_MS);
+          setTimeout(() => resolve(SESSION_READ_TIMEOUT), SESSION_READ_MS);
         }),
       ]);
-      if (!sessionNorm?.user) {
-        const { data } = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise((resolve) => {
-            setTimeout(() => resolve({ data: { session: null } }), 5000);
-          }),
-        ]);
-        if (data?.session?.user) {
+
+      let sessionNorm = null;
+      if (first === SESSION_READ_TIMEOUT || !first?.user) {
+        // Slow or inconclusive read — ask the client once without a fake “empty session” timeout.
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data?.session?.user) {
           sessionNorm = normalizeSessionFromClient(data.session);
         }
+      } else {
+        sessionNorm = first;
       }
 
       if (sessionNorm?.user) {
@@ -162,13 +165,8 @@ export function AuthProvider({ children }) {
         console.warn("[Auth] refreshUser:", e?.message || e);
       }
       try {
-        const { data } = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise((resolve) => {
-            setTimeout(() => resolve({ data: { session: null } }), 5000);
-          }),
-        ]);
-        const su = data?.session?.user;
+        const { data, error } = await supabase.auth.getSession();
+        const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
           const fb = getCachedUser();
           if (fb && (fb.id === su.id || fb.supabase_id === su.id)) {
@@ -224,15 +222,23 @@ export function AuthProvider({ children }) {
         await consumeAuthCallbackFromUrl();
         let initialSession = null;
         try {
-          initialSession = await Promise.race([
-            SupabaseAuthService.getSession(),
-            new Promise((_, reject) => {
-              setTimeout(() => reject(new Error("getSession timeout")), SESSION_INIT_MS);
+          const first = await Promise.race([
+            readSessionSafe(),
+            new Promise((resolve) => {
+              setTimeout(() => resolve(SESSION_READ_TIMEOUT), SESSION_INIT_MS);
             }),
           ]);
+          if (first === SESSION_READ_TIMEOUT) {
+            const { data, error } = await supabase.auth.getSession();
+            if (!error && data?.session?.user) {
+              initialSession = normalizeSessionFromClient(data.session);
+            }
+          } else {
+            initialSession = first;
+          }
         } catch (e) {
           if (!cancelled && import.meta.env?.DEV) {
-            console.warn("[Auth] getSession slow or failed during init:", e?.message || e);
+            console.warn("[Auth] getSession failed during init:", e?.message || e);
           }
           try {
             const { data, error } = await supabase.auth.getSession();
@@ -316,12 +322,10 @@ export function AuthProvider({ children }) {
           user: nextSession.user,
         });
         await refreshUser();
-      } else if (!nextSession && event !== "INITIAL_SESSION") {
-        // Session cleared without INITIAL_SESSION (e.g. invalid refresh); keep guest flows on public routes only
-        setSession(null);
-        setUser(null);
-        redirectToLoginIfProtectedPath();
       }
+      // Do not treat other events with a null session as sign-out. Short races/timeouts and
+      // some auth-js callbacks can emit without a payload; clearing user caused false logouts.
+      // Real session loss is delivered as SIGNED_OUT (handled above).
     });
     return () => subscription.unsubscribe();
   }, [refreshUser, scheduleRefreshUser]);
