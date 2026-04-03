@@ -3,7 +3,9 @@
  * and lightweight anomaly hints (404 bursts, 5xx).
  */
 
-import process from "node:process";
+// Runtime-safe: some Vercel runtimes don't support `node:process` (e.g. Edge-like).
+// We only need `process.env` for feature flags.
+const process = globalThis.process ?? { env: {} };
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
