@@ -3,6 +3,7 @@
  * Stale deploys often break dynamic import(); we reload once via sessionStorage (same key as legacy inline handler).
  */
 import { getCurrentPage, logUnhandledError } from '@/utils/apiLogger';
+import { isAbortError } from '@/utils/retryOnAbort';
 
 const RELOAD_ONCE_KEY = 'paidly_preload_reload_once';
 
@@ -101,6 +102,12 @@ export function installGlobalAsyncErrorHandlers() {
       logUnhandledRejection(reason);
       event.preventDefault();
       tryReloadOnceForStaleAssets();
+      return;
+    }
+
+    // Expected when leaving the page or tearing down (e.g. html2canvas / fetch abort) — not an app bug.
+    if (isAbortError(reason)) {
+      event.preventDefault();
       return;
     }
 

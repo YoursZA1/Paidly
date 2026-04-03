@@ -3,9 +3,26 @@
  * Often caused by React Strict Mode, navigation, or component unmount.
  */
 
-export const isAbortError = (err) =>
-  err?.name === 'AbortError' ||
-  (err?.message && String(err.message).toLowerCase().includes('aborted'));
+/**
+ * True for user/agent aborts (navigation, Strict Mode teardown, html2canvas/img fetch cancel).
+ * Handles DOMException, Error, and plain rejection strings.
+ */
+export const isAbortError = (err) => {
+  if (err == null) return false;
+  if (typeof err === 'string') {
+    return String(err).toLowerCase().includes('aborted');
+  }
+  if (err?.name === 'AbortError') return true;
+  // Legacy / edge: DOMException with ABORT_ERR
+  if (err?.name === 'DOMException') {
+    const code = err.code;
+    if (code === 20 || code === 'AbortError' || String(code).toUpperCase().includes('ABORT')) {
+      return true;
+    }
+  }
+  const msg = err?.message != null ? String(err.message).toLowerCase() : '';
+  return msg.includes('aborted');
+};
 
 /**
  * Retry an async operation on AbortError (once by default).
