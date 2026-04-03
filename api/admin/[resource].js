@@ -169,10 +169,6 @@ export default async function handler(req, res) {
     const postResources = new Set(["approve", "decline", "invite-user"]);
 
     if (postResources.has(resource)) {
-      if (resource === "invite-user") {
-        await ensureCorsDeps();
-        return handleVercelAdminInviteUserPost(req, res);
-      }
       if (req.method === "OPTIONS") {
         await ensureCorsDeps();
         applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
