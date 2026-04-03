@@ -17,39 +17,60 @@ let handleVercelAdminInviteUserPost;
 let affiliateApproveHandler;
 let applyPaidlyServerlessCors;
 
-let depsPromise = null;
-async function ensureDeps() {
+let corsPromise = null;
+let getDepsPromise = null;
+let approveDeclineDepsPromise = null;
+let inviteUserDepsPromise = null;
+
+async function ensureCorsDeps() {
   if (applyPaidlyServerlessCors) return;
-  if (depsPromise) return depsPromise;
-  depsPromise = Promise.all([
+  if (corsPromise) return corsPromise;
+  corsPromise = import("../../server/src/vercelPaidlyCors.js").then((m) => {
+    applyPaidlyServerlessCors = m.applyPaidlyServerlessCors;
+  });
+  return corsPromise;
+}
+
+async function ensureGetDeps() {
+  await ensureCorsDeps();
+  if (createClient) return;
+  if (getDepsPromise) return getDepsPromise;
+  getDepsPromise = Promise.all([
     import("@supabase/supabase-js"),
     import("../../server/src/adminRouteAccess.js"),
     import("../../server/src/adminPlatformUsersList.js"),
     import("../../server/src/securityMiddleware.js"),
-    import("../../server/src/vercelAffiliateDeclinePost.js"),
-    import("../../server/src/vercelAdminInviteUserPost.js"),
-    import("../affiliates/approve.js"),
-    import("../../server/src/vercelPaidlyCors.js"),
-  ]).then(([
-    supabaseMod,
-    adminRouteAccessMod,
-    adminPlatformUsersMod,
-    securityMiddlewareMod,
-    affiliateDeclineMod,
-    adminInviteMod,
-    affiliateApproveMod,
-    corsMod,
-  ]) => {
+  ]).then(([supabaseMod, adminRouteAccessMod, adminPlatformUsersMod, securityMiddlewareMod]) => {
     createClient = supabaseMod.createClient;
     assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
     fetchMergedPlatformUsersForAdmin = adminPlatformUsersMod.fetchMergedPlatformUsersForAdmin;
     getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
-    handleVercelAffiliateDeclinePost = affiliateDeclineMod.handleVercelAffiliateDeclinePost;
-    handleVercelAdminInviteUserPost = adminInviteMod.handleVercelAdminInviteUserPost;
-    affiliateApproveHandler = affiliateApproveMod.default;
-    applyPaidlyServerlessCors = corsMod.applyPaidlyServerlessCors;
   });
-  return depsPromise;
+  return getDepsPromise;
+}
+
+async function ensureApproveDeclineDeps() {
+  await ensureCorsDeps();
+  if (affiliateApproveHandler && handleVercelAffiliateDeclinePost) return;
+  if (approveDeclineDepsPromise) return approveDeclineDepsPromise;
+  approveDeclineDepsPromise = Promise.all([
+    import("../affiliates/approve.js"),
+    import("../../server/src/vercelAffiliateDeclinePost.js"),
+  ]).then(([affiliateApproveMod, affiliateDeclineMod]) => {
+    affiliateApproveHandler = affiliateApproveMod.default;
+    handleVercelAffiliateDeclinePost = affiliateDeclineMod.handleVercelAffiliateDeclinePost;
+  });
+  return approveDeclineDepsPromise;
+}
+
+async function ensureInviteUserDeps() {
+  await ensureCorsDeps();
+  if (handleVercelAdminInviteUserPost) return;
+  if (inviteUserDepsPromise) return inviteUserDepsPromise;
+  inviteUserDepsPromise = import("../../server/src/vercelAdminInviteUserPost.js").then((m) => {
+    handleVercelAdminInviteUserPost = m.handleVercelAdminInviteUserPost;
+  });
+  return inviteUserDepsPromise;
 }
 
 /** Vercel usually sets `query.resource`; fall back to path if missing (rewrites / some runtimes). */
@@ -143,26 +164,38 @@ function handleSecurityEvents(res) {
 
 export default async function handler(req, res) {
   try {
-    await ensureDeps();
     const resource = adminResourceFromRequest(req);
     const getResources = new Set(["affiliates", "platform-users", "security-events"]);
     const postResources = new Set(["approve", "decline", "invite-user"]);
 
     if (postResources.has(resource)) {
       if (resource === "invite-user") {
+        await ensureCorsDeps();
         return handleVercelAdminInviteUserPost(req, res);
       }
       if (req.method === "OPTIONS") {
+        await ensureCorsDeps();
         applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
         return res.status(200).end();
       }
       if (req.method === "POST") {
-        if (resource === "approve") return affiliateApproveHandler(req, res);
-        if (resource === "decline") return handleVercelAffiliateDeclinePost(req, res);
+        if (resource === "approve") {
+          await ensureApproveDeclineDeps();
+          return affiliateApproveHandler(req, res);
+        }
+        if (resource === "decline") {
+          await ensureApproveDeclineDeps();
+          return handleVercelAffiliateDeclinePost(req, res);
+        }
+        if (resource === "invite-user") {
+          await ensureInviteUserDeps();
+          return handleVercelAdminInviteUserPost(req, res);
+        }
       }
       return res.status(405).json({ error: "Method not allowed" });
     }
 
+    await ensureGetDeps();
     cors(res, req);
     if (req.method === "OPTIONS") return res.status(200).end();
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
