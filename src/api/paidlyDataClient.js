@@ -1,4 +1,9 @@
 import { supabase } from '@/lib/supabaseClient';
+import {
+  markAuditLogsSupabaseTableMissing,
+  resetAuditLogsSupabaseTableFlag,
+} from '@/lib/auditLogsSupabaseStatus';
+import { isSupabaseMissingRelationError } from '@/utils/supabaseErrorUtils';
 
 const PAIDLY_AUDIT_STORAGE_KEY = 'paidly_audit_log';
 
@@ -47,6 +52,14 @@ async function fetchAuditLogRowsFromSupabase(limit) {
       return ordered.data;
     }
 
+    if (ordered.error && isSupabaseMissingRelationError(ordered.error)) {
+      markAuditLogsSupabaseTableMissing();
+      console.warn(
+        '[paidly] public.audit_logs is missing — apply repo migration `supabase/migrations/20260404150100_audit_logs.sql` (e.g. `supabase db push` or SQL Editor). Until then, only local / unified audit entries will show.'
+      );
+      return [];
+    }
+
     if (import.meta.env?.DEV && ordered.error) {
       console.warn('[paidly] audit_logs query:', ordered.error.code, ordered.error.message);
     }
@@ -57,6 +70,14 @@ async function fetchAuditLogRowsFromSupabase(limit) {
       return fallback.data.sort(
         (a, b) => new Date(b.created_at || b.created_date || 0) - new Date(a.created_at || a.created_date || 0)
       );
+    }
+
+    if (fallback.error && isSupabaseMissingRelationError(fallback.error)) {
+      markAuditLogsSupabaseTableMissing();
+      console.warn(
+        '[paidly] public.audit_logs is missing — apply `supabase/migrations/20260404150100_audit_logs.sql`.'
+      );
+      return [];
     }
 
     if (import.meta.env?.DEV && fallback.error) {
@@ -72,6 +93,7 @@ async function fetchAuditLogRowsFromSupabase(limit) {
 
 /** Merges Supabase `audit_logs`, Settings `paidly_audit_log`, and unified AuditLogService entries. */
 async function listAuditLogs(limit = 200) {
+  resetAuditLogsSupabaseTableFlag();
   const cap = Number(limit) > 0 ? Math.min(Number(limit), 500) : 200;
   const out = [];
   const seenIds = new Set();

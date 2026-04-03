@@ -21,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getAuditLogsSupabaseTableMissing } from '@/lib/auditLogsSupabaseStatus';
 
 const CATEGORY_META = {
   users: { label: 'Users', icon: Users, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -158,10 +160,16 @@ export default function AuditLogPage() {
     document.title = `${PAGE_TITLE} · Paidly`;
   }, []);
 
-  const { data: logs = [], isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['audit-logs'],
-    queryFn: () => paidly.entities.AuditLog.list('-created_date', 200),
+    queryFn: async () => {
+      const logs = await paidly.entities.AuditLog.list('-created_date', 200);
+      return { logs, supabaseTableMissing: getAuditLogsSupabaseTableMissing() };
+    },
   });
+
+  const logs = data?.logs ?? [];
+  const supabaseTableMissing = data?.supabaseTableMissing ?? false;
 
   const filtered = logs.filter((l) => {
     const matchCategory = categoryFilter === 'all' || l.category === categoryFilter;
@@ -186,6 +194,21 @@ export default function AuditLogPage() {
         onRefresh={() => refetch()}
         isRefreshing={isFetching}
       />
+
+      {supabaseTableMissing ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription className="text-sm leading-relaxed">
+            The <code className="rounded bg-muted px-1 font-mono text-foreground">public.audit_logs</code> table is
+            not in this Supabase project (PostgREST 404 / missing relation). Apply the migration{' '}
+            <code className="rounded bg-muted px-1 font-mono text-foreground">
+              supabase/migrations/20260404150100_audit_logs.sql
+            </code>{' '}
+            via <span className="font-medium">Supabase CLI</span> (<code className="rounded bg-muted px-1">supabase
+            db push</code>) or paste the file into the <span className="font-medium">SQL Editor</span> and run it.
+            Until then, this page still shows entries from local storage and the unified audit service only.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="mb-6 flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3 text-sm text-muted-foreground">

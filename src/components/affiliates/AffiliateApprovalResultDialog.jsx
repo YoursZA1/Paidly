@@ -30,7 +30,7 @@ export default function AffiliateApprovalResultDialog({ notice, onOpenChange }) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" aria-describedby="affiliate-approval-notice-desc">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-left">
             {notice?.isResend ? (
@@ -40,7 +40,7 @@ export default function AffiliateApprovalResultDialog({ notice, onOpenChange }) 
             )}
             {notice?.isResend ? 'Referral link sent' : 'Affiliate approved'}
           </DialogTitle>
-          <DialogDescription id="affiliate-approval-notice-desc" className="text-left">
+          <DialogDescription className="text-left">
             {notice?.isResend
               ? `Another email with their signup link was sent to ${notice.applicantEmail || 'the applicant'}.`
               : `${notice?.applicantName || 'Applicant'} is approved. Their unique referral link is below — the same URL was included in the email when delivery succeeded.`}

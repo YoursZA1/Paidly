@@ -41,6 +41,20 @@ export function isAuthSignupEmailRateLimitError(error) {
 }
 
 /**
+ * PostgREST / Postgres: relation not in schema cache or does not exist (migrations not applied).
+ * @param {unknown} error - PostgrestError or similar `{ code, message }`
+ */
+export function isSupabaseMissingRelationError(error) {
+  if (error == null || typeof error !== "object") return false;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "PGRST205" || code === "42P01") return true;
+  const msg = String(error.message ?? "").toLowerCase();
+  if (/could not find the table .* in the schema cache/i.test(msg)) return true;
+  if (/relation .+ does not exist/i.test(msg)) return true;
+  return false;
+}
+
+/**
  * Get a safe, user-friendly message from a Supabase or generic error.
  * Handles PostgrestError, AuthError, StorageError, and plain Error.
  * @param {unknown} error - Error from Supabase or thrown in catch

@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
-import { callAdminAffiliateMutation } from '@/api/adminAffiliateMutations';
+import {
+  approveAffiliateApplication,
+  declineAffiliateApplication,
+  resendAffiliateReferralEmail,
+} from '@/api/affiliateAdminModerationApi';
 import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
 import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -105,7 +109,7 @@ export default function AffiliatesPage() {
 
   const handleApprove = async (aff) => {
     try {
-      const result = await callAdminAffiliateMutation('/api/admin/approve', {
+      const result = await approveAffiliateApplication({
         applicationId: aff.id,
         commissionRate: Number(aff.commission_rate ?? defaultCommissionPct),
       });
@@ -158,7 +162,7 @@ export default function AffiliatesPage() {
 
   const handleResend = async (aff) => {
     try {
-      const result = await callAdminAffiliateMutation('/api/affiliates/resend-link', { applicationId: aff.id });
+      const result = await resendAffiliateReferralEmail({ applicationId: aff.id });
       const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
       const code = String(result?.referral_code || '').trim();
       const link =
@@ -192,7 +196,7 @@ export default function AffiliatesPage() {
 
   const handleDecline = async (aff) => {
     try {
-      await callAdminAffiliateMutation('/api/admin/decline', { applicationId: aff.id });
+      await declineAffiliateApplication({ applicationId: aff.id });
       queryClient.invalidateQueries({ queryKey: ['affiliates'] });
       toast.success('Application declined');
       logAction({
@@ -492,8 +496,11 @@ export default function AffiliatesPage() {
       <Dialog open={!!viewingApp} onOpenChange={() => setViewingApp(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Affiliate Application</DialogTitle>
-            <DialogDescription className="sr-only">Review applicant details and approve or decline.</DialogDescription>
+            <DialogTitle>Affiliate application</DialogTitle>
+            <DialogDescription>
+              Review the applicant below. Approving grants affiliate access, creates their referral code, and emails
+              their share link when email is configured. Decline rejects the application.
+            </DialogDescription>
           </DialogHeader>
           {viewingApp && (
             <div className="space-y-4 mt-4">

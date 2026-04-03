@@ -1,5 +1,9 @@
 -- Persisted audit trail for Admin V2 → Audit Log (admin + management).
 -- Replaces reliance on localStorage-only data and avoids permanently skipping Supabase when the table was once missing.
+--
+-- Do **not** replace this with a minimal table (e.g. only id, action, user_id): the client inserts
+-- category, action, description, before, after, actor_name, actor_email, actor_role, target_label
+-- (see src/lib/auditLogger.js). This file is the canonical schema + RLS.
 
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

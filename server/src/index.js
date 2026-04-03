@@ -403,9 +403,14 @@ function logAdminApi(method, path, statusCode, detail = null) {
  * app_metadata.role === "admin" OR (when ADMIN_BYPASS_AUTH is true) email in ADMIN_BYPASS_EMAILS.
  * Bypass is only allowed when both ADMIN_BYPASS_AUTH is true AND email is in the list.
  *
- * @param {{ allowInternalTeam?: boolean, allowTeamManagement?: boolean }} [opts]
+ * @param {{
+ *   allowInternalTeam?: boolean,
+ *   allowTeamManagement?: boolean,
+ *   allowAffiliateModeration?: boolean,
+ * }} [opts]
  *   allowInternalTeam — profiles with admin|management|support|sales may access read-style admin routes.
  *   allowTeamManagement — profiles with admin|management may POST team invites (same as JWT admin for this action).
+ *   allowAffiliateModeration — admin|management|support may approve/decline affiliates (matches /admin-v2/affiliates).
  */
 const getAdminFromRequest = async (req, res, opts = {}) => {
   const { user, error } = await getUserFromRequest(req);

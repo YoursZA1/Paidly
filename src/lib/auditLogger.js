@@ -1,6 +1,11 @@
 /** Client-side audit trail — localStorage + Supabase `audit_logs` (admin/management RLS). */
 
 import { supabase } from '@/lib/supabaseClient';
+import {
+  getAuditLogsSupabaseTableMissing,
+  markAuditLogsSupabaseTableMissing,
+} from '@/lib/auditLogsSupabaseStatus';
+import { isSupabaseMissingRelationError } from '@/utils/supabaseErrorUtils';
 
 const STORAGE_KEY = 'paidly_audit_log';
 const MAX_ENTRIES = 200;
@@ -44,24 +49,28 @@ export function logAction({ actor, action, category, description, after, before,
     actor?.full_name ||
     actor?.display_name ||
     (actor?.email ? String(actor.email).split('@')[0] : null);
-  void supabase
-    .from('audit_logs')
-    .insert({
-      category: category || 'settings',
-      action: action || '',
-      description: description || null,
-      before: before ?? null,
-      after: after ?? null,
-      actor_name: actorName,
-      actor_email: actor?.email || null,
-      actor_role: actor?.role || null,
-      target_label: targetLabel || null,
-    })
-    .then(({ error }) => {
-      if (error && import.meta.env?.DEV) {
-        console.warn('[audit] audit_logs insert:', error.message);
-      }
-    });
+  if (!getAuditLogsSupabaseTableMissing()) {
+    void supabase
+      .from('audit_logs')
+      .insert({
+        category: category || 'settings',
+        action: action || '',
+        description: description || null,
+        before: before ?? null,
+        after: after ?? null,
+        actor_name: actorName,
+        actor_email: actor?.email || null,
+        actor_role: actor?.role || null,
+        target_label: targetLabel || null,
+      })
+      .then(({ error }) => {
+        if (error && isSupabaseMissingRelationError(error)) {
+          markAuditLogsSupabaseTableMissing();
+        } else if (error && import.meta.env?.DEV) {
+          console.warn('[audit] audit_logs insert:', error.message);
+        }
+      });
+  }
 
   if (import.meta.env?.DEV) {
     console.debug('[audit]', entry);

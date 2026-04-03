@@ -24,7 +24,11 @@ import PlanBadge from '@/components/dashboard/PlanBadge';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
-import { callAdminAffiliateMutation } from '@/api/adminAffiliateMutations';
+import {
+  approveAffiliateApplication,
+  declineAffiliateApplication,
+  resendAffiliateReferralEmail,
+} from '@/api/affiliateAdminModerationApi';
 import { SystemSettingsService } from '@/services/SystemSettingsService';
 import { createAffiliateSignupShareUrl } from '@/utils';
 import { toast } from 'sonner';
@@ -113,7 +117,7 @@ export default function AdminV2Dashboard() {
   const handleDashboardApproveAffiliate = async (aff) => {
     setBusyAffiliateId(aff.id);
     try {
-      const result = await callAdminAffiliateMutation('/api/admin/approve', {
+      const result = await approveAffiliateApplication({
         applicationId: aff.id,
         commissionRate: Number(aff.commission_rate ?? defaultAffiliateCommissionPct),
       });
@@ -168,7 +172,7 @@ export default function AdminV2Dashboard() {
     if (!window.confirm(`Decline affiliate application for ${name}?`)) return;
     setBusyAffiliateId(aff.id);
     try {
-      await callAdminAffiliateMutation('/api/admin/decline', { applicationId: aff.id });
+      await declineAffiliateApplication({ applicationId: aff.id });
       await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
       toast.success('Application declined', {
         description: `${String(aff.applicant_email || '').trim() || 'Applicant'} was not approved. Queue updated.`,
@@ -193,7 +197,7 @@ export default function AdminV2Dashboard() {
   const handleDashboardResendAffiliateLink = async (aff) => {
     setBusyAffiliateId(aff.id);
     try {
-      const result = await callAdminAffiliateMutation('/api/affiliates/resend-link', { applicationId: aff.id });
+      const result = await resendAffiliateReferralEmail({ applicationId: aff.id });
       await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
       const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
       const code = String(result?.referral_code || '').trim();

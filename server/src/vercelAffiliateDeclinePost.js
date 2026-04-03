@@ -1,9 +1,10 @@
 /**
- * POST decline affiliate application — shared by Express patterns; used from Vercel admin/[resource].js.
+ * POST /api/admin/decline — Vercel serverless (mounted from api/admin/[resource].js).
  */
 import { createClient } from "@supabase/supabase-js";
 import { applyPaidlyServerlessCors } from "./vercelPaidlyCors.js";
-import { canMutateAffiliateApplication } from "./adminRouteAccess.js";
+import { assertVercelAffiliateModerationAuth } from "./vercelAffiliateModerationAuth.js";
+import { parseAffiliateApplicationId, runAffiliateApplicationDecline } from "./affiliateModerationCore.js";
 
 function cors(res, req) {
   applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
@@ -24,38 +25,15 @@ export async function handleVercelAffiliateDeclinePost(req, res) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return res.status(503).json({ error: "Server misconfigured (Supabase)" });
 
-  const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
+  if (!moderator) return;
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
-
-  if (!(await canMutateAffiliateApplication(supabase, authData.user))) {
-    return res.status(403).json({ error: "Access restricted" });
-  }
-
-  const applicationId = req.body?.applicationId || req.body?.application_id || req.body?.id;
+  const applicationId = parseAffiliateApplicationId(req.body || {});
   if (!applicationId) return res.status(400).json({ error: "Missing applicationId" });
 
-  const { data: appRow, error: appErr } = await supabase
-    .from("affiliate_applications")
-    .select("id, status")
-    .eq("id", applicationId)
-    .maybeSingle();
-
-  if (appErr || !appRow) return res.status(404).json({ error: "Application not found" });
-
-  if (String(appRow.status).toLowerCase() !== "pending") {
-    return res.status(400).json({ error: "Application is not pending" });
+  const result = await runAffiliateApplicationDecline(supabase, applicationId);
+  if (!result.ok) {
+    return res.status(result.status).json(result.body);
   }
-
-  const { error: upErr } = await supabase
-    .from("affiliate_applications")
-    .update({ status: "rejected", updated_at: new Date().toISOString() })
-    .eq("id", applicationId);
-
-  if (upErr) return res.status(500).json({ error: upErr.message });
-
-  return res.status(200).json({ ok: true });
+  return res.status(200).json(result.payload);
 }
