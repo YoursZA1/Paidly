@@ -1,3 +1,5 @@
+import { isClientAuthThrottleRelaxed } from "@/utils/clientAuthThrottleEnv";
+
 /**
  * Client-side throttle for password sign-in (defense in depth; Supabase also rate-limits auth).
  * Uses sessionStorage so it clears when the tab closes.
@@ -20,6 +22,7 @@ function normalizeEmailKey(email) {
 export function getLoginThrottleState(email) {
   const emailKey = normalizeEmailKey(email);
   if (!emailKey) return { blocked: false, failures: 0 };
+  if (isClientAuthThrottleRelaxed()) return { blocked: false, failures: 0 };
 
   try {
     const raw = sessionStorage.getItem(storageKey(emailKey));
@@ -44,6 +47,7 @@ export function getLoginThrottleState(email) {
 export function recordLoginFailure(email) {
   const emailKey = normalizeEmailKey(email);
   if (!emailKey) return;
+  if (isClientAuthThrottleRelaxed()) return;
 
   try {
     const key = storageKey(emailKey);

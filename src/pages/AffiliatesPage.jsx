@@ -219,7 +219,7 @@ export default function AffiliatesPage() {
   const payoutsByAffiliateId = useMemo(() => {
     const map = new Map();
     for (const p of payouts) {
-      const key = String(p.affiliate_id || p.referral_id || '');
+      const key = String(p.affiliate_id || '');
       if (!key) continue;
       const arr = map.get(key) || [];
       arr.push(p);
@@ -359,7 +359,8 @@ export default function AffiliatesPage() {
                 </thead>
                 <tbody>
                   {filtered.map((aff) => {
-                    const affPayouts = payoutsByAffiliateId.get(String(aff.id)) || [];
+                    const payoutKey = String(aff.affiliate_partner_id || '');
+                    const affPayouts = (payoutKey && payoutsByAffiliateId.get(payoutKey)) || [];
                     const totalEarnings = affPayouts.reduce((s, p) => s + Number(p.commission_amount ?? p.amount ?? 0), 0);
                     return (
                       <tr key={aff.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
@@ -382,14 +383,32 @@ export default function AffiliatesPage() {
                             type="number"
                             min={0}
                             max={100}
+                            step={0.5}
                             className="h-8 w-20"
+                            disabled={aff.status !== 'approved'}
+                            title={
+                              aff.status !== 'approved'
+                                ? 'Commission can be adjusted after the application is approved'
+                                : 'Updates the partner rate used for new subscription commissions'
+                            }
                             defaultValue={Number(aff.commission_rate ?? defaultCommissionPct)}
+                            key={`${aff.id}-${aff.commission_rate}`}
                             onBlur={(e) => handleCommissionUpdate(aff, e.target.value)}
                           />
                         </td>
-                        <td className="px-6 py-4 text-sm">{aff.referrals_count || 0}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className="font-medium tabular-nums">{aff.referrals_count ?? 0}</span>
+                          {(aff.referrals_subscribed_count > 0 || aff.referrals_paid_count > 0) && (
+                            <span className="block text-xs text-muted-foreground tabular-nums">
+                              {aff.referrals_subscribed_count ?? 0} subscriber
+                              {(aff.referrals_subscribed_count ?? 0) === 1 ? '' : 's'} · {aff.referrals_paid_count ?? 0}{' '}
+                              paid
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-sm font-medium text-primary">
-                          R {totalEarnings > 0 ? totalEarnings.toFixed(2) : Number(aff.earnings || 0).toFixed(2)}
+                          R{' '}
+                          {(totalEarnings > 0 ? totalEarnings : Number(aff.earnings || 0)).toFixed(2)}
                         </td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">
                           {aff.created_date ? format(new Date(aff.created_date), 'dd MMM yyyy') : '—'}

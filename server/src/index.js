@@ -86,6 +86,11 @@ import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
 import { recordSubscriptionPaymentCommission } from "./affiliateSubscriptionCommission.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
+import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
+import {
+  isPaidSubscriptionPlan,
+  markReferralSubscribedForUser,
+} from "./affiliateReferralLifecycle.js";
 import {
   handlePostAffiliateApplicationApprove,
   handlePostAffiliateApplicationDecline,
@@ -1919,6 +1924,14 @@ app.put("/api/admin/users/:userId", async (req, res) => {
       return res.status(500).json({ error: profileError.message });
     }
 
+    if (updates.subscription_plan && isPaidSubscriptionPlan(updates.subscription_plan)) {
+      try {
+        await markReferralSubscribedForUser(supabaseAdmin, userId);
+      } catch (e) {
+        console.error("[admin/users] mark referral subscribed:", e?.message || e);
+      }
+    }
+
     let userData = null;
     if (parsed.user_metadata && Object.keys(parsed.user_metadata).length > 0) {
       const authUpdatePayload = { user_metadata: { ...parsed.user_metadata } };
@@ -2117,8 +2130,13 @@ async function handleAdminAffiliateBundleGet(req, res) {
       return res.status(500).json(body || { error: "affiliate_applications query failed" });
     }
 
-    const applications = appsRes.data || [];
+    const rawApplications = appsRes.data || [];
     const partners = partnersRes.error ? [] : partnersRes.data || [];
+    const applications = await mergeAffiliateApplicationsWithPartnersAndStats(
+      supabaseAdmin,
+      rawApplications,
+      partners
+    );
     const counts = countAffiliateApplicationsByStatus(applications);
     const data = {
       ok: true,

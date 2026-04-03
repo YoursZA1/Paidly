@@ -1,3 +1,5 @@
+import { isClientAuthThrottleRelaxed } from "@/utils/clientAuthThrottleEnv";
+
 /**
  * Client-side throttle for sign-up step 1 (defense in depth; server limits POST /api/auth/sign-up).
  */
@@ -16,6 +18,7 @@ function normalizeEmailKey(email) {
 export function getSignupThrottleState(email) {
   const emailKey = normalizeEmailKey(email);
   if (!emailKey) return { blocked: false, attempts: 0 };
+  if (isClientAuthThrottleRelaxed()) return { blocked: false, attempts: 0 };
 
   try {
     const raw = sessionStorage.getItem(storageKey(emailKey));
@@ -40,6 +43,7 @@ export function getSignupThrottleState(email) {
 export function recordSignupAttempt(email) {
   const emailKey = normalizeEmailKey(email);
   if (!emailKey) return;
+  if (isClientAuthThrottleRelaxed()) return;
 
   try {
     const key = storageKey(emailKey);

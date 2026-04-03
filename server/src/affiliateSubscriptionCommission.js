@@ -2,6 +2,8 @@
  * Subscription payment → commission row + referral marked paid (deterministic, idempotent per referral per UTC day).
  */
 
+import { markReferralSubscribedForUser } from "./affiliateReferralLifecycle.js";
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase
  * @param {{ userId: string, grossAmountZar: number, source?: string }} params
@@ -10,6 +12,8 @@ export async function recordSubscriptionPaymentCommission(supabase, { userId, gr
   if (!userId || typeof grossAmountZar !== "number" || !Number.isFinite(grossAmountZar) || grossAmountZar <= 0) {
     return { ok: false, reason: "bad_input" };
   }
+
+  await markReferralSubscribedForUser(supabase, userId);
 
   const { data: referral, error: refErr } = await supabase
     .from("referrals")

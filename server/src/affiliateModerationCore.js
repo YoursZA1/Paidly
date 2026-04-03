@@ -131,9 +131,16 @@ export async function runAffiliateApplicationApprove(supabaseAdmin, resend, inpu
     };
   }
 
+  const commissionPercent = Number((commissionFraction * 100).toFixed(4));
+
   await supabaseAdmin
     .from("affiliate_applications")
-    .update({ status: "approved", user_id: userId, updated_at: new Date().toISOString() })
+    .update({
+      status: "approved",
+      user_id: userId,
+      updated_at: new Date().toISOString(),
+      commission_rate: commissionPercent,
+    })
     .eq("id", appRow.id);
 
   const origin = resolvePublicAppOriginForShareLinks(httpRequest);

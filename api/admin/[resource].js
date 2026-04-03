@@ -1,4 +1,5 @@
 import { postgrestErrorToApiBody } from "../../server/src/postgrestErrorToApiBody.js";
+import { mergeAffiliateApplicationsWithPartnersAndStats } from "../../server/src/affiliateAdminApplicationsEnrich.js";
 
 /**
  * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
@@ -157,8 +158,9 @@ async function handleAffiliates(req, res, supabase, limit) {
     return res.status(500).json(body || { error: "affiliate_applications query failed" });
   }
 
-  const applications = appsRes.data || [];
+  const rawApplications = appsRes.data || [];
   const partners = partnersRes.error ? [] : partnersRes.data || [];
+  const applications = await mergeAffiliateApplicationsWithPartnersAndStats(supabase, rawApplications, partners);
   const counts = countAffiliateApplicationsByStatus(applications);
   const data = {
     ok: true,

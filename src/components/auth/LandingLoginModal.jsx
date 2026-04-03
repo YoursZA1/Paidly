@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -47,6 +47,8 @@ export default function LandingLoginModal({ open, onOpenChange }) {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const submitLockRef = useRef(false);
+  const resendLockRef = useRef(false);
 
   const closeAndNavigate = (to) => {
     onOpenChange(false);
@@ -62,6 +64,8 @@ export default function LandingLoginModal({ open, onOpenChange }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
+
     setError("");
     const normalizedEmail = email.trim().toLowerCase();
     const throttle = getLoginThrottleState(normalizedEmail);
@@ -72,6 +76,8 @@ export default function LandingLoginModal({ open, onOpenChange }) {
       return;
     }
 
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsLoading(true);
 
     try {
@@ -97,11 +103,14 @@ export default function LandingLoginModal({ open, onOpenChange }) {
         setError(err?.message || "Login failed. Please try again.");
       }
     } finally {
+      submitLockRef.current = false;
       setIsLoading(false);
     }
   };
 
   const handleResendConfirmation = async () => {
+    if (resendLoading || resendLockRef.current) return;
+    resendLockRef.current = true;
     setResendLoading(true);
     setResendSuccess("");
     try {
@@ -111,6 +120,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
     } catch (err) {
       setResendSuccess(err?.message || "Failed to resend confirmation email.");
     } finally {
+      resendLockRef.current = false;
       setResendLoading(false);
     }
   };
@@ -198,6 +208,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                   type="submit"
                   className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation"
                   disabled={isLoading}
+                  aria-busy={isLoading}
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">

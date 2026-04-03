@@ -91,6 +91,8 @@ export default function Signup() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const hydratedFromDraftRef = useRef(false);
+  const stepOneSubmitLockRef = useRef(false);
+  const stepTwoSubmitLockRef = useRef(false);
 
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -102,7 +104,7 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [createdUserId, setCreatedUserId] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
@@ -202,6 +204,8 @@ export default function Signup() {
 
   const handleStepOne = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
 
     if (!validateStepOne()) {
@@ -222,7 +226,9 @@ export default function Signup() {
       return;
     }
 
-    setIsLoading(true);
+    if (loading || stepOneSubmitLockRef.current) return;
+    stepOneSubmitLockRef.current = true;
+    setLoading(true);
 
     try {
       let storedUsers = [];
@@ -342,19 +348,24 @@ export default function Signup() {
     } catch (err) {
       setError(err?.message || "Failed to create account");
     } finally {
-      setIsLoading(false);
+      stepOneSubmitLockRef.current = false;
+      setLoading(false);
     }
   };
 
   const handleStepTwo = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
 
     if (!validateStepTwo()) {
       return;
     }
 
-    setIsLoading(true);
+    if (loading || stepTwoSubmitLockRef.current) return;
+    stepTwoSubmitLockRef.current = true;
+    setLoading(true);
 
     try {
       const now = new Date();
@@ -459,7 +470,8 @@ export default function Signup() {
     } catch (err) {
       setError(err?.message || "Failed to finish setup");
     } finally {
-      setIsLoading(false);
+      stepTwoSubmitLockRef.current = false;
+      setLoading(false);
     }
   };
 
@@ -632,16 +644,10 @@ export default function Signup() {
               <Button
                 type="submit"
                 className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/20 transition hover:bg-[#E64700] touch-manipulation"
-                disabled={isLoading || (turnstile.required && !turnstile.ready)}
+                disabled={loading || (turnstile.required && !turnstile.ready)}
+                aria-busy={loading}
               >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating account...
-                  </span>
-                ) : (
-                  "Create account"
-                )}
+                {loading ? "Creating account..." : "Sign up"}
               </Button>
 
               <AuthSocialButtons mode="signup" />
@@ -736,12 +742,12 @@ export default function Signup() {
                   variant="outline"
                   className="w-full border-zinc-600 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
                   onClick={() => setStep(1)}
-                  disabled={isLoading}
+                  disabled={loading}
                 >
                   Back
                 </Button>
-                <Button type="submit" className="w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700]" disabled={isLoading}>
-                  {isLoading ? (
+                <Button type="submit" className="w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700]" disabled={loading}>
+                  {loading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Finishing setup...

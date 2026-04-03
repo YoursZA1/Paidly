@@ -108,3 +108,9 @@ where tgname = 'on_auth_user_created';
 ```
 
 Expected: `profiles` has (among others) `id`, `email`, `full_name`, `company_name`, `company_address`, `phone`, `subscription_plan`, `currency`, `timezone`; trigger `on_auth_user_created` on `auth.users`.
+
+---
+
+## See also
+
+- **[DEV_SIGNUP_TESTING.md](./DEV_SIGNUP_TESTING.md)** — dev Supabase rate limits, loading/double-submit, throttles, and test email practices for Paidly.

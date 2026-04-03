@@ -250,7 +250,10 @@ function normalizeEntity(entityName, row) {
       audience_size: row.audience_size || null,
       why_promote: row.why_promote || null,
       description: row.description || row.why_promote || '',
+      affiliate_partner_id: row.affiliate_partner_id ?? null,
       referrals_count: Number(row.referrals_count || 0),
+      referrals_subscribed_count: Number(row.referrals_subscribed_count || 0),
+      referrals_paid_count: Number(row.referrals_paid_count || 0),
       earnings: Number(row.earnings || 0),
       commission_rate: Number(row.commission_rate ?? 15),
       status: normalizedStatus || 'pending',
@@ -281,6 +284,18 @@ function normalizeEntity(entityName, row) {
       ...row,
       created_date: row.created_date || row.created_at || null,
       user_id: row.user_id || row.created_by_id || null,
+    };
+  }
+
+  if (entityName === 'AffiliatePayout') {
+    const src = String(row.source || '');
+    let period_month = null;
+    const m = src.match(/period=([^|]+)/);
+    if (m) period_month = m[1];
+    return {
+      ...row,
+      commission_amount: Number(row.amount ?? row.commission_amount ?? 0),
+      period_month,
     };
   }
 
@@ -332,6 +347,41 @@ function denormalizeEntity(entityName, payload) {
     if (typeof out.email === 'string') out.email = out.email.trim().toLowerCase();
     if (out.full_name && !out.name) out.name = String(out.full_name).trim();
     return out;
+  }
+
+  if (entityName === 'AffiliatePayout') {
+    const hasLedgerRow =
+      payload?.affiliate_id != null &&
+      Number(payload?.amount ?? payload?.commission_amount ?? NaN) > 0;
+    if (!hasLedgerRow) {
+      const out = {};
+      if (payload?.status != null) out.status = payload.status;
+      return out;
+    }
+
+    const notes = String(payload.notes || '')
+      .trim()
+      .replace(/\|/g, ' ')
+      .slice(0, 400);
+    const period = String(payload.period_month || '').trim();
+    const rate =
+      payload.commission_rate != null && payload.commission_rate !== ''
+        ? String(payload.commission_rate).trim()
+        : '';
+    const parts = ['payout_batch'];
+    if (period) parts.push(`period=${period}`);
+    if (rate) parts.push(`rate=${rate}`);
+    if (notes) parts.push(`notes=${notes}`);
+    const source = parts.join('|').slice(0, 2000);
+
+    return {
+      affiliate_id: payload.affiliate_id,
+      referral_id: payload.referral_id ?? null,
+      amount: Number(payload.amount ?? payload.commission_amount ?? 0),
+      currency: String(payload.currency || 'ZAR').slice(0, 8),
+      status: payload.status || 'pending',
+      source,
+    };
   }
 
   return payload;
@@ -545,31 +595,54 @@ async function update(entityName, id, payload) {
   }
   if (error) throw error;
 
-  // Keep canonical affiliate profile in sync so /dashboard/affiliate reflects admin updates.
+  // Keep canonical affiliate profile in sync so /dashboard/affiliate and commission webhooks match admin edits.
   if (entityName === 'AffiliateSubmission') {
+    const toAffiliateRateFraction = (maybePercent) => {
+      const n = Number(maybePercent);
+      if (!Number.isFinite(n)) return undefined;
+      if (n <= 0) return undefined;
+      return n <= 1 ? n : n / 100;
+    };
+
     const userId = data?.user_id || payload?.user_id;
+    const applicationId = data?.id ?? id;
+    const fraction =
+      payload?.commission_rate != null || data?.commission_rate != null
+        ? toAffiliateRateFraction(payload?.commission_rate ?? data?.commission_rate)
+        : undefined;
+
+    if (fraction != null && applicationId) {
+      const { error: affUpErr } = await supabase
+        .from('affiliates')
+        .update({ commission_rate: fraction, updated_at: new Date().toISOString() })
+        .eq('application_id', applicationId);
+      if (affUpErr && import.meta.env?.DEV) {
+        console.warn('[paidlyDataClient] affiliates commission sync by application_id:', affUpErr.message);
+      }
+    }
+
     if (userId) {
-      const toAffiliateRateFraction = (maybePercent) => {
-        const n = Number(maybePercent);
-        if (!Number.isFinite(n)) return undefined;
-        if (n <= 0) return undefined;
-        return n <= 1 ? n : n / 100;
-      };
-      const affiliatePatch = {
-        commission_rate: toAffiliateRateFraction(payload?.commission_rate ?? data?.commission_rate) ?? 0.2,
-      };
+      const affiliatePatch = {};
+      if (fraction != null) affiliatePatch.commission_rate = fraction;
       if (payload?.referral_code) affiliatePatch.referral_code = payload.referral_code;
       const st = String(payload?.status || '').toLowerCase();
       if (st === 'approved' || st === 'accepted') affiliatePatch.status = 'approved';
       else if (st === 'declined' || st === 'rejected') affiliatePatch.status = 'pending';
       if (data?.id) affiliatePatch.application_id = data.id;
-      await supabase.from('affiliates').upsert(
-        {
-          user_id: userId,
-          ...affiliatePatch,
-        },
-        { onConflict: 'user_id' }
-      );
+
+      const payloadKeys = Object.keys(payload || {}).filter((k) => payload[k] !== undefined);
+      const commissionOnly =
+        payloadKeys.length === 1 && payloadKeys[0] === 'commission_rate';
+
+      if (!commissionOnly && Object.keys(affiliatePatch).length > 0) {
+        await supabase.from('affiliates').upsert(
+          {
+            user_id: userId,
+            ...affiliatePatch,
+          },
+          { onConflict: 'user_id' }
+        );
+      }
     }
   }
 
