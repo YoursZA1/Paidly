@@ -16,6 +16,7 @@ let handleVercelAffiliateDeclinePost;
 let handleVercelAdminInviteUserPost;
 let affiliateApproveHandler;
 let applyPaidlyServerlessCors;
+let validateServiceRoleKey;
 
 let corsPromise = null;
 let getDepsPromise = null;
@@ -40,11 +41,13 @@ async function ensureGetDeps() {
     import("../../server/src/adminRouteAccess.js"),
     import("../../server/src/adminPlatformUsersList.js"),
     import("../../server/src/securityMiddleware.js"),
-  ]).then(([supabaseMod, adminRouteAccessMod, adminPlatformUsersMod, securityMiddlewareMod]) => {
+    import("../../server/src/supabaseServiceRoleGuard.js"),
+  ]).then(([supabaseMod, adminRouteAccessMod, adminPlatformUsersMod, securityMiddlewareMod, roleGuardMod]) => {
     createClient = supabaseMod.createClient;
     assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
     fetchMergedPlatformUsersForAdmin = adminPlatformUsersMod.fetchMergedPlatformUsersForAdmin;
     getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
+    validateServiceRoleKey = roleGuardMod.validateServiceRoleKey;
   });
   return getDepsPromise;
 }
@@ -97,8 +100,13 @@ function cors(res, req) {
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  if (!url || !key) return { client: null, configError: "Server misconfigured (Supabase)." };
+  const roleCheck = validateServiceRoleKey?.(key) ?? { ok: true };
+  if (!roleCheck.ok) return { client: null, configError: roleCheck.message };
+  return {
+    client: createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } }),
+    configError: null,
+  };
 }
 
 function countAffiliateApplicationsByStatus(rows) {
@@ -200,8 +208,8 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: "Not found" });
     }
 
-    const supabase = getSupabaseAdmin();
-    if (!supabase) return res.status(503).json({ error: "Server misconfigured (Supabase)" });
+    const { client: supabase, configError } = getSupabaseAdmin();
+    if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
 
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;

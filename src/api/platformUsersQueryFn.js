@@ -16,9 +16,18 @@ export async function platformUsersQueryFn(limit = 500) {
   try {
     return await fetchAdminPlatformUsers(limit);
   } catch (e) {
+    const msg = String(e?.message || e || "");
+    // Do not mask auth/config failures with profile fallback; surface real problem to admins.
+    if (
+      /admin access required|session expired|not authenticated|server misconfigured|service_role|user not allowed/i.test(
+        msg
+      )
+    ) {
+      throw e;
+    }
     console.warn(
       '[admin] platform-users API failed, using profiles list fallback:',
-      e?.message || e
+      msg
     );
     return paidly.entities.PlatformUser.list('-created_date', limit);
   }
