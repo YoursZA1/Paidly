@@ -58,16 +58,23 @@ const supabaseOnlyProd = import.meta.env.PROD && viteEnvFlag("VITE_SUPABASE_ONLY
 
 /**
  * Backend base URL for production Axios calls.
- * We do not infer a default API host from the page URL: misconfigured DNS breaks sign-in. Set VITE_SERVER_URL explicitly (e.g. https://paidly.co.za).
- * (browser shows hostname not found / bogus CORS). Set VITE_SERVER_URL explicitly when the Node API is deployed.
+ *
+ * **Case A — API on the same host as the app (e.g. Vercel serverless `/api/*`):** leave `VITE_SERVER_URL`
+ * unset. The client uses same-origin `/api/...` (see {@link resolveProductionBrowserApiBaseUrl}).
+ *
+ * **Case B — API on another host:** set `VITE_SERVER_URL` to that origin (no trailing slash), e.g.
+ * `https://api.paidly.co.za`.
  */
 const rawServerUrl = String(import.meta.env.VITE_SERVER_URL ?? "").trim();
 const serverUrl = (rawServerUrl || "http://localhost:5179").replace(/\/$/, "");
 const baseURL = isDev ? "" : resolveProductionBrowserApiBaseUrl(serverUrl);
 
-/** Production bundle still points at localhost — email/password auth uses Supabase directly (see SupabaseAuthService). */
+/** True when production explicitly sets VITE_SERVER_URL to localhost (usually wrong). Unset = same-origin, not this. */
 export function isProductionBackendUrlLocalhost() {
-  return import.meta.env.PROD && /localhost|127\.0\.0\.1/i.test(serverUrl);
+  if (!import.meta.env.PROD) return false;
+  const raw = String(import.meta.env.VITE_SERVER_URL ?? "").trim();
+  if (!raw) return false;
+  return /localhost|127\.0\.0\.1/i.test(raw);
 }
 
 /**
@@ -89,7 +96,7 @@ export function shouldUseNodeAuthApi() {
 
 if (isProductionBackendUrlLocalhost() && !supabaseOnlyProd) {
   console.warn(
-    "[Paidly] VITE_SERVER_URL is missing or points to localhost in production. Email/password sign-in uses Supabase directly. Set VITE_SERVER_URL to your API (no trailing slash) for server rate limits, waitlist, and currency — or set VITE_SUPABASE_ONLY=1 if you intentionally omit the Node API."
+    "[Paidly] VITE_SERVER_URL points at localhost in production. Remove it for same-host /api (Vercel serverless), set it to your real API origin, or set VITE_SUPABASE_ONLY=1."
   );
 }
 
@@ -101,6 +108,10 @@ export const backendApi = axios.create({
 });
 
 export function getBackendBaseUrl() {
+  if (rawServerUrl) return serverUrl;
+  if (import.meta.env.PROD && typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
   return serverUrl;
 }
 

@@ -5,6 +5,7 @@
  * absolute requests hit another origin → CORS failures even though the same Vercel app serves both.
  * Returning "" means same-origin (/api/..., /affiliate/...).
  *
+ * When `VITE_SERVER_URL` is unset (Case A: same deployment as the app), returns "" — use relative `/api/...`.
  * When the API is on a different host (e.g. api.example.com), returns the configured base — server must send CORS.
  *
  * @param {string} configuredServerUrl - Normalized VITE_SERVER_URL (no trailing slash), e.g. https://www.paidly.co.za

@@ -37,12 +37,16 @@ npm start
 
 The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
 
-1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, **`VITE_SERVER_URL`** (your **live** Node API base URL — **no trailing slash**; e.g. **`https://api.paidly.co.za`** if the API is on that host, or the same origin as the app if the API is colocated), and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** if previews should hit a real API). Without `VITE_SERVER_URL`, **email/password sign-in still works** (via Supabase directly), but **waitlist, currency, and server rate limits** need the API URL set — **or** set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-only deploy and silence the production warning.
+1. **Environment variables** (Vercel → Project → Settings → Environment Variables): set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_SUPABASE_STORAGE_BUCKET`. Apply to **Production** (and **Preview** as needed).
+   - **`VITE_SERVER_URL` (optional):**
+     - **Case A — API on the same Vercel deployment** (serverless `api/`, same host as the app): **leave it unset** (or delete it). The browser uses relative `fetch("/api/...")` / same-origin requests. Do **not** set it to a stale or different host.
+     - **Case B — API on a separate host:** set **`VITE_SERVER_URL=https://api.paidly.co.za`** (no trailing slash; adjust host to your API). CORS on that API must allow the app origin.
+   - Without any backend URL features: **email/password sign-in still works** (via Supabase). For waitlist/currency/server rate limits that need the API, ensure `/api/*` is reachable (Case A or B). Set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-heavy deploy and silence client hints about the backend.
 2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
 3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
 4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` to a comma-separated explicit allowlist (for example: `https://www.paidly.co.za,https://paidly.co.za`). In production, use `https` origins only (localhost allowed only for local testing).
 
-The repo includes a `vercel.json` that routes all paths to `index.html` for client-side routing.
+The repo includes `vercel.json` redirects, API rewrites, and an SPA fallback that **does not** rewrite `/api/*` to `index.html`.
 
 ## Production Runbook (Critical)
 
@@ -50,7 +54,7 @@ Use this checklist before every production promotion:
 
 1. Environment and secret checks
    - Confirm `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `ADMIN_BOOTSTRAP_TOKEN`.
-   - Confirm `VITE_SERVER_URL` is set to the real API URL (not localhost).
+   - **Same-deployment API:** `VITE_SERVER_URL` unset. **Separate API:** `VITE_SERVER_URL` is the real API origin (not localhost).
    - Confirm `ENFORCE_HTTPS=true`, `DISABLE_HSTS=false`, `CORS_DEBUG_ALLOW_ALL=false`.
 2. Database and policy checks
    - Run: `npm run verify:prod`
@@ -98,7 +102,7 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    |----------|----------|-------------|
    | `VITE_SUPABASE_URL` | Yes | Supabase project URL (Settings → API). |
    | `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (Settings → API). |
-   | `VITE_SERVER_URL` | Strongly recommended in prod | **Local:** `http://localhost:5179` (include port; backend default). **Production:** e.g. `https://api.paidly.co.za`. Without it in production, auth uses Supabase directly; waitlist/currency/admin API paths still need a real URL. |
+   | `VITE_SERVER_URL` | Optional in prod (see Deployment) | **Local:** `http://localhost:5179` (include port; backend default). **Prod Case A (same Vercel app):** omit — use relative `/api/*`. **Prod Case B (separate API):** e.g. `https://api.paidly.co.za`. Without it, same-origin `/api/*` is used when the env is empty. |
    | `VITE_TURNSTILE_SITE_KEY` | Recommended in prod | Cloudflare Turnstile site key for signup bot protection. |
    | `VITE_TURNSTILE_REQUIRE_SIGNUP` | No | Set to `true` to enforce challenge on sign-up in all environments (defaults to required in prod when site key exists). |
    | `VITE_TURNSTILE_REQUIRE_WAITLIST` | No | Set to `true` to enforce challenge on waitlist form (defaults to required in prod when site key exists). |

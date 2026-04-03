@@ -19,8 +19,8 @@ export default defineConfig(({ mode }) => {
     !String(env.VITE_SERVER_URL || '').trim() &&
     !envTruthy(env.VITE_SUPABASE_ONLY)
   ) {
-    console.warn(
-      '[vite] VITE_SERVER_URL is unset for this Vercel production build. Email/password auth will use Supabase directly; set VITE_SERVER_URL for API rate limits, waitlist, and currency — or VITE_SUPABASE_ONLY=1 if you omit the Node API.'
+    console.info(
+      '[vite] VITE_SERVER_URL unset — OK when /api/* is served on the same deployment (relative fetch). Set VITE_SERVER_URL only if the API is on another host (e.g. https://api.example.com). Use VITE_SUPABASE_ONLY=1 to silence this line if you intentionally have no backend features beyond Supabase.'
     );
   }
   const serverUrl = env.VITE_SERVER_URL || 'http://localhost:5179';

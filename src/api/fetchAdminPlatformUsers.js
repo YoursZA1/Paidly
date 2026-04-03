@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { apiErrorFieldToString } from "@/utils/apiErrorText";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -55,8 +56,15 @@ async function fetchPlatformUsersPayloadFromApi(token, lim) {
     const payload = looksJson ? await res.json().catch(() => ({})) : {};
 
     if (!res.ok) {
+      let fromJson = "";
+      if (looksJson) {
+        const raw = payload.error ?? payload.message;
+        if (raw != null && raw !== "") {
+          fromJson = apiErrorFieldToString(raw);
+        }
+      }
       lastError =
-        (looksJson && payload.error) ||
+        fromJson ||
         (res.status === 401
           ? "Session expired or invalid. Please log in again."
           : res.status === 403

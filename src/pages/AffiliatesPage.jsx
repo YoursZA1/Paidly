@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import {
@@ -25,6 +25,7 @@ import {
   EMPTY_AFFILIATE_ADMIN_BUNDLE,
   normalizeAffiliateAdminQueryResult,
 } from '@/utils/affiliateApplicationCounts';
+import { formatQueryError } from '@/utils/apiErrorText';
 
 export default function AffiliatesPage() {
   const { user: currentUser } = useCurrentUser();
@@ -33,6 +34,7 @@ export default function AffiliatesPage() {
   const [viewingApp, setViewingApp] = useState(null);
   const [calculatingFor, setCalculatingFor] = useState(null);
   const queryClient = useQueryClient();
+  const hasAlertedErrorRef = useRef(false);
   const isRefreshing =
     useIsFetching({
       predicate: (q) => ['affiliates', 'affiliate-payouts'].includes(String(q.queryKey[0])),
@@ -52,6 +54,27 @@ export default function AffiliatesPage() {
   });
   const affiliates = affiliateAdmin.applications;
   const affiliateStatusCounts = affiliateAdmin.counts;
+
+  useEffect(() => {
+    if (!affiliatesFetchError || !affiliatesFetchErr) return;
+    if (hasAlertedErrorRef.current) return;
+
+    const formatted = formatQueryError(affiliatesFetchErr);
+    if (formatted === '[object Object]' || formatted === 'Unknown error') {
+      // Step 4 debugging aid: surface the full error object instead of a useless string.
+      console.error(affiliatesFetchErr);
+      const payload =
+        affiliatesFetchErr instanceof Error
+          ? { name: affiliatesFetchErr.name, message: affiliatesFetchErr.message, stack: affiliatesFetchErr.stack }
+          : affiliatesFetchErr;
+      try {
+        alert(JSON.stringify(payload));
+      } catch {
+        alert(String(payload));
+      }
+      hasAlertedErrorRef.current = true;
+    }
+  }, [affiliatesFetchError, affiliatesFetchErr]);
 
   const { data: payouts = [] } = useQuery({
     queryKey: ['affiliate-payouts'],
@@ -232,9 +255,11 @@ export default function AffiliatesPage() {
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>
             Could not load affiliate submissions from the backend (admin queue is not loaded via Supabase):{' '}
-            {affiliatesFetchErr?.message || 'Unknown error'}. Check that{' '}
-            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns JSON on this
-            host (Vercel serverless) or your <code className="rounded bg-muted px-1">VITE_SERVER_URL</code>{' '}
+            {formatQueryError(affiliatesFetchErr)}. To test the API directly, open{' '}
+            <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> (with auth), not this page
+            URL — <code className="rounded bg-muted px-1">/admin-v2/affiliates</code> is the SPA and returns HTML.
+            Check that <code className="rounded bg-muted px-1">GET /api/admin/affiliates</code> returns JSON on
+            this host (Vercel serverless) or your <code className="rounded bg-muted px-1">VITE_SERVER_URL</code>{' '}
             API. If the app and API are the same deployment, try clearing or updating{' '}
             <code className="rounded bg-muted px-1">VITE_SERVER_URL</code> so it does not point at a dead host.
           </AlertDescription>

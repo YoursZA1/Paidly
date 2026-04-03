@@ -10,6 +10,7 @@ import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { countAffiliateApplicationsByStatus } from "@/utils/affiliateApplicationCounts";
 import { finalizeAffiliateApplicationsForAdmin } from "@/api/paidlyDataClient";
+import { apiErrorFieldToString } from "@/utils/apiErrorText";
 
 /**
  * URL for admin affiliate POST routes. Prefer {@link getAdminDataApiBase} (apex/www-safe); otherwise same-origin
@@ -34,8 +35,9 @@ function buildAffiliateAdminFetchUrls(limit) {
     out.push(u);
   };
 
-  const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
-  const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
+  // Case A (same deployment): leave VITE_SERVER_URL unset → base = "" → `/api/admin/affiliates`.
+  // Case B (separate API): set VITE_SERVER_URL to the real API origin (no trailing slash).
+  const base = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
 
   // Same-origin (or Vite dev proxy) first — production often serves /api/* via Vercel serverless while
   // VITE_SERVER_URL still points at a legacy Node host; hitting that first makes fetch() throw (Failed to fetch)
@@ -44,15 +46,11 @@ function buildAffiliateAdminFetchUrls(limit) {
   push(`/api/affiliates${q}`);
   push(`/api/admin/affiliate-applications${q}`);
 
-  if (vite) {
-    push(`${vite}/api/admin/affiliates${q}`);
-    push(`${vite}/api/affiliates${q}`);
-    push(`${vite}/api/admin/affiliate-applications${q}`);
-  }
-  if (adminBase && adminBase !== vite) {
-    push(`${adminBase}/api/admin/affiliates${q}`);
-    push(`${adminBase}/api/affiliates${q}`);
-    push(`${adminBase}/api/admin/affiliate-applications${q}`);
+  if (base) {
+    // Absolute URL attempts are guarded by `shouldSkipAdminFetchAbsoluteUrl()` to avoid apex/www CORS issues.
+    push(`${base}/api/admin/affiliates${q}`);
+    push(`${base}/api/affiliates${q}`);
+    push(`${base}/api/admin/affiliate-applications${q}`);
   }
 
   return out;
@@ -88,8 +86,15 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
     const payload = looksJson ? await res.json().catch(() => ({})) : {};
 
     if (!res.ok) {
+      let fromJson = "";
+      if (looksJson) {
+        const raw = payload.error ?? payload.message;
+        if (raw != null && raw !== "") {
+          fromJson = apiErrorFieldToString(raw);
+        }
+      }
       lastError =
-        (looksJson && payload.error) ||
+        fromJson ||
         (res.status === 401
           ? "Session expired or invalid. Please log in again."
           : res.status === 403
