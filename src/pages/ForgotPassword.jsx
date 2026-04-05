@@ -47,8 +47,8 @@ export default function ForgotPassword() {
   if (submitted) {
     return (
       <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
-        <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
-          <CardContent className="pt-8 sm:pt-12 pb-6 text-center px-4 sm:px-6">
+        <Card className="w-full max-w-layout-narrow shadow-lg rounded-2xl border border-border">
+          <CardContent className="pt-4 pb-0 text-center sm:pt-8">
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-status-paid/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-status-paid" />
             </div>
@@ -70,8 +70,8 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] auth-page-bg flex items-center justify-center p-4 safe-y safe-x">
-      <Card className="w-full max-w-md shadow-lg rounded-2xl border border-border">
-        <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6">
+      <Card className="w-full max-w-layout-narrow shadow-lg rounded-2xl border border-border">
+        <CardHeader className="space-y-1 pb-0 text-center">
           <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
             <Mail className="w-8 h-8 text-primary-foreground" />
           </div>
@@ -80,25 +80,25 @@ export default function ForgotPassword() {
             Enter your email and we&apos;ll send you a link to reset your password
           </p>
         </CardHeader>
-        <CardContent className="px-4 sm:px-6 pb-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <CardContent className="pb-0">
+          <form onSubmit={handleSubmit} className="form-field-stack">
             {error && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="form-field">
               <Label htmlFor="email" className="text-foreground">Email address</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@company.com"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 rounded-xl border-border"
+                  className="pl-10"
                   required
                 />
               </div>

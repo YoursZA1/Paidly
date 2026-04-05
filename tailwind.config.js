@@ -4,6 +4,19 @@ module.exports = {
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
   	extend: {
+  		/** 8pt mobile system: page 16px, section 24px (Layout Rule 3 — mb-section / vertical rhythm), card 18px (16–20), element gaps 8–12px, buttons 14px (12–16 rhythm between adjacent buttons) */
+  		spacing: {
+  			page: '16px',
+  			section: '24px',
+  			card: '18px',
+  			element: '12px',
+  			'element-sm': '8px',
+  			buttons: '14px',
+  		},
+  		maxWidth: {
+  			/** Layout Rule 2 — narrow centered column (pairs with mx-auto w-full) */
+  			'layout-narrow': 'var(--layout-narrow-max, 480px)',
+  		},
   		fontFamily: {
   			sans: ['Inter', 'system-ui', 'sans-serif'],
   			mono: ['JetBrains Mono', 'monospace'],

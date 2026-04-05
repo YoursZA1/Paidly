@@ -16,7 +16,7 @@ export default function DraftInvoiceInfo({ invoice, client }) {
 
   return (
     <Card className={`border-2 ${isDraft ? 'border-primary/20 bg-primary/10' : 'border-gray-200 bg-gray-50'}`}>
-      <CardContent className="p-4">
+      <CardContent>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <FileText className={`w-5 h-5 ${isDraft ? 'text-primary' : 'text-gray-600'}`} />

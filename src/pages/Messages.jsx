@@ -566,7 +566,7 @@ export default function MessagesPage() {
                                     </TabsList>
                                 </Tabs>
                             </CardHeader>
-                            <CardContent className="p-4">
+                            <CardContent>
                                 <ConversationList
                                     conversations={filteredConversations}
                                     clients={clients}

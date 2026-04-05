@@ -193,7 +193,7 @@ export default function QuotePDF() {
             `}</style>
 
             <div className="min-h-[100dvh] w-full bg-gray-100 py-2 sm:py-4 print:bg-white print:min-h-0 print:py-0">
-                <div className="pdf-wrapper w-full max-w-none mx-auto px-2 sm:px-4">
+                <div className="pdf-wrapper w-full max-w-none mx-auto px-page sm:px-6">
                     <div className="no-print quote-pdf-actions mb-4 flex flex-col sm:flex-row justify-end gap-2">
                         <Button
                             onClick={() => (isDraft ? window.close() : navigate(-1))}

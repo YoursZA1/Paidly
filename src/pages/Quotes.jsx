@@ -339,8 +339,8 @@ export default function QuotesPage() {
                     </div>
                 </motion.div>
 
-                <Card className="rounded-xl border border-border shadow-sm">
-                    <CardHeader>
+                <Card className="gap-0 rounded-xl border border-border p-0 shadow-sm">
+                    <CardHeader className="px-4 pb-2 pt-4">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <CardTitle>Quote List</CardTitle>
                             <div className="flex gap-3 w-full sm:w-auto">
@@ -367,7 +367,7 @@ export default function QuotesPage() {
                             </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="p-4 sm:p-6">
+                    <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
                         {initialError && (
                             <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3 mb-4">
                                 <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">

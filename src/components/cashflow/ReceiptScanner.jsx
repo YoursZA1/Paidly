@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { X, Camera, Upload, Loader2, FileText, CheckCircle2 } from "lucide-react";
@@ -193,8 +194,9 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
         if (result?.payload) onScanComplete(result.payload);
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
+    /** Portals to document.body so footer actions stay above MobileBottomNav (z-50). */
+    const modal = (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
             <div className="flex max-h-[calc(100dvh-0.25rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:max-h-[90vh]">
                 <div className="flex items-center justify-between border-b border-border p-4 sm:p-6">
                     <h2 className="text-xl font-semibold text-foreground">Scan Receipt</h2>
@@ -284,7 +286,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
                 </div>
 
                 {result && !loading && (
-                    <div className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-border bg-card/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:p-4">
+                    <div className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-border bg-card/95 p-3 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:p-4 sm:pb-4">
                         <Button variant="outline" className="flex-1" onClick={() => setResult(null)}>
                             Scan another
                         </Button>
@@ -297,4 +299,7 @@ export default function ReceiptScanner({ onScanComplete, onCancel }) {
             </div>
         </div>
     );
+
+    if (typeof document === "undefined") return null;
+    return createPortal(modal, document.body);
 }

@@ -124,13 +124,13 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-        <div>
+    <div className="form-field-stack">
+      <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="form-field">
           <Label htmlFor={`${lineItemsBaseId}-catalog-browse`} className="text-sm font-medium text-foreground">
             Select existing product or service
           </Label>
-          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Pick from your saved catalog (same list as{" "}
             <button
               type="button"
@@ -181,9 +181,9 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
       {list.map((row, index) => (
         <div
           key={index}
-          className="grid gap-3 sm:grid-cols-[1fr_80px_100px_100px_auto] sm:items-end border border-border rounded-lg p-3"
+          className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid sm:grid-cols-[1fr_80px_100px_100px_auto] sm:items-end sm:gap-3 sm:rounded-lg sm:p-3 sm:shadow-none"
         >
-          <div className="space-y-2 sm:col-span-1 col-span-full">
+          <div className="flex flex-col gap-2 col-span-full sm:col-span-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label htmlFor={`${lineItemsBaseId}-desc-${index}`} className="text-xs text-muted-foreground">
                 Description
@@ -230,10 +230,10 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               id={`${lineItemsBaseId}-desc-${index}`}
               value={row.description}
               onChange={(e) => updateAt(index, { description: e.target.value })}
-              placeholder="Service or product"
+              placeholder="e.g. Website design — Phase 1"
             />
           </div>
-          <div className="space-y-2">
+          <div className="form-field">
             <Label htmlFor={`${lineItemsBaseId}-qty-${index}`} className="text-xs text-muted-foreground">
               Qty
             </Label>
@@ -244,11 +244,12 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               step="0.01"
               value={row.quantity}
               onChange={(e) => updateAt(index, { quantity: parseFloat(e.target.value) || 0 })}
+              placeholder="1"
             />
           </div>
-          <div className="space-y-2">
+          <div className="form-field">
             <Label htmlFor={`${lineItemsBaseId}-unit-${index}`} className="text-xs text-muted-foreground">
-              Unit
+              Unit price
             </Label>
             <Input
               id={`${lineItemsBaseId}-unit-${index}`}
@@ -257,11 +258,12 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               step="0.01"
               value={row.unit_price}
               onChange={(e) => updateAt(index, { unit_price: parseFloat(e.target.value) || 0 })}
+              placeholder="0.00"
             />
           </div>
-          <div className="space-y-2">
+          <div className="form-field">
             <Label htmlFor={`${lineItemsBaseId}-total-${index}`} className="text-xs text-muted-foreground">
-              Total
+              Line total
             </Label>
             <Input
               id={`${lineItemsBaseId}-total-${index}`}
@@ -271,7 +273,7 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               className="bg-muted/50"
             />
           </div>
-          <div className="flex sm:justify-end pb-0.5">
+          <div className="flex justify-end pb-0.5 sm:justify-end">
             <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} aria-label="Remove line">
               <Trash2 className="h-4 w-4 text-muted-foreground" />
             </Button>

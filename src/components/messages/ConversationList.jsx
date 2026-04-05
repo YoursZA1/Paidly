@@ -46,7 +46,7 @@ export default function ConversationList({ conversations, clients, invoices, onS
                             }}
                             aria-label={`Open conversation with ${client?.name || 'Unknown Client'}`}
                         >
-                            <CardContent className="p-4">
+                            <CardContent>
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${

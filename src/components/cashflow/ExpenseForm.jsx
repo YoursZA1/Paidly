@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -275,8 +276,9 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
         setFormData(prev => ({ ...prev, attachments: newAttachments }));
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
+    /** Portals to document.body so stacking sits above MobileBottomNav (z-50) inside Layout. */
+    const modal = (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
             <div className="flex max-h-[calc(100dvh-0.25rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:max-h-[90vh]">
                 <div className="flex items-center justify-between border-b border-border p-4 shrink-0 sm:p-6">
                     <div>
@@ -627,7 +629,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                     </form>
                 </div>
 
-                <div className="sticky bottom-0 z-10 flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-card/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:bg-muted/40 sm:p-6">
+                <div className="sticky bottom-0 z-10 flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-card/95 p-4 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:bg-muted/40 sm:p-6 sm:pb-6">
                     <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
                         Cancel
                     </Button>
@@ -638,4 +640,7 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
             </div>
         </div>
     );
+
+    if (typeof document === "undefined") return null;
+    return createPortal(modal, document.body);
 }

@@ -69,7 +69,7 @@ const DialogFooter = ({
   ...props
 }) => (
   <div
-    className={cn("sticky bottom-0 -mx-4 mt-2 flex flex-col-reverse gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:static sm:mx-0 sm:mt-0 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0", className)}
+    className={cn("sticky bottom-0 -mx-4 mt-2 flex flex-col-reverse gap-buttons border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:static sm:mx-0 sm:mt-0 sm:flex-row sm:justify-end sm:gap-buttons sm:border-0 sm:bg-transparent sm:px-0 sm:py-0", className)}
     {...props} />
 )
 DialogFooter.displayName = "DialogFooter"
@@ -107,7 +107,9 @@ const DialogContent = React.forwardRef((allProps, ref) => {
     typeof rawAriaDescribedBy === "string" && rawAriaDescribedBy.length > 0
 
   const hasTitle = hasDialogChild(children, DialogTitle)
-  const hasUserDescription = hasDialogChild(children, DialogDescription)
+  const hasUserDescription =
+    hasDialogChild(children, DialogDescription) ||
+    hasDialogChild(children, DialogPrimitive.Description)
   /**
    * Inject sr-only Description when none detected. Do not set a custom id or override Content
    * aria-describedby: Radix links context.descriptionId to the Description node; mismatched ids
@@ -116,17 +118,20 @@ const DialogContent = React.forwardRef((allProps, ref) => {
   const injectFallbackDescription = !hasNonEmptyAriaDescribedBy && !hasUserDescription
 
   /**
-   * Non-empty aria-describedby: caller controls the id.
-   * Fallback: omit aria-describedby here so DialogContentImpl keeps context.descriptionId.
-   * Explicit undefined: caller opts out of description (spread onto Content after Radix defaults).
+   * Radix always sets aria-describedby={context.descriptionId} on Content, then spreads our props.
+   * If no Description mounts, that id points at nothing → console warning.
+   * - Non-empty aria-describedby: caller supplies the id.
+   * - Explicit aria-describedby key (incl. undefined): caller opts out or overrides.
+   * - Fallback Description or detected DialogDescription: omit so Radix links correctly.
+   * - Otherwise: pass undefined to override Radix default and silence the warning (title-only dialogs).
    */
   const ariaDescribedByProp = hasNonEmptyAriaDescribedBy
     ? { "aria-describedby": rawAriaDescribedBy }
-    : injectFallbackDescription
-      ? {}
-      : hasAriaDescribedbyKey
-        ? { "aria-describedby": rawAriaDescribedBy }
-        : {}
+    : hasAriaDescribedbyKey
+      ? { "aria-describedby": rawAriaDescribedBy }
+      : injectFallbackDescription || hasUserDescription
+        ? {}
+        : { "aria-describedby": undefined }
 
   return (
     <DialogPortal>

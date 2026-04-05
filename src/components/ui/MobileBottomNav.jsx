@@ -12,6 +12,10 @@ import {
 } from "@heroicons/react/24/outline";
 import { createPageUrl, triggerHaptic } from "@/utils";
 
+/**
+ * Rule 7 — Simple navigation: one primary row only (max ~5 targets).
+ * Home, Invoices, Create (FAB), Clients, Menu — deeper routes live in the drawer, not the bar.
+ */
 const speedDialActions = [
   { name: "Invoice", url: createPageUrl("CreateInvoice"), icon: DocumentTextIcon },
   { name: "Quote", url: createPageUrl("CreateQuote"), icon: DocumentDuplicateIcon },
@@ -35,10 +39,10 @@ function MobileBottomNav({ onOpenMenu }) {
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 isolate pointer-events-none">
       <nav
-        className="relative pointer-events-auto bg-background/95 dark:bg-background/95 backdrop-blur-xl backdrop-saturate-150 border-t border-border shadow-[0_-10px_40px_-12px_rgba(15,23,42,0.12)] dark:shadow-[0_-12px_40px_-8px_rgba(0,0,0,0.55)] px-4 sm:px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        className="relative pointer-events-auto bg-background/95 dark:bg-background/95 backdrop-blur-xl backdrop-saturate-150 border-t border-border shadow-[0_-10px_40px_-12px_rgba(15,23,42,0.12)] dark:shadow-[0_-12px_40px_-8px_rgba(0,0,0,0.55)] mobile-bottom-nav-inner pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         aria-label="Primary navigation"
       >
-        <div className="flex justify-between items-center max-w-lg mx-auto gap-0.5 sm:gap-1">
+        <div className="flex justify-between items-center max-w-layout-narrow mx-auto w-full gap-0.5 sm:gap-1">
           {/* Home */}
           <Link
             to={createPageUrl("Dashboard")}
@@ -50,7 +54,7 @@ function MobileBottomNav({ onOpenMenu }) {
             aria-current={isActive(createPageUrl("Dashboard")) ? "page" : undefined}
           >
             <HomeIcon className="w-6 h-6 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Home</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Home</span>
           </Link>
           {/* Invoices */}
           <Link
@@ -63,7 +67,7 @@ function MobileBottomNav({ onOpenMenu }) {
             aria-current={isActive(createPageUrl("Invoices")) ? "page" : undefined}
           >
             <DocumentTextIcon className="w-6 h-6 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Invoices</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Invoices</span>
           </Link>
 
           {/* Center FAB */}
@@ -126,7 +130,7 @@ function MobileBottomNav({ onOpenMenu }) {
             aria-current={isActive(createPageUrl("Clients")) ? "page" : undefined}
           >
             <UserGroupIcon className="w-6 h-6 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Clients</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Clients</span>
           </Link>
           {/* Menu — opens sidebar drawer */}
           <button
@@ -136,7 +140,7 @@ function MobileBottomNav({ onOpenMenu }) {
             aria-label="Menu"
           >
             <Bars3Icon className="w-6 h-6 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Menu</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Menu</span>
           </button>
         </div>
       </nav>

@@ -207,7 +207,9 @@ async function attachInvoiceCompany(record) {
       .eq("id", record.company_id)
       .single();
     if (data) record.company = { id: data.id, name: data.name, logo_url: data.logo_url };
-  } catch (_) { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function clearOrgIdCache() {
@@ -556,6 +558,17 @@ class EntityManager {
     return records.filter((record) => {
       return Object.entries(criteria).every(([key, value]) => {
         const recordVal = record[key];
+        if (key === 'quote_number' || key === 'invoice_number') {
+          // Do not coerce undefined/null: String(undefined ?? '') === '' would match every row.
+          if (Array.isArray(value)) {
+            return value.some((v) => {
+              if (v === undefined || v === null) return recordVal === v;
+              return String(recordVal ?? '') === String(v);
+            });
+          }
+          if (value === undefined || value === null) return recordVal === value;
+          return String(recordVal ?? '') === String(value);
+        }
         if (Array.isArray(value)) return value.includes(recordVal);
         return recordVal === value;
       });
@@ -1011,6 +1024,9 @@ class EntityManager {
         Object.keys(supabaseData).forEach(key => {
           if (!INVOICE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        if (supabaseData.invoice_number != null) {
+          supabaseData.invoice_number = String(supabaseData.invoice_number).trim();
+        }
       }
       const RECURRING_INVOICE_INSERT_COLUMNS = [
         'org_id', 'profile_name', 'client_id', 'invoice_template', 'frequency',
@@ -1123,6 +1139,9 @@ class EntityManager {
         Object.keys(supabaseData).forEach(key => {
           if (!QUOTE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        if (supabaseData.quote_number != null) {
+          supabaseData.quote_number = String(supabaseData.quote_number).trim();
+        }
       }
 
       // Whitelist columns for services table to avoid "column does not exist" when DB schema differs
@@ -1322,6 +1341,9 @@ class EntityManager {
         Object.keys(updateData).forEach(key => {
           if (!INVOICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        if (updateData.invoice_number != null) {
+          updateData.invoice_number = String(updateData.invoice_number).trim();
+        }
       }
       const QUOTE_UPDATE_COLUMNS = [
         'client_id', 'quote_number', 'status', 'project_title', 'project_description',
@@ -1334,6 +1356,9 @@ class EntityManager {
         Object.keys(updateData).forEach(key => {
           if (!QUOTE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        if (updateData.quote_number != null) {
+          updateData.quote_number = String(updateData.quote_number).trim();
+        }
       }
       const RECURRING_INVOICE_UPDATE_COLUMNS = [
         'profile_name', 'client_id', 'invoice_template', 'frequency',

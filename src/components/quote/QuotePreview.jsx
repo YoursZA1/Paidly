@@ -50,7 +50,7 @@ export default function QuotePreview({
 
   if (!quoteData) {
     return (
-      <Card className="border-border">
+      <Card className="gap-0 border-border p-0">
         <CardContent className="p-6">
           <p className="text-destructive text-sm">Quote data is missing.</p>
         </CardContent>
@@ -64,8 +64,8 @@ export default function QuotePreview({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <Card className="bg-card/80 backdrop-blur-sm border-0 shadow-xl overflow-x-auto">
-        <CardHeader className="border-b border-border pb-6">
+      <Card className="gap-0 overflow-x-auto border-0 bg-card/80 p-0 shadow-xl backdrop-blur-sm">
+        <CardHeader className="border-b border-border px-4 pb-6 pt-4 sm:px-6 sm:pt-4">
           <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
             <FileText className="w-5 h-5" />
             {previewOnly ? "Quote" : "Quote Preview"}
@@ -88,7 +88,7 @@ export default function QuotePreview({
           )}
         </CardHeader>
 
-        <CardContent className="p-4 sm:p-6 lg:p-8 pt-4">
+        <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8">
           {previewDoc ? (
             <DocumentPreview doc={previewDoc} docType="quote" clients={clientList} user={profile} />
           ) : null}

@@ -821,7 +821,7 @@ export default function Layout({ children, currentPageName }) {
           </div>
 
           {/* Navigation */}
-          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "px-3 pr-12"}`}>
+          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "pl-4 pr-12"}`}>
             <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-1"}>
               {getNavigationItems(user?.subscription_plan || 'Individual', user?.role)
                 .filter(item => item.title && item.id && item.title !== "Dashboard")
@@ -906,13 +906,13 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
       <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 bg-background ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
-        {/* Top header: fixed on mobile (hamburger + Paidly + avatar); standard header on lg+ */}
+        {/* Top bar (Rule 7): logo + menu entry + account — no extra nav rows on mobile; rest in drawer + bottom nav */}
         <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="relative z-20 safe-top bg-card/95 backdrop-blur-sm border-b border-border shadow-sm min-h-[56px]
-            fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8"
+            fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-element sm:gap-3 app-gutter-x"
         >
           {/* Mobile (< lg): Hamburger | Paidly | Avatar */}
           <div className="flex items-center gap-2 w-full lg:hidden">
@@ -1063,7 +1063,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area mobile-page mobile-scale-padding mobile-scale-typography flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth px-3 sm:px-6 md:px-8 safe-x min-w-0 flex flex-col pt-14 pb-4 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-14 pb-6 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1">
           <AnimatePresence mode="wait">

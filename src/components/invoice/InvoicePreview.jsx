@@ -37,7 +37,7 @@ function InvoicePreview({
 
   if (!invoiceData) {
     return (
-      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+      <Card className="gap-0 border-0 bg-white/80 p-0 shadow-xl backdrop-blur-sm">
         <CardContent className="p-4 sm:p-8">
           <p className="text-destructive text-sm sm:text-base">Error: Invoice data is missing</p>
         </CardContent>
@@ -203,8 +203,8 @@ function InvoicePreview({
 
   return (
     <div style={{ opacity: 1 }}>
-      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl overflow-x-auto overflow-y-visible rounded-fintech text-card-foreground min-w-0">
-        <CardHeader className="border-b border-border pb-4 sm:pb-6 px-4 sm:px-6">
+      <Card className="gap-0 min-w-0 overflow-x-auto overflow-y-visible rounded-fintech border-0 bg-white/80 p-0 text-card-foreground shadow-xl backdrop-blur-sm">
+        <CardHeader className="border-b border-border px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
           <CardTitle className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
             <FileText className="w-5 h-5 shrink-0" />
             {previewOnly ? "Invoice" : "Invoice Preview"}
@@ -250,7 +250,7 @@ function InvoicePreview({
           )}
         </CardHeader>
 
-        <CardContent className="p-4 sm:p-6 lg:p-8 pt-4">
+        <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8">
           {templateDocument}
 
           <section

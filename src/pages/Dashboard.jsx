@@ -1074,7 +1074,7 @@ export default function Dashboard() {
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
-      <div className="min-h-screen bg-background w-full min-w-0 px-3 py-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-background w-full min-w-0 py-4 sm:py-6 lg:py-8">
         <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 w-full min-w-0">
           <div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-foreground font-display">Admin Dashboard</h1>
@@ -1084,7 +1084,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
             {/* Total Revenue (Today / MTD / YTD) */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Total Revenue</p>
                 <p className="text-2xl font-semibold text-foreground">{formatCurrency(adminStats.revenue, 'ZAR')}</p>
                 <div className="flex flex-wrap gap-2 mt-2 text-xs">
@@ -1108,21 +1108,21 @@ export default function Dashboard() {
             </Card>
             {/* Active Businesses */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Active Businesses</p>
                 <p className="text-2xl font-semibold text-foreground">{adminStats.activeUsers}</p>
               </CardContent>
             </Card>
             {/* Active Subscriptions */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Active Subscriptions</p>
                 <p className="text-2xl font-semibold text-foreground">{adminStats.activeSubscribers}</p>
               </CardContent>
             </Card>
             {/* Total Transactions (24h) */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Total Transactions (24h)</p>
                 <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => {
@@ -1136,7 +1136,7 @@ export default function Dashboard() {
             </Card>
             {/* Failed Payments */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Failed Payments</p>
                 <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => inv.status === 'failed' || inv.status === 'overdue').length
@@ -1145,7 +1145,7 @@ export default function Dashboard() {
             </Card>
             {/* Pending Payouts */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Pending Payouts</p>
                 <p className="text-2xl font-semibold text-foreground">{
                   invoices.filter(inv => inv.status === 'pending_payout' || inv.status === 'awaiting_payout').length
@@ -1154,7 +1154,7 @@ export default function Dashboard() {
             </Card>
             {/* Platform Balance */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">Platform Balance</p>
                 <p className="text-2xl font-semibold text-foreground">{
                   formatCurrency(OutstandingBalanceService.calculateTotalOutstanding(invoices).totalOutstanding, 'ZAR')
@@ -1163,7 +1163,7 @@ export default function Dashboard() {
             </Card>
             {/* System Alerts */}
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
+              <CardContent>
                 <p className="text-xs text-muted-foreground">System Alerts</p>
                 <p className="text-2xl font-semibold text-foreground">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
               </CardContent>
@@ -1216,7 +1216,7 @@ export default function Dashboard() {
                   ))}
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent>
                 {isLoading ? (
                   <Skeleton className="h-48 w-full" />
                 ) : (
@@ -1248,7 +1248,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Growth Metrics</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm">
+                <CardContent className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">New users (7d)</p>
                     <p className="text-lg font-semibold text-foreground">{growthStats.newUsersThisWeek}</p>
@@ -1280,7 +1280,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Activity Logs</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="space-y-3">
                   {activityLogs.recentActions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No recent admin actions.</p>
                   ) : (
@@ -1350,7 +1350,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Weekly Users & Invoices</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4">
+                <CardContent>
                   {isLoading ? (
                     <Skeleton className="h-40 w-full" />
                   ) : (
@@ -1380,7 +1380,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Monthly Revenue</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4">
+                <CardContent>
                   {isLoading ? (
                     <Skeleton className="h-40 w-full" />
                   ) : (
@@ -1413,7 +1413,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Users Hitting Plan Limits</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="space-y-3">
                   {alerts.planLimits.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No plan limits reached.</p>
                   ) : (
@@ -1438,7 +1438,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">Failed or Overdue Subscriptions</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="space-y-3">
                   {alerts.failedSubscriptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No failed subscriptions.</p>
                   ) : (
@@ -1463,7 +1463,7 @@ export default function Dashboard() {
                 <CardHeader className="border-b">
                   <CardTitle className="text-sm font-semibold">High-Volume Users on Low Plans</CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="space-y-3">
                   {alerts.highVolumeLowPlan.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No upgrade candidates.</p>
                   ) : (
@@ -1565,7 +1565,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
-      <div className="max-w-7xl mx-auto w-full min-w-0 px-3 py-2 sm:p-6 md:p-8">
+      <div className="max-w-7xl mx-auto w-full min-w-0 py-2 sm:py-6 md:py-8">
         {/* Welcome Header — subtle fade, leads into staggered content */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}

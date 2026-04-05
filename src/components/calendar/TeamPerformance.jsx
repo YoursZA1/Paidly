@@ -125,7 +125,7 @@ export default function TeamPerformance({ tasks = [] }) {
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="border-0 dark:border dark:border-slate-700 shadow-lg dark:bg-slate-800">
-                    <CardContent className="p-4">
+                    <CardContent>
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Completion Rate</p>
@@ -138,7 +138,7 @@ export default function TeamPerformance({ tasks = [] }) {
                 </Card>
 
                 <Card className="border-0 dark:border dark:border-slate-700 shadow-lg dark:bg-slate-800">
-                    <CardContent className="p-4">
+                    <CardContent>
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">On-Time Rate</p>
@@ -151,7 +151,7 @@ export default function TeamPerformance({ tasks = [] }) {
                 </Card>
 
                 <Card className="border-0 dark:border dark:border-slate-700 shadow-lg dark:bg-slate-800">
-                    <CardContent className="p-4">
+                    <CardContent>
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Overdue Tasks</p>
@@ -163,7 +163,7 @@ export default function TeamPerformance({ tasks = [] }) {
                 </Card>
 
                 <Card className="border-0 dark:border dark:border-slate-700 shadow-lg dark:bg-slate-800">
-                    <CardContent className="p-4">
+                    <CardContent>
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">Avg. Completion</p>

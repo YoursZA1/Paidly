@@ -159,11 +159,18 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
               <BarChart data={agingData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip formatter={(value) => formatCurrency(value, currency)} />
+                <YAxis yAxisId="left" tickFormatter={(v) => formatCurrency(v, currency)} width={72} />
+                <YAxis yAxisId="right" orientation="right" allowDecimals={false} width={48} />
+                <Tooltip
+                  formatter={(value, name) =>
+                    name === 'Invoice Count'
+                      ? [String(value), name]
+                      : [formatCurrency(Number(value), currency), name]
+                  }
+                />
                 <Legend />
-                <Bar dataKey="amount" fill="#ef4444" name="Outstanding Amount" />
-                <Bar dataKey="count" fill="#3b82f6" name="Invoice Count" yAxisId="right" />
+                <Bar yAxisId="left" dataKey="amount" fill="#ef4444" name="Outstanding Amount" />
+                <Bar yAxisId="right" dataKey="count" fill="#3b82f6" name="Invoice Count" />
               </BarChart>
             </ResponsiveContainer>
             </div>

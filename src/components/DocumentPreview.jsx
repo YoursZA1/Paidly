@@ -476,94 +476,136 @@ const DocumentPreview = forwardRef(function DocumentPreview(
           </div>
         </div>
 
-        <div style={{ marginBottom: "32px", overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "520px" }}>
-            <thead>
-              <tr style={{ background: SLATE_900 }}>
-                <th
-                  style={{
-                    padding: "12px 16px",
-                    textAlign: "left",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#94a3b8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
+        <div style={{ marginBottom: "32px" }}>
+          {/* Mobile: stacked line-item cards (no horizontal table scroll) */}
+          <div className="document-line-items-cards space-y-3 md:hidden">
+            {lineRows.length === 0 ? (
+              <div
+                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-400"
+                style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
+              >
+                No line items
+              </div>
+            ) : (
+              lineRows.map((item, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
                 >
-                  Description
-                </th>
-                <th
-                  style={{
-                    padding: "12px 16px",
-                    textAlign: "right",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#94a3b8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    width: "80px",
-                  }}
-                >
-                  Qty
-                </th>
-                <th
-                  style={{
-                    padding: "12px 16px",
-                    textAlign: "right",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#94a3b8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    width: "110px",
-                  }}
-                >
-                  Unit price
-                </th>
-                <th
-                  style={{
-                    padding: "12px 16px",
-                    textAlign: "right",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: BRAND_SECONDARY,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    width: "120px",
-                  }}
-                >
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineRows.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ padding: "12px 16px", fontSize: "11px", color: "#9ca3af", lineHeight: "16px" }}>
-                    No line items
-                  </td>
-                </tr>
-              ) : (
-                lineRows.map((item, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                    <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151" }}>
-                      {item.description}
-                    </td>
-                    <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                  <div className="text-sm font-semibold leading-snug text-slate-900">{item.description || "—"}</div>
+                  <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+                    <div>
+                      <span className="font-medium text-slate-500">Qty: </span>
                       {item.quantity}
-                    </td>
-                    <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-500">Unit price: </span>
                       {fmt(item.unit_price)}
-                    </td>
-                    <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right" }}>
+                    </div>
+                    <div className="pt-0.5 text-base font-semibold text-slate-900">
+                      <span className="text-sm font-medium text-slate-500">Total: </span>
                       {fmt(item.total)}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* md+: table layout; always used when printing */}
+          <div className="document-line-items-table-wrap hidden overflow-x-auto md:block" style={{ marginBottom: 0 }}>
+            <table
+              className="document-line-items-table"
+              style={{ width: "100%", borderCollapse: "collapse", minWidth: "520px" }}
+            >
+              <thead>
+                <tr style={{ background: SLATE_900 }}>
+                  <th
+                    style={{
+                      padding: "12px 16px",
+                      textAlign: "left",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    Description
+                  </th>
+                  <th
+                    style={{
+                      padding: "12px 16px",
+                      textAlign: "right",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      width: "80px",
+                    }}
+                  >
+                    Qty
+                  </th>
+                  <th
+                    style={{
+                      padding: "12px 16px",
+                      textAlign: "right",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      width: "110px",
+                    }}
+                  >
+                    Unit price
+                  </th>
+                  <th
+                    style={{
+                      padding: "12px 16px",
+                      textAlign: "right",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: BRAND_SECONDARY,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      width: "120px",
+                    }}
+                  >
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: "12px 16px", fontSize: "11px", color: "#9ca3af", lineHeight: "16px" }}>
+                      No line items
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  lineRows.map((item, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
+                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151" }}>
+                        {item.description}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                        {item.quantity}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                        {fmt(item.unit_price)}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right" }}>
+                        {fmt(item.total)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="page-break" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "24px" }}>

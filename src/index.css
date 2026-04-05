@@ -2,6 +2,111 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Layout Rule 1 — Edge breathing room (premium mobile + desktop):
+ * Horizontal inset is at least 16px from the viewport edge, never less than safe-area insets.
+ * Use .app-gutter-x on the app shell (main + header). Do not pair with px-page / px-* on the same axis.
+ */
+.app-gutter-x {
+  box-sizing: border-box;
+  padding-left: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) {
+  .app-gutter-x {
+    padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+  }
+}
+@media (min-width: 768px) {
+  .app-gutter-x {
+    padding-left: max(2rem, env(safe-area-inset-left, 0px));
+    padding-right: max(2rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Fixed bottom nav: same 16px minimum + safe area as main shell */
+.mobile-bottom-nav-inner {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) {
+  .mobile-bottom-nav-inner {
+    padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+/*
+ * Layout Rule 2 — Max width control (premium narrow column):
+ * max-width 480px, margin 0 auto. Use for form stacks, auth, reading rails, bottom-nav icon row.
+ * Do not replace max-w-7xl / dashboard shells — those stay wide; wrap only the narrow intent.
+ */
+.app-max-narrow {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--layout-narrow-max, 480px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/*
+ * Layout Rule 3 — Vertical rhythm:
+ * Major sections: margin-bottom 24px (--spacing-section-mobile).
+ * .app-section:last-child margin is 0 so stacks don’t add extra gap before footer/padding.
+ * Tailwind: mb-section (same token). Flex stacks: .mobile-section-stack uses gap (equivalent rhythm).
+ */
+.app-section {
+  box-sizing: border-box;
+  margin-bottom: var(--spacing-section-mobile, 24px);
+}
+.app-section:last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * Forms — text fields (Input / Select trigger): 48px height, 0 12px padding, 10px radius (rounded-input).
+ * Spacing: .form-field (label→control 8px), .form-field-stack (field→field 16px), .form-field-tight (6px).
+ * Button groups: gap-buttons (14px, within 12–16px) — use gap-buttons / CardFooter / DialogFooter; avoid gap-2 stacks.
+ */
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Form spacing: label → control 8px (6–8pt range); stack fields at 16px */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.form-field-tight {
+  gap: 0.375rem;
+}
+.form-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* DocumentPreview: mobile line-item cards hidden when printing; table always for print */
+@media print {
+  .document-line-items-cards {
+    display: none !important;
+  }
+  .document-line-items-table-wrap {
+    display: block !important;
+    overflow: visible !important;
+  }
+  table.document-line-items-table {
+    display: table !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+}
+
 /* Smooth scrolling and color-scheme for dark mode (native controls, scrollbars) */
 html {
   scroll-behavior: smooth;
@@ -19,25 +124,33 @@ html.light {
   }
 }
 
-/* Viewport-based scale for mobile: fluid base font so rem units scale with screen size */
+/*
+ * Mobile / tablet (≤1023px): fixed 16px rem root + 8pt spacing + SaaS typography.
+ * Avoid fluid clamp() so headings and padding stay on-scale (8 / 16 / 24).
+ */
 @media (max-width: 1023px) {
   html {
-    font-size: clamp(14px, 2.2vw + 12px, 16px);
+    font-size: 16px;
   }
 }
 
-/* CSS custom property for viewport scale factor (0.85–1) for use in components */
 @media (max-width: 1023px) {
   :root {
-    /* Reference width 390px; scale down on smaller devices */
     --viewport-scale: min(1, max(0.82, (100vw / 390)));
-    --text-h1-size: clamp(20px, 5vw + 14px, 28px);
-    --text-h2-size: clamp(16px, 2.5vw + 12px, 18px);
-    --text-body-size: clamp(13px, 1.5vw + 11px, 14px);
-    --text-caption-size: clamp(11px, 1vw + 10px, 12px);
-    --spacing-page-mobile: clamp(12px, 3vw, 20px);
-    --card-padding: clamp(16px, 4vw, 24px);
-    --gap-cards: clamp(16px, 3vw, 24px);
+    /* Spacing: 8pt system */
+    --spacing-page-mobile: 16px;
+    --spacing-section-mobile: 24px;
+    --card-padding-mobile: 18px;
+    --gap-element-mobile: 12px;
+    --gap-element-mobile-sm: 8px;
+    --card-padding: 18px;
+    --gap-cards: 24px;
+    /* Typography: H1 24 / H2 20 / H3 18 / body 15–16 / meta min 14px */
+    --text-h1-size: 24px;
+    --text-h2-size: 20px;
+    --text-h3-size: 18px;
+    --text-body-size: 15px;
+    --text-caption-size: 14px;
   }
 }
 
@@ -48,14 +161,18 @@ html.light {
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .safe-left { padding-left: env(safe-area-inset-left); }
   .safe-right { padding-right: env(safe-area-inset-right); }
-  .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  /* At least 16px inset so content never hugs the screen when safe-area is 0 */
+  .safe-x {
+    padding-left: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-right, 0px));
+  }
   .safe-y { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
   /* Mobile layout: ensure main content and nav respect safe areas on phones */
   .mobile-safe-area-top { padding-top: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-top)); }
   .mobile-safe-area-bottom { padding-bottom: max(var(--spacing-page-mobile, 16px), env(safe-area-inset-bottom)); }
   .mobile-nav-panel {
     padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: 1rem;
+    padding-right: max(1rem, env(safe-area-inset-right));
     padding-top: max(1rem, env(safe-area-inset-top));
   }
   /* Mobile sidebar: floating pill active state (light orange + indicator dot) */
@@ -104,6 +221,17 @@ body {
 .table {
   font-size: 14px;
   line-height: 1.4;
+}
+
+@media (max-width: 767px) {
+  .invoice-list-table th,
+  .quote-list-table th {
+    font-size: 14px;
+    letter-spacing: 0.02em;
+  }
+  .status-pill {
+    font-size: 14px;
+  }
 }
 
 /* Amount column (Invoices + Quotes): right-align, tabular figures, weight 600 */
@@ -383,6 +511,12 @@ body {
   padding: 0 1rem;
 }
 
+/*
+ * Rule 7 — Navigation: top bar (logo + menu) OR bottom nav; cap primary bar items (~5); overflow in menu / FAB.
+ * Rule 8 — Visual polish: body line-height 1.4–1.6; light borders ≈ #E5E7EB; page bg ≈ #F9FAFB (see :root tokens).
+ * Anti-patterns: tiny text, no edge padding, small buttons, crowded screens, desktop layout on mobile — use app-gutter-x, h-12 buttons, mobile-section-stack / line-item cards.
+ * Tailwind plug-and-play: .tw-mobile-column + .tw-stack-6 (or className="px-4 max-w-md mx-auto" + gap-6); cards use card-float / Card; buttons use Button (h-12).
+ */
 /* Paidly light theme: soft off-white page, white cards, orange/coral brand (matches logo).
  * Use semantic tokens app-wide:
  * - Text: text-foreground (main), text-muted-foreground (labels/captions)
@@ -394,8 +528,8 @@ body {
 @layer base {
   :root {
     /* Brand palette from logo (dist/logo.svg): coral/orange */
-    /* Lighter neutral background so cards pop without heavy shadows */
-    --bg-main: #F6F7F9;
+    /* Page surface — gray-50 #F9FAFB (visual polish); cards stay white */
+    --bg-main: #f9fafb;
     --bg-card: #FFFFFF;
     --brand-primary: #f24e00;
     --brand-secondary: #ff7c00;
@@ -419,6 +553,7 @@ body {
     --font-display: 'Plus Jakarta Sans', Inter, system-ui, sans-serif;
 
     /* Semantic theme (HSL) — primary = logo coral #f24e00 (17 100% 47%) */
+    /* Background ≈ #F9FAFB; border/input ≈ #E5E7EB (gray-200) */
     --background: 210 20% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
@@ -435,8 +570,8 @@ body {
     --accent-foreground: 0 0% 100%;
     --destructive: 0 79% 63%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 92%;
-    --input: 214 20% 92%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
     --ring: 17 100% 47%;
     --chart-1: 17 100% 47%;
     --chart-2: 29 100% 50%;
@@ -458,18 +593,24 @@ body {
     --sidebar-border: 222 47% 16%;
     --sidebar-ring: 17 100% 47%;
     --logo-cyan: #f24e00;
-    --content-bg: #F4F7F9;
+    --content-bg: #f9fafb;
     --panel-bg: #FFFFFF;
     --sidebar-border-color: #EDEFF2;
     /* FinBank spacing & typography */
     --spacing-page-mobile: 16px;
     --spacing-page-desktop: 32px;
+    --layout-narrow-max: 480px;
+    --spacing-section-mobile: 24px;
+    --card-padding-mobile: 18px;
+    --gap-element-mobile: 12px;
+    --gap-element-mobile-sm: 8px;
     --card-padding: 24px;
     --gap-cards: 24px;
     --text-h1-size: 28px;
-    --text-h2-size: 18px;
-    --text-body-size: 14px;
-    --text-caption-size: 12px;
+    --text-h2-size: 20px;
+    --text-h3-size: 20px;
+    --text-body-size: 15px;
+    --text-caption-size: 14px;
   }
   /* Auth pages: warm gradient matching logo (coral/orange/cream) */
   .auth-page-bg {
@@ -531,7 +672,7 @@ body {
     font-family: var(--font-sans);
     min-height: 100vh;
     letter-spacing: 0.01em;
-    line-height: 1.55;
+    line-height: 1.5;
     background: hsl(var(--background));
   }
 
@@ -541,11 +682,11 @@ body {
     font-feature-settings: "tnum" 1;
     font-family: var(--font-mono);
   }
-  /* Inputs: consistent focus for product feel */
+  /* Native controls: visible focus when components don’t set their own ring */
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible {
-    @apply outline-none ring-2 ring-ring/30 ring-offset-2 ring-offset-background;
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
   /* Main content area: FinBank soft off-white so cards feel floating */
   .content-area-light {
@@ -567,6 +708,10 @@ body {
     font-size: var(--text-h2-size);
     font-weight: 600;
   }
+  h3 {
+    font-size: var(--text-h3-size);
+    font-weight: 600;
+  }
   /* Section titles: readable, sophisticated */
   .section-title {
     font-family: var(--font-display);
@@ -574,13 +719,15 @@ body {
     letter-spacing: -0.02em;
     color: var(--text-main);
   }
-  /* FinBank body & captions */
+  /* FinBank body & captions — line-height in 1.4–1.6 range for readable blocks */
   .finbank-body {
     font-size: var(--text-body-size);
+    line-height: 1.5;
     color: var(--text-main);
   }
   .finbank-caption {
     font-size: var(--text-caption-size);
+    line-height: 1.45;
     color: var(--text-muted);
   }
   #root {
@@ -590,7 +737,7 @@ body {
   /* Mobile: main content area gets extra bottom padding so content isn't behind home indicator */
   @media (max-width: 767px) {
     .dashboard-scroll-area {
-      padding-bottom: max(env(safe-area-inset-bottom), 1.5rem);
+      padding-bottom: max(env(safe-area-inset-bottom), var(--spacing-section-mobile, 24px));
     }
     /* Prevent horizontal scroll on app shell */
     body { overflow-x: hidden; }
@@ -627,10 +774,30 @@ body {
       -webkit-overflow-scrolling: touch;
       overflow-x: auto;
     }
-    /* Use viewport-scaled spacing for padded sections */
+    /* Horizontal page gutter (16px); prefer Tailwind px-page / px-4 on shells */
     .mobile-scale-padding {
       padding-left: var(--spacing-page-mobile);
       padding-right: var(--spacing-page-mobile);
+    }
+    /* Layout Rule 3 — vertical rhythm (24px) via flex gap */
+    .mobile-section-stack {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-section-mobile, 24px);
+    }
+    /* In-flow sections: margin-bottom 24px per block (Rule 3); last child trimmed */
+    .mobile-section-stack-flow > * {
+      margin-bottom: var(--spacing-section-mobile, 24px);
+    }
+    .mobile-section-stack-flow > *:last-child {
+      margin-bottom: 0;
+    }
+    /* Stacks of labels/controls: 8–12px */
+    .mobile-gap-elements {
+      gap: var(--gap-element-mobile, 12px);
+    }
+    .mobile-gap-elements-sm {
+      gap: var(--gap-element-mobile-sm, 8px);
     }
   }
   /* Tablet and below: apply viewport-scaled typography */
@@ -677,15 +844,15 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   }
 
-  /* Floating cards on light: white, subtle shadow */
+  /* Main card pattern: 16px padding via Card component; 12px radius; soft lift shadow */
   .card-float {
     background: var(--bg-card);
     border: 1px solid hsl(var(--border));
-    border-radius: 20px;
-    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   }
   .dark .card-float {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
   }
 
   /* Shadow & depth (FinBank "look") */
@@ -743,5 +910,15 @@ body {
   }
   .sidebar-nav-item-active-ghost .sidebar-nav-icon {
     color: hsl(var(--sidebar-foreground)) !important;
+  }
+}
+
+@layer components {
+  /* Mirrors common Tailwind recipes: px-4 max-w-md mx-auto; pair with .tw-stack-6 for space-y-6 rhythm */
+  .tw-mobile-column {
+    @apply mx-auto w-full max-w-md px-4;
+  }
+  .tw-stack-6 {
+    @apply flex flex-col gap-6;
   }
 }

@@ -356,7 +356,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
             </div>
             )}
             {/* Action Bar — white rounded bar, fits + mobile-friendly */}
-            <div className={`no-print pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 ${embedded && embeddedFullWidth ? 'px-2 sm:px-4' : 'px-4 sm:px-6'}`}>
+            <div className={`no-print pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 ${embedded && embeddedFullWidth ? 'px-page sm:px-6' : 'px-4 sm:px-6'}`}>
                 <div className={`${embedded && embeddedFullWidth ? 'max-w-none w-full' : 'max-w-5xl mx-auto'} bg-white rounded-xl border border-slate-100 shadow-sm p-3 sm:p-4`}>
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                         <Button
@@ -455,7 +455,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Invoice Preview Column */}
                     <div className="lg:col-span-2">
-                         <Card id="invoice-preview" className="shadow-lg print:shadow-none print:border-none bg-white overflow-hidden">
+                         <Card id="invoice-preview" className="gap-0 p-0 shadow-lg print:shadow-none print:border-none bg-white overflow-hidden">
                             <CardContent className="p-4 sm:p-6 lg:p-8">
                                 <InvoicePreview
                                     embedded
@@ -473,8 +473,8 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                     </div>
 
                     <div className="lg:col-span-1">
-                        <Card className="shadow-md">
-                            <CardContent className="p-6">
+                        <Card className="gap-0 p-0 shadow-md">
+                            <CardContent className="p-4 sm:p-6">
                                 <div className="flex items-center gap-2 mb-4">
                                     <Clock className="w-4 h-4 text-slate-600" />
                                     <h3 className="font-semibold text-slate-800">Version History</h3>

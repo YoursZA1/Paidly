@@ -181,7 +181,7 @@ export default function AffiliateDashboard() {
       <div className="relative overflow-hidden border-b border-border/60 bg-gradient-to-br from-primary/[0.07] via-background to-background">
         <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 left-0 h-48 w-48 rounded-full bg-emerald-500/5 blur-2xl" />
-        <div className="relative mx-auto flex max-w-6xl flex-col gap-4 px-3 py-8 sm:flex-row sm:items-end sm:justify-between sm:px-6 md:py-10">
+        <div className="relative mx-auto flex max-w-6xl flex-col gap-4 py-8 sm:flex-row sm:items-end sm:justify-between md:py-10">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -219,7 +219,7 @@ export default function AffiliateDashboard() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-8 px-3 py-8 sm:px-6 md:py-10">
+      <div className="mx-auto max-w-6xl space-y-8 py-8 md:py-10">
         {noAffiliate ? (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <Card className="border-dashed border-primary/25 bg-muted/20">

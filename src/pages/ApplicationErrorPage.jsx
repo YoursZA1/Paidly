@@ -35,7 +35,7 @@ export default function ApplicationErrorPage({ error, onReset }) {
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Something went wrong</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           Paidly ran into an unexpected problem. This is usually temporary — try again, refresh the page, or go back
-          home. If it keeps happening after a deploy, try a hard refresh so your browser loads the latest version.
+          home. If the application just got updated, try a hard refresh so your browser loads the latest version.
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">

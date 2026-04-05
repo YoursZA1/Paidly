@@ -291,12 +291,12 @@ export default function Services() {
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-                        <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-2">
+                        <div className="grid w-full grid-cols-2 gap-2 touch-manipulation md:flex md:w-auto md:grid-cols-none">
                             <Button
                                 type="button"
                                 onClick={() => setActiveView("catalog")}
-                                className={`rounded-2xl font-bold px-4 py-2.5 ${
+                                className={`min-h-12 rounded-2xl px-3 text-sm font-bold sm:px-4 ${
                                     activeView === "catalog"
                                         ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
                                         : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
@@ -307,7 +307,7 @@ export default function Services() {
                             <Button
                                 type="button"
                                 onClick={() => setActiveView("inventory")}
-                                className={`rounded-2xl font-bold px-4 py-2.5 ${
+                                className={`min-h-12 rounded-2xl px-3 text-sm font-bold sm:px-4 ${
                                     activeView === "inventory"
                                         ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
                                         : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
@@ -318,53 +318,63 @@ export default function Services() {
                         </div>
 
                         {activeView === "inventory" ? null : (
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-72">
-                            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
-                            <Input
-                                placeholder="Search items..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300 dark:focus:border-orange-500"
-                            />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                data-testid="services-add-product"
-                                onClick={() => {
-                                    setCreateType("product");
-                                    setEditingService(null);
-                                    setShowForm(true);
-                                }}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold shadow-sm whitespace-nowrap ${
-                                    createType === "product"
-                                        ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
-                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                }`}
-                            >
-                                <CubeIcon className="w-4 h-4" />
-                                Create Product
-                            </Button>
-                            <Button
-                                type="button"
-                                data-testid="services-add"
-                                onClick={() => {
-                                    setCreateType("service");
-                                    setEditingService(null);
-                                    setShowForm(true);
-                                }}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold shadow-sm whitespace-nowrap ${
-                                    createType === "service"
-                                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                }`}
-                            >
-                                <TagIcon className="w-4 h-4" />
-                                Create Service
-                            </Button>
-                        </div>
-                    </div>
+                            <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch md:w-auto md:flex-row md:items-center md:gap-3">
+                                <div className="relative w-full min-w-0 sm:min-w-0 sm:flex-1 md:w-72 md:flex-none">
+                                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                                    <Input
+                                        placeholder="Search items..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="min-h-12 w-full rounded-2xl border border-slate-200 bg-white py-0 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-orange-500"
+                                    />
+                                </div>
+                                <div className="grid w-full grid-cols-1 gap-2 touch-manipulation min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:shrink-0 sm:gap-2">
+                                    <Button
+                                        type="button"
+                                        data-testid="services-add-product"
+                                        onClick={() => {
+                                            setCreateType("product");
+                                            setEditingService(null);
+                                            setShowForm(true);
+                                        }}
+                                        className={`flex min-h-12 flex-row items-center justify-center gap-2 rounded-2xl px-3 text-sm font-bold leading-none shadow-sm min-[360px]:flex-col min-[360px]:gap-0.5 min-[360px]:px-2 min-[360px]:py-2 min-[360px]:text-xs min-[360px]:leading-tight sm:flex-row sm:gap-2 sm:px-4 sm:py-0 sm:text-sm sm:leading-none md:whitespace-nowrap ${
+                                            createType === "product"
+                                                ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
+                                                : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
+                                        }`}
+                                    >
+                                        <CubeIcon className="size-5 shrink-0 sm:size-4" />
+                                        <span className="text-center min-[360px]:max-w-[7.5rem] sm:max-w-none">
+                                            <span className="min-[360px]:hidden">Product</span>
+                                            <span className="hidden min-[360px]:inline">
+                                                Create Product
+                                            </span>
+                                        </span>
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        data-testid="services-add"
+                                        onClick={() => {
+                                            setCreateType("service");
+                                            setEditingService(null);
+                                            setShowForm(true);
+                                        }}
+                                        className={`flex min-h-12 flex-row items-center justify-center gap-2 rounded-2xl px-3 text-sm font-bold leading-none shadow-sm min-[360px]:flex-col min-[360px]:gap-0.5 min-[360px]:px-2 min-[360px]:py-2 min-[360px]:text-xs min-[360px]:leading-tight sm:flex-row sm:gap-2 sm:px-4 sm:py-0 sm:text-sm sm:leading-none md:whitespace-nowrap ${
+                                            createType === "service"
+                                                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                                                : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
+                                        }`}
+                                    >
+                                        <TagIcon className="size-5 shrink-0 sm:size-4" />
+                                        <span className="text-center min-[360px]:max-w-[7.5rem] sm:max-w-none">
+                                            <span className="min-[360px]:hidden">Service</span>
+                                            <span className="hidden min-[360px]:inline">
+                                                Create Service
+                                            </span>
+                                        </span>
+                                    </Button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -497,10 +507,12 @@ export default function Services() {
                                     setCreateType("service");
                                     setShowForm(true);
                                 }}
-                                className="border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-[32px] flex flex-col items-center justify-center p-12 text-slate-400 dark:text-slate-500 hover:border-orange-300 dark:hover:border-orange-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50/30 dark:hover:bg-orange-950/30 transition-all min-h-[240px]"
+                                className="flex min-h-[200px] touch-manipulation flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-slate-200 p-8 text-slate-400 transition-all hover:border-orange-300 hover:bg-orange-50/30 hover:text-orange-500 dark:border-slate-600 dark:text-slate-500 dark:hover:border-orange-600 dark:hover:bg-orange-950/30 dark:hover:text-orange-400 sm:min-h-[240px] sm:p-12"
                             >
-                                <PlusIcon className="w-10 h-10 mb-2" />
-                                <span className="font-bold">Create New Offer</span>
+                                <PlusIcon className="mb-2 size-9 sm:size-10" />
+                                <span className="text-center text-sm font-bold sm:text-base">
+                                    Create New Offer
+                                </span>
                             </button>
                         </>
                     )}
@@ -525,9 +537,9 @@ export default function Services() {
                                         setEditingService(null);
                                         setShowForm(true);
                                     }}
-                                    className="bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold"
+                                    className="mx-auto min-h-12 w-full max-w-xs rounded-2xl bg-orange-600 font-bold text-white hover:bg-orange-700 sm:w-auto sm:max-w-none"
                                 >
-                                    <PlusIcon className="w-5 h-5 mr-2" />
+                                    <PlusIcon className="mr-2 size-5" />
                                     Add New
                                 </Button>
                             )}

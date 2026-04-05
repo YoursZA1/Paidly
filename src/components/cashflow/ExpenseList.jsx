@@ -174,11 +174,11 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
 
     return (
         <>
-            <Card>
-                <CardHeader>
+            <Card className="gap-0 overflow-hidden p-0">
+                <CardHeader className="px-4 pt-4">
                     <CardTitle>Recent Expenses</CardTitle>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6 sm:pt-0">
+                <CardContent className="p-0 sm:px-6 sm:pb-6 sm:pt-0">
                     {/* Desktop View: virtualized table for large lists */}
                     <div className="hidden md:block overflow-x-auto mobile-scroll-x min-w-0">
                         {isLoading ? (
@@ -269,7 +269,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                     <div className="md:hidden space-y-4 p-4">
                         {isLoading ? (
                             Array(3).fill(0).map((_, i) => (
-                                <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
+                                <Card key={i}><CardContent><Skeleton className="h-24 w-full" /></CardContent></Card>
                             ))
                         ) : expenses.length === 0 ? (
                             <div className="text-center py-12">
@@ -281,7 +281,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                 const status = expense.approval_status || (expense.is_claimable ? 'pending' : 'not_required');
                                 return (
                                     <Card key={expense.id}>
-                                        <CardContent className="p-4">
+                                        <CardContent>
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex-1 mr-2">
                                                     <p className="font-semibold text-foreground line-clamp-1">{expense.description}</p>

@@ -22,7 +22,7 @@ const SelectTrigger = React.forwardRef(({ className, children, id: idProp, name:
       id={id}
       name={nameProp ?? id}
       className={cn(
-        "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+        "flex h-12 w-full items-center justify-between whitespace-nowrap rounded-input border border-input bg-transparent px-3 py-0 text-base shadow-sm ring-offset-background transition-[color,box-shadow,border-color] data-[placeholder]:text-muted-foreground data-[placeholder]:opacity-100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 md:text-sm [&>span]:line-clamp-1",
         className
       )}
       {...props}>

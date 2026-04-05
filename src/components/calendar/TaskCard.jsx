@@ -41,7 +41,7 @@ export default function TaskCard({ task, client, onEdit, onDelete, onStatusChang
         <Card className={`border-0 dark:border dark:border-slate-700 shadow-md hover:shadow-lg dark:bg-slate-800 transition-all ${
             task.status === 'completed' ? 'opacity-60' : ''
         } ${isOverdue ? 'ring-2 ring-red-200 dark:ring-red-800' : ''} ${hasBlockingDeps ? 'ring-2 ring-yellow-200 dark:ring-yellow-800' : ''}`}>
-            <CardContent className="p-4">
+            <CardContent>
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-3 flex-1">
                         <button

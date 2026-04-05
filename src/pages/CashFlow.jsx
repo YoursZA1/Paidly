@@ -630,14 +630,14 @@ export default function CashFlowPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {isLoading ? (
                                     [...Array(6)].map((_, i) => (
-                                        <Card key={i} className="rounded-xl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+                                        <Card key={i} className="rounded-xl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"><CardContent><Skeleton className="h-20 w-full" /></CardContent></Card>
                                     ))
                                 ) : applyExpenseFilters(storeExpenses || [], expenseFilters).length === 0 ? (
                                     <div className="col-span-full text-center py-12 text-muted-foreground dark:text-slate-400">No expenses match the filters.</div>
                                 ) : (
                                     applyExpenseFilters(storeExpenses || [], expenseFilters).map((exp) => (
                                         <Card key={exp.id} className="rounded-xl border border-border dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800">
-                                            <CardContent className="p-4">
+                                            <CardContent>
                                                 <div className="flex justify-between items-start mb-2">
                                                     <span className="font-semibold text-foreground">{formatCurrency(exp.amount, userCurrency)}</span>
                                                     <Badge variant="outline" className="text-xs capitalize">{exp.category || 'other'}</Badge>
