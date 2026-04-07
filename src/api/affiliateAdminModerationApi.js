@@ -14,6 +14,7 @@ export const AFFILIATE_ADMIN = {
   DECLINE: '/api/admin/decline',
   RESEND_LINK: '/api/affiliates/resend-link',
 };
+const AFFILIATE_ADMIN_MUTATION_METHOD = 'POST';
 
 /**
  * @param {string} path Absolute or root-relative API path
@@ -43,7 +44,8 @@ export async function postAffiliateAdminAuthed(path, body = {}) {
       : body;
 
   const res = await fetch(url, {
-    method: 'POST',
+    method: AFFILIATE_ADMIN_MUTATION_METHOD,
+    cache: 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',

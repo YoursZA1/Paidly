@@ -1,11 +1,14 @@
 import { supabase } from '@/lib/supabaseClient';
 import {
+  getAuditLogsSupabaseAccessForbidden,
+  markAuditLogsSupabaseAccessForbidden,
   markAuditLogsSupabaseTableMissing,
   resetAuditLogsSupabaseTableFlag,
 } from '@/lib/auditLogsSupabaseStatus';
 import { isSupabaseMissingRelationError } from '@/utils/supabaseErrorUtils';
 
 const PAIDLY_AUDIT_STORAGE_KEY = 'paidly_audit_log';
+let affiliateRowNotVisibleBreadcrumbShown = false;
 
 function stringifyMaybeJson(val) {
   if (val == null) return null;
@@ -39,8 +42,19 @@ function mapLegacyEntityToCategory(entityType) {
   return 'settings';
 }
 
+function logAffiliateRowNotVisibleOnce(context) {
+  if (affiliateRowNotVisibleBreadcrumbShown || !import.meta.env?.DEV) return;
+  affiliateRowNotVisibleBreadcrumbShown = true;
+  console.info(
+    `[dev breadcrumb] affiliate row not visible after write (${context}). Likely RLS or select visibility; operation may still have succeeded.`
+  );
+}
+
 /** Pulls Supabase `audit_logs` (never permanently skipped — old localStorage flag caused empty DB forever). */
 async function fetchAuditLogRowsFromSupabase(limit) {
+  if (getAuditLogsSupabaseAccessForbidden()) {
+    return [];
+  }
   try {
     const ordered = await supabase
       .from('audit_logs')
@@ -57,6 +71,10 @@ async function fetchAuditLogRowsFromSupabase(limit) {
       console.warn(
         '[paidly] public.audit_logs is missing — apply repo migration `supabase/migrations/20260404150100_audit_logs.sql` (e.g. `supabase db push` or SQL Editor). Until then, only local / unified audit entries will show.'
       );
+      return [];
+    }
+    if (ordered.error && String(ordered.error.code || '') === '42501') {
+      markAuditLogsSupabaseAccessForbidden();
       return [];
     }
 
@@ -77,6 +95,10 @@ async function fetchAuditLogRowsFromSupabase(limit) {
       console.warn(
         '[paidly] public.audit_logs is missing — apply `supabase/migrations/20260404150100_audit_logs.sql`.'
       );
+      return [];
+    }
+    if (fallback.error && String(fallback.error.code || '') === '42501') {
+      markAuditLogsSupabaseAccessForbidden();
       return [];
     }
 
@@ -578,12 +600,15 @@ async function create(entityName, payload) {
   let data;
   let error;
   for (const table of tableCandidates) {
-    const result = await supabase.from(table).insert(toInsert).select().single();
-    data = result.data;
+    const result = await supabase.from(table).insert(toInsert).select().limit(1);
+    data = Array.isArray(result.data) ? result.data[0] : result.data;
     error = result.error;
     if (!error) break;
   }
   if (error) throw error;
+  if (entityName === 'AffiliateSubmission' && !data) {
+    logAffiliateRowNotVisibleOnce('create');
+  }
   return normalizeEntity(entityName, data);
 }
 
@@ -593,8 +618,8 @@ async function update(entityName, id, payload) {
   let data;
   let error;
   for (const table of tableCandidates) {
-    const result = await supabase.from(table).update(toUpdate).eq('id', id).select().single();
-    data = result.data;
+    const result = await supabase.from(table).update(toUpdate).eq('id', id).select().limit(1);
+    data = Array.isArray(result.data) ? result.data[0] : result.data;
     error = result.error;
     if (!error) break;
   }
@@ -605,13 +630,16 @@ async function update(entityName, id, payload) {
     if (status === 'approved') retryPatch.status = 'approved';
     if (status === 'declined') retryPatch.status = 'rejected';
     for (const table of tableCandidates) {
-      const result = await supabase.from(table).update(retryPatch).eq('id', id).select().single();
-      data = result.data;
+      const result = await supabase.from(table).update(retryPatch).eq('id', id).select().limit(1);
+      data = Array.isArray(result.data) ? result.data[0] : result.data;
       error = result.error;
       if (!error) break;
     }
   }
   if (error) throw error;
+  if (entityName === 'AffiliateSubmission' && !data) {
+    logAffiliateRowNotVisibleOnce('update');
+  }
 
   // Keep canonical affiliate profile in sync so /dashboard/affiliate and commission webhooks match admin edits.
   if (entityName === 'AffiliateSubmission') {

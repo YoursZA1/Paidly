@@ -2,7 +2,9 @@
 
 import { supabase } from '@/lib/supabaseClient';
 import {
+  getAuditLogsSupabaseAccessForbidden,
   getAuditLogsSupabaseTableMissing,
+  markAuditLogsSupabaseAccessForbidden,
   markAuditLogsSupabaseTableMissing,
 } from '@/lib/auditLogsSupabaseStatus';
 import { isSupabaseMissingRelationError } from '@/utils/supabaseErrorUtils';
@@ -49,7 +51,7 @@ export function logAction({ actor, action, category, description, after, before,
     actor?.full_name ||
     actor?.display_name ||
     (actor?.email ? String(actor.email).split('@')[0] : null);
-  if (!getAuditLogsSupabaseTableMissing()) {
+  if (!getAuditLogsSupabaseTableMissing() && !getAuditLogsSupabaseAccessForbidden()) {
     void supabase
       .from('audit_logs')
       .insert({
@@ -66,6 +68,8 @@ export function logAction({ actor, action, category, description, after, before,
       .then(({ error }) => {
         if (error && isSupabaseMissingRelationError(error)) {
           markAuditLogsSupabaseTableMissing();
+        } else if (error && String(error.code || '') === '42501') {
+          markAuditLogsSupabaseAccessForbidden();
         } else if (error && import.meta.env?.DEV) {
           console.warn('[audit] audit_logs insert:', error.message);
         }
