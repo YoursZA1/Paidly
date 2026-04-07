@@ -33,14 +33,21 @@ export async function buildAffiliateDashboardPayload(supabase, userId) {
       },
       summary: { signups: 0, paid_users: 0, earnings: 0 },
       recentCommissions: [],
+      recentReferrals: [],
     };
   }
 
   const aid = affiliate.id;
 
-  const [clicksRes, referralsRes, commissionsRes] = await Promise.all([
+  const [clicksRes, referralsRes, recentReferralsRes, commissionsRes] = await Promise.all([
     supabase.from("affiliate_clicks").select("id", { count: "exact", head: true }).eq("affiliate_id", aid),
     supabase.from("referrals").select("id, status").eq("affiliate_id", aid),
+    supabase
+      .from("referrals")
+      .select("id, referred_user_id, status, created_at")
+      .eq("affiliate_id", aid)
+      .order("created_at", { ascending: false })
+      .limit(20),
     supabase
       .from("commissions")
       .select("id, amount, status, created_at")
@@ -84,6 +91,7 @@ export async function buildAffiliateDashboardPayload(supabase, userId) {
       earnings: earningsTotal,
     },
     recentCommissions: commissions,
+    recentReferrals: recentReferralsRes.data || [],
     referralsError: referralsRes.error?.message,
   };
 }

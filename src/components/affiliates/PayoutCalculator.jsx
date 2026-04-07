@@ -76,8 +76,13 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
       toast.error('No eligible subscription commission rows for payout (check affiliate partner id and source).');
       return;
     }
+    if (!Number.isFinite(Number(payoutCommissionPct)) || Number(payoutCommissionPct) <= 0) {
+      toast.error('Set a valid commission rate greater than 0%.');
+      return;
+    }
     createMutation.mutate({
       affiliate_id: partnerAffiliateId,
+      referral_id: affiliate.id,
       affiliate_name: affiliate.applicant_name,
       affiliate_email: affiliate.applicant_email,
       referral_code: affiliate.referral_code || null,
@@ -111,7 +116,7 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label>Gross amount (derived)</Label>
+              <Label>Gross amount (from approved paying referrals)</Label>
               <Input type="number" value={Number(grossAmount || 0).toFixed(2)} disabled />
             </div>
             <div className="grid gap-2">

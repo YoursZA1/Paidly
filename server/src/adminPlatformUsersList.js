@@ -97,11 +97,18 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
         authUser.user_metadata?.role ||
         "user"
     ).toLowerCase();
+    const um = authUser.user_metadata || {};
+    const invitedByRaw = um.invited_by;
+    const invited_by =
+      typeof invitedByRaw === "string" && invitedByRaw.trim()
+        ? invitedByRaw.trim().toLowerCase()
+        : null;
     return {
       id: authUser.id,
       email,
       full_name: full_name || email || "—",
       role,
+      invited_by,
       email_verified: ev.email_verified,
       email_confirmed_at: ev.email_confirmed_at,
       app_metadata: authUser.app_metadata || {},

@@ -286,14 +286,21 @@ async function fetchAffiliateDashboardFromSupabase() {
       stats: { clicks: 0, signups: 0, subscribed: 0, paidUsers: 0, earningsPending: 0, earningsPaid: 0 },
       summary: { signups: 0, paid_users: 0, earnings: 0 },
       recentCommissions: [],
+      recentReferrals: [],
     };
   }
 
   const aid = affiliate.id;
 
-  const [clicksRes, referralsRes, commissionsRes] = await Promise.all([
+  const [clicksRes, referralsRes, recentReferralsRes, commissionsRes] = await Promise.all([
     supabase.from("affiliate_clicks").select("id", { count: "exact", head: true }).eq("affiliate_id", aid),
     supabase.from("referrals").select("id, status").eq("affiliate_id", aid),
+    supabase
+      .from("referrals")
+      .select("id, referred_user_id, status, created_at")
+      .eq("affiliate_id", aid)
+      .order("created_at", { ascending: false })
+      .limit(20),
     supabase
       .from("commissions")
       .select("id, amount, status, created_at")
@@ -332,6 +339,7 @@ async function fetchAffiliateDashboardFromSupabase() {
     },
     summary: { signups, paid_users: paidUsers, earnings: earningsTotal },
     recentCommissions: commissions,
+    recentReferrals: recentReferralsRes.data || [],
     referralsError: referralsRes.error?.message,
   };
 }

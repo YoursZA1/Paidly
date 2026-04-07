@@ -289,13 +289,21 @@ function normalizeEntity(entityName, row) {
 
   if (entityName === 'AffiliatePayout') {
     const src = String(row.source || '');
-    let period_month = null;
-    const m = src.match(/period=([^|]+)/);
-    if (m) period_month = m[1];
+    const readTag = (key) => {
+      const m = src.match(new RegExp(`${key}=([^|]+)`));
+      return m ? decodeURIComponent(m[1]) : null;
+    };
+    const period_month = readTag('period');
+    const grossAmount = Number(readTag('gross'));
+    const referralsCount = Number(readTag('referrals'));
+    const sourceRate = Number(readTag('rate'));
     return {
       ...row,
       commission_amount: Number(row.amount ?? row.commission_amount ?? 0),
       period_month,
+      gross_amount: Number.isFinite(grossAmount) ? grossAmount : null,
+      referrals_count: Number.isFinite(referralsCount) ? referralsCount : null,
+      commission_rate: Number.isFinite(sourceRate) ? sourceRate : row.commission_rate ?? null,
     };
   }
 
@@ -368,10 +376,20 @@ function denormalizeEntity(entityName, payload) {
       payload.commission_rate != null && payload.commission_rate !== ''
         ? String(payload.commission_rate).trim()
         : '';
+    const gross =
+      payload.gross_amount != null && payload.gross_amount !== ''
+        ? String(payload.gross_amount).trim()
+        : '';
+    const referrals =
+      payload.referrals_count != null && payload.referrals_count !== ''
+        ? String(payload.referrals_count).trim()
+        : '';
     const parts = ['payout_batch'];
-    if (period) parts.push(`period=${period}`);
-    if (rate) parts.push(`rate=${rate}`);
-    if (notes) parts.push(`notes=${notes}`);
+    if (period) parts.push(`period=${encodeURIComponent(period)}`);
+    if (rate) parts.push(`rate=${encodeURIComponent(rate)}`);
+    if (gross) parts.push(`gross=${encodeURIComponent(gross)}`);
+    if (referrals) parts.push(`referrals=${encodeURIComponent(referrals)}`);
+    if (notes) parts.push(`notes=${encodeURIComponent(notes)}`);
     const source = parts.join('|').slice(0, 2000);
 
     return {

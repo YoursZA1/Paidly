@@ -1746,7 +1746,7 @@ app.post("/api/admin/invite-user", async (req, res) => {
     let inviteRole = String(parsed.role || "management").trim().toLowerCase();
     if (!staffInviteRoles.has(inviteRole)) inviteRole = "management";
 
-    const meta = sanitizeInviteMetadata(parsed.full_name, inviteRole, parsed.plan);
+    const meta = sanitizeInviteMetadata(parsed.full_name, inviteRole, parsed.plan, adminUser.id);
 
     const origin =
       (typeof parsed.redirect_to === "string" &&

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -12,9 +12,25 @@ import { ROLE_LABELS, ROLES, STAFF_ROLES } from '@/lib/permissions';
 
 const INVITE_ROLES = [...STAFF_ROLES];
 
+function formatLastSignIn(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return '—';
+  }
+}
+
+function inviterMatches(u, inviterId) {
+  if (!inviterId || u?.invited_by == null || u.invited_by === '') return false;
+  return String(u.invited_by).toLowerCase() === String(inviterId).toLowerCase();
+}
+
 export default function TeamMembers() {
   const queryClient = useQueryClient();
-  const { sendUserInvite } = useAuth();
+  const { sendUserInvite, user, session } = useAuth();
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState(ROLES.MANAGEMENT);
@@ -35,6 +51,18 @@ export default function TeamMembers() {
   const staff = users.filter((u) =>
     INVITE_ROLES.includes((u.role || '').toLowerCase())
   );
+
+  const myId = user?.id || session?.user?.id || null;
+
+  const { signedInInvitees, pendingInvitees } = useMemo(() => {
+    const mine = myId ? staff.filter((u) => inviterMatches(u, myId)) : [];
+    const signedIn = mine.filter((u) => u.last_sign_in_at);
+    const pending = mine.filter((u) => !u.last_sign_in_at);
+    return {
+      signedInInvitees: signedIn,
+      pendingInvitees: pending,
+    };
+  }, [staff, myId]);
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -131,8 +159,68 @@ export default function TeamMembers() {
         </Button>
       </form>
 
+      {myId ? (
+        <div className="space-y-6">
+          <div>
+            <p className="mb-1 text-sm font-medium">People you invited — signed in</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Shows teammates who accepted your invite and have completed at least one sign-in. New invites include
+              attribution; older invites may not appear here.
+            </p>
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : signedInInvitees.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No attributed invitees with a sign-in yet. Send an invite above, or check pending below.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {signedInInvitees.map((u) => (
+                  <li
+                    key={u.id}
+                    className="flex flex-col gap-1 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                  >
+                    <span className="font-medium">{u.full_name || u.email}</span>
+                    <span className="text-muted-foreground">
+                      {ROLE_LABELS[u.role] || u.role} · {u.email}
+                    </span>
+                    <span className="text-xs text-muted-foreground sm:text-sm">
+                      Last sign-in: {formatLastSignIn(u.last_sign_in_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium">People you invited — awaiting first sign-in</p>
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : pendingInvitees.length === 0 ? (
+              <p className="text-sm text-muted-foreground">None pending.</p>
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {pendingInvitees.map((u) => (
+                  <li
+                    key={u.id}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium">{u.full_name || u.email}</span>
+                    <span className="text-muted-foreground">
+                      {ROLE_LABELS[u.role] || u.role} · {u.email}
+                    </span>
+                    <span className="text-xs text-amber-700 dark:text-amber-400">Invite sent — not signed in yet</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <div>
-        <p className="mb-2 text-sm font-medium">Dashboard accounts (staff roles)</p>
+        <p className="mb-2 text-sm font-medium">All dashboard accounts (staff roles)</p>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : staff.length === 0 ? (
@@ -140,11 +228,21 @@ export default function TeamMembers() {
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {staff.map((u) => (
-              <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+              <li
+                key={u.id}
+                className="flex flex-col gap-1 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
+              >
                 <span className="font-medium">{u.full_name || u.email}</span>
                 <span className="text-muted-foreground">
                   {ROLE_LABELS[u.role] || u.role} · {u.email}
                 </span>
+                {u.last_sign_in_at ? (
+                  <span className="text-xs text-muted-foreground">
+                    Last sign-in: {formatLastSignIn(u.last_sign_in_at)}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No sign-in yet</span>
+                )}
               </li>
             ))}
           </ul>

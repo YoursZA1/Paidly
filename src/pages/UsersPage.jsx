@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
@@ -23,6 +23,7 @@ import PlanBadge from '@/components/dashboard/PlanBadge';
 import UserFormDialog from '@/components/users/UserFormDialog';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
+import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 
 export default function UsersPage() {
   const { user: currentUser } = useCurrentUser();
@@ -46,6 +47,16 @@ export default function UsersPage() {
 
   const usersFetching = useIsFetching({ queryKey: ['platform-users'] }) > 0;
 
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => paidly.entities.Invoice.list('-created_date', 500),
+    refetchInterval: 30000,
+  });
+
+  const usersWithInvoiceCounts = useMemo(() => {
+    return mergeUsersWithInvoiceCounts(users, invoices);
+  }, [users, invoices]);
+
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => paidly.entities.PlatformUser.update(id, data),
     onSuccess: () => {
@@ -55,7 +66,7 @@ export default function UsersPage() {
     onError: (err) => toast.error(err?.message || 'Update failed'),
   });
 
-  const filtered = users.filter((u) => {
+  const filtered = usersWithInvoiceCounts.filter((u) => {
     const matchSearch =
       !search ||
       (u.full_name || '').toLowerCase().includes(search.toLowerCase()) ||

@@ -61,6 +61,17 @@ const statusStyles = {
   paid: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
 };
 
+const referralStatusStyles = {
+  signed_up: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
+  subscribed: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
+  paid: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+};
+
+function toStatusLabel(status) {
+  if (!status) return "unknown";
+  return String(status).replace(/_/g, " ");
+}
+
 /**
  * In-app affiliate hub — dashboard payload lives in Zustand (`useAffiliateDashboardStore`); updates use `set({ affiliateData })`, never in-place mutation.
  */
@@ -121,6 +132,7 @@ export default function AffiliateDashboard() {
   const affiliate = payload?.affiliate;
   const stats = payload?.stats;
   const recentCommissions = payload?.recentCommissions ?? [];
+  const recentReferrals = payload?.recentReferrals ?? [];
 
   const totalEarningsBooked = useMemo(() => {
     const p = Number(stats?.earningsPending) || 0;
@@ -386,6 +398,92 @@ export default function AffiliateDashboard() {
                 ))}
               </div>
             </div>
+
+            <Card className="border-border/80">
+              <CardHeader>
+                <CardTitle className="text-lg">Recent referrals</CardTitle>
+                <CardDescription>
+                  Accounts attributed to your referral code (visible once your affiliate profile is approved).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentReferrals.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    No referrals yet. Share your link to start seeing signups here.
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-3 md:hidden">
+                      {recentReferrals.map((r) => (
+                        <div key={r.id} className="rounded-xl border border-border/60 bg-card px-4 py-3">
+                          <div className="text-xs text-muted-foreground">Referral ID</div>
+                          <div className="font-mono text-xs break-all text-foreground">
+                            {r.referred_user_id || "—"}
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              {r.created_at
+                                ? new Date(r.created_at).toLocaleDateString("en-ZA", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "—"}
+                            </span>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                referralStatusStyles[r.status] || "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {toStatusLabel(r.status)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto rounded-lg border border-border/60 md:block">
+                      <table className="w-full min-w-[560px] text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-border/60 bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                            <th className="px-4 py-3 font-medium">Date</th>
+                            <th className="px-4 py-3 font-medium">Referral ID</th>
+                            <th className="px-4 py-3 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentReferrals.map((r) => (
+                            <tr key={r.id} className="border-b border-border/40 last:border-0">
+                              <td className="px-4 py-3 text-muted-foreground tabular-nums">
+                                {r.created_at
+                                  ? new Date(r.created_at).toLocaleDateString("en-ZA", {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-xs break-all text-foreground">
+                                {r.referred_user_id || "—"}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                    referralStatusStyles[r.status] || "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {toStatusLabel(r.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
             <Card className="border-border/80">
               <CardHeader>

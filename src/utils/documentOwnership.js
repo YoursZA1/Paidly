@@ -31,3 +31,36 @@ export function countByUserId(rows) {
   }
   return m;
 }
+
+/**
+ * Merge invoice totals onto platform users with a stable fallback order:
+ * 1) Count by user id from invoice ownership fields
+ * 2) Count by user email from invoice user_email/owner_email
+ * 3) Existing profile/admin payload fallback (invoices_sent/invoices_count)
+ */
+export function mergeUsersWithInvoiceCounts(users, invoices) {
+  const safeUsers = Array.isArray(users) ? users : [];
+  const invoiceCountByUser = countByUserId(invoices);
+  const invoiceCountByEmail = new Map();
+
+  for (const inv of Array.isArray(invoices) ? invoices : []) {
+    const email = String(inv?.user_email || inv?.owner_email || '')
+      .trim()
+      .toLowerCase();
+    if (!email) continue;
+    invoiceCountByEmail.set(email, Number(invoiceCountByEmail.get(email) || 0) + 1);
+  }
+
+  return safeUsers.map((u) => {
+    const email = String(u?.email || '')
+      .trim()
+      .toLowerCase();
+    const byUid = Number(invoiceCountByUser.get(String(u?.id || '')) || 0);
+    const byEmail = Number(invoiceCountByEmail.get(email) || 0);
+    const profileFallback = Number(u?.invoices_sent ?? u?.invoices_count ?? 0);
+    return {
+      ...u,
+      invoices_sent: byUid || byEmail || profileFallback,
+    };
+  });
+}

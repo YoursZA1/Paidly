@@ -30,6 +30,9 @@ export default function PayoutsTable() {
               <th className="text-left px-6 py-3 font-medium">Affiliate</th>
               <th className="text-left px-6 py-3 font-medium">Code</th>
               <th className="text-left px-6 py-3 font-medium">Period</th>
+              <th className="text-left px-6 py-3 font-medium">Rate</th>
+              <th className="text-left px-6 py-3 font-medium">Approved Referrals</th>
+              <th className="text-left px-6 py-3 font-medium">Gross</th>
               <th className="text-left px-6 py-3 font-medium">Commission</th>
               <th className="text-left px-6 py-3 font-medium">Status</th>
               <th className="text-right px-6 py-3 font-medium">Actions</th>
@@ -44,6 +47,9 @@ export default function PayoutsTable() {
                 </td>
                 <td className="px-6 py-4 text-xs font-mono">{p.referral_code || '—'}</td>
                 <td className="px-6 py-4 text-sm text-muted-foreground">{p.period_month || '—'}</td>
+                <td className="px-6 py-4 text-sm">{p.commission_rate != null ? `${Number(p.commission_rate).toFixed(2)}%` : '—'}</td>
+                <td className="px-6 py-4 text-sm">{p.referrals_count ?? '—'}</td>
+                <td className="px-6 py-4 text-sm">R {Number(p.gross_amount ?? 0).toFixed(2)}</td>
                 <td className="px-6 py-4 text-sm font-medium">R {Number(p.commission_amount ?? p.amount ?? 0).toFixed(2)}</td>
                 <td className="px-6 py-4"><StatusBadge status={p.status || 'pending'} /></td>
                 <td className="px-6 py-4 text-right">
@@ -71,7 +77,7 @@ export default function PayoutsTable() {
             ))}
             {payouts.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-sm">
                   {isLoading ? 'Loading payouts...' : 'No payouts yet'}
                 </td>
               </tr>

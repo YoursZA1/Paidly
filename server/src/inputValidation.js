@@ -145,12 +145,22 @@ export function isStrongPassword(password) {
   return hasUpper && hasLower && hasDigit && hasSymbol;
 }
 
-export function sanitizeInviteMetadata(fullName, role, plan) {
-  return {
+/**
+ * @param {string} [invitedByUserId] — auth user id of the teammate who sent the invite (stored in invitee user_metadata).
+ */
+export function sanitizeInviteMetadata(fullName, role, plan, invitedByUserId) {
+  const out = {
     full_name: sanitizeOneLine(typeof fullName === "string" ? fullName : "", 200),
     role: sanitizeOneLine(typeof role === "string" ? role : "user", 32),
     plan: sanitizeOneLine(typeof plan === "string" ? plan : "free", 64),
   };
+  if (typeof invitedByUserId === "string") {
+    const id = invitedByUserId.trim().toLowerCase();
+    if (isValidUuid(id)) {
+      out.invited_by = id;
+    }
+  }
+  return out;
 }
 
 /** PayFast custom fields: printable ASCII, bounded length (avoid log/DB injection noise). */

@@ -114,7 +114,8 @@ export async function handleVercelAdminInviteUserPost(req, res) {
   const meta = sanitizeInviteMetadata(
     parsed.data.full_name,
     inviteRole,
-    parsed.data.plan
+    parsed.data.plan,
+    authData.user.id
   );
 
   const origin =

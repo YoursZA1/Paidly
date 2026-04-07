@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { supabase } from '@/lib/supabaseClient';
-import { countByUserId } from '@/utils/documentOwnership';
+import { countByUserId, mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import {
   EMPTY_AFFILIATE_ADMIN_BUNDLE,
   normalizeAffiliateAdminQueryResult,
@@ -320,6 +320,7 @@ export default function AdminV2Dashboard() {
   const totalQuotes = quotes.length;
   const totalPayslips = payslips.length;
   const userBehaviorRows = useMemo(() => {
+    const usersWithInvoiceCounts = mergeUsersWithInvoiceCounts(users, invoices);
     const subByUserId = new Map(
       subscriptions
         .filter((s) => s.user_id)
@@ -330,25 +331,15 @@ export default function AdminV2Dashboard() {
         .filter((s) => s.user_email || s.email)
         .map((s) => [String(s.user_email || s.email).toLowerCase(), s])
     );
-    const invoiceCountByUser = countByUserId(invoices);
     const quoteCountByUser = countByUserId(quotes);
     const payslipCountByUser = countByUserId(payslips);
-    const invoiceCountByEmail = new Map();
-    for (const inv of invoices) {
-      const email = String(inv?.user_email || inv?.owner_email || '').trim().toLowerCase();
-      if (email) invoiceCountByEmail.set(email, Number(invoiceCountByEmail.get(email) || 0) + 1);
-    }
-
-    return users
+    return usersWithInvoiceCounts
       .map((u) => {
         const email = String(u.email || '').toLowerCase();
         const sub =
           subByUserId.get(String(u.id)) ||
           (email ? subByEmail.get(email) : null) ||
           null;
-        const byUid = Number(invoiceCountByUser.get(String(u.id)) || 0);
-        const byEmail = Number(invoiceCountByEmail.get(email) || 0);
-        const profileFallback = Number(u.invoices_sent ?? u.invoices_count ?? 0);
         return {
           id: u.id,
           full_name: u.full_name || '—',
@@ -357,7 +348,7 @@ export default function AdminV2Dashboard() {
           company_name: u.company_name || u.company || '—',
           plan: u.plan || u.subscription_plan || 'none',
           status: u.status || 'active',
-          invoices_sent: byUid || byEmail || profileFallback,
+          invoices_sent: Number(u.invoices_sent || 0),
           quotes_created: Number(quoteCountByUser.get(String(u.id)) || 0),
           payslips_created: Number(payslipCountByUser.get(String(u.id)) || 0),
           subscription_status: sub?.status || 'none',
