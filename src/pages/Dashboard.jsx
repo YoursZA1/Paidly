@@ -41,7 +41,6 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { NumberTicker } from "@/components/dashboard/NumberTicker";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import WelcomeGuide from '@/components/shared/WelcomeGuide';
 import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
 import KPICarousel from '@/components/dashboard/KPICarousel';
 import GoalProgress from '@/components/dashboard/GoalProgress';
@@ -1545,9 +1544,6 @@ export default function Dashboard() {
     return (status || 'draft').replace('_', ' ');
   };
 
-  const isProfileComplete = Boolean(user?.company_name && user?.company_address && user?.logo_url);
-  const showWelcomeBanner =
-    !isProfileComplete || (bankingCheckResolved && !hasBankingDetails);
   const today = startOfDay(new Date());
   const endOfThisWeek = new Date(today);
   endOfThisWeek.setDate(endOfThisWeek.getDate() + 7);
@@ -1825,15 +1821,6 @@ export default function Dashboard() {
           </div>
         )}
         
-        {user && !isLoading && showWelcomeBanner && (
-          <div className="glass-card rounded-fintech border border-border mb-6 overflow-hidden">
-            <WelcomeGuide
-              user={user}
-              hasBankingDetails={bankingCheckResolved ? hasBankingDetails : true}
-            />
-          </div>
-        )}
-
         {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Recent Invoices), 30% right (Setup, Quick Creator, annual target card, Transactions) */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
           {/* Left Column (70%) — Revenue trend + Recent Invoices */}

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
 
 /**
@@ -118,7 +118,7 @@ const AUTH_ROUTES = [
 
 // --- Main App Pages ---
 const MAIN_ROUTES = [
-    { path: "/", element: <Login /> },
+    { path: "/", element: <Home /> },
     { path: "/Dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/Clients", element: <RequireAuth><Clients /></RequireAuth> },
@@ -319,28 +319,62 @@ function getPageName(pathname) {
   return clean.charAt(0).toUpperCase() + clean.slice(1) || "Dashboard";
 }
 
+const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
+    /^\/$/i,
+    /^\/home$/i,
+    /^\/auth/i,
+    /^\/login$/i,
+    /^\/signup$/i,
+    /^\/forgotpassword$/i,
+    /^\/resetpassword$/i,
+    /^\/acceptinvite$/i,
+    /^\/publicinvoice$/i,
+    /^\/publicquote$/i,
+    /^\/publicpayslip$/i,
+    /^\/view\//i,
+    /^\/clientportal$/i,
+    /^\/invoicepdf$/i,
+    /^\/privacy-policy$/i,
+    /^\/privacypolicy$/i,
+    /^\/terms/i,
+    /^\/affiliate(\/|$)/i,
+];
+
+function shouldBypassAppLayout(pathname) {
+    const p = pathname || "";
+    return PUBLIC_LAYOUT_BYPASS_PATTERNS.some((re) => re.test(p));
+}
+
 function PagesContent() {
     const location = useLocation();
     const currentPageName = getPageName(location.pathname);
+    const routes = (
+        <Suspense fallback={<RouteFallback />}>
+        <Routes>
+            {/* Auth & Public */}
+            {AUTH_ROUTES.map((route, i) => <Route key={"auth-"+i} {...route} />)}
+            {/* Main App */}
+            {MAIN_ROUTES.map((route, i) => <Route key={"main-"+i} {...route} />)}
+            {/* Invoices */}
+            {INVOICE_ROUTES.map((route, i) => <Route key={"inv-"+i} {...route} />)}
+            {/* Quotes */}
+            {QUOTE_ROUTES.map((route, i) => <Route key={"quote-"+i} {...route} />)}
+            {/* Payslips & Reports */}
+            {PAYSLIP_REPORT_ROUTES.map((route, i) => <Route key={"pay-"+i} {...route} />)}
+            {/* Admin & Support */}
+            {ADMIN_ROUTES.map((route, i) => <Route key={"admin-"+i} {...route} />)}
+            <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+        </Suspense>
+    );
+
+    if (shouldBypassAppLayout(location.pathname)) {
+        return routes;
+    }
+
     return (
         <Layout currentPageName={currentPageName}>
-            <Suspense fallback={<RouteFallback />}>
-            <Routes>
-                {/* Auth & Public */}
-                {AUTH_ROUTES.map((route, i) => <Route key={"auth-"+i} {...route} />)}
-                {/* Main App */}
-                {MAIN_ROUTES.map((route, i) => <Route key={"main-"+i} {...route} />)}
-                {/* Invoices */}
-                {INVOICE_ROUTES.map((route, i) => <Route key={"inv-"+i} {...route} />)}
-                {/* Quotes */}
-                {QUOTE_ROUTES.map((route, i) => <Route key={"quote-"+i} {...route} />)}
-                {/* Payslips & Reports */}
-                {PAYSLIP_REPORT_ROUTES.map((route, i) => <Route key={"pay-"+i} {...route} />)}
-                {/* Admin & Support */}
-                {ADMIN_ROUTES.map((route, i) => <Route key={"admin-"+i} {...route} />)}
-                <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-            </Suspense>
+            {routes}
         </Layout>
     );
 }

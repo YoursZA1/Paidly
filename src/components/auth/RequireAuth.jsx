@@ -18,7 +18,7 @@ export default function RequireAuth({ children, roles }) {
   if (!isAuthenticated) {
     return (
       <Navigate
-        to={`${createPageUrl("Login")}#sign-in`}
+        to={createPageUrl("Home")}
         replace
         state={{ from: location }}
       />
