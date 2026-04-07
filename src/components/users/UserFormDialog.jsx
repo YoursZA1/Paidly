@@ -17,6 +17,10 @@ function emptyForm() {
   return {
     full_name: '',
     email: '',
+    phone: '',
+    company_name: '',
+    company_address: '',
+    company_website: '',
     status: 'active',
     plan: 'none',
   };
@@ -36,6 +40,10 @@ export default function UserFormDialog({ open, onClose, user }) {
       setForm({
         full_name: user.full_name || '',
         email: user.email || '',
+        phone: user.phone || '',
+        company_name: user.company_name || user.company || '',
+        company_address: user.company_address || '',
+        company_website: user.company_website || '',
         status: user.status || 'active',
         plan: user.plan || 'none',
       });
@@ -47,6 +55,10 @@ export default function UserFormDialog({ open, onClose, user }) {
   const buildPayload = () => ({
     full_name: form.full_name.trim(),
     email: form.email.trim().toLowerCase(),
+    phone: form.phone.trim(),
+    company_name: form.company_name.trim(),
+    company_address: form.company_address.trim(),
+    company_website: form.company_website.trim(),
     status: form.status,
     plan: form.plan,
     subscription_plan: form.plan,
@@ -113,6 +125,44 @@ export default function UserFormDialog({ open, onClose, user }) {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="user@company.com"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="user-phone">Phone</Label>
+              <Input
+                id="user-phone"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="+27 00 000 0000"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="user-company-name">Company</Label>
+              <Input
+                id="user-company-name"
+                value={form.company_name}
+                onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                placeholder="Acme Pty Ltd"
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="user-company-address">Company address</Label>
+            <Input
+              id="user-company-address"
+              value={form.company_address}
+              onChange={(e) => setForm({ ...form, company_address: e.target.value })}
+              placeholder="123 Main Road, Cape Town"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="user-company-website">Website</Label>
+            <Input
+              id="user-company-website"
+              value={form.company_website}
+              onChange={(e) => setForm({ ...form, company_website: e.target.value })}
+              placeholder="https://example.com"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">

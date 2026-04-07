@@ -103,9 +103,7 @@ export default function SubscriptionSettings() {
     };
 
     const handleTierAction = (tier) => {
-        if (tier.id === "corporate") {
-            handleContactSales();
-        } else if (tier.id !== currentPlanId) {
+        if (tier.id !== currentPlanId) {
             handleManageBilling();
         }
     };
@@ -208,14 +206,7 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                {tier.id === "corporate" ? (
-                                    <Button
-                                        onClick={() => handleContactSales()}
-                                        className="w-full py-4 rounded-2xl font-bold bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 active:scale-[0.98]"
-                                    >
-                                        {isCurrent ? "Current Plan" : tier.buttonText}
-                                    </Button>
-                                ) : tier.id === "individual" && !isCurrent ? (
+                                {tier.id === "individual" && !isCurrent ? (
                                     <PayFastSubscriptionForm
                                         amountZar="25.00"
                                         planName="Paidly Individual Monthly"
@@ -225,6 +216,12 @@ export default function SubscriptionSettings() {
                                     <PayFastSubscriptionForm
                                         amountZar="50.00"
                                         planName="Paidly SME Monthly"
+                                        className="mt-0"
+                                    />
+                                ) : tier.id === "corporate" && !isCurrent ? (
+                                    <PayFastSubscriptionForm
+                                        amountZar="110.00"
+                                        planName="Paidly Corporate Monthly"
                                         className="mt-0"
                                     />
                                 ) : (

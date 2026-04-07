@@ -2,7 +2,8 @@
 const getPayfastApiBase = () => {
   if (import.meta.env.DEV) return "";
   const url = (import.meta.env.VITE_SERVER_URL || "").replace(/\/$/, "");
-  return url || "http://localhost:5179";
+  // Production default should be same-origin (/api on current deployment), not localhost.
+  return url;
 };
 
 const submitPayfastForm = (payfastUrl, fields) => {
@@ -30,6 +31,25 @@ const buildReturnUrl = (path) => {
 };
 
 const PayfastService = {
+  async readApiError(response, fallbackMessage) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      try {
+        const text = await response.text();
+        if (text) payload = { error: text };
+      } catch {
+        payload = null;
+      }
+    }
+    const msg =
+      payload?.error ||
+      payload?.message ||
+      `${fallbackMessage} (HTTP ${response.status})`;
+    return new Error(msg);
+  },
+
   async startOneTimePayment({
     invoiceId,
     amount,
@@ -70,8 +90,7 @@ const PayfastService = {
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || "Failed to start Payfast payment");
+      throw await this.readApiError(response, "Failed to start Payfast payment");
     }
 
     const data = await response.json();
@@ -128,8 +147,7 @@ const PayfastService = {
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || "Failed to start Payfast subscription");
+      throw await this.readApiError(response, "Failed to start Payfast subscription");
     }
 
     const data = await response.json();

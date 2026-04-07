@@ -43,7 +43,7 @@ export default function PayFastSubscriptionForm({
     e.preventDefault();
     setError(null);
     const userEmail = authUser?.email;
-    const userName = authUser?.user_metadata?.full_name || authUser?.email || "Customer";
+    const userName = authUser?.full_name || authUser?.user_metadata?.full_name || authUser?.email || "Customer";
 
     if (!userEmail) {
       setError("Please sign in to subscribe.");
