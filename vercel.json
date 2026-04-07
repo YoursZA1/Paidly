@@ -67,7 +67,7 @@
     },
     {
       "path": "/api/cron/subscription-dunning",
-      "schedule": "30 * * * *"
+      "schedule": "30 8 * * *"
     }
   ]
 }
