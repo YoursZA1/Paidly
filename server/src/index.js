@@ -1320,6 +1320,16 @@ app.post("/api/send-email", requireAuthMiddleware, async (req, res) => {
 });
 
 const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
+const PAYFAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function toPayfastBooleanFlag(value, fallback = true) {
+  if (value == null) return fallback ? "true" : "false";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  const v = String(value).trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes" || v === "on") return "true";
+  if (v === "false" || v === "0" || v === "no" || v === "off") return "false";
+  return fallback ? "true" : "false";
+}
 
 function parsePayfastWhitelist(raw) {
   return String(raw || "")
@@ -1358,11 +1368,21 @@ function addHoursIso(baseDate, hours) {
   return d.toISOString();
 }
 
+function parsePayfastYyyyMmDdToIso(raw) {
+  const s = String(raw || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toISOString();
+}
+
 async function upsertSubscriptionFromItn(supabase, payload) {
   const userId = String(payload.custom_str2 || "").trim();
   if (!isValidUuid(userId)) return;
 
   const paymentStatus = String(payload.payment_status || "").toUpperCase();
+  const eventType = String(payload.type || "").toLowerCase();
+  const isFreeTrialEvent = eventType === "subscription.free-trial";
   const cycle = String(payload.custom_str3 || "monthly").toLowerCase();
   const planRaw = String(payload.item_name || payload.custom_str1 || "subscription");
   const plan = sanitizeOneLine(planRaw.replace(/\s+plan$/i, ""), 120) || "subscription";
@@ -1373,7 +1393,10 @@ async function upsertSubscriptionFromItn(supabase, payload) {
   const amountNum = Number(payload.amount_gross ?? payload.amount ?? payload.recurring_amount ?? 0);
   const amount = Number.isFinite(amountNum) && amountNum > 0 ? amountNum : null;
   const nowIso = new Date().toISOString();
-  const nextBilling = addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
+  const nextBilling =
+    parsePayfastYyyyMmDdToIso(payload.next_run) ||
+    parsePayfastYyyyMmDdToIso(payload.billing_date) ||
+    addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
   const { data: existing } = await supabase
     .from("subscriptions")
     .select("id, failure_count, retry_interval_hours, max_retry_attempts")
@@ -1392,7 +1415,7 @@ async function upsertSubscriptionFromItn(supabase, payload) {
   );
 
   const prevFailures = Number(existing?.failure_count || 0);
-  const isSuccess = paymentStatus === "COMPLETE";
+  const isSuccess = paymentStatus === "COMPLETE" || isFreeTrialEvent;
   const nextFailures = isSuccess ? 0 : prevFailures + 1;
   const status = isSuccess
     ? "active"
@@ -1412,7 +1435,8 @@ async function upsertSubscriptionFromItn(supabase, payload) {
     ...(token ? { payfast_token: token } : {}),
     ...(isSuccess
       ? {
-          last_payment_at: nowIso,
+          // Free-trial webhook confirms subscription activation, not a paid charge.
+          last_payment_at: isFreeTrialEvent ? existing?.last_payment_at || null : nowIso,
           next_billing_date: nextBilling,
           start_date: existing ? undefined : nowIso,
           next_retry_at: null,
@@ -1459,7 +1483,12 @@ app.post("/api/payfast/subscription", (req, res) => {
     amount,
     currency,
     returnUrl,
-    cancelUrl
+    cancelUrl,
+    billingDate,
+    cycles,
+    subscriptionNotifyEmail,
+    subscriptionNotifyWebhook,
+    subscriptionNotifyBuyer
   } = parsed;
 
   const emailNorm = userEmail;
@@ -1511,8 +1540,14 @@ app.post("/api/payfast/subscription", (req, res) => {
   }
 
   const now = new Date();
-  const billingDate = now.toISOString().slice(0, 10);
+  const billingDateResolved =
+    typeof billingDate === "string" && PAYFAST_DATE_RE.test(billingDate.trim())
+      ? billingDate.trim()
+      : now.toISOString().slice(0, 10);
   const frequency = getPayfastFrequency(cycleRaw);
+  const cyclesNumber = Number(cycles);
+  const cyclesResolved =
+    Number.isFinite(cyclesNumber) && cyclesNumber >= 0 ? Math.floor(cyclesNumber) : 0;
 
   const planLabel = sanitizeOneLine(plan != null ? String(plan) : "Subscription", 120) || "Subscription";
   const userLabel = sanitizeOneLine(userName != null ? String(userName) : "", 200);
@@ -1533,11 +1568,14 @@ app.post("/api/payfast/subscription", (req, res) => {
     custom_str3: cycleRaw,
     custom_str4: currencySafe,
     email_address: emailNorm,
-    subscription_type: 1,
-    billing_date: billingDate,
+    subscription_type: 2,
+    billing_date: billingDateResolved,
     recurring_amount: amountCheck.value.toFixed(2),
     frequency,
-    cycles: 0
+    cycles: cyclesResolved,
+    subscription_notify_email: toPayfastBooleanFlag(subscriptionNotifyEmail, true),
+    subscription_notify_webhook: toPayfastBooleanFlag(subscriptionNotifyWebhook, true),
+    subscription_notify_buyer: toPayfastBooleanFlag(subscriptionNotifyBuyer, true)
   };
 
   payload.signature = signPayfastPayload(payload, passphrase);

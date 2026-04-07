@@ -56,6 +56,11 @@ export const payfastSubscriptionBodySchema = z.object({
   currency: z.string().optional(),
   returnUrl: z.union([z.string(), z.null()]).optional(),
   cancelUrl: z.union([z.string(), z.null()]).optional(),
+  billingDate: z.union([z.string(), z.null()]).optional(),
+  cycles: z.union([z.number(), z.string(), z.null()]).optional(),
+  subscriptionNotifyEmail: z.union([z.boolean(), z.string(), z.null()]).optional(),
+  subscriptionNotifyWebhook: z.union([z.boolean(), z.string(), z.null()]).optional(),
+  subscriptionNotifyBuyer: z.union([z.boolean(), z.string(), z.null()]).optional(),
 });
 
 /** POST /api/payfast/once */
