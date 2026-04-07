@@ -29,6 +29,7 @@ function getSettingsReturnUrl() {
 export default function PayFastSubscriptionForm({
   amountZar = DEFAULT_AMOUNT_ZAR,
   planName = "Paidly Pro Monthly",
+  ctaLabel = "Upgrade to Pro",
   processUrl,
   className = "",
 }) {
@@ -103,7 +104,7 @@ export default function PayFastSubscriptionForm({
             Redirecting to PayFast…
           </>
         ) : (
-          <>Upgrade to Pro (R{amountZar}/mo)</>
+          <>{ctaLabel} (R{amountZar}/mo)</>
         )}
       </button>
     </form>
@@ -115,6 +116,7 @@ export { getSettingsReturnUrl, PAYFAST_PROCESS_URL, PAYFAST_SANDBOX_URL };
 PayFastSubscriptionForm.propTypes = {
   amountZar: PropTypes.string,
   planName: PropTypes.string,
+  ctaLabel: PropTypes.string,
   processUrl: PropTypes.string,
   className: PropTypes.string,
 };

@@ -222,6 +222,7 @@ export default function SubscriptionSettings() {
                                     <PayFastSubscriptionForm
                                         amountZar="110.00"
                                         planName="Paidly Corporate Monthly"
+                                        ctaLabel="Upgrade to Pro +"
                                         className="mt-0"
                                     />
                                 ) : (

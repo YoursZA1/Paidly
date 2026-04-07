@@ -1321,6 +1321,130 @@ app.post("/api/send-email", requireAuthMiddleware, async (req, res) => {
 
 const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
 
+function parsePayfastWhitelist(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function payfastItnIpAllowed(req) {
+  const allowed = parsePayfastWhitelist(process.env.PAYFAST_ITN_IP_WHITELIST);
+  if (allowed.length === 0) return true;
+  const ip = String(getClientIp(req) || "").trim();
+  if (!ip) return false;
+  return allowed.includes(ip);
+}
+
+function addMonthsIso(baseDate, months) {
+  const d = new Date(baseDate);
+  if (!Number.isFinite(d.getTime())) return null;
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString();
+}
+
+function monthsFromBillingCycle(cycle) {
+  const c = String(cycle || "monthly").toLowerCase();
+  if (c === "annual") return 12;
+  if (c === "biannual") return 6;
+  if (c === "quarterly") return 3;
+  return 1;
+}
+
+function addHoursIso(baseDate, hours) {
+  const d = new Date(baseDate);
+  if (!Number.isFinite(d.getTime())) return null;
+  d.setTime(d.getTime() + Math.max(1, Number(hours || 24)) * 60 * 60 * 1000);
+  return d.toISOString();
+}
+
+async function upsertSubscriptionFromItn(supabase, payload) {
+  const userId = String(payload.custom_str2 || "").trim();
+  if (!isValidUuid(userId)) return;
+
+  const paymentStatus = String(payload.payment_status || "").toUpperCase();
+  const cycle = String(payload.custom_str3 || "monthly").toLowerCase();
+  const planRaw = String(payload.item_name || payload.custom_str1 || "subscription");
+  const plan = sanitizeOneLine(planRaw.replace(/\s+plan$/i, ""), 120) || "subscription";
+  const token = sanitizeOneLine(
+    String(payload.token || payload.token_id || payload.subscription_token || ""),
+    256
+  );
+  const amountNum = Number(payload.amount_gross ?? payload.amount ?? payload.recurring_amount ?? 0);
+  const amount = Number.isFinite(amountNum) && amountNum > 0 ? amountNum : null;
+  const nowIso = new Date().toISOString();
+  const nextBilling = addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
+  const { data: existing } = await supabase
+    .from("subscriptions")
+    .select("id, failure_count, retry_interval_hours, max_retry_attempts")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const suspendAfter = Math.max(
+    1,
+    Number(existing?.max_retry_attempts || process.env.PAYFAST_SUBSCRIPTION_SUSPEND_AFTER || 3)
+  );
+  const retryHours = Math.max(
+    1,
+    Number(existing?.retry_interval_hours || process.env.PAYFAST_RETRY_INTERVAL_HOURS || 24)
+  );
+
+  const prevFailures = Number(existing?.failure_count || 0);
+  const isSuccess = paymentStatus === "COMPLETE";
+  const nextFailures = isSuccess ? 0 : prevFailures + 1;
+  const status = isSuccess
+    ? "active"
+    : nextFailures >= suspendAfter
+      ? "canceled"
+      : "past_due";
+
+  const row = {
+    user_id: userId,
+    status,
+    plan,
+    current_plan: plan,
+    billing_cycle: cycle,
+    provider: "payfast",
+    updated_at: nowIso,
+    ...(amount != null ? { amount, custom_price: amount } : {}),
+    ...(token ? { payfast_token: token } : {}),
+    ...(isSuccess
+      ? {
+          last_payment_at: nowIso,
+          next_billing_date: nextBilling,
+          start_date: existing ? undefined : nowIso,
+          next_retry_at: null,
+          dunning_stage: 0,
+          past_due_at: null,
+          canceled_at: null,
+          last_payment_failure_at: null,
+        }
+      : {
+          next_retry_at: addHoursIso(nowIso, retryHours) || nowIso,
+          dunning_stage: nextFailures,
+          past_due_at: nowIso,
+          last_payment_failure_at: nowIso,
+        }),
+    failure_count: nextFailures,
+  };
+  Object.keys(row).forEach((k) => row[k] === undefined && delete row[k]);
+
+  if (existing?.id) {
+    await supabase.from("subscriptions").update(row).eq("id", existing.id);
+  } else {
+    await supabase.from("subscriptions").insert({
+      email: sanitizeOneLine(String(payload.email_address || ""), 320) || "unknown@paidly.local",
+      user_email: sanitizeOneLine(String(payload.email_address || ""), 320) || "unknown@paidly.local",
+      full_name: sanitizeOneLine(String(payload.name_first || ""), 200) || null,
+      user_name: sanitizeOneLine(String(payload.name_first || ""), 200) || null,
+      ...row,
+      created_at: nowIso,
+    });
+  }
+}
+
 app.post("/api/payfast/subscription", (req, res) => {
   const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
   if (!parsed) return;
@@ -1364,7 +1488,19 @@ app.post("/api/payfast/subscription", (req, res) => {
   const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
   const passphrase = process.env.PAYFAST_PASSPHRASE || "";
-  const notifyUrl = process.env.PAYFAST_NOTIFY_URL || returnUrl;
+  let defaultSubscriptionNotifyUrl = returnUrl;
+  try {
+    if (returnUrl) {
+      const origin = new URL(String(returnUrl)).origin;
+      defaultSubscriptionNotifyUrl = `${origin}/payfast/subscription/itn`;
+    }
+  } catch {
+    /* keep returnUrl fallback */
+  }
+  const notifyUrl =
+    process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL ||
+    process.env.PAYFAST_NOTIFY_URL ||
+    defaultSubscriptionNotifyUrl;
   const returnUrlResolved = process.env.PAYFAST_RETURN_URL || returnUrl;
   const cancelUrlResolved = process.env.PAYFAST_CANCEL_URL || cancelUrl;
 
@@ -1533,10 +1669,57 @@ app.post("/api/payfast/once", async (req, res) => {
 });
 
 /**
- * PayFast ITN handler for one-time invoice payments.
- * Expects custom_str1 in the format "invoice:<invoiceId>" for one-time payments.
+ * PayFast ITN handler for recurring subscriptions (tokenized billing).
+ * Endpoint can be configured as PAYFAST_SUBSCRIPTION_NOTIFY_URL.
+ */
+async function handlePayfastSubscriptionItn(req, res) {
+  if (!payfastItnIpAllowed(req)) {
+    return res.status(403).send("IP not allowed");
+  }
+
+  const payload = req.body || {};
+  const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+  const signatureValid = verifyPayfastSignature(payload, passphrase);
+  if (!signatureValid) {
+    return res.status(400).send("Invalid signature");
+  }
+
+  try {
+    await upsertSubscriptionFromItn(supabaseAdmin, payload);
+
+    const paymentStatus = String(payload.payment_status || "").toUpperCase();
+    const userId = String(payload.custom_str2 || "").trim();
+    const paymentAmount = Number(payload.amount_gross ?? payload.amount ?? 0);
+    if (paymentStatus === "COMPLETE" && isValidUuid(userId) && Number.isFinite(paymentAmount) && paymentAmount > 0) {
+      try {
+        await recordSubscriptionPaymentCommission(supabaseAdmin, {
+          userId,
+          grossAmountZar: paymentAmount,
+          source: `payfast_sub_itn:${String(payload.pf_payment_id || payload.m_payment_id || "")}`,
+        });
+      } catch (e) {
+        console.error("[payfast-subscription-itn] affiliate commission failed", e?.message || e);
+      }
+    }
+    return res.status(200).send("OK");
+  } catch (err) {
+    console.error("[payfast-subscription-itn] unexpected error", err);
+    return res.status(200).send("OK");
+  }
+}
+
+app.post("/payfast/subscription/itn", handlePayfastSubscriptionItn);
+app.post("/api/payfast/subscription/itn", handlePayfastSubscriptionItn);
+
+/**
+ * PayFast ITN handler for one-time invoice payments only.
+ * Expects custom_str1 in the format "invoice:<invoiceId>".
  */
 app.post("/api/payfast/itn", async (req, res) => {
+  if (!payfastItnIpAllowed(req)) {
+    return res.status(403).send("IP not allowed");
+  }
+
   const payload = req.body || {};
   const passphrase = process.env.PAYFAST_PASSPHRASE || "";
   const signatureValid = verifyPayfastSignature(payload, passphrase);
@@ -1555,31 +1738,7 @@ app.post("/api/payfast/itn", async (req, res) => {
   }
 
   const customStr1 = String(payload.custom_str1 || "");
-  const userIdFromSub = String(payload.custom_str2 || "").trim();
-
   if (!customStr1.startsWith("invoice:")) {
-    if (isValidUuid(userIdFromSub)) {
-      const paymentAmountRaw = payload.amount_gross ?? payload.amount;
-      const paymentAmount = Number(paymentAmountRaw);
-      if (Number.isFinite(paymentAmount) && paymentAmount > 0) {
-        try {
-          const c = await recordSubscriptionPaymentCommission(supabaseAdmin, {
-            userId: userIdFromSub,
-            grossAmountZar: paymentAmount,
-            source: `payfast_itn:${String(payload.pf_payment_id || payload.m_payment_id || "")}`,
-          });
-          console.log("[payfast-itn] Subscription / affiliate ledger", c);
-        } catch (e) {
-          console.error("[payfast-itn] Subscription affiliate commission failed", e?.message || e);
-        }
-      }
-      return res.status(200).send("OK");
-    }
-    console.log("[payfast-itn] Non-invoice ITN received", {
-      m_payment_id: payload.m_payment_id,
-      payment_status: payload.payment_status,
-      custom_str1: customStr1
-    });
     return res.status(200).send("OK");
   }
 
