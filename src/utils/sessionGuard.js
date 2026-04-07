@@ -4,6 +4,7 @@
  */
 
 const PUBLIC_PATH_PATTERNS = [
+  /^\/$/i,
   /^\/login$/i,
   /^\/auth/i,
   /^\/signup/i,

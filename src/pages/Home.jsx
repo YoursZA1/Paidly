@@ -30,6 +30,11 @@ export default function Home({
   const openLogin = useCallback(() => setLoginOpen(true), []);
 
   useEffect(() => {
+    // Open login modal if navActive is 'login' or hash is '#sign-in'
+    if (navActive === "login" || location.hash === "#sign-in") {
+      setLoginOpen(true);
+    }
+
     const params = new URLSearchParams(location.search);
     const ref = params.get("ref");
     if (ref && ref.trim()) {
@@ -37,7 +42,7 @@ export default function Home({
       setPendingReferralCode(code);
       recordAffiliateClick(code);
     }
-  }, [location.search]);
+  }, [location.search, location.hash, navActive]);
 
 
   return (

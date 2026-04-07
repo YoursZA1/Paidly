@@ -1,0 +1,177 @@
+Fetching deployment "paidly-njachci65-invoice-breek.vercel.app" in invoice-breek
+2026-04-02T21:34:47.833Z  Running build in Washington, D.C., USA (East) – iad1
+2026-04-02T21:34:47.833Z  Build machine configuration: 2 cores, 8 GB
+2026-04-02T21:34:47.970Z  Retrieving list of deployment files...
+2026-04-02T21:34:48.553Z  Downloading 1780 deployment files...
+2026-04-02T21:35:00.680Z  Restored build cache from previous deployment (5WZtM3JazeSAWiD11ggf1TXWD86L)
+2026-04-02T21:35:01.037Z  Running "vercel build"
+2026-04-02T21:35:01.684Z  Vercel CLI 50.38.1
+2026-04-02T21:35:02.983Z  Installing dependencies...
+2026-04-02T21:35:04.456Z  
+2026-04-02T21:35:04.457Z  > paidly-app@1.0.0 prepare
+2026-04-02T21:35:04.457Z  > node scripts/install-git-hooks.mjs
+2026-04-02T21:35:04.458Z  
+2026-04-02T21:35:04.498Z  [hooks] .git not found, skipping hook installation.
+2026-04-02T21:35:04.506Z  
+2026-04-02T21:35:04.507Z  up to date in 1s
+2026-04-02T21:35:04.507Z  
+2026-04-02T21:35:04.508Z  169 packages are looking for funding
+2026-04-02T21:35:04.508Z  run `npm fund` for details
+2026-04-02T21:35:04.928Z  vite v6.4.1 building for production...
+2026-04-02T21:35:05.000Z  transforming...
+2026-04-02T21:35:23.924Z  ✓ 5165 modules transformed.
+2026-04-02T21:35:25.425Z  rendering chunks...
+2026-04-02T21:35:26.272Z  [plugin vite:reporter]
+2026-04-02T21:35:26.272Z  (!) /vercel/path0/src/pages/ApplicationErrorPage.jsx is dynamically imported by /vercel/path0/src/pages/index.jsx but also statically imported by /vercel/path0/src/main.jsx, dynamic import will not move module into another chunk.
+2026-04-02T21:35:26.272Z  
+2026-04-02T21:35:27.945Z  computing gzip size...
+2026-04-02T21:35:29.124Z  dist/index.html                                                   2.50 kB │ gzip:   0.99 kB
+2026-04-02T21:35:29.125Z  dist/assets/receiptOcr.worker-Dfh3nl09.js                        18.54 kB
+2026-04-02T21:35:29.125Z  dist/assets/index-BM8sZwj_.css                                  195.65 kB │ gzip:  31.26 kB
+2026-04-02T21:35:29.125Z  dist/assets/authPasswordPolicy-w9DDi6QH.js                        0.14 kB │ gzip:   0.14 kB
+2026-04-02T21:35:29.126Z  dist/assets/adminUserDisplay-CIpZI8fe.js                          0.23 kB │ gzip:   0.17 kB
+2026-04-02T21:35:29.126Z  dist/assets/skeleton-BR4Trnma.js                                  0.25 kB │ gzip:   0.21 kB
+2026-04-02T21:35:29.126Z  dist/assets/invoiceLogic-poXQZi87.js                              0.30 kB │ gzip:   0.17 kB
+2026-04-02T21:35:29.126Z  dist/assets/useCurrentUser-BAONTwLi.js                            0.30 kB │ gzip:   0.25 kB
+2026-04-02T21:35:29.126Z  dist/assets/CreateQuote-DQEGbWk2.js                               0.38 kB │ gzip:   0.28 kB
+2026-04-02T21:35:29.127Z  dist/assets/CreateInvoice-iOJOumCb.js                             0.38 kB │ gzip:   0.29 kB
+2026-04-02T21:35:29.127Z  dist/assets/label-D_vCygPX.js                                     0.39 kB │ gzip:   0.28 kB
+2026-04-02T21:35:29.127Z  dist/assets/useServicesCatalogQuery-DuPHeXeY.js                   0.41 kB │ gzip:   0.30 kB
+2026-04-02T21:35:29.127Z  dist/assets/QuoteStatusBadge-7oBsB1iH.js                          0.43 kB │ gzip:   0.29 kB
+2026-04-02T21:35:29.127Z  dist/assets/Login-40bAwHJA.js                                     0.47 kB │ gzip:   0.30 kB
+2026-04-02T21:35:29.127Z  dist/assets/separator-DfPd-9k6.js                                 0.47 kB │ gzip:   0.31 kB
+2026-04-02T21:35:29.127Z  dist/assets/progress-BBeXIiCa.js                                  0.49 kB │ gzip:   0.34 kB
+2026-04-02T21:35:29.128Z  dist/assets/invoiceDraftStorage-D_AxXNq0.js                       0.52 kB │ gzip:   0.26 kB
+2026-04-02T21:35:29.128Z  dist/assets/PlanBadge-CiZMFgQ0.js                                 0.52 kB │ gzip:   0.32 kB
+2026-04-02T21:35:29.128Z  dist/assets/ViewQuote-Do9s181R.js                                 0.52 kB │ gzip:   0.37 kB
+2026-04-02T21:35:29.128Z  dist/assets/InvoiceStatusBadge-Bs9MBNz0.js                        0.53 kB │ gzip:   0.33 kB
+2026-04-02T21:35:29.128Z  dist/assets/HelpTooltip-CBnW1EpY.js                               0.55 kB │ gzip:   0.35 kB
+2026-04-02T21:35:29.128Z  dist/assets/currencyProfiles-Ii_Cs4oT.js                          0.55 kB │ gzip:   0.34 kB
+2026-04-02T21:35:29.128Z  dist/assets/documentBrandColors-jgIuW9eR.js                       0.56 kB │ gzip:   0.29 kB
+2026-04-02T21:35:29.130Z  dist/assets/textarea-CvlImqK_.js                                  0.62 kB │ gzip:   0.41 kB
+2026-04-02T21:35:29.130Z  dist/assets/checkbox-BoJ0-EUs.js                                  0.66 kB │ gzip:   0.40 kB
+2026-04-02T21:35:29.130Z  dist/assets/ConfirmationDialog-D3qtK6BT.js                        0.68 kB │ gzip:   0.40 kB
+2026-04-02T21:35:29.130Z  dist/assets/badge-Cw_u9vk5.js                                     0.76 kB │ gzip:   0.40 kB
+2026-04-02T21:35:29.130Z  dist/assets/switch-jB79kDRm.js                                    0.82 kB │ gzip:   0.44 kB
+2026-04-02T21:35:29.130Z  dist/assets/popover-D1uC618y.js                                   0.85 kB │ gzip:   0.45 kB
+2026-04-02T21:35:29.131Z  dist/assets/alert-CuVXhQOq.js                                     0.96 kB │ gzip:   0.49 kB
+2026-04-02T21:35:29.131Z  dist/assets/StatusBadge-nY7wEBTk.js                               0.96 kB │ gzip:   0.39 kB
+2026-04-02T21:35:29.131Z  dist/assets/card-DiVbxYGU.js                                      1.02 kB │ gzip:   0.38 kB
+2026-04-02T21:35:29.131Z  dist/assets/DocumentSendSuccessToast-BULxrsa0.js                  1.06 kB │ gzip:   0.55 kB
+2026-04-02T21:35:29.131Z  dist/assets/PageHeader-CXWpZj2N.js                                1.06 kB │ gzip:   0.56 kB
+2026-04-02T21:35:29.131Z  dist/assets/auditLogger-l7tGwZCG.js                               1.13 kB │ gzip:   0.61 kB
+2026-04-02T21:35:29.131Z  dist/assets/documentPreviewPdf-DuERnljb.js                        1.18 kB │ gzip:   0.66 kB
+2026-04-02T21:35:29.131Z  dist/assets/breadcrumb-Bi8-TTIH.js                                1.27 kB │ gzip:   0.57 kB
+2026-04-02T21:35:29.131Z  dist/assets/generateInvoicePDF-D1KJJsgb.js                        1.29 kB │ gzip:   0.75 kB
+2026-04-02T21:35:29.131Z  dist/assets/PageSkeleton-B8SGlZze.js                              1.41 kB │ gzip:   0.60 kB
+2026-04-02T21:35:29.131Z  dist/assets/DashboardRevenueChart-Y52FI7dD.js                     1.47 kB │ gzip:   0.79 kB
+2026-04-02T21:35:29.131Z  dist/assets/tabs-CIPp41Dc.js                                      1.50 kB │ gzip:   0.58 kB
+2026-04-02T21:35:29.131Z  dist/assets/table-DOdP29dm.js                                     1.60 kB │ gzip:   0.56 kB
+2026-04-02T21:35:29.131Z  dist/assets/AcceptInvite-B1UAFJRQ.js                              1.60 kB │ gzip:   0.81 kB
+2026-04-02T21:35:29.131Z  dist/assets/DueDateNotificationService-N0l9jSpQ.js                1.72 kB │ gzip:   0.80 kB
+2026-04-02T21:35:29.131Z  dist/assets/TrialSubscriptionNotificationService-DaBXkz8k.js      1.99 kB │ gzip:   1.03 kB
+2026-04-02T21:35:29.131Z  dist/assets/alert-dialog-DB8xFvFF.js                              2.03 kB │ gzip:   0.74 kB
+2026-04-02T21:35:29.131Z  dist/assets/calendar-DRrqf-x4.js                                  2.07 kB │ gzip:   0.86 kB
+2026-04-02T21:35:29.131Z  dist/assets/generatePdfFromElement-B9GuizYT.js                    2.24 kB │ gzip:   1.13 kB
+2026-04-02T21:35:29.131Z  dist/assets/QuoteReminderService-DDh2MpnK.js                      2.35 kB │ gzip:   1.25 kB
+2026-04-02T21:35:29.131Z  dist/assets/PayfastService-CG8rOHLB.js                            2.46 kB │ gzip:   0.97 kB
+2026-04-02T21:35:29.131Z  dist/assets/ViewPayslip-DFUfTaNZ.js                               2.66 kB │ gzip:   1.25 kB
+2026-04-02T21:35:29.131Z  dist/assets/fetchAdminAffiliateApplications-B-EzQB4G.js           2.75 kB │ gzip:   1.29 kB
+2026-04-02T21:35:29.132Z  dist/assets/About-DOj94A2x.js                                     2.78 kB │ gzip:   1.07 kB
+2026-04-02T21:35:29.132Z  dist/assets/ClientFollowUpService-BV2y6Xln.js                     3.06 kB │ gzip:   1.38 kB
+2026-04-02T21:35:29.132Z  dist/assets/DocumentLayout-CbR_rVT1.js                            3.06 kB │ gzip:   1.21 kB
+2026-04-02T21:35:29.132Z  dist/assets/currencyCalculations-BYJ4oYUn.js                      3.17 kB │ gzip:   1.00 kB
+2026-04-02T21:35:29.132Z  dist/assets/TurnstileChallenge-CjTnce2X.js                        3.26 kB │ gzip:   1.73 kB
+2026-04-02T21:35:29.132Z  dist/assets/select-CDcMVr8Z.js                                    3.41 kB │ gzip:   1.25 kB
+2026-04-02T21:35:29.132Z  dist/assets/PublicPayslip-CG3IMAdX.js                             3.90 kB │ gzip:   1.73 kB
+2026-04-02T21:35:29.132Z  dist/assets/AdminLayout-BKrr3Mif.js                               3.97 kB │ gzip:   1.58 kB
+2026-04-02T21:35:29.132Z  dist/assets/LogoImage-CcP985OK.js                                 4.01 kB │ gzip:   1.70 kB
+2026-04-02T21:35:29.132Z  dist/assets/ForgotPassword-Bn-JWFM0.js                            4.13 kB │ gzip:   1.64 kB
+2026-04-02T21:35:29.132Z  dist/assets/BentoDemo-DLXR3dE9.js                                 4.15 kB │ gzip:   1.52 kB
+2026-04-02T21:35:29.133Z  dist/assets/CurrencySelector-BwQfzLVW.js                          4.19 kB │ gzip:   1.69 kB
+2026-04-02T21:35:29.133Z  dist/assets/TaxService-uK3y28nx.js                                4.32 kB │ gzip:   1.76 kB
+2026-04-02T21:35:29.133Z  dist/assets/CreateRecurringInvoice-DsI-2Fa_.js                    4.43 kB │ gzip:   1.83 kB
+2026-04-02T21:35:29.133Z  dist/assets/InvoiceSendService-CvuZIoe2.js                        4.46 kB │ gzip:   1.53 kB
+2026-04-02T21:35:29.133Z  dist/assets/PrivacyPolicy-CwNwcqij.js                             4.58 kB │ gzip:   1.58 kB
+2026-04-02T21:35:29.133Z  dist/assets/ManualShareModal-C9yUiJtz.js                          4.65 kB │ gzip:   1.79 kB
+2026-04-02T21:35:29.133Z  dist/assets/TermsAndConditions-DqbMZliv.js                        5.06 kB │ gzip:   1.68 kB
+2026-04-02T21:35:29.133Z  dist/assets/PayslipPDF-DxtghYIl.js                                5.16 kB │ gzip:   1.55 kB
+2026-04-02T21:35:29.133Z  dist/assets/OutstandingBalanceService-DVPkZAAT.js                 5.26 kB │ gzip:   1.88 kB
+2026-04-02T21:35:29.133Z  dist/assets/BankingForm-BHt5xSQK.js                               5.39 kB │ gzip:   1.75 kB
+2026-04-02T21:35:29.134Z  dist/assets/AffiliateApply-B6P_uWZk.js                            5.39 kB │ gzip:   2.08 kB
+2026-04-02T21:35:29.134Z  dist/assets/platformUsersQueryFn-DGepkLak.js                      5.44 kB │ gzip:   2.04 kB
+2026-04-02T21:35:29.134Z  dist/assets/ResetPassword-By04xSwB.js                             5.50 kB │ gzip:   1.65 kB
+2026-04-02T21:35:29.134Z  dist/assets/InvoicePDF-BjoNnCNM.js                                5.95 kB │ gzip:   2.50 kB
+2026-04-02T21:35:29.134Z  dist/assets/QuotePDF-CE-EWNVt.js                                  6.02 kB │ gzip:   2.40 kB
+2026-04-02T21:35:29.134Z  dist/assets/QuoteTemplates-ByumeEk5.js                            6.15 kB │ gzip:   1.93 kB
+2026-04-02T21:35:29.134Z  dist/assets/PublicQuote-CW6O-zS2.js                               6.35 kB │ gzip:   1.97 kB
+2026-04-02T21:35:29.134Z  dist/assets/AffiliateLanding-BAmv1KIO.js                          6.45 kB │ gzip:   2.15 kB
+2026-04-02T21:35:29.134Z  dist/assets/supabase-CYfCJm1c.js                                  6.68 kB │ gzip:   2.73 kB
+2026-04-02T21:35:29.134Z  dist/assets/Vendors-DpGkqQW4.js                                   7.08 kB │ gzip:   2.40 kB
+2026-04-02T21:35:29.134Z  dist/assets/InvoicePreview-Covd763c.js                            7.17 kB │ gzip:   2.95 kB
+2026-04-02T21:35:29.136Z  dist/assets/generatePdfFromAnvil-BjNE0V6Q.js                      7.20 kB │ gzip:   2.68 kB
+2026-04-02T21:35:29.136Z  dist/assets/PublicInvoice-BhhAwqiz.js                             7.27 kB │ gzip:   2.79 kB
+2026-04-02T21:35:29.136Z  dist/assets/SettingsPage-dwysZ8IW.js                              7.38 kB │ gzip:   2.58 kB
+2026-04-02T21:35:29.136Z  dist/assets/InvoiceView-VlsSepOa.js                               7.69 kB │ gzip:   3.08 kB
+2026-04-02T21:35:29.136Z  dist/assets/CashFlowPDF-CvDMGjoF.js                               8.35 kB │ gzip:   2.21 kB
+2026-04-02T21:35:29.136Z  dist/assets/ViewDocument-BbWYryJb.js                              8.56 kB │ gzip:   3.13 kB
+2026-04-02T21:35:29.136Z  dist/assets/ReportPDF-DKyW0e1z.js                                 8.94 kB │ gzip:   3.16 kB
+2026-04-02T21:35:29.147Z  dist/assets/AuditLogService-NPxDi8zQ.js                           9.08 kB │ gzip:   3.12 kB
+2026-04-02T21:35:29.147Z  dist/assets/Notes-wKL2uarf.js                                     9.10 kB │ gzip:   2.96 kB
+2026-04-02T21:35:29.147Z  dist/assets/UsersPage-CBBlDavk.js                                 9.18 kB │ gzip:   3.10 kB
+2026-04-02T21:35:29.147Z  dist/assets/WaitlistPage-DkESe3HG.js                              9.28 kB │ gzip:   2.84 kB
+2026-04-02T21:35:29.147Z  dist/assets/AuditLogPage-B2WUIIl3.js                              9.49 kB │ gzip:   3.31 kB
+2026-04-02T21:35:29.147Z  dist/assets/Budgets-Z8VscXuJ.js                                   9.59 kB │ gzip:   3.57 kB
+2026-04-02T21:35:29.147Z  dist/assets/Reports-Dq5-bx11.js                                  10.33 kB │ gzip:   2.79 kB
+2026-04-02T21:35:29.147Z  dist/assets/DocumentCatalogPicker-CpwFNqyl.js                    10.49 kB │ gzip:   3.85 kB
+2026-04-02T21:35:29.148Z  dist/assets/AnimatedIconsDemo-Czb-dCiJ.js                        10.61 kB │ gzip:   2.51 kB
+2026-04-02T21:35:29.148Z  dist/assets/EditPayslip-CxcoRcwP.js                              10.88 kB │ gzip:   2.66 kB
+2026-04-02T21:35:29.148Z  dist/assets/ClientForm-C6cPsGjF.js                               11.61 kB │ gzip:   3.05 kB
+2026-04-02T21:35:29.148Z  dist/assets/AffiliateDashboard-CS3Xja15.js                       12.42 kB │ gzip:   3.96 kB
+2026-04-02T21:35:29.148Z  dist/assets/CreatePayslip-Dr1ogGSJ.js                            14.78 kB │ gzip:   3.89 kB
+2026-04-02T21:35:29.148Z  dist/assets/ClientDetail-BFde77X9.js                             14.86 kB │ gzip:   4.46 kB
+2026-04-02T21:35:29.148Z  dist/assets/SubscriptionsPage-DvFbyWAF.js                        15.84 kB │ gzip:   4.62 kB
+2026-04-02T21:35:29.149Z  dist/assets/DocumentPreview-DdK7K6Xm.js                          17.19 kB │ gzip:   4.51 kB
+2026-04-02T21:35:29.149Z  dist/assets/EditInvoice-B3C97GTm.js                              17.52 kB │ gzip:   4.99 kB
+2026-04-02T21:35:29.149Z  dist/assets/Accounting-B7T6h_9i.js                               17.91 kB │ gzip:   4.28 kB
+2026-04-02T21:35:29.149Z  dist/assets/Signup-CRLkdET2.js                                   18.24 kB │ gzip:   5.70 kB
+2026-04-02T21:35:29.149Z  dist/assets/Services-CZx697xE.js                                 18.53 kB │ gzip:   5.33 kB
+2026-04-02T21:35:29.149Z  dist/assets/EditQuote-BWLiNOkT.js                                18.74 kB │ gzip:   5.79 kB
+2026-04-02T21:35:29.149Z  dist/assets/AffiliatesPage-BguwxFUC.js                           20.88 kB │ gzip:   5.75 kB
+2026-04-02T21:35:29.150Z  dist/assets/AdminV2Dashboard-CQxUFf84.js                         21.44 kB │ gzip:   5.60 kB
+2026-04-02T21:35:29.150Z  dist/assets/Payslips-CLsNoXZi.js                                 21.81 kB │ gzip:   6.51 kB
+2026-04-02T21:35:29.150Z  dist/assets/Clients-CdoSJjvu.js                                  23.48 kB │ gzip:   6.82 kB
+2026-04-02T21:35:29.150Z  dist/assets/ServiceForm-ByYFBggc.js                              26.01 kB │ gzip:   5.93 kB
+2026-04-02T21:35:29.150Z  dist/assets/ClientPortal-DsNWmxDO.js                             27.65 kB │ gzip:   6.64 kB
+2026-04-02T21:35:29.156Z  dist/assets/date-fns-DEwvAI8x.js                                 29.44 kB │ gzip:   8.47 kB
+2026-04-02T21:35:29.156Z  dist/assets/CreateDocument-DMkB2YwC.js                           29.72 kB │ gzip:   8.50 kB
+2026-04-02T21:35:29.156Z  dist/assets/Messages-DWFTDotD.js                                 31.06 kB │ gzip:   9.00 kB
+2026-04-02T21:35:29.156Z  dist/assets/InvoiceTemplatePdfCapture-Cy5XluZF.js                31.12 kB │ gzip:   7.75 kB
+2026-04-02T21:35:29.156Z  dist/assets/ViewInvoice-B_Kqo7Ps.js                              32.29 kB │ gzip:   8.75 kB
+2026-04-02T21:35:29.156Z  dist/assets/Home-v6ndZuUA.js                                     35.68 kB │ gzip:  10.50 kB
+2026-04-02T21:35:29.156Z  dist/assets/axios-C0Zqfgkc.js                                    36.62 kB │ gzip:  14.72 kB
+2026-04-02T21:35:29.156Z  dist/assets/framer-motion-B9hIH4xd.js                            38.46 kB │ gzip:  13.68 kB
+2026-04-02T21:35:29.156Z  dist/assets/Invoices-XgMZBM4W.js                                 41.79 kB │ gzip:  10.85 kB
+2026-04-02T21:35:29.157Z  dist/assets/Calendar-4Usihc-S.js                                 41.90 kB │ gzip:  11.59 kB
+2026-04-02T21:35:29.157Z  dist/assets/Quotes-27QVbQW0.js                                   42.21 kB │ gzip:  12.56 kB
+2026-04-02T21:35:29.157Z  dist/assets/Inventory-BAZi7W7d.js                                46.84 kB │ gzip:  12.27 kB
+2026-04-02T21:35:29.157Z  dist/assets/ProjectDetails-BvUfDoOM.js                           53.68 kB │ gzip:  10.92 kB
+2026-04-02T21:35:29.157Z  dist/assets/confetti-irKnUu0V.js                                 55.09 kB │ gzip:  15.95 kB
+2026-04-02T21:35:29.157Z  dist/assets/lucide-DUh3KA_2.js                                   59.38 kB │ gzip:  11.90 kB
+2026-04-02T21:35:29.157Z  dist/assets/RecurringInvoices-0FNDcjNB.js                        65.52 kB │ gzip:  15.97 kB
+2026-04-02T21:35:29.157Z  dist/assets/Settings-BWoG_IUV.js                                 71.30 kB │ gzip:  17.93 kB
+2026-04-02T21:35:29.158Z  dist/assets/Dashboard-CUW_VhMn.js                                92.71 kB │ gzip:  23.55 kB
+2026-04-02T21:35:29.158Z  dist/assets/CashFlow-CozG5ERr.js                                119.38 kB │ gzip:  28.81 kB
+2026-04-02T21:35:29.158Z  dist/assets/index-D_rEmviC.js                                   240.56 kB │ gzip:  67.66 kB
+2026-04-02T21:35:29.158Z  dist/assets/recharts-CwdBFzZB.js                                291.75 kB │ gzip:  66.56 kB
+2026-04-02T21:35:29.158Z  dist/assets/xlsx-CkFp8p6R.js                                    429.53 kB │ gzip: 143.08 kB
+2026-04-02T21:35:29.158Z  dist/assets/vendor-BgaE-KH7.js                                2,656.39 kB │ gzip: 772.12 kB
+2026-04-02T21:35:29.159Z  ✓ built in 24.18s
+2026-04-02T21:35:34.576Z  Build Completed in /vercel/output [32s]
+2026-04-02T21:35:35.154Z  Deploying outputs...
+2026-04-02T21:35:41.157Z  Deployment completed
+2026-04-02T21:35:42.227Z  Creating build cache...
+2026-04-02T21:37:55.929Z  Created build cache: 2m
+2026-04-02T21:37:55.930Z  Uploading build cache [104.30 MB]
+2026-04-02T21:37:59.130Z  Build cache uploaded: 3.204s
+status	● Ready

@@ -4,7 +4,23 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false
   },
-  "include": ["src/**/*.js", "src/**/*.jsx"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "server/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".vercel",
+    "coverage"
+  ]
 } 

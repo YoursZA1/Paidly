@@ -166,6 +166,7 @@ describe("fetchAffiliateDashboardData", () => {
       .mockReturnValueOnce(affiliateQueryBuilder)
       .mockReturnValueOnce(clicksQueryBuilder)
       .mockReturnValueOnce(referralsQueryBuilder)
+      .mockReturnValueOnce(referralsQueryBuilder) // For recentReferralsRes
       .mockReturnValueOnce(commissionsQueryBuilder);
 
     const { fetchAffiliateDashboardData } = await import("@/api/affiliateClient");
