@@ -118,7 +118,7 @@ const AUTH_ROUTES = [
 
 // --- Main App Pages ---
 const MAIN_ROUTES = [
-    { path: "/", element: <RequireAuth><Dashboard /></RequireAuth> },
+    { path: "/", element: <Home /> },
     { path: "/Dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/Clients", element: <RequireAuth><Clients /></RequireAuth> },

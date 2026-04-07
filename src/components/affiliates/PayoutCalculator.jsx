@@ -46,6 +46,8 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
     [eligibleCommissions]
   );
 
+  const periodMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
+
   const paidUsersCount = useMemo(
     () => new Set(eligibleCommissions.map((p) => p.referral_id).filter(Boolean)).size,
     [eligibleCommissions]
@@ -56,14 +58,32 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
     return (commissionAmount * 100) / payoutCommissionPct;
   }, [commissionAmount, payoutCommissionPct]);
 
+  const existingOpenPayout = useMemo(
+    () =>
+      (payouts || []).find(
+        (p) =>
+          partnerAffiliateId &&
+          String(p.affiliate_id) === String(partnerAffiliateId) &&
+          String(p.referral_id) === String(affiliate?.id || '') &&
+          String(p.period_month || '') === String(periodMonth) &&
+          (p.status === 'pending' || p.status === 'approved')
+      ) || null,
+    [payouts, partnerAffiliateId, affiliate?.id, periodMonth]
+  );
+
   const createMutation = useMutation({
-    mutationFn: (payload) => paidly.entities.AffiliatePayout.create(payload),
-    onSuccess: () => {
-      toast.success('Payout generated');
+    mutationFn: async ({ mode, id, payload }) => {
+      if (mode === 'update' && id) {
+        return paidly.entities.AffiliatePayout.update(id, payload);
+      }
+      return paidly.entities.AffiliatePayout.create(payload);
+    },
+    onSuccess: (_, variables) => {
+      toast.success(variables?.mode === 'update' ? 'Payout updated' : 'Payout generated');
       queryClient.invalidateQueries({ queryKey: ['affiliate-payouts'] });
       onClose();
     },
-    onError: (e) => toast.error(e?.message || 'Failed to generate payout'),
+    onError: (e) => toast.error(e?.message || 'Failed to save payout'),
   });
 
   const handleCreate = () => {
@@ -80,7 +100,7 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
       toast.error('Set a valid commission rate greater than 0%.');
       return;
     }
-    createMutation.mutate({
+    const payload = {
       affiliate_id: partnerAffiliateId,
       referral_id: affiliate.id,
       affiliate_name: affiliate.applicant_name,
@@ -91,9 +111,15 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
       commission_rate: Number(payoutCommissionPct || 0),
       commission_amount: Number(commissionAmount || 0),
       amount: Number(commissionAmount || 0),
-      status: 'pending',
+      status: existingOpenPayout?.status || 'pending',
       notes: notes.trim() || null,
-      period_month: new Date().toISOString().slice(0, 7),
+      period_month: periodMonth,
+    };
+
+    createMutation.mutate({
+      mode: existingOpenPayout ? 'update' : 'create',
+      id: existingOpenPayout?.id || null,
+      payload,
     });
   };
 
@@ -146,10 +172,19 @@ export default function PayoutCalculator({ open, onClose, affiliate }) {
             <p className="text-muted-foreground">Commission Amount</p>
             <p className="text-lg font-semibold">R {Number(commissionAmount || 0).toFixed(2)}</p>
           </div>
+          {existingOpenPayout ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Existing payout for this month will be updated.
+            </p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="button" onClick={handleCreate} disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving...' : 'Create Payout'}
+              {createMutation.isPending
+                ? 'Saving...'
+                : existingOpenPayout
+                  ? 'Update Payout'
+                  : 'Create Payout'}
             </Button>
           </div>
         </div>
