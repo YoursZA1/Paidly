@@ -1,7 +1,8 @@
 /**
- * Vercel serverless: GET /api/email-track?token=uuid
- * Also supports GET /api/email-track/:token (path) for backwards compatibility.
- * Returns 1x1 GIF; records email open in message_logs.
+ * Vercel serverless:
+ * - GET  /api/email-track?token=uuid                 (pixel open)
+ * - POST /api/track-open (rewritten here with mode)  (json open event)
+ * - GET  /api/track-link?token=&u=                   (rewritten here with mode)
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -39,7 +40,95 @@ function extractToken(req) {
   return m ? decodeURIComponent(m[1]).trim() : null;
 }
 
+function readTokenFromQuery(query) {
+  const rawTok = query?.token || query?.t;
+  return Array.isArray(rawTok) ? rawTok[0] : rawTok;
+}
+
+function isAllowedRedirectUrl(target, requestHost) {
+  try {
+    const parsed = new URL(target);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const host = parsed.hostname.toLowerCase();
+    const req = (requestHost || "").split(":")[0].toLowerCase();
+    if (req && host === req) return true;
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host.endsWith(".vercel.app")) return true;
+    if (host === "www.paidly.co.za" || host === "paidly.co.za") return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
+  const mode = String(req.query?.mode || "pixel").toLowerCase();
+  const supabase = getSupabaseAdmin();
+
+  if (mode === "open") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.status(200).end();
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    let body = {};
+    try {
+      body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+    const trimmed = typeof body?.token === "string" ? body.token.trim() : "";
+    if (!trimmed || !isValidTrackingToken(trimmed)) {
+      return res.status(400).json({ error: "Invalid token" });
+    }
+    if (!supabase) return res.status(503).json({ error: "Server misconfigured" });
+    try {
+      const { error } = await supabase
+        .from("message_logs")
+        .update({ viewed: true, opened_at: new Date().toISOString() })
+        .eq("tracking_token", trimmed);
+      if (error) return res.status(500).json({ error: "Failed to record open" });
+      return res.status(200).json({ ok: true });
+    } catch (e) {
+      return res.status(500).json({ error: e?.message || "Failed" });
+    }
+  }
+
+  if (mode === "link") {
+    if (req.method !== "GET") {
+      res.setHeader("Allow", "GET");
+      return res.status(405).end();
+    }
+    const token = readTokenFromQuery(req.query);
+    const rawU = req.query?.u;
+    const u = Array.isArray(rawU) ? rawU[0] : rawU;
+    const trimmed = typeof token === "string" ? token.trim() : "";
+    let dest = "";
+    try {
+      dest = typeof u === "string" ? decodeURIComponent(u) : "";
+    } catch {
+      dest = "";
+    }
+    const host = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
+    if (!trimmed || !isValidTrackingToken(trimmed) || !dest || !isAllowedRedirectUrl(dest, host)) {
+      return res.status(400).send("Invalid link");
+    }
+    if (supabase) {
+      try {
+        await supabase
+          .from("message_logs")
+          .update({ clicked_at: new Date().toISOString() })
+          .eq("tracking_token", trimmed)
+          .is("clicked_at", null);
+      } catch (e) {
+        console.warn("[track-link]", e?.message || e);
+      }
+    }
+    res.setHeader("Location", dest);
+    return res.status(302).end();
+  }
+
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).end();
@@ -54,7 +143,6 @@ export default async function handler(req, res) {
     return res.status(200).send(TRACKING_PIXEL_GIF);
   }
 
-  const supabase = getSupabaseAdmin();
   if (supabase) {
     try {
       await supabase

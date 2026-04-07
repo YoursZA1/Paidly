@@ -29,6 +29,14 @@
       "destination": "/api/admin/security-events"
     },
     {
+      "source": "/api/track-open",
+      "destination": "/api/email-track?mode=open"
+    },
+    {
+      "source": "/api/track-link",
+      "destination": "/api/email-track?mode=link"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
