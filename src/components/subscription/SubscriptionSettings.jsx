@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { User } from "@/api/entities";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";

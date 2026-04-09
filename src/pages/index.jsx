@@ -79,7 +79,6 @@ const NotFoundPage = lazy(() =>
 );
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "@/components/auth/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -419,9 +418,7 @@ export default function Pages() {
     }
     return (
         <Router>
-            <AuthProvider>
-                <PagesContent />
-            </AuthProvider>
+            <PagesContent />
         </Router>
     );
 }

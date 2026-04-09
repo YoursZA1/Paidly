@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { X, Sparkles } from "lucide-react";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { createAffiliateDashboardUrl } from "@/utils";
 
 const storageKey = (userId) => `paidly_affiliate_prompt_dismissed_${userId}`;

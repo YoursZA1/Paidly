@@ -32,7 +32,7 @@ import {
   AppQuickSearchMobileDialog,
   OPEN_EVENT as QUICK_SEARCH_OPEN_EVENT,
 } from "@/components/layout/AppQuickSearch";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible } from "@/utils";

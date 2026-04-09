@@ -15,7 +15,7 @@ import { Service } from "@/api/entities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "../services/ServiceForm";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
 import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";

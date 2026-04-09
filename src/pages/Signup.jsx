@@ -37,7 +37,7 @@ function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
 }
 import { userService } from "@/services/ExcelUserService";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 import { readStoredAuthUser } from "@/utils/authStorage";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";

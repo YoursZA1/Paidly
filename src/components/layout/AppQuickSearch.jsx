@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const MAX_PER_GROUP = 8;
 const OPEN_EVENT = "paidly:open-quick-search";

@@ -13,13 +13,14 @@ import { Payment } from "@/api/entities";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
+import { useAppContext } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { getUserCurrency } from "@/api/currencyProfiles";
 import { formatCurrency } from "@/utils/currencyCalculations";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { userService } from "@/services/ExcelUserService";
 import CreateAccountDialog from "@/components/CreateAccountDialog";
@@ -50,6 +51,7 @@ import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
@@ -215,6 +217,8 @@ StatCard.propTypes = {
 
 export default function Dashboard() {
   const { user: authUser } = useAuth();
+  const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
+  const { profile: profileFromQuery } = useUserProfileQuery();
   const { toast } = useToast();
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
@@ -323,15 +327,14 @@ export default function Dashboard() {
   const storeClients = useAppStore((s) => s.clients);
   const storeExpenses = useAppStore((s) => s.expenses);
   const storePayments = useAppStore((s) => s.payments);
-  const storeUser = useAppStore((s) => s.userProfile);
   const storeIsLoading = useAppStore((s) => s.isLoading);
   const fetchAll = useAppStore((s) => s.fetchAll);
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
   const payments = isAdmin ? paymentsState : storePayments;
-  const user = isAdmin ? userState : storeUser ?? authUser;
-  const isLoading = isAdmin ? isLoadingState : storeIsLoading;
+  const user = isAdmin ? userState : profileFromQuery ?? authUser;
+  const isLoading = isAdmin ? isLoadingState : storeIsLoading || appLoading;
 
   const openAccount = (user) => {
     const params = new URLSearchParams();
@@ -339,6 +342,12 @@ export default function Dashboard() {
     if (user?.email) params.set('email', user.email);
     navigate(`/admin/accounts-management?${params.toString()}`);
   };
+
+  // Keep global app loading in sync for non-admin dashboard renders.
+  useEffect(() => {
+    if (isAdmin) return;
+    setAppLoading(Boolean(storeIsLoading));
+  }, [isAdmin, storeIsLoading, setAppLoading]);
 
   // Clear stale goal immediately when the calendar year advances (before refetch completes).
   useEffect(() => {
@@ -381,7 +390,7 @@ export default function Dashboard() {
         const goalRow =
           goalSettled.status === "fulfilled" ? goalSettled.value ?? null : null;
         setBusinessGoal(businessGoalMatchesYear(goalRow, calendarYear) ? goalRow : null);
-        const profile = useAppStore.getState().userProfile;
+        const profile = profileFromQuery;
         if (profile?.currency) setUserCurrencyPreference(profile.currency);
       } catch (err) {
         if (!cancelled && mountedRef.current) console.warn("Dashboard banking/goal fetch failed:", err);
@@ -390,7 +399,7 @@ export default function Dashboard() {
       }
     })();
     return () => { cancelled = true; mountedRef.current = false; };
-  }, [isAdmin, authUser?.id, calendarYear]);
+  }, [isAdmin, authUser?.id, calendarYear, profileFromQuery]);
 
   // Removed calculateFinancialMetrics (no longer used)
 

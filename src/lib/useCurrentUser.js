@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { useAuth } from '@/components/auth/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useCurrentUser() {
   const { user: authUser, loading: authLoading } = useAuth();

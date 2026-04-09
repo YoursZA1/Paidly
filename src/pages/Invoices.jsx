@@ -24,17 +24,20 @@ import InvoiceFilters, { applyInvoiceFilters } from "../components/filters/Invoi
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
-
-const INVOICES_PAGE_QUERY_KEY = ["invoices-page"];
+import { useAuth } from "@/contexts/AuthContext";
+import { useInvoices } from "@/hooks/useInvoices";
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import { useAppContext } from "@/contexts/AppContext";
 
 export default function InvoicesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
+    const { user: authUser } = useAuth();
+    const { loading: invoicesLoading, invoices, refetch: refetchInvoices } = useInvoices(authUser);
+    const { profile } = useUserProfileQuery();
+    const { setLoading: setAppLoading } = useAppContext();
     const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
-    const fetchAll = useAppStore((s) => s.fetchAll);
-    const invoicesFromStore = useAppStore((s) => s.invoices);
     const clientsFromStore = useAppStore((s) => s.clients);
-    const userProfile = useAppStore((s) => s.userProfile);
     const [payments, setPayments] = useState([]);
     const [invoiceViews, setInvoiceViews] = useState([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -68,48 +71,45 @@ export default function InvoicesPage() {
         };
     }, []);
 
-    const invoices = invoicesFromStore ?? [];
     const clients = clientsFromStore ?? [];
-    const isLoading = invoices.length === 0 && isRefreshing;
+    const isLoading = invoicesLoading || (invoices.length === 0 && isRefreshing);
 
     const handleActionSuccess = useCallback(() => {
-        // When an action succeeds, prefer reloading only invoices; the store will sync via its own logic.
-        queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
-    }, [queryClient]);
+        void refetchInvoices();
+    }, [refetchInvoices]);
 
     const handleRefresh = useCallback(async () => {
         setIsRefreshing(true);
         setInitialError(null);
         try {
-            await fetchAll();
+            await refetchInvoices();
             const [paymentsData, viewsData] = await Promise.all([
                 Payment.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
                 InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
             ]);
             setPayments(Array.isArray(paymentsData) ? paymentsData : []);
             setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
-            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
         } catch (err) {
             console.warn("Invoices refresh failed:", err);
             setInitialError(err);
         } finally {
             setIsRefreshing(false);
         }
-    }, [fetchAll, queryClient]);
+    }, [refetchInvoices]);
 
     const handleOptimisticUpdate = useCallback(
         async (id, status) => {
             await storeUpdateInvoice(id, { status });
-            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+            void refetchInvoices();
         },
-        [storeUpdateInvoice, queryClient]
+        [storeUpdateInvoice, refetchInvoices]
     );
 
     useSupabaseRealtime(
         ["invoices", "payments"],
         () => {
-            // Supabase changefeed: refresh side data without blocking page.
-            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+            // Supabase changefeed: refresh list + side data without blocking page.
+            void refetchInvoices();
         },
         { channelName: "invoices-page" }
     );
@@ -129,7 +129,11 @@ export default function InvoicesPage() {
         return client ? client.name : "N/A";
     };
 
-    const userCurrency = userProfile?.currency || "ZAR";
+    const userCurrency = profile?.currency || authUser?.currency || "ZAR";
+
+    useEffect(() => {
+        setAppLoading(isLoading);
+    }, [isLoading, setAppLoading]);
 
     const paymentsMap = useMemo(() => {
         const map = new Map();
@@ -254,7 +258,7 @@ export default function InvoicesPage() {
                     skipped++;
                 }
             }
-            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+            await refetchInvoices();
             queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
             toast({
                 title: "Import complete",
@@ -318,7 +322,7 @@ export default function InvoicesPage() {
                     skipped++;
                 }
             }
-            queryClient.invalidateQueries({ queryKey: INVOICES_PAGE_QUERY_KEY });
+            await refetchInvoices();
             toast({
                 title: "Import complete",
                 description: `${created} view(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,

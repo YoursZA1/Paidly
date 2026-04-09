@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPageUrl } from "@/utils";
 import PayfastService from "@/services/PayfastService";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import PropTypes from "prop-types";
 

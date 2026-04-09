@@ -16,7 +16,7 @@ import LineItemsEditor from "@/components/LineItemsEditor";
 import DocumentPreview from "@/components/DocumentPreview";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
 import { useToast } from "@/components/ui/use-toast";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";

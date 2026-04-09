@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '@/App.jsx'
 import ApplicationErrorPage from '@/pages/ApplicationErrorPage.jsx'
 import '@/index.css'
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AppProvider } from "@/contexts/AppContext";
 import { logUnhandledError, getCurrentPage } from '@/utils/apiLogger'
 import {
     installGlobalAsyncErrorHandlers,
@@ -101,9 +103,13 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
-        <AppErrorBoundary>
-          <App />
-        </AppErrorBoundary>
+        <AuthProvider>
+          <AppProvider>
+            <AppErrorBoundary>
+              <App />
+            </AppErrorBoundary>
+          </AppProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
 )

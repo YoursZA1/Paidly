@@ -320,7 +320,9 @@ export function AuthProvider({ children }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Fail-safe: never leave auth loading spinner running forever.
@@ -346,6 +348,20 @@ export function AuthProvider({ children }) {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
+  }, [refreshSession, refreshUser]);
+
+  // Global focus refresh: re-check Supabase session when user returns to the app/tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleFocus = () => {
+      void supabase.auth.getSession();
+      void refreshSession();
+      void refreshUser();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, [refreshSession, refreshUser]);
 
   // Listen to Supabase auth state (sign in/out, token refresh) to keep session and user in sync
@@ -449,8 +465,7 @@ export function AuthProvider({ children }) {
 
   const purgeSupabaseAuthStorage = useCallback(() => {
     const shouldRemoveKey = (k) =>
-      typeof k === "string" &&
-      (k === "supabase.auth.token" || /^sb-.*-auth-token$/i.test(k));
+      typeof k === "string" && (k === "supabase.auth.token" || /^sb-.*-auth-token$/i.test(k));
 
     try {
       if (typeof localStorage !== "undefined") {
@@ -479,50 +494,51 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
-    clearNodeAuthUnreachable();
-    try {
-      await User.logout();
-    } catch {
-      // ignore
-    }
-    setSession(null);
-    setUser(null);
-    setError("");
-    setShowVerifyDialog(false);
-    setResendLoading(false);
-    setResendSuccess("");
-
-    // 2. Revoke Supabase session while tokens still exist in storage — purging before signOut()
-    //    causes signOut to hang or time out (no refresh token for the revoke request).
-    const SIGNOUT_MS = 8000;
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("signOut timeout")), SIGNOUT_MS);
-    });
-    const signOutPromise = supabase.auth.signOut({ scope: "global" }).then(({ error }) => {
-      if (error) throw error;
-    });
-    try {
-      await Promise.race([signOutPromise, timeoutPromise]);
-    } catch (e) {
-      if (import.meta.env?.DEV) {
-        console.warn("[Auth] Supabase signOut failed or timed out.", e?.message || e);
+  const logout = useCallback(
+    async () => {
+      // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
+      clearNodeAuthUnreachable();
+      try {
+        await User.logout();
+      } catch {
+        // ignore
       }
-    } finally {
-      clearTimeout(timeoutId);
-      // 3. Always remove Supabase auth keys after signOut (or if it failed / timed out).
-      purgeSupabaseAuthStorage();
-    }
-  }, [purgeSupabaseAuthStorage]);
+      setSession(null);
+      setUser(null);
+      setError("");
+      setShowVerifyDialog(false);
+      setResendLoading(false);
+      setResendSuccess("");
+
+      // 2. Revoke Supabase session while tokens still exist in storage — purging before signOut()
+      //    causes signOut to hang or time out (no refresh token for the revoke request).
+      const SIGNOUT_MS = 8000;
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("signOut timeout")), SIGNOUT_MS);
+      });
+      const signOutPromise = supabase.auth.signOut({ scope: "global" }).then(({ error }) => {
+        if (error) throw error;
+      });
+      try {
+        await Promise.race([signOutPromise, timeoutPromise]);
+      } catch (e) {
+        if (import.meta.env?.DEV) {
+          console.warn("[Auth] Supabase signOut failed or timed out.", e?.message || e);
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        // 3. Always remove Supabase auth keys after signOut (or if it failed / timed out).
+        purgeSupabaseAuthStorage();
+      }
+    },
+    [purgeSupabaseAuthStorage]
+  );
 
   /** Supabase-only password reset (no client-side tokens; expiry handled by Supabase). */
   const sendPasswordReset = useCallback(async (email) => {
     const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${createPageUrl("ResetPassword")}`
-        : undefined;
+      typeof window !== "undefined" ? `${window.location.origin}${createPageUrl("ResetPassword")}` : undefined;
     await SupabaseAuthService.resetPasswordForEmail((email || "").trim().toLowerCase(), redirectTo);
     return true;
   }, []);
@@ -597,27 +613,51 @@ export function AuthProvider({ children }) {
       error,
       userRole,
       userPermissions,
-      session
+      session,
     };
-  }, [user, loading, login, logout, refreshUser, refreshSession, sendPasswordReset, sendUserInvite, showVerifyDialog, resendLoading, resendSuccess, error, session]);
+  }, [
+    user,
+    loading,
+    login,
+    logout,
+    refreshUser,
+    refreshSession,
+    sendPasswordReset,
+    sendUserInvite,
+    showVerifyDialog,
+    resendLoading,
+    resendSuccess,
+    error,
+    session,
+  ]);
 
-  return <>
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-    {/* Email not verified dialog (global) */}
-    {showVerifyDialog && user && (
-      <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
-          <h2 className="text-xl font-bold mb-2">Email not verified</h2>
-          <p className="mb-4">Your email address has not been confirmed. Please check your inbox and click the confirmation link.</p>
-          <Button onClick={() => handleResendConfirmation(user.email)} disabled={resendLoading} className="w-full mb-2">
-            {resendLoading ? "Resending..." : "Resend confirmation email"}
-          </Button>
-          {resendSuccess && <div className="text-green-600 text-sm mt-2">{resendSuccess}</div>}
-          <Button variant="outline" onClick={() => setShowVerifyDialog(false)} className="w-full mt-2">Close</Button>
+  return (
+    <>
+      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+      {/* Email not verified dialog (global) */}
+      {showVerifyDialog && user && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
+            <h2 className="text-xl font-bold mb-2">Email not verified</h2>
+            <p className="mb-4">
+              Your email address has not been confirmed. Please check your inbox and click the confirmation link.
+            </p>
+            <Button
+              onClick={() => handleResendConfirmation(user.email)}
+              disabled={resendLoading}
+              className="w-full mb-2"
+            >
+              {resendLoading ? "Resending..." : "Resend confirmation email"}
+            </Button>
+            {resendSuccess && <div className="text-green-600 text-sm mt-2">{resendSuccess}</div>}
+            <Button variant="outline" onClick={() => setShowVerifyDialog(false)} className="w-full mt-2">
+              Close
+            </Button>
+          </div>
         </div>
-      </div>
-    )}
-  </>;
+      )}
+    </>
+  );
 }
 
 const AUTH_FALLBACK = {

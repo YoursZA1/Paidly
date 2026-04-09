@@ -4,7 +4,7 @@ import { formatCurrency } from "@/components/CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 
 const SLATE_900 = "#0f172a";

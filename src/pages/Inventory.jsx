@@ -6,7 +6,7 @@ import { AlertTriangle, Barcode, Package, Plus, Search, ShoppingCart, Truck } fr
 import { format } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";

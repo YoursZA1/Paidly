@@ -17,7 +17,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { mapCatalogToLineItem } from "@/services/CatalogSyncService";
 import { Service } from "@/api/entities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";

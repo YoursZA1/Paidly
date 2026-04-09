@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { mapCatalogToLineItem } from "@/services/CatalogSyncService";
 import { createPageUrl } from "@/utils";
 import { normalizeCatalogItemForMap } from "@/utils/catalogLineItemMap";

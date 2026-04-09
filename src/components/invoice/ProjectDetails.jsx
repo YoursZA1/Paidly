@@ -30,7 +30,7 @@ import { getItemTypeIcon, getUnitLabel } from "../invoice/itemTypeHelpers";
 import TaxService from "@/services/TaxService";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
 import { Client, BankingDetail, Service } from "@/api/entities";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
 import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";

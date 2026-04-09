@@ -23,7 +23,7 @@ import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
 import { useClientsQuery } from "@/hooks/useClientsQuery";
 import { useAppStore } from "@/stores/useAppStore";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
 
 const statusStyles = {

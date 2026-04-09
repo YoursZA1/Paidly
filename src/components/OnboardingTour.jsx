@@ -5,7 +5,7 @@ import PropTypes from "prop-types";
  * Replace with your actual onboarding steps and UI as needed.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth } from "@/components/auth/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { clearWelcomeTourEligible } from "@/utils";
 
 const TOUR_STEPS = [
