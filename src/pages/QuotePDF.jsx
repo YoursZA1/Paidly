@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Quote, Client, User } from '@/api/entities';
+import { Quote, Client, User, BankingDetail } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
@@ -18,6 +18,7 @@ export default function QuotePDF() {
     const [quote, setQuote] = useState(null);
     const [client, setClient] = useState(null);
     const [user, setUser] = useState(null);
+    const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const printRef = useRef(null);
@@ -57,10 +58,12 @@ export default function QuotePDF() {
                             owner_email: quoteData.owner_email,
                             owner_logo_url: quoteData.owner_logo_url,
                             currency: quoteData.currency,
+                            banking_detail_id: quoteData.banking_detail_id || null,
                         };
                         setQuote(mappedQuote);
                         setClient(draftClient);
                         setUser(draftUser);
+                        setBankingDetail(draft.bankingDetail || null);
                     }
                 }
             } catch (e) {
@@ -100,13 +103,19 @@ export default function QuotePDF() {
     const loadQuoteData = async () => {
         try {
             const quoteData = await Quote.get(quoteId);
-            const [clientData, userData] = await Promise.all([
+            const bid = quoteData.banking_detail_id && String(quoteData.banking_detail_id).trim();
+            const bankingFetch = bid
+                ? BankingDetail.get(bid).catch(() => null)
+                : Promise.resolve(null);
+            const [clientData, userData, bankingData] = await Promise.all([
                 Client.get(quoteData.client_id),
-                User.me()
+                User.me(),
+                bankingFetch,
             ]);
             setQuote(quoteData);
             setClient(clientData);
             setUser(userData);
+            setBankingDetail(bankingData || null);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -220,6 +229,7 @@ export default function QuotePDF() {
                                         docType="quote"
                                         clients={clientsForPreview}
                                         user={profile}
+                                        bankingDetail={bankingDetail}
                                         hideStatus
                                     />
                                 ) : null}

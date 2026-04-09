@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { recordToStyledPreviewDoc, profileForQuotePreview } from "@/utils/documentPreviewData";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { useParams, useNavigate } from "react-router-dom";
-import { Invoice, Quote, Client, User } from "@/api/entities";
+import { Invoice, Quote, Client, User, BankingDetail } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Download, Send, Loader2, Edit, ArrowRightSquare } from "lucide-react";
@@ -45,6 +45,7 @@ export default function ViewDocument() {
   const [record, setRecord] = useState(null);
   const [client, setClient] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [bankingDetail, setBankingDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -54,6 +55,7 @@ export default function ViewDocument() {
     if (!id || !docType) {
       setLoading(false);
       setRecord(null);
+      setBankingDetail(null);
       return;
     }
     setLoading(true);
@@ -66,6 +68,7 @@ export default function ViewDocument() {
       if (!entity) {
         setRecord(null);
         setClient(null);
+        setBankingDetail(null);
         return;
       }
 
@@ -90,12 +93,24 @@ export default function ViewDocument() {
         userProfile = null;
       }
 
+      let bankingRow = null;
+      const bid = withItems.banking_detail_id && String(withItems.banking_detail_id).trim();
+      if (bid) {
+        try {
+          bankingRow = await withTimeoutRetry(() => BankingDetail.get(bid), ENTITY_GET_TIMEOUT_MS, 1);
+        } catch {
+          bankingRow = null;
+        }
+      }
+
       setRecord(withItems);
       setClient(clientData);
       setProfile(userProfile);
+      setBankingDetail(bankingRow);
     } catch (e) {
       console.error("ViewDocument load:", e);
       setRecord(null);
+      setBankingDetail(null);
       toast({
         title: "Could not load document",
         description: e?.message || "Please try again.",
@@ -298,6 +313,7 @@ export default function ViewDocument() {
           docType={docType}
           clients={client ? [client] : []}
           user={previewProfile}
+          bankingDetail={bankingDetail}
           hideStatus={downloading}
         />
       </div>

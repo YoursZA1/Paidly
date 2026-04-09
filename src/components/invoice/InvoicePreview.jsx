@@ -194,6 +194,7 @@ function InvoicePreview({
       docType="invoice"
       clients={clientList}
       user={pack.resolvedUser}
+      bankingDetail={bankingDetail}
     />
   ) : null;
 

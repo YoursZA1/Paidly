@@ -6,6 +6,8 @@ import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
+import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
+import { formatDocumentPreviewBankingLines } from "@/utils/formatDocumentPreviewBankingLines";
 
 const SLATE_900 = "#0f172a";
 
@@ -108,10 +110,11 @@ function statusLabel(status) {
 /**
  * Styled invoice/quote preview for CreateDocument, ViewDocument, and capture ref (e.g. PDF export).
  * Accepts the same `doc` + `docType` + `clients` + `user` props as before.
+ * @param {object|null} [bankingDetail] — Saved banking row; merged with profile defaults via effectiveBankingDetail.
  * @param {boolean} [hideStatus] — Omit status pill (use for PDF download / print capture).
  */
 const DocumentPreview = forwardRef(function DocumentPreview(
-  { doc, docType: docTypeProp, clients = [], user, hideStatus = false },
+  { doc, docType: docTypeProp, clients = [], user, bankingDetail = null, hideStatus = false },
   ref
 ) {
   const { user: authUser } = useAuth();
@@ -133,6 +136,11 @@ const DocumentPreview = forwardRef(function DocumentPreview(
     }),
     [BRAND_PRIMARY]
   );
+
+  const bankingLines = useMemo(() => {
+    const merged = effectiveBankingDetail(bankingDetail, effectiveUser);
+    return formatDocumentPreviewBankingLines(merged);
+  }, [bankingDetail, effectiveUser]);
 
   const resolved = useMemo(() => {
     if (!doc) return null;
@@ -651,11 +659,11 @@ const DocumentPreview = forwardRef(function DocumentPreview(
           </div>
         </div>
 
-        {(notes || terms_conditions) && (
+        {(notes || terms_conditions || bankingLines) && (
           <>
             <div style={{ height: "1px", background: "#f1f5f9", marginBottom: "24px" }} />
             {notes ? (
-              <div style={{ marginBottom: terms_conditions ? "24px" : 0 }}>
+              <div style={{ marginBottom: terms_conditions || bankingLines ? "24px" : 0 }}>
                 <div
                   style={{
                     fontSize: "10px",
@@ -671,7 +679,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                 <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.45, whiteSpace: "pre-line" }}>{notes}</div>
               </div>
             ) : null}
-            {terms_conditions ? (
+            {terms_conditions || bankingLines ? (
               <div>
                 <div
                   style={{
@@ -685,9 +693,26 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                 >
                   Terms & conditions
                 </div>
-                <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.45, whiteSpace: "pre-line" }}>
-                  {terms_conditions}
-                </div>
+                {terms_conditions ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.45, whiteSpace: "pre-line" }}>
+                    {terms_conditions}
+                  </div>
+                ) : null}
+                {bankingLines ? (
+                  <div
+                    role="group"
+                    aria-label="Bank details for payment"
+                    style={{
+                      marginTop: terms_conditions ? "10px" : 0,
+                      fontSize: "10px",
+                      color: "#94a3b8",
+                      lineHeight: 1.5,
+                      whiteSpace: "pre-line",
+                    }}
+                  >
+                    {bankingLines}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </>

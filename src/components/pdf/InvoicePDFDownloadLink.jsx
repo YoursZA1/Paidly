@@ -251,6 +251,7 @@ export default function InvoicePDFDownloadLink({
             docType="invoice"
             clients={clientsForPreview}
             user={pack.resolvedUser}
+            bankingDetail={bankingDetail}
             hideStatus
           />
         ) : (

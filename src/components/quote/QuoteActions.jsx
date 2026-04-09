@@ -14,11 +14,10 @@ import {
 import { MoreHorizontal, Eye, Mail, Download, Edit, Trash2, CheckCircle, XCircle, ArrowRightSquare, Copy } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Quote } from '@/api/entities';
+import { Quote, BankingDetail, Client, User } from '@/api/entities';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import ManualShareModal from '../shared/ManualShareModal';
 import QuoteEmailPreviewModal from './QuoteEmailPreviewModal';
-import { Client, User } from '@/api/entities';
 import { supabase } from '@/lib/supabaseClient';
 import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import { useToast } from '@/components/ui/use-toast';
@@ -87,10 +86,20 @@ function QuoteActions({ quote, onActionSuccess }) {
                 ...quote,
                 items: Array.isArray(quote.items) ? quote.items : [],
             };
+            const bid = quoteForPdf.banking_detail_id && String(quoteForPdf.banking_detail_id).trim();
+            let bankingRow = null;
+            if (bid) {
+                try {
+                    bankingRow = await BankingDetail.get(bid);
+                } catch {
+                    bankingRow = null;
+                }
+            }
             const pdfBlob = await generateQuotePDF({
                 quote: quoteForPdf,
                 client: clientData,
                 user: userData,
+                bankingDetail: bankingRow,
             });
             const blobToBase64 = async (blob) =>
                 new Promise((resolve, reject) => {

@@ -8,7 +8,7 @@ import { createPageUrl } from "@/utils";
 import { writeQuoteDraft } from "@/utils/invoiceDraftStorage";
 import DocumentPreview from "@/components/DocumentPreview";
 import { recordToStyledPreviewDoc, profileForQuotePreview } from "@/utils/documentPreviewData";
-import { clientPropType, quoteDataPropType } from "../invoice/propTypes";
+import { bankingDetailPropType, clientPropType, quoteDataPropType } from "../invoice/propTypes";
 
 export default function QuotePreview({
   quoteData,
@@ -21,6 +21,7 @@ export default function QuotePreview({
   loading = false,
   previewOnly = false,
   onTotalClick: _onTotalClick,
+  bankingDetail = null,
 }) {
   const clientList = Array.isArray(clients) ? clients : [];
   const client = clientList.find((c) => c.id === quoteData?.client_id) ?? null;
@@ -41,6 +42,7 @@ export default function QuotePreview({
         },
         client: client || {},
         user: user || {},
+        bankingDetail: bankingDetail || null,
       });
       window.open(createPageUrl("QuotePDF") + "?draft=1", "_blank", "noopener,noreferrer");
     } catch (e) {
@@ -90,7 +92,13 @@ export default function QuotePreview({
 
         <CardContent className="px-4 pb-4 pt-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8">
           {previewDoc ? (
-            <DocumentPreview doc={previewDoc} docType="quote" clients={clientList} user={profile} />
+            <DocumentPreview
+              doc={previewDoc}
+              docType="quote"
+              clients={clientList}
+              user={profile}
+              bankingDetail={bankingDetail}
+            />
           ) : null}
 
           <div
@@ -156,4 +164,5 @@ QuotePreview.propTypes = {
   loading: PropTypes.bool,
   previewOnly: PropTypes.bool,
   onTotalClick: PropTypes.func,
+  bankingDetail: bankingDetailPropType,
 };

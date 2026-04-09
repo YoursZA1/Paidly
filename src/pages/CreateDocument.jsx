@@ -588,6 +588,11 @@ export default function CreateDocument() {
     [form, computed, effectiveOwnerLogoUrl]
   );
 
+  const previewBankingRow = useMemo(() => {
+    const id = (form.banking_detail_id || "").trim();
+    return id ? bankingDetails.find((b) => b.id === id) ?? null : null;
+  }, [form.banking_detail_id, bankingDetails]);
+
   const resolveClientId = async () => {
     if (form.client_id) return form.client_id;
     const name = (form.client_name || "").trim();
@@ -956,6 +961,7 @@ export default function CreateDocument() {
               docType={docType}
               clients={clients}
               user={user}
+              bankingDetail={previewBankingRow}
               hideStatus={pdfExportPending || pdfExporting}
             />
           </CardContent>

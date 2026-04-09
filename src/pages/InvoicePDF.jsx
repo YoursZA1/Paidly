@@ -292,6 +292,7 @@ export default function InvoicePDF() {
                                 docType="invoice"
                                 clients={clientsForPreview}
                                 user={pdfPack.resolvedUser}
+                                bankingDetail={bankingDetail}
                                 hideStatus
                             />
                         ) : null}

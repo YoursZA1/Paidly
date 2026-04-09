@@ -30,10 +30,10 @@ function flushLayout() {
 
 /**
  * Generate a quote PDF blob using the same DocumentPreview used by QuotePDF page.
- * @param {{ quote: object, client: object, user: object }} params
+ * @param {{ quote: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
  */
-export async function generateQuotePDF({ quote, client, user }) {
+export async function generateQuotePDF({ quote, client, user, bankingDetail = null }) {
   if (typeof document === "undefined") {
     throw new Error("Quote PDF generation requires a browser environment.");
   }
@@ -58,6 +58,7 @@ export async function generateQuotePDF({ quote, client, user }) {
         docType="quote"
         clients={[resolvedClient]}
         user={profile}
+        bankingDetail={bankingDetail}
         hideStatus
       />
     );
