@@ -1070,10 +1070,30 @@ function PaymentMethodsSettings() {
                 business: compactBusinessForProfile(defaultBankForm),
             };
             await User.updateMyUserData(payload);
+
+            // If there are no saved payment methods yet, create one from defaults so invoices can select it.
+            const normalized = compactBusinessForProfile(defaultBankForm);
+            const canCreateSavedMethod = Boolean(normalized.bank_name && normalized.account_name);
+            if (bankingDetails.length === 0 && canCreateSavedMethod) {
+                await BankingDetail.create({
+                    bank_name: normalized.bank_name,
+                    account_name: normalized.account_name,
+                    account_number: normalized.account_number || "",
+                    routing_number: normalized.branch_code || "",
+                    payment_method: "bank_transfer",
+                    additional_info: "Auto-created from Default Bank Details",
+                    is_default: true,
+                });
+                await loadBankingDetails();
+            }
+
             await refreshUser();
             toast({
                 title: "✓ Default bank details updated",
-                description: "Profile defaults saved. Invoice-specific payment methods still override these values.",
+                description:
+                    bankingDetails.length === 0 && canCreateSavedMethod
+                        ? "Profile defaults saved and added as your first payment method. Invoice-specific methods still override defaults."
+                        : "Profile defaults saved. Invoice-specific payment methods still override these values.",
                 variant: "success",
             });
         } catch (error) {
