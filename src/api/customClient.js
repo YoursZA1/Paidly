@@ -96,7 +96,7 @@ function isSupabaseAuthUuid(id) {
 const SUPABASE_SELECT_COLUMNS = {
   invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
-  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency",
+  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
   quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
@@ -1133,6 +1133,7 @@ class EntityManager {
         'org_id', 'client_id', 'quote_number', 'status', 'project_title', 'project_description',
         'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
         'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
+        'banking_detail_id',
         'document_brand_primary', 'document_brand_secondary',
         'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
       ];
@@ -1349,7 +1350,7 @@ class EntityManager {
       const QUOTE_UPDATE_COLUMNS = [
         'client_id', 'quote_number', 'status', 'project_title', 'project_description',
         'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
-        'notes', 'terms_conditions', 'updated_at',
+        'notes', 'terms_conditions', 'updated_at', 'banking_detail_id',
         'document_brand_primary', 'document_brand_secondary',
         'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
       ];

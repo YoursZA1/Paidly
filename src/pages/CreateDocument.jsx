@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
-import { Client, Invoice, Quote, QuoteTemplate } from "@/api/entities";
+import { Client, Invoice, Quote, QuoteTemplate, BankingDetail } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { sendInvoiceToClient } from "@/services/InvoiceSendService";
@@ -30,6 +30,32 @@ const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
 /** Sentinel so Radix Select stays controlled (empty client_id must not use `undefined` → avoids uncontrolled/controlled warning). */
 const CLIENT_SELECT_NONE = "__paidly_no_client__";
+const BANKING_SELECT_NONE = "__paidly_no_banking__";
+
+const quoteBankingPrefKey = (quoteId) => `paidly_quote_banking_pref_${quoteId}`;
+
+function readQuoteBankingPreference(quoteId) {
+  if (!quoteId) return "";
+  try {
+    return (localStorage.getItem(quoteBankingPrefKey(quoteId)) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeQuoteBankingPreference(quoteId, bankingDetailId) {
+  if (!quoteId) return;
+  try {
+    const value = (bankingDetailId || "").trim();
+    if (value) {
+      localStorage.setItem(quoteBankingPrefKey(quoteId), value);
+    } else {
+      localStorage.removeItem(quoteBankingPrefKey(quoteId));
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function normalizeDocType(raw) {
   const t = String(raw || "").toLowerCase();
@@ -107,6 +133,8 @@ export default function CreateDocument() {
   const [pdfExporting, setPdfExporting] = useState(false);
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(true);
+  const [bankingDetails, setBankingDetails] = useState([]);
+  const [loadingBankingDetails, setLoadingBankingDetails] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
   const [loadedQuote, setLoadedQuote] = useState(null);
   const [prefillLoading, setPrefillLoading] = useState(false);
@@ -128,6 +156,7 @@ export default function CreateDocument() {
     company_name: "",
     company_email: "",
     company_address: "",
+    banking_detail_id: "",
     terms_conditions: initialTerms,
     /** Public URL for logo on this document only; empty = use profile logo */
     document_logo_url: "",
@@ -171,6 +200,43 @@ export default function CreateDocument() {
       cancelled = true;
     };
   }, [toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingBankingDetails(true);
+      try {
+        const list = await withApiLogging("createDocument.banking.list", () =>
+          withTimeoutRetry(() => BankingDetail.list("-created_date", { limit: 100, maxWaitMs: 8000 }), 20000, 1)
+        );
+        if (!cancelled) {
+          const safe = Array.isArray(list) ? list : [];
+          setBankingDetails(safe);
+          setForm((f) => {
+            // Keep explicit selection; otherwise preselect default for invoices.
+            if (f.banking_detail_id) return f;
+            if (docType !== "invoice") return f;
+            const def = safe.find((d) => d?.is_default) || safe[0];
+            return def?.id ? { ...f, banking_detail_id: def.id } : f;
+          });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setBankingDetails([]);
+          toast({
+            title: "Could not load bank details",
+            description: e?.message || "You can still create the invoice, but bank details will use profile defaults.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoadingBankingDetails(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [docType, toast]);
 
   useEffect(() => {
     setForm((f) => ({ ...f, number: generateNumber(docType, f.client_name || "") }));
@@ -245,6 +311,11 @@ export default function CreateDocument() {
           line_items: line_items.length > 0 ? line_items : f.line_items,
           tax_rate: Number(quote.tax_rate ?? 0),
           discount: 0,
+          banking_detail_id:
+            (quote.banking_detail_id && String(quote.banking_detail_id).trim()) ||
+            readQuoteBankingPreference(quote.id) ||
+            f.banking_detail_id ||
+            "",
           notes: quote.notes || "",
           terms_conditions: quote.terms_conditions || DEFAULT_INVOICE_TERMS_BODY,
           currency: quote.currency || f.currency || user?.currency || "ZAR",
@@ -396,6 +467,11 @@ export default function CreateDocument() {
           line_items: line_items.length > 0 ? line_items : f.line_items,
           tax_rate: Number(full.tax_rate ?? 0),
           discount: 0,
+          banking_detail_id:
+            (full.banking_detail_id && String(full.banking_detail_id).trim()) ||
+            readQuoteBankingPreference(full.id) ||
+            f.banking_detail_id ||
+            "",
           notes: full.notes || "",
           terms_conditions: full.terms_conditions || "",
           currency: full.currency || f.currency || user?.currency || "ZAR",
@@ -577,6 +653,7 @@ export default function CreateDocument() {
       owner_email,
       owner_currency,
       owner_logo_url,
+      banking_detail_id: (form.banking_detail_id || "").trim() || null,
       items,
     };
 
@@ -688,11 +765,13 @@ export default function CreateDocument() {
           owner_email,
           owner_currency,
           owner_logo_url,
+          banking_detail_id: (form.banking_detail_id || "").trim() || null,
           ...snapshotDocumentBrandForPersist(user),
           items,
         };
 
-        await withTimeoutRetry(() => Quote.create(quoteToCreate), 45000, 2);
+        const createdQuote = await withTimeoutRetry(() => Quote.create(quoteToCreate), 45000, 2);
+        writeQuoteBankingPreference(createdQuote?.id, form.banking_detail_id);
         toast({
           title: "Quote created",
           description: `Saved as ${number}.`,
@@ -1097,6 +1176,46 @@ export default function CreateDocument() {
                     </SelectContent>
                   </Select>
                 </div>
+                {(docType === "invoice" || docType === "quote") && (
+                  <div className="space-y-2">
+                    <Label>
+                      {docType === "quote" ? "Preferred bank details for invoice" : "Bank details on invoice"}
+                    </Label>
+                    <Select
+                      value={form.banking_detail_id ? form.banking_detail_id : BANKING_SELECT_NONE}
+                      onValueChange={(v) =>
+                        update("banking_detail_id", v === BANKING_SELECT_NONE ? "" : v)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={loadingBankingDetails ? "Loading…" : "Choose bank details…"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={BANKING_SELECT_NONE}>Use profile bank details</SelectItem>
+                        {bankingDetails.map((detail) => {
+                          const label =
+                            detail.account_name ||
+                            detail.bank_name ||
+                            detail.account_number ||
+                            "Saved bank details";
+                          return (
+                            <SelectItem key={detail.id} value={detail.id}>
+                              {detail.is_default ? "Default - " : ""}
+                              {label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {docType === "quote"
+                        ? "Saved as your preferred bank details when converting this quote to an invoice."
+                        : "Selected bank details are saved on this invoice and shown on downloads/shared views."}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
