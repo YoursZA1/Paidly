@@ -13,6 +13,35 @@ import {
 
 installGlobalAsyncErrorHandlers()
 
+function recoverFromCorruptedStorage() {
+    if (typeof window === "undefined") return;
+
+    const RECOVERY_RELOAD_ONCE_KEY = "paidly_storage_recovery_reloaded_once";
+    try {
+        const raw = localStorage.getItem("paidly_data");
+        if (!raw) return;
+
+        const data = JSON.parse(raw);
+        if (!data || !data.user) {
+            throw new Error("Invalid data");
+        }
+    } catch {
+        // Prevent infinite reload loops if storage is consistently unreadable.
+        const alreadyReloaded = sessionStorage.getItem(RECOVERY_RELOAD_ONCE_KEY) === "1";
+        if (alreadyReloaded) return;
+        try {
+            sessionStorage.setItem(RECOVERY_RELOAD_ONCE_KEY, "1");
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch {
+            // ignore
+        }
+        window.location.reload();
+    }
+}
+
+recoverFromCorruptedStorage()
+
 class AppErrorBoundary extends React.Component {
     constructor(props) {
         super(props);

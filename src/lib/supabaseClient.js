@@ -40,10 +40,25 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 const effectiveUrl = supabaseUrl || "https://supabase.com";
 const effectiveKey = supabaseAnonKey || "not-configured";
 
+const inMemoryStorage = new Map();
+const authSessionStorage =
+  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+    ? window.sessionStorage
+    : {
+        getItem: (key) => (inMemoryStorage.has(key) ? inMemoryStorage.get(key) : null),
+        setItem: (key, value) => {
+          inMemoryStorage.set(key, String(value));
+        },
+        removeItem: (key) => {
+          inMemoryStorage.delete(key);
+        },
+      };
+
 export const supabase = createClient(effectiveUrl, effectiveKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
+    detectSessionInUrl: true,
+    storage: authSessionStorage,
+  },
 });

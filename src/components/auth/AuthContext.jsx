@@ -11,14 +11,10 @@ import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
+import { readStoredAuthUser } from "@/utils/authStorage";
 
 function getCachedUser() {
-  try {
-    const s = localStorage.getItem("breakapi_user");
-    return s ? JSON.parse(s) : null;
-  } catch {
-    return null;
-  }
+  return readStoredAuthUser();
 }
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
@@ -30,6 +26,14 @@ function normalizeSessionFromClient(session) {
     expiresAt: session.expires_at,
     user: session.user,
   };
+}
+
+function isSessionValid(sessionNorm) {
+  if (!sessionNorm?.user?.id) return false;
+  if (!sessionNorm?.accessToken || !sessionNorm?.refreshToken) return false;
+  if (typeof sessionNorm.expiresAt !== "number") return false;
+  const now = Math.floor(Date.now() / 1000);
+  return sessionNorm.expiresAt > now;
 }
 
 /**
@@ -106,7 +110,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getCachedUser);
-  const [loading, setLoading] = useState(() => !getCachedUser());
+  const [loading, setLoading] = useState(true);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState("");
@@ -207,9 +211,19 @@ export function AuthProvider({ children }) {
   const refreshSession = useCallback(async () => {
     try {
       const newSession = await SupabaseAuthService.getSession();
+      if (!isSessionValid(newSession)) {
+        setSession(null);
+        setUser(null);
+        setError("");
+        redirectToLoginIfProtectedPath();
+        return;
+      }
       setSession(newSession);
     } catch {
       setSession(null);
+      setUser(null);
+      setError("");
+      redirectToLoginIfProtectedPath();
     }
   }, []);
 
@@ -250,38 +264,58 @@ export function AuthProvider({ children }) {
           }
         }
         if (cancelled) return;
-        setSession(initialSession);
+        const hasValidSession = isSessionValid(initialSession);
+        setSession(hasValidSession ? initialSession : null);
         let currentUser = null;
 
-        if (initialSession?.user) {
-          try {
-            currentUser = await Promise.race([
-              User.restoreFromSupabaseSession(initialSession),
-              new Promise((resolve) => {
-                setTimeout(() => resolve(null), 10000);
-              }),
-            ]);
-          } catch (restoreErr) {
-            console.warn("Restore from session failed:", restoreErr);
-          }
+        // 1) Check session, 2) Validate session
+        if (!hasValidSession) {
+          setUser(null);
+          setError("");
+          redirectToLoginIfProtectedPath();
+          return;
         }
 
-        if (!currentUser && initialSession?.user) {
+        try {
+          currentUser = await Promise.race([
+            User.restoreFromSupabaseSession(initialSession),
+            new Promise((resolve) => {
+              setTimeout(() => resolve(null), 10000);
+            }),
+          ]);
+        } catch (restoreErr) {
+          console.warn("Restore from session failed:", restoreErr);
+        }
+
+        // 3) Fetch user data
+        if (!currentUser) {
           try {
             currentUser = await User.me();
           } catch {
-            // fallback
+            currentUser = null;
           }
         }
 
         if (cancelled) return;
-        setUser(currentUser ?? getCachedUser());
-        setError(initialSession?.user && !currentUser ? "Failed to restore session" : "");
+        // 4) Render UI with resolved auth state; if user fetch failed, reset/redirect.
+        if (!currentUser) {
+          setUser(null);
+          setError("Failed to restore session");
+          redirectToLoginIfProtectedPath();
+          return;
+        }
+        setUser(currentUser);
+        setError("");
       } catch (err) {
         if (!isAbortError(err)) {
           console.warn("Auth init error:", err);
         }
-        if (!cancelled) setSession(null);
+        if (!cancelled) {
+          setSession(null);
+          setUser(null);
+          setError("");
+          redirectToLoginIfProtectedPath();
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -289,11 +323,44 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Fail-safe: never leave auth loading spinner running forever.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // Re-sync auth state when returning to this tab.
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSession();
+        void refreshUser();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshSession, refreshUser]);
+
   // Listen to Supabase auth state (sign in/out, token refresh) to keep session and user in sync
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if (!nextSession) {
+        setSession(null);
+        setUser(null);
+        setError("");
+        redirectToLoginIfProtectedPath();
+        return;
+      }
+
       if (event === "SIGNED_IN" && nextSession) {
         setSession({
           accessToken: nextSession.access_token,
@@ -323,9 +390,6 @@ export function AuthProvider({ children }) {
         });
         await refreshUser();
       }
-      // Do not treat other events with a null session as sign-out. Short races/timeouts and
-      // some auth-js callbacks can emit without a payload; clearing user caused false logouts.
-      // Real session loss is delivered as SIGNED_OUT (handled above).
     });
     return () => subscription.unsubscribe();
   }, [refreshUser, scheduleRefreshUser]);

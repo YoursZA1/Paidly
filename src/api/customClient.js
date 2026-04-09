@@ -17,6 +17,7 @@ import {
 import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
+import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -1646,9 +1647,9 @@ class AuthManager {
 
   loadUserFromStorage() {
     try {
-      const stored = localStorage.getItem('breakapi_user');
+      const stored = readStoredAuthUser();
       if (stored) {
-        this.user = JSON.parse(stored);
+        this.user = stored;
         this.isAuthenticated = !!this.user;
       }
     } catch {
@@ -1659,10 +1660,10 @@ class AuthManager {
   saveUserToStorage() {
     try {
       if (this.user) {
-        localStorage.setItem('breakapi_user', JSON.stringify(this.user));
+        writeStoredAuthUser(this.user);
       }
     } catch {
-      console.warn('Failed to save user to localStorage');
+      console.warn("Failed to save user to sessionStorage");
     }
   }
 
@@ -1754,7 +1755,7 @@ class AuthManager {
   async logout() {
     this.isAuthenticated = false;
     this.user = null;
-    localStorage.removeItem('breakapi_user');
+    clearStoredAuthUser();
     clearOrgIdCache();
   }
 
@@ -2183,10 +2184,8 @@ class IntegrationManager {
 
     const getLocalUserId = () => {
       try {
-        const stored = localStorage.getItem("breakapi_user");
-        if (!stored) return null;
-        const parsed = JSON.parse(stored);
-        return parsed?.id || null;
+        const stored = readStoredAuthUser();
+        return stored?.id || null;
       } catch {
         return null;
       }

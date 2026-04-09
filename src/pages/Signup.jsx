@@ -39,6 +39,7 @@ function formatRetryMinutes(ms) {
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/components/auth/AuthContext";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
+import { readStoredAuthUser } from "@/utils/authStorage";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
 import TurnstileChallenge from "@/components/security/TurnstileChallenge";
@@ -462,7 +463,7 @@ export default function Signup() {
         if (shouldRedirectToAppAfterAuth()) {
           window.location.href = getAppDashboardUrl();
         } else {
-          const storedUser = JSON.parse(localStorage.getItem("breakapi_user") || "null");
+          const storedUser = readStoredAuthUser();
           const role = String(storedUser?.role || "").toLowerCase();
           navigate(isStaffDashboardRole(role) ? staffDashboardHomePath() : createPageUrl("Dashboard"));
         }
