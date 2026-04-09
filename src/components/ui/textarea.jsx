@@ -3,10 +3,12 @@ import PropTypes from "prop-types"
 
 import { cn } from "@/lib/utils"
 
-const Textarea = React.forwardRef(({ className, id: idProp, name: nameProp, ...props }, ref) => {
+const Textarea = React.forwardRef(({ className, id: idProp, name: nameProp, value, ...props }, ref) => {
   const generatedId = React.useId();
   const id = idProp ?? generatedId;
   const name = nameProp ?? id;
+  // API rows often use null; React controlled textareas require string or undefined (never null).
+  const safeValue = value === null ? "" : value;
   return (
     <textarea
       id={id}
@@ -16,6 +18,7 @@ const Textarea = React.forwardRef(({ className, id: idProp, name: nameProp, ...p
         className
       )}
       ref={ref}
+      {...(safeValue !== undefined ? { value: safeValue } : {})}
       {...props}
     />
   );
