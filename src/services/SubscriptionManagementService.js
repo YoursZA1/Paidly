@@ -5,6 +5,7 @@
  */
 
 import AdminDataService from './AdminDataService';
+import { adminCacheGet, adminCacheSet } from '@/lib/adminLocalCache';
 import PlanManagementService from "@/services/PlanManagementService";
 import NotificationService from '@/components/notifications/NotificationService';
 
@@ -527,7 +528,7 @@ class SubscriptionManagementService {
    * Get billing history for subscription
    */
   static getBillingHistory(subscriptionId = null) {
-    const history = JSON.parse(localStorage.getItem(BILLING_HISTORY_KEY) || '[]');
+    const history = JSON.parse(adminCacheGet(BILLING_HISTORY_KEY) || '[]');
 
     if (subscriptionId) {
       return history
@@ -623,7 +624,7 @@ class SubscriptionManagementService {
   }
 
   static recordBillingEvent(eventType, subscriptionId, details) {
-    const history = JSON.parse(localStorage.getItem(BILLING_HISTORY_KEY) || '[]');
+    const history = JSON.parse(adminCacheGet(BILLING_HISTORY_KEY) || '[]');
 
     history.push({
       id: Date.now().toString(),
@@ -634,7 +635,7 @@ class SubscriptionManagementService {
       recordedBy: 'admin'
     });
 
-    localStorage.setItem(BILLING_HISTORY_KEY, JSON.stringify(history));
+    adminCacheSet(BILLING_HISTORY_KEY, JSON.stringify(history));
   }
 
   static calculateDiscountedPrice(subscription) {

@@ -1,25 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Payroll } from '@/api/entities';
-import { formatCurrency } from '../components/CurrencySelector';
 import { format } from 'date-fns';
 import DocumentLayout from '../components/shared/DocumentLayout';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { createPageUrl } from '@/utils';
-import { AlertCircle, Mail } from 'lucide-react';
+import {
+    fetchPublicPayslipPayload,
+    verifyPublicPayslipEmail,
+} from '@/api/publicPayslipApiClient';
+import {
+    clearLegacyPayslipVerificationSessionKeys,
+    getPublicPayslipViewerToken,
+    setPublicPayslipViewerToken,
+} from '@/lib/publicPayslipViewerStorage';
+import { AlertCircle, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-function PublicPayslipContent({ payslip, user }) {
-    if (!payslip) {
-        return null; // Should ideally not happen if parent handles !payslip
+function PublicPayslipContent({ payslip, shareToken }) {
+    if (!payslip || !shareToken) {
+        return null;
     }
-    // The core content of the public payslip page is essentially an iframe
-    // displaying the Payslip PDF. This component encapsulates that.
+    const pdfSrc = `${createPageUrl(`PayslipPDF?id=${payslip.id}&token=${encodeURIComponent(shareToken)}`)}`;
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <iframe
-                src={`/PayslipPDF?id=${payslip.id}`} // Use payslip.id from the passed prop
+                src={pdfSrc}
                 title="Payslip"
                 className="w-full border-none"
                 style={{ height: '1000px' }}
@@ -37,53 +43,64 @@ export default function PublicPayslip() {
     const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [verificationError, setVerificationError] = useState('');
+    const [sentToEmailHint, setSentToEmailHint] = useState('');
+    const [shareToken, setShareToken] = useState('');
 
     useEffect(() => {
-        loadPayslipData();
-    }, [location]);
+        clearLegacyPayslipVerificationSessionKeys();
+    }, []);
 
-    const loadPayslipData = async () => {
-        setIsLoading(true);
-        try {
-            const params = new URLSearchParams(location.search);
-            const token = params.get('token');
+    useEffect(() => {
+        const load = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const params = new URLSearchParams(location.search);
+                const token = params.get('token');
 
-            if (!token) {
-                setError("Invalid payslip link. No token provided.");
-                return;
-            }
-
-            const payslips = await Payroll.filter({ public_share_token: token });
-            
-            if (payslips.length === 0) {
-                setError("Payslip not found or link has expired.");
-                return;
-            }
-            
-            const currentPayslip = payslips[0];
-            
-            // Check if email verification is required
-            if (currentPayslip.sent_to_email) {
-                const verifiedEmail = sessionStorage.getItem(`payslip_${currentPayslip.id}_verified_email`);
-                if (verifiedEmail !== currentPayslip.sent_to_email) {
-                    setNeedsEmailVerification(true);
-                    setPayslip(currentPayslip);
+                if (!token) {
+                    setError("Invalid payslip link. No token provided.");
                     return;
                 }
+
+                setShareToken(token);
+                const viewerToken = getPublicPayslipViewerToken(token);
+                const payload = await fetchPublicPayslipPayload(token, viewerToken);
+
+                const current = payload.payslip;
+                if (!current) {
+                    setError("Payslip not found or link has expired.");
+                    return;
+                }
+
+                if (payload.requiresEmailVerification) {
+                    setSentToEmailHint(payload.sentToEmailHint || '');
+                    setNeedsEmailVerification(true);
+                    setPayslip(current);
+                    return;
+                }
+
+                setNeedsEmailVerification(false);
+                setSentToEmailHint('');
+                setPayslip(current);
+            } catch (e) {
+                console.error('Error loading public payslip:', e);
+                setError(e?.message || "Could not load the payslip. Please check the link and try again.");
+            } finally {
+                setIsLoading(false);
             }
-            
-            setPayslip(currentPayslip);
-        } catch (error) {
-            console.error('Error loading public payslip:', error);
-            setError("Could not load the payslip. Please check the link and try again.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        };
+
+        load();
+    }, [location.search]);
 
     const handleEmailVerification = async () => {
         if (!emailVerification.trim()) {
             setVerificationError('Please enter your email address');
+            return;
+        }
+        if (!shareToken) {
+            setVerificationError('Invalid link.');
             return;
         }
 
@@ -91,15 +108,22 @@ export default function PublicPayslip() {
         setVerificationError('');
 
         try {
-            if (emailVerification.toLowerCase().trim() === payslip.sent_to_email.toLowerCase().trim()) {
-                sessionStorage.setItem(`payslip_${payslip.id}_verified_email`, payslip.sent_to_email);
-                setNeedsEmailVerification(false);
-                window.location.reload();
-            } else {
-                setVerificationError('The email address does not match our records.');
+            const viewerToken = await verifyPublicPayslipEmail(shareToken, emailVerification);
+            setPublicPayslipViewerToken(shareToken, viewerToken);
+            const payload = await fetchPublicPayslipPayload(shareToken, viewerToken);
+            const current = payload.payslip;
+            if (!current || payload.requiresEmailVerification) {
+                setVerificationError('Verification failed. Please try again.');
+                return;
             }
-        } catch (error) {
-            setVerificationError('Verification failed. Please try again.');
+            setNeedsEmailVerification(false);
+            setSentToEmailHint('');
+            setPayslip(current);
+        } catch (err) {
+            setVerificationError(
+                err?.message ||
+                    'The email address does not match our records. Please enter the email this payslip was sent to.'
+            );
         } finally {
             setIsVerifying(false);
         }
@@ -128,9 +152,14 @@ export default function PublicPayslip() {
                         <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
                         <p className="text-slate-600">
                             To view this payslip, please enter the email address it was sent to.
+                            {sentToEmailHint ? (
+                                <span className="block mt-2 text-sm text-muted-foreground">
+                                    Hint: {sentToEmailHint}
+                                </span>
+                            ) : null}
                         </p>
                     </div>
-                    
+
                     <div className="space-y-4">
                         <div>
                             <Input
@@ -141,7 +170,7 @@ export default function PublicPayslip() {
                                     setEmailVerification(e.target.value);
                                     setVerificationError('');
                                 }}
-                                onKeyPress={(e) => {
+                                onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         handleEmailVerification();
                                     }
@@ -152,7 +181,7 @@ export default function PublicPayslip() {
                                 <p className="text-red-500 text-sm mt-2">{verificationError}</p>
                             )}
                         </div>
-                        
+
                         <Button
                             onClick={handleEmailVerification}
                             disabled={isVerifying || !emailVerification.trim()}
@@ -187,15 +216,19 @@ export default function PublicPayslip() {
         logo_url: payslip.owner_logo_url
     };
 
+    const downloadPath = shareToken
+        ? `PayslipPDF?id=${payslip.id}&token=${encodeURIComponent(shareToken)}&download=true`
+        : `PayslipPDF?id=${payslip.id}&download=true`;
+
     return (
         <DocumentLayout
             user={user}
             title="PAYSLIP"
             documentNumber={payslip.payslip_number}
             date={payslip.pay_date ? format(new Date(payslip.pay_date), 'MMMM d, yyyy') : ''}
-            downloadUrl={createPageUrl(`PayslipPDF?id=${payslip.id}`)}
+            downloadUrl={createPageUrl(downloadPath)}
         >
-            <PublicPayslipContent payslip={payslip} user={user} />
+            <PublicPayslipContent payslip={payslip} shareToken={shareToken} />
         </DocumentLayout>
     );
 }

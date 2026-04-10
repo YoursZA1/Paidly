@@ -33,7 +33,14 @@ export default function InvoicesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const { user: authUser } = useAuth();
-    const { loading: invoicesLoading, invoices, refetch: refetchInvoices } = useInvoices(authUser);
+    const {
+        loading: invoicesLoading,
+        invoices,
+        refetch: refetchInvoices,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInvoices(authUser);
     const { profile } = useUserProfileQuery();
     const { setLoading: setAppLoading } = useAppContext();
     const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
@@ -72,7 +79,8 @@ export default function InvoicesPage() {
     }, []);
 
     const clients = clientsFromStore ?? [];
-    const isLoading = invoicesLoading || (invoices.length === 0 && isRefreshing);
+    const isLoading =
+        (invoicesLoading && invoices.length === 0) || (invoices.length === 0 && isRefreshing);
 
     const handleActionSuccess = useCallback(() => {
         void refetchInvoices();
@@ -123,6 +131,7 @@ export default function InvoicesPage() {
     const [isImportingViews, setIsImportingViews] = useState(false);
     const invoiceFileInputRef = useRef(null);
     const invoiceViewsFileInputRef = useRef(null);
+    const invoiceLoadMoreRef = useRef(null);
 
     const getClientName = (clientId) => {
         const client = clients.find((c) => c.id === clientId);
@@ -168,6 +177,19 @@ export default function InvoicesPage() {
     useEffect(() => {
         setCurrentPage(1);
     }, [filters]);
+
+    useEffect(() => {
+        const el = invoiceLoadMoreRef.current;
+        if (!el || !hasNextPage) return undefined;
+        const ob = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) void fetchNextPage();
+            },
+            { root: null, rootMargin: "240px", threshold: 0 }
+        );
+        ob.observe(el);
+        return () => ob.disconnect();
+    }, [hasNextPage, fetchNextPage]);
 
     const handleExportInvoices = async () => {
         const listToExport = filteredInvoices;
@@ -259,6 +281,7 @@ export default function InvoicesPage() {
                 }
             }
             await refetchInvoices();
+            queryClient.invalidateQueries({ queryKey: ["invoices", "list"], exact: false });
             queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
             toast({
                 title: "Import complete",
@@ -472,6 +495,11 @@ export default function InvoicesPage() {
                                 onFilterChange={setFilters} 
                                 clients={clients}
                             />
+                            {hasNextPage && (
+                                <p className="text-xs text-muted-foreground">
+                                    Filters apply to invoices loaded so far. Scroll the list to load older invoices, then filter or export as needed.
+                                </p>
+                            )}
                         </div>
                     </CardHeader>
                     <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
@@ -522,6 +550,22 @@ export default function InvoicesPage() {
                                 )}
                                 
                                 {/* Pagination Controls */}
+                                {(hasNextPage || isFetchingNextPage) && (
+                                    <div
+                                        ref={invoiceLoadMoreRef}
+                                        className="mt-6 flex min-h-[52px] flex-col items-center justify-center gap-2 border-t border-border pt-4"
+                                        aria-live="polite"
+                                    >
+                                        {isFetchingNextPage ? (
+                                            <span className="text-sm text-muted-foreground">Loading more invoices…</span>
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                                More invoices available — scroll down to load older rows
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+
                                 {totalPages > 1 && (
                                     <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4">
                                         <div className="flex items-center gap-2 text-sm text-muted-foreground">

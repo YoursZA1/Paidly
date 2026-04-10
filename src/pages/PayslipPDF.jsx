@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Payroll, User } from '@/api/entities';
+import { fetchPublicPayslipPayload } from '@/api/publicPayslipApiClient';
+import { getPublicPayslipViewerToken } from '@/lib/publicPayslipViewerStorage';
 import { formatCurrency } from '../components/CurrencySelector';
 import { format, isValid, parseISO } from 'date-fns';
 import DocumentLayout from '../components/shared/DocumentLayout';
@@ -9,16 +11,23 @@ export default function PayslipPDF() {
     const location = useLocation();
     const urlParams = new URLSearchParams(location.search);
     const payslipId = urlParams.get('id');
+    const shareToken = urlParams.get('token');
     const autoDownload = urlParams.get('download') === 'true';
     const [payslip, setPayslip] = useState(null);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (shareToken) {
+            loadPublicPayslipByToken(shareToken, payslipId);
+            return;
+        }
         if (payslipId) {
             loadPayslipData();
+            return;
         }
-    }, [payslipId]);
+        setIsLoading(false);
+    }, [payslipId, shareToken]);
 
     useEffect(() => {
         if (autoDownload && !isLoading && payslip) {
@@ -28,6 +37,43 @@ export default function PayslipPDF() {
             return () => clearTimeout(timer);
         }
     }, [autoDownload, isLoading, payslip]);
+
+    const loadPublicPayslipByToken = async (token, expectedId) => {
+        setIsLoading(true);
+        try {
+            const viewerToken = getPublicPayslipViewerToken(token);
+            const payload = await fetchPublicPayslipPayload(token, viewerToken);
+            if (payload.requiresEmailVerification) {
+                setPayslip(null);
+                setUser(null);
+                return;
+            }
+            const row = payload.payslip;
+            if (!row) {
+                setPayslip(null);
+                setUser(null);
+                return;
+            }
+            if (expectedId && row.id !== expectedId) {
+                setPayslip(null);
+                setUser(null);
+                return;
+            }
+            setPayslip(row);
+            setUser({
+                company_name: row.owner_company_name,
+                company_address: row.owner_company_address,
+                logo_url: row.owner_logo_url,
+                currency: row.owner_currency || 'ZAR',
+            });
+        } catch (error) {
+            console.error('Error loading public payslip PDF:', error);
+            setPayslip(null);
+            setUser(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const loadPayslipData = async () => {
         try {
@@ -55,7 +101,13 @@ export default function PayslipPDF() {
     }
 
     if (!payslip || !user) {
-        return <div className="flex items-center justify-center min-h-screen">Document not found.</div>;
+        return (
+            <div className="flex items-center justify-center min-h-screen p-4 text-center text-muted-foreground">
+                {shareToken
+                    ? 'Document not found. Open the payslip link in your browser, verify your email if asked, then try again.'
+                    : 'Document not found.'}
+            </div>
+        );
     }
 
     const payDate = safeFormatDate(payslip.pay_date);

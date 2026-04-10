@@ -1,56 +1,80 @@
-import { useQuery } from '@tanstack/react-query';
-import { Client, Invoice } from '@/api/entities';
-import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
-import { withApiLogging, getCurrentPage } from '@/utils/apiLogger';
-
-const CLIENT_LIST_KEY = ['clients'];
-/** Allow pullFromSupabase to finish on cold/slow Supabase (was 12s → empty cache + failed refresh). */
-const LIST_OPTS = { limit: 100, maxWaitMs: 60000 };
-/** Per-entity cap: session + org + query can exceed 30s on poor networks. */
-const PER_LIST_TIMEOUT_MS = 120000;
-const PER_LIST_RETRIES = 1;
-
-async function fetchClientsAndInvoices() {
-  const page = getCurrentPage();
-  return withApiLogging(
-    'clients.list',
-    async () => {
-      // Fetch in parallel but tolerate partial failure: do not fail the whole page if one list times out.
-      const [cRes, iRes] = await Promise.allSettled([
-        withTimeoutRetry(() => Client.list('-created_date', LIST_OPTS), PER_LIST_TIMEOUT_MS, PER_LIST_RETRIES),
-        withTimeoutRetry(() => Invoice.list('-created_date', LIST_OPTS), PER_LIST_TIMEOUT_MS, PER_LIST_RETRIES),
-      ]);
-      const clients = cRes.status === 'fulfilled' ? cRes.value : [];
-      const invoices = iRes.status === 'fulfilled' ? iRes.value : [];
-      if (cRes.status === 'rejected' && iRes.status === 'rejected') {
-        const err = cRes.reason || iRes.reason;
-        throw err instanceof Error ? err : new Error(String(err || 'Unable to load clients'));
-      }
-      return [clients, invoices];
-    },
-    page
-  );
-}
+import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useClientsList } from "@/hooks/useClientsList";
+import { useInvoices } from "@/hooks/useInvoices";
 
 /**
- * Single source of truth for Clients page: clients + invoices + user.
- * Cached 60s, one request per mount/refetch.
+ * Clients page: clients + invoices with shared infinite-query caches
+ * (`['clients','list',userId]` and `['invoices','list',userId]` — same invoice key as Invoices page).
  */
 export function useClientsQuery(options = {}) {
-  return useQuery({
-    queryKey: CLIENT_LIST_KEY,
-    queryFn: async () => {
-      const [clientsData, invoicesData] = await fetchClientsAndInvoices();
-      return {
-        clients: clientsData || [],
-        invoices: invoicesData || [],
+  const { user, clientsBootstrap = [], invoicesBootstrap = [] } = options;
+  const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
+
+  const cq = useClientsList(user);
+  const iq = useInvoices(user);
+
+  const clients = useMemo(() => {
+    if (cq.clients.length > 0 || !cq.loading) return cq.clients;
+    return Array.isArray(clientsBootstrap) ? clientsBootstrap : [];
+  }, [cq.clients, cq.loading, clientsBootstrap]);
+
+  const invoices = useMemo(() => {
+    if (iq.invoices.length > 0 || !iq.loading) return iq.invoices;
+    return Array.isArray(invoicesBootstrap) ? invoicesBootstrap : [];
+  }, [iq.invoices, iq.loading, invoicesBootstrap]);
+
+  const isLoading = cq.loading || iq.loading;
+
+  const isError = cq.isError && iq.isError;
+  const error = cq.error || iq.error;
+
+  const isRefetching =
+    (cq.isFetching && !cq.loading) || (iq.isFetching && !iq.loading);
+
+  const refetch = useCallback(async () => {
+    await Promise.all([cq.refetch(), iq.refetch()]);
+    const cPages = userId
+      ? queryClient.getQueryData(["clients", "list", userId])
+      : null;
+    const iPages = userId
+      ? queryClient.getQueryData(["invoices", "list", userId])
+      : null;
+    const cFlat = cPages?.pages?.flat?.() ?? [];
+    const iFlat = iPages?.pages?.flat?.() ?? [];
+    return {
+      data: {
+        clients: cFlat,
+        invoices: iFlat,
         user: null,
-      };
-    },
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: false,
-    retry: 2,
-    retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 15000),
-    ...options,
-  });
+      },
+    };
+  }, [cq.refetch, iq.refetch, queryClient, userId]);
+
+  const data = useMemo(
+    () => ({
+      clients,
+      invoices,
+      user: null,
+    }),
+    [clients, invoices]
+  );
+
+  return {
+    data,
+    clients,
+    invoices,
+    isLoading,
+    isError,
+    error,
+    isRefetching,
+    refetch,
+    fetchNextClientsPage: cq.fetchNextPage,
+    hasNextClientsPage: cq.hasNextPage,
+    isFetchingNextClientsPage: cq.isFetchingNextPage,
+    fetchNextInvoicesPage: iq.fetchNextPage,
+    hasNextInvoicesPage: iq.hasNextPage,
+    isFetchingNextInvoicesPage: iq.isFetchingNextPage,
+  };
 }

@@ -37,6 +37,18 @@
       "destination": "/api/email-track?mode=link"
     },
     {
+      "source": "/api/payfast/subscription/itn",
+      "destination": "/api/payfast-subscription-itn"
+    },
+    {
+      "source": "/payfast/subscription/itn",
+      "destination": "/api/payfast-subscription-itn"
+    },
+    {
+      "source": "/api/payfast/webhook",
+      "destination": "/api/payfast-subscription-itn"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

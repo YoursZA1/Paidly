@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { breakApi } from '@/api/apiClient';
+import { ClientPortalProvider, useClientPortal } from '@/contexts/ClientPortalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,19 @@ const statusStyles = {
     declined: "bg-status-declined/12 text-status-declined border border-status-declined/25",
 };
 
+const PORTAL_TAB_STORAGE_KEY = 'paidly_portal_active_tab_v1';
+const PORTAL_TAB_VALUES = new Set(['invoices', 'quotes', 'messages', 'reports', 'payments']);
+
+function readStoredPortalTab() {
+    try {
+        const v = sessionStorage.getItem(PORTAL_TAB_STORAGE_KEY);
+        if (v && PORTAL_TAB_VALUES.has(v)) return v;
+    } catch {
+        /* ignore */
+    }
+    return 'invoices';
+}
+
 const safeFormatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
@@ -52,53 +65,33 @@ const safeFormatDate = (dateStr) => {
     }
 };
 
-export default function ClientPortal() {
-    const [client, setClient] = useState(null);
-    const [invoices, setInvoices] = useState([]);
-    const [quotes, setQuotes] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+function ClientPortalShell() {
+    const {
+        client,
+        invoices,
+        quotes,
+        isBootstrapping,
+        isLoading,
+        login,
+        logout,
+        updateClientProfile,
+        recordPayment,
+    } = useClientPortal();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
+    const [activeTab, setActiveTab] = useState(readStoredPortalTab);
 
     useEffect(() => {
-        const savedClient = sessionStorage.getItem('portal_client_email');
-        if (savedClient) {
-            handleLogin(savedClient);
-        }
-    }, []);
-
-    const handleLogin = async (email) => {
-        setIsLoading(true);
         try {
-            // Use backend function to bypass RLS
-            const { client: clientData, token } = await breakApi.backend.ClientPortal.login({ email });
-            
-            setClient(clientData);
-            sessionStorage.setItem('portal_client_email', email);
-            if (token) sessionStorage.setItem('portal_token', token);
-
-            // Load client's invoices and quotes via backend
-            const { invoices: invoicesData, quotes: quotesData } = await breakApi.backend.ClientPortal.getData({ 
-                clientId: clientData.id, 
-                email: email 
-            });
-
-            setInvoices(invoicesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
-            setQuotes(quotesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
-        } catch (error) {
-            console.error('Login error:', error);
-            throw error;
-        } finally {
-            setIsLoading(false);
+            sessionStorage.setItem(PORTAL_TAB_STORAGE_KEY, activeTab);
+        } catch {
+            /* ignore */
         }
-    };
+    }, [activeTab]);
 
     const handleLogout = () => {
-        setClient(null);
-        setInvoices([]);
-        setQuotes([]);
-        sessionStorage.removeItem('portal_client_email');
+        logout();
     };
 
     const handlePayment = (invoice) => {
@@ -108,31 +101,18 @@ export default function ClientPortal() {
 
     const handlePaymentSuccess = async (invoiceId, amount) => {
         try {
-            await breakApi.backend.ClientPortal.processPayment({
-                invoiceId,
-                amount,
+            await recordPayment(invoiceId, amount, {
                 method: 'credit_card',
-                notes: 'Online payment via client portal'
+                notes: 'Online payment via client portal',
             });
-
-            // Reload data
-            const { invoices: invoicesData } = await breakApi.backend.ClientPortal.getData({ 
-                clientId: client.id, 
-                email: client.email 
-            });
-            setInvoices(invoicesData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
         } catch (error) {
             console.error("Payment processing error:", error);
-            alert("Payment recorded but failed to update status. Please contact support.");
+            alert("Payment could not be recorded. Please contact support.");
         }
     };
 
     const handleContactUpdate = async (formData) => {
-        await breakApi.backend.ClientPortal.updateClient({
-            clientId: client.id,
-            data: formData
-        });
-        setClient({ ...client, ...formData });
+        await updateClientProfile(formData);
     };
 
     const handleDownload = (type, id) => {
@@ -171,11 +151,7 @@ export default function ClientPortal() {
 
     const pendingQuotes = quotes.filter(q => q.status === 'sent' || q.status === 'viewed').length;
 
-    if (!client) {
-        return <ClientLogin onLogin={handleLogin} />;
-    }
-
-    if (isLoading) {
+    if (isBootstrapping) {
         return (
             <div className="min-h-screen bg-slate-50 p-4">
                 <div className="max-w-7xl mx-auto space-y-6">
@@ -189,6 +165,10 @@ export default function ClientPortal() {
                 </div>
             </div>
         );
+    }
+
+    if (!client) {
+        return <ClientLogin onLogin={login} isSubmitting={isLoading} />;
     }
 
     return (
@@ -306,9 +286,13 @@ export default function ClientPortal() {
                     </Card>
                 </div>
 
-                {/* Tabs */}
-                <Tabs defaultValue="invoices" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 mb-6">
+                {/* Tabs — controlled + sessionStorage so switching/re-auth does not snap back to Invoices */}
+                <Tabs
+                    value={activeTab}
+                    onValueChange={setActiveTab}
+                    className="w-full"
+                >
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-6">
                         <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
                         <TabsTrigger value="quotes">Quotes ({quotes.length})</TabsTrigger>
                         <TabsTrigger value="messages">
@@ -526,7 +510,11 @@ export default function ClientPortal() {
                                                 invoiceId: inv.id
                                             }))
                                         )
-                                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                        .sort(
+                                            (a, b) =>
+                                                new Date(b.payment_date || b.paid_at || b.created_at || 0) -
+                                                new Date(a.payment_date || a.paid_at || a.created_at || 0)
+                                        )
                                         .map((payment, index) => (
                                             <div key={index} className="flex justify-between items-center py-4 border-b last:border-0">
                                                 <div>
@@ -534,7 +522,10 @@ export default function ClientPortal() {
                                                         Invoice #{payment.invoiceNumber}
                                                     </p>
                                                     <p className="text-sm text-slate-600">
-                                                        {safeFormatDate(payment.date)} • {payment.method?.replace('_', ' ')}
+                                                        {safeFormatDate(
+                                                            payment.payment_date || payment.paid_at || payment.created_at
+                                                        )}{' '}
+                                                        • {(payment.payment_method || payment.method || '').replace('_', ' ')}
                                                     </p>
                                                     {payment.notes && (
                                                         <p className="text-xs text-slate-500 mt-1">{payment.notes}</p>
@@ -583,5 +574,13 @@ export default function ClientPortal() {
                 />
             )}
         </div>
+    );
+}
+
+export default function ClientPortal() {
+    return (
+        <ClientPortalProvider>
+            <ClientPortalShell />
+        </ClientPortalProvider>
     );
 }

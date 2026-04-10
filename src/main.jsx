@@ -1,7 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from 'next-themes'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createAppQueryClient } from '@/lib/query-client'
 import App from '@/App.jsx'
 import ApplicationErrorPage from '@/pages/ApplicationErrorPage.jsx'
 import '@/index.css'
@@ -86,19 +87,7 @@ class AppErrorBoundary extends React.Component {
     }
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Keep data fresh for 5 min so navigating back (Dashboard → Clients → Invoices → Dashboard) uses cache
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      retry: 2,
-      refetchOnWindowFocus: false,
-      // Avoid refetch when mounting a page that already has cached data (e.g. back to Invoices/Clients)
-      refetchOnMount: false,
-    },
-  },
-})
+const queryClient = createAppQueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>

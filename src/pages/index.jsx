@@ -73,6 +73,8 @@ const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
 const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
 const AffiliateApply = lazy(() => import("./AffiliateApply"));
 const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
+const PayfastReturn = lazy(() => import("./PayfastReturn"));
+const PayfastCancel = lazy(() => import("./PayfastCancel"));
 const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
 const NotFoundPage = lazy(() =>
   import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
@@ -113,6 +115,9 @@ const AUTH_ROUTES = [
     { path: "/Affiliate", element: <AffiliateLanding /> },
     { path: "/affiliate/apply", element: <AffiliateApply /> },
     { path: "/Affiliate/apply", element: <AffiliateApply /> },
+    { path: "/return", element: <PayfastReturn /> },
+    { path: "/success", element: <PayfastReturn /> },
+    { path: "/cancel", element: <PayfastCancel /> },
 ];
 
 // --- Main App Pages ---
@@ -337,6 +342,9 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/privacypolicy$/i,
     /^\/terms/i,
     /^\/affiliate(\/|$)/i,
+    /^\/return$/i,
+    /^\/success$/i,
+    /^\/cancel$/i,
 ];
 
 function shouldBypassAppLayout(pathname) {

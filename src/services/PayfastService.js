@@ -1,4 +1,22 @@
-// In dev: use same origin so Vite proxy forwards /api to the backend. In production: use VITE_SERVER_URL.
+/**
+ * PayFast subscription / once-off checkout
+ *
+ * Phase 1 (NOW) — get checkout working:
+ *   Settings → Subscription → Subscribe → POST `/api/payfast/subscription` (Express or `api/payfast/subscription.js` on Vercel)
+ *   → `{ payfastUrl, fields }` with `signature` → programmatic form POST to PayFast → user lands on `/success`.
+ *   Dev: run `npm run server` (default :5179); Vite proxies `/api` to it.
+ *
+ * Phase 2 (NEXT) — mostly implemented server-side:
+ *   PayFast ITN hits `/api/payfast/webhook` → `payfastSubscriptionItn.js` upserts `subscriptions` and updates `profiles.subscription_plan`.
+ *
+ * Request flow (both phases):
+ *   1. User chooses plan or invoice payment (amount + metadata on the client).
+ *   2. Client POSTs JSON to `/api/payfast/subscription` or `/api/payfast/once`.
+ *   3. Server returns `{ payfastUrl, fields }` where `fields` includes `signature`.
+ *   4. `submitPayfastForm` POSTs `fields` to PayFast.
+ *
+ * Production: same-origin `/api` on Vercel, or set `VITE_SERVER_URL` if the API is on another host.
+ */
 const getPayfastApiBase = () => {
   if (import.meta.env.DEV) return "";
   const url = (import.meta.env.VITE_SERVER_URL || "").replace(/\/$/, "");
@@ -94,8 +112,8 @@ const PayfastService = {
     }
 
     const data = await response.json();
-    if (!data?.payfastUrl || !data?.fields) {
-      throw new Error("Invalid Payfast response");
+    if (!data?.payfastUrl || !data?.fields?.signature) {
+      throw new Error("Invalid Payfast response: missing signed fields");
     }
 
     submitPayfastForm(data.payfastUrl, data.fields);
@@ -107,11 +125,15 @@ const PayfastService = {
     userEmail,
     userName,
     plan,
+    itemDescription,
     billingCycle,
     amount,
     currency = "ZAR",
     returnPath = "/AdminSubscriptions",
-    cancelPath = "/AdminSubscriptions"
+    cancelPath = "/AdminSubscriptions",
+    returnUrl: returnUrlAbsolute,
+    cancelUrl: cancelUrlAbsolute,
+    notifyUrl
   }) {
     const payload = {
       subscriptionId,
@@ -119,11 +141,17 @@ const PayfastService = {
       userEmail,
       userName,
       plan,
+      ...(itemDescription != null && String(itemDescription).trim() !== ""
+        ? { itemDescription: String(itemDescription).trim() }
+        : {}),
       billingCycle,
       amount,
       currency,
-      returnUrl: buildReturnUrl(returnPath),
-      cancelUrl: buildReturnUrl(cancelPath)
+      returnUrl: returnUrlAbsolute || buildReturnUrl(returnPath),
+      cancelUrl: cancelUrlAbsolute || buildReturnUrl(cancelPath),
+      ...(notifyUrl != null && String(notifyUrl).trim() !== ""
+        ? { notifyUrl: String(notifyUrl).trim() }
+        : {})
     };
 
     let response;
@@ -151,8 +179,8 @@ const PayfastService = {
     }
 
     const data = await response.json();
-    if (!data?.payfastUrl || !data?.fields) {
-      throw new Error("Invalid Payfast response");
+    if (!data?.payfastUrl || !data?.fields?.signature) {
+      throw new Error("Invalid Payfast response: missing signed fields");
     }
 
     submitPayfastForm(data.payfastUrl, data.fields);

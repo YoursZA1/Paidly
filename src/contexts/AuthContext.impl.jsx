@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { User } from "@/api/entities";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
@@ -11,11 +11,7 @@ import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
-import { readStoredAuthUser } from "@/utils/authStorage";
-
-function getCachedUser() {
-  return readStoredAuthUser();
-}
+import { clearStoredAuthUser } from "@/utils/authStorage";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -28,12 +24,15 @@ function normalizeSessionFromClient(session) {
   };
 }
 
+/** Seconds of slack before expiry so clock skew / refresh races do not log users out spuriously. */
+const SESSION_EXPIRY_SKEW_SEC = 90;
+
 function isSessionValid(sessionNorm) {
   if (!sessionNorm?.user?.id) return false;
   if (!sessionNorm?.accessToken || !sessionNorm?.refreshToken) return false;
   if (typeof sessionNorm.expiresAt !== "number") return false;
   const now = Math.floor(Date.now() / 1000);
-  return sessionNorm.expiresAt > now;
+  return sessionNorm.expiresAt > now - SESSION_EXPIRY_SKEW_SEC;
 }
 
 /**
@@ -109,7 +108,7 @@ async function consumeAuthCallbackFromUrl() {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(getCachedUser);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -117,6 +116,14 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState("");
   const [session, setSession] = useState(null);
   const refreshUserDebounceRef = useRef(null);
+  const sessionResyncTimerRef = useRef(null);
+
+  // Drop legacy `breakapi_user` mirror when using Supabase — session + profiles are authoritative.
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      clearStoredAuthUser();
+    }
+  }, []);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -150,14 +157,8 @@ export function AuthProvider({ children }) {
         if (currentUser) {
           setUser(currentUser);
         } else {
-          const fb = getCachedUser();
-          const uid = sessionNorm.user.id;
-          if (fb && (fb.id === uid || fb.supabase_id === uid)) {
-            setUser(fb);
-          } else {
-            const min = minimalUserFromJwtUser(sessionNorm.user);
-            if (min) setUser(min);
-          }
+          const min = minimalUserFromJwtUser(sessionNorm.user);
+          if (min) setUser(min);
         }
         setError("");
       } else {
@@ -172,19 +173,13 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase.auth.getSession();
         const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
-          const fb = getCachedUser();
-          if (fb && (fb.id === su.id || fb.supabase_id === su.id)) {
-            setUser(fb);
-          } else {
-            const min = minimalUserFromJwtUser(su);
-            if (min) setUser(min);
-          }
+          const min = minimalUserFromJwtUser(su);
+          if (min) setUser(min);
         } else {
           setUser(null);
         }
       } catch {
-        const fb = getCachedUser();
-        if (fb) setUser(fb);
+        setUser(null);
       }
       setError("");
     } finally {
@@ -333,36 +328,45 @@ export function AuthProvider({ children }) {
     return () => clearTimeout(timeout);
   }, []);
 
-  // Re-sync auth state when returning to this tab.
+  // One debounced resync on tab focus / visibility — avoids stacked getSession + refresh races.
+  const scheduleSessionResync = useCallback(() => {
+    if (sessionResyncTimerRef.current) clearTimeout(sessionResyncTimerRef.current);
+    sessionResyncTimerRef.current = setTimeout(() => {
+      sessionResyncTimerRef.current = null;
+      void supabase.auth.getSession();
+      void refreshSession();
+      void refreshUser();
+    }, 400);
+  }, [refreshSession, refreshUser]);
+
+  useEffect(
+    () => () => {
+      if (sessionResyncTimerRef.current) clearTimeout(sessionResyncTimerRef.current);
+    },
+    []
+  );
+
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void refreshSession();
-        void refreshUser();
-      }
+      if (document.visibilityState === "visible") scheduleSessionResync();
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [refreshSession, refreshUser]);
+  }, [scheduleSessionResync]);
 
-  // Global focus refresh: re-check Supabase session when user returns to the app/tab.
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
-    const handleFocus = () => {
-      void supabase.auth.getSession();
-      void refreshSession();
-      void refreshUser();
-    };
+    const handleFocus = () => scheduleSessionResync();
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [refreshSession, refreshUser]);
+  }, [scheduleSessionResync]);
 
   // Listen to Supabase auth state (sign in/out, token refresh) to keep session and user in sync
   useEffect(() => {

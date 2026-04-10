@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { adminCacheGet, adminCacheSet } from "@/lib/adminLocalCache";
 import AdminDataService from "@/services/AdminDataService";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { getPublicApiBase } from "@/api/backendClient";
@@ -19,7 +20,7 @@ const STORAGE_KEYS = {
 
 const getStoredUsers = () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.USERS);
+    const stored = adminCacheGet(STORAGE_KEYS.USERS);
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
@@ -27,21 +28,21 @@ const getStoredUsers = () => {
 };
 
 const saveSupabaseData = (payload, status = "success", errorMessage = null) => {
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_USERS, JSON.stringify(payload.users || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_ORGS, JSON.stringify(payload.organizations || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_MEMBERSHIPS, JSON.stringify(payload.memberships || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_CLIENTS, JSON.stringify(payload.clients || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_SERVICES, JSON.stringify(payload.services || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_INVOICES, JSON.stringify(payload.invoices || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_QUOTES, JSON.stringify(payload.quotes || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_PAYMENTS, JSON.stringify(payload.payments || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_ASSETS, JSON.stringify(payload.assets || []));
-  localStorage.setItem("breakapi_supabase_affiliates", JSON.stringify(payload.affiliates || []));
-  localStorage.setItem("breakapi_supabase_affiliate_applications", JSON.stringify(payload.affiliate_applications || []));
-  localStorage.setItem("breakapi_supabase_referrals", JSON.stringify(payload.referrals || []));
-  localStorage.setItem("breakapi_supabase_commissions", JSON.stringify(payload.commissions || []));
-  localStorage.setItem("breakapi_supabase_affiliate_clicks", JSON.stringify(payload.affiliate_clicks || []));
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_META, JSON.stringify({
+  adminCacheSet(STORAGE_KEYS.SUPABASE_USERS, JSON.stringify(payload.users || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_ORGS, JSON.stringify(payload.organizations || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_MEMBERSHIPS, JSON.stringify(payload.memberships || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_CLIENTS, JSON.stringify(payload.clients || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_SERVICES, JSON.stringify(payload.services || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_INVOICES, JSON.stringify(payload.invoices || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_QUOTES, JSON.stringify(payload.quotes || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_PAYMENTS, JSON.stringify(payload.payments || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_ASSETS, JSON.stringify(payload.assets || []));
+  adminCacheSet("breakapi_supabase_affiliates", JSON.stringify(payload.affiliates || []));
+  adminCacheSet("breakapi_supabase_affiliate_applications", JSON.stringify(payload.affiliate_applications || []));
+  adminCacheSet("breakapi_supabase_referrals", JSON.stringify(payload.referrals || []));
+  adminCacheSet("breakapi_supabase_commissions", JSON.stringify(payload.commissions || []));
+  adminCacheSet("breakapi_supabase_affiliate_clicks", JSON.stringify(payload.affiliate_clicks || []));
+  adminCacheSet(STORAGE_KEYS.SUPABASE_META, JSON.stringify({
     bucket: payload.bucket || null,
     synced_at: new Date().toISOString(),
     status,
@@ -50,7 +51,7 @@ const saveSupabaseData = (payload, status = "success", errorMessage = null) => {
 };
 
 const saveSyncFailure = (message) => {
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_META, JSON.stringify({
+  adminCacheSet(STORAGE_KEYS.SUPABASE_META, JSON.stringify({
     bucket: null,
     synced_at: new Date().toISOString(),
     status: "failed",
@@ -141,7 +142,7 @@ const mergeUsers = (existingUsers, supabaseUsers) => {
  */
 export function getSyncStatus() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SUPABASE_META);
+    const raw = adminCacheGet(STORAGE_KEYS.SUPABASE_META);
     const meta = raw ? JSON.parse(raw) : null;
     return {
       status: meta?.status ?? null,
@@ -221,7 +222,7 @@ export const syncAdminData = async () => {
     const existingUsers = getStoredUsers();
     const { mergedUsers, matched, updated, added } = mergeUsers(existingUsers, supabaseUsers);
 
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
+    adminCacheSet(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
     AdminDataService.clearCache();
     AdminDataService.broadcastDataChange("supabaseSync", {
       matched,

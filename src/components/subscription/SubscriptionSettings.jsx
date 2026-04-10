@@ -7,7 +7,11 @@ import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 import { getBillingPortalUrl } from "@/utils";
 
-const CONTACT_SALES_EMAIL = "support@paidly.co.za";
+const CONTACT_SALES_EMAIL = (
+  import.meta.env.VITE_CONTACT_SALES_EMAIL ||
+  import.meta.env.VITE_SUPPORT_EMAIL ||
+  "support@paidly.co.za"
+).trim();
 
 const TIERS = [
     {
@@ -16,7 +20,7 @@ const TIERS = [
         price: "R 25",
         normalPrice: "R 99",
         savingsLabel: "You save R 74/mo",
-        description: "Ideal for freelancers and solo operators getting started.",
+        description: "Solo operators and side projects.",
         features: ["Unlimited invoices", "Up to 10 clients", "Basic reports", "Email support", "1 user"],
         buttonText: "Choose Plan",
         recommended: false,
@@ -209,20 +213,28 @@ export default function SubscriptionSettings() {
                                 {tier.id === "individual" && !isCurrent ? (
                                     <PayFastSubscriptionForm
                                         amountZar="25.00"
-                                        planName="Paidly Individual Monthly"
+                                        planName={tier.name}
+                                        itemDescription={tier.description}
+                                        ctaLabel="Subscribe — Individual"
+                                        submitVariant="image"
                                         className="mt-0"
                                     />
                                 ) : tier.id === "sme" && !isCurrent ? (
                                     <PayFastSubscriptionForm
                                         amountZar="50.00"
-                                        planName="Paidly SME Monthly"
+                                        planName={tier.name}
+                                        itemDescription={tier.description}
+                                        ctaLabel="Subscribe — SME"
+                                        submitVariant="image"
                                         className="mt-0"
                                     />
                                 ) : tier.id === "corporate" && !isCurrent ? (
                                     <PayFastSubscriptionForm
                                         amountZar="110.00"
-                                        planName="Paidly Corporate Monthly"
+                                        planName={tier.name}
+                                        itemDescription={tier.description}
                                         ctaLabel="Upgrade to Pro +"
+                                        submitVariant="image"
                                         className="mt-0"
                                     />
                                 ) : (

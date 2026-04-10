@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { breakApi } from '@/api/apiClient';
+import { useClientPortal } from '@/contexts/ClientPortalContext';
+import { portalGetMessages, portalSendMessage } from '@/api/clientPortalClient';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,6 +8,7 @@ import { Send, MessageCircle, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function ClientMessages({ client, invoices }) {
+    const { token } = useClientPortal();
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -15,36 +17,23 @@ export default function ClientMessages({ client, invoices }) {
 
     useEffect(() => {
         loadMessages();
-    }, [client?.id]);
+    }, [client?.id, token]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     const loadMessages = async () => {
-        if (!client?.id) {
+        if (!client?.id || !token) {
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
         try {
-            const allMessages = await breakApi.backend.ClientPortal.getMessages({ 
-                clientId: client.id,
-                email: client.email 
-            });
-            setMessages(allMessages.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
-            
-            // Mark messages as read
-            const unreadIds = allMessages
-                .filter(m => !m.is_read && m.sender_type === 'business')
-                .map(m => m.id);
-            
-            if (unreadIds.length > 0) {
-                await breakApi.backend.ClientPortal.markMessagesRead({
-                    clientId: client.id,
-                    messageIds: unreadIds
-                });
-            }
+            const allMessages = await portalGetMessages(token);
+            setMessages(
+                [...allMessages].sort((a, b) => new Date(a.created_date) - new Date(b.created_date))
+            );
         } catch (error) {
             console.error('Error loading messages:', error);
         } finally {
@@ -53,15 +42,13 @@ export default function ClientMessages({ client, invoices }) {
     };
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !client?.id) return;
+        if (!newMessage.trim() || !client?.id || !token) return;
         
         setIsSending(true);
         try {
-            await breakApi.backend.ClientPortal.sendMessage({
-                clientId: client.id,
-                email: client.email,
+            await portalSendMessage(token, {
                 content: newMessage,
-                attachments: [] // Attachments not implemented in UI yet
+                attachments: [],
             });
             setNewMessage('');
             loadMessages();

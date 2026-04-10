@@ -39,7 +39,6 @@ function formatRetryMinutes(ms) {
 import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/contexts/AuthContext";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
-import { readStoredAuthUser } from "@/utils/authStorage";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
 import TurnstileChallenge from "@/components/security/TurnstileChallenge";
@@ -459,14 +458,15 @@ export default function Signup() {
       setSuccess(true);
       clearSignupOnboardingDraft();
       setWelcomeTourEligibleAfterSignup(createdUserId);
-      setTimeout(() => {
+      setTimeout(async () => {
         if (shouldRedirectToAppAfterAuth()) {
           window.location.href = getAppDashboardUrl();
-        } else {
-          const storedUser = readStoredAuthUser();
-          const role = String(storedUser?.role || "").toLowerCase();
-          navigate(isStaffDashboardRole(role) ? staffDashboardHomePath() : createPageUrl("Dashboard"));
+          return;
         }
+        const { User } = await import("@/api/entities");
+        const u = await User.getCurrentUser?.().catch(() => null);
+        const role = String(u?.role || "").toLowerCase();
+        navigate(isStaffDashboardRole(role) ? staffDashboardHomePath() : createPageUrl("Dashboard"));
       }, 800);
     } catch (err) {
       setError(err?.message || "Failed to finish setup");

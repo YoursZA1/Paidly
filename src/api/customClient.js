@@ -3,7 +3,7 @@
  * Provides a flexible API for managing business entities and integrations
  */
 
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
@@ -103,14 +103,14 @@ const SUPABASE_SELECT_COLUMNS = {
   services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
-    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, created_at, updated_at",
+    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
   invoice_views: "id, org_id, invoice_id, client_id, viewed_at, ip_address, user_agent, is_read, created_at, updated_at",
   document_sends: "id, org_id, document_type, document_id, client_id, channel, sent_at, created_at",
   message_logs: "id, org_id, document_type, document_id, client_id, channel, recipient, sent_at, opened_at, viewed, paid, payment_date, tracking_token, clicked_at, created_at",
-  payslips: "id, org_id, user_id, created_by_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, gross_pay, tax_deduction, uif_deduction, total_deductions, net_pay, status, public_share_token, created_at, updated_at",
+  payslips: "id, org_id, user_id, created_by_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, overtime_hours, overtime_rate, allowances, gross_pay, tax_deduction, uif_deduction, pension_deduction, medical_aid_deduction, other_deductions, total_deductions, net_pay, status, public_share_token, sent_to_email, created_at, updated_at",
   expenses: "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, created_at, updated_at",
   tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
   notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
@@ -166,6 +166,7 @@ export async function selectProfileByUserId(supabase, authUserId) {
         if (d.avatar_url === undefined) d.avatar_url = null;
         if (d.role === undefined) d.role = null;
         if (d.user_role === undefined) d.user_role = null;
+        if (d.list_filter_prefs === undefined) d.list_filter_prefs = null;
       }
       return { data: d, error: null };
     }
@@ -217,6 +218,30 @@ function clearOrgIdCache() {
   Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
 }
 
+/**
+ * Entity class name (e.g. "Invoice") → Supabase table when rows are loaded via pullFromSupabase.
+ * Used to skip localStorage mirrors for signed-in users: Supabase (+ in-memory EntityManager cache) is authoritative.
+ */
+function getSupabaseTableForEntityName(entityName) {
+  const table = String(entityName || "").toLowerCase() + "s";
+  if (table === "services") return "services";
+  if (table === "clients") return "clients";
+  if (table === "invoices") return "invoices";
+  if (table === "quotes") return "quotes";
+  if (table === "payments") return "payments";
+  if (table === "bankingdetails") return "banking_details";
+  if (table === "recurringinvoices") return "recurring_invoices";
+  if (table === "packages") return "packages";
+  if (table === "invoiceviews") return "invoice_views";
+  if (table === "payrolls") return "payslips";
+  if (table === "expenses") return "expenses";
+  if (table === "tasks") return "tasks";
+  if (table === "notes") return "notes";
+  if (table === "documentsends") return "document_sends";
+  if (table === "messagelogs") return "message_logs";
+  return null;
+}
+
 class EntityManager {
   constructor(entityName = '', userId = null) {
     this.entityName = entityName;
@@ -245,6 +270,10 @@ class EntityManager {
     } else {
       this.storageKey = `breakapi_guest_${this.entityName}`;
     }
+    this.skipLocalPersistence =
+      isSupabaseConfigured &&
+      !!this.userId &&
+      getSupabaseTableForEntityName(this.entityName) != null;
   }
 
   setUserId(userId) {
@@ -255,6 +284,7 @@ class EntityManager {
   }
 
   loadFromStorage() {
+    if (this.skipLocalPersistence) return {};
     try {
       const stored = localStorage.getItem(this.storageKey);
       return stored ? JSON.parse(stored) : {};
@@ -264,6 +294,7 @@ class EntityManager {
   }
 
   saveToStorage() {
+    if (this.skipLocalPersistence) return;
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.data));
     } catch {
@@ -1073,7 +1104,7 @@ class EntityManager {
         'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
-        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token',
+        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'sent_to_email',
         'created_by_id', 'created_at', 'updated_at', 'is_sample'
       ];
       if (supabaseTable === 'payslips') {
@@ -1400,7 +1431,7 @@ class EntityManager {
         'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
-        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'is_sample', 'updated_at'
+        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'sent_to_email', 'is_sample', 'updated_at'
       ];
       if (supabaseTable === 'payslips') {
         if (typeof updateData.allowances === 'string') {
@@ -1727,6 +1758,12 @@ class AuthManager {
       // Stale localStorage can cause profile data to appear "lost" after logout/login.
     }
 
+    if (isSupabaseConfigured && !supabaseUserId) {
+      this.isAuthenticated = false;
+      this.user = null;
+      throw new Error("No Supabase session. Sign in before continuing.");
+    }
+
     this.isAuthenticated = true;
     this.user = {
       id: supabaseUserId || userId,
@@ -1951,7 +1988,7 @@ class AuthManager {
           2,
           250
         );
-        if (profileErr) {
+        if (profileErr && !isAbortError(profileErr)) {
           console.warn(
             "Could not load profile in restoreFromSupabaseSession:",
             getSupabaseErrorMessage(profileErr, "Profile load failed")
@@ -1959,10 +1996,12 @@ class AuthManager {
         }
         profileData = profile || {};
       } catch (profileErr) {
-        console.warn(
-          "Could not load profile in restoreFromSupabaseSession:",
-          getSupabaseErrorMessage(profileErr, "Profile load failed")
-        );
+        if (!isAbortError(profileErr)) {
+          console.warn(
+            "Could not load profile in restoreFromSupabaseSession:",
+            getSupabaseErrorMessage(profileErr, "Profile load failed")
+          );
+        }
       }
 
       const fullName = profileData.full_name || su.user_metadata?.full_name || (su.email || "").split("@")[0] || "User";
@@ -1997,7 +2036,9 @@ class AuthManager {
       this.saveUserToStorage();
       return this.user;
     } catch (err) {
-      console.warn("restoreFromSupabaseSession failed:", getSupabaseErrorMessage(err, "Restore failed"));
+      if (!isAbortError(err)) {
+        console.warn("restoreFromSupabaseSession failed:", getSupabaseErrorMessage(err, "Restore failed"));
+      }
       return null;
     }
   }

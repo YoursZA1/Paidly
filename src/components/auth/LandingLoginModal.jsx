@@ -25,7 +25,7 @@ import {
   clearLoginFailures,
 } from "@/utils/loginRateLimit";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
-import { readStoredAuthUser } from "@/utils/authStorage";
+import { User } from "@/api/entities";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -88,8 +88,8 @@ export default function LandingLoginModal({ open, onOpenChange }) {
         window.location.href = getAppDashboardUrl();
         return;
       }
-      const storedUser = readStoredAuthUser();
-      const destination = resolvePostLoginRoute(storedUser, from);
+      const appUser = (await User.getCurrentUser?.()) || null;
+      const destination = resolvePostLoginRoute(appUser, from);
       navigate(destination, { replace: true });
       clearLoginFailures(normalizedEmail);
     } catch (err) {

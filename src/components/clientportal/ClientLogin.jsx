@@ -5,24 +5,22 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 
-export default function ClientLogin({ onLogin }) {
+export default function ClientLogin({ onLogin, isSubmitting = false }) {
     const [email, setEmail] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        setIsLoading(true);
 
         try {
             await onLogin(email);
         } catch (err) {
-            setError('Invalid email or client not found. Please check your email address.');
-        } finally {
-            setIsLoading(false);
+            setError(err?.message || 'Invalid email or client not found. Please check your email address.');
         }
     };
+
+    const busy = isSubmitting;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
@@ -61,9 +59,9 @@ export default function ClientLogin({ onLogin }) {
                         <Button 
                             type="submit" 
                             className="w-full bg-emerald-600 hover:bg-emerald-700"
-                            disabled={isLoading}
+                            disabled={busy}
                         >
-                            {isLoading ? (
+                            {busy ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                     Verifying...

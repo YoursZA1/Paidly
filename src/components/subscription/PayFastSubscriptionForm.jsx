@@ -5,16 +5,40 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import PropTypes from "prop-types";
 
+/** Live checkout (PayFast). Override with VITE_PAYFAST_PROCESS_URL if needed. */
 const PAYFAST_PROCESS_URL = "https://www.payfast.co.za/eng/process";
 const PAYFAST_SANDBOX_URL = "https://sandbox.payfast.co.za/eng/process";
 
-const DEFAULT_AMOUNT_ZAR = "199.00";
-const SUBSCRIPTION_TYPE = "1";
-const FREQUENCY_MONTHLY = "3";
-const CYCLES_INFINITE = "0";
+/** Default matches Individual tier (Settings → Subscription); SME R50 / Corporate R110 pass `amountZar` explicitly. */
+const DEFAULT_AMOUNT_ZAR = "25.00";
+
+const PAYFAST_SUBSCRIBE_IMG =
+  "https://my.payfast.io/images/buttons/Subscribe/Light-Large-Subscribe.png";
+
+function paidlyPublicSiteBase() {
+  const fromEnv = (import.meta.env.VITE_PAYFAST_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (typeof window !== "undefined") {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return "https://www.paidly.co.za";
+}
 
 /**
- * Builds the full Settings page URL for return/cancel (same as app Settings route).
+ * Return/cancel URLs: default success path /success (also /return). Override with VITE_PAYFAST_*.
+ */
+export function getPayfastSubscriptionCheckoutUrls() {
+  const site = paidlyPublicSiteBase();
+  const fromEnv = (import.meta.env.VITE_PAYFAST_SUBSCRIPTION_NOTIFY_URL || "").trim();
+  return {
+    returnUrl: (import.meta.env.VITE_PAYFAST_RETURN_URL || `${site}/success`).replace(/\/$/, ""),
+    cancelUrl: (import.meta.env.VITE_PAYFAST_CANCEL_URL || `${site}/cancel`).replace(/\/$/, ""),
+    notifyUrl: fromEnv || `${site}/api/payfast/webhook`,
+  };
+}
+
+/**
+ * Builds the full Settings page URL (legacy fallback).
  */
 function getSettingsReturnUrl() {
   const path = createPageUrl("Settings");
@@ -22,14 +46,15 @@ function getSettingsReturnUrl() {
 }
 
 /**
- * PayFast Subscription form: posts to PayFast process URL with subscription_type (1),
- * frequency (3 = monthly), monthly amount in ZAR, and return/cancel URLs pointing to /Settings.
- * Uses backend to get signed payload, then submits form to PayFast.
+ * PayFast subscription UI: plan + amount → `PayfastService.startSubscription` → backend payload + signature → programmatic POST to PayFast.
+ * Paidly tiers: Individual R25, SME R50, Corporate R110 (`SubscriptionSettings` passes amounts per tier).
  */
 export default function PayFastSubscriptionForm({
   amountZar = DEFAULT_AMOUNT_ZAR,
-  planName = "Paidly Pro Monthly",
-  ctaLabel = "Upgrade to Pro",
+  planName = "Individual",
+  itemDescription = "",
+  ctaLabel = "Subscribe",
+  submitVariant = "button",
   processUrl,
   className = "",
 }) {
@@ -37,8 +62,7 @@ export default function PayFastSubscriptionForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  const returnUrl = getSettingsReturnUrl();
-  const cancelUrl = getSettingsReturnUrl();
+  const { returnUrl, cancelUrl, notifyUrl } = getPayfastSubscriptionCheckoutUrls();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -50,20 +74,26 @@ export default function PayFastSubscriptionForm({
       setError("Please sign in to subscribe.");
       return;
     }
+    if (!authUser?.id) {
+      setError("Your session is missing a user id. Sign out and sign in again, then try subscribing.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await PayfastService.startSubscription({
-        subscriptionId: `paidly-pro-${authUser?.id || Date.now()}`,
+        subscriptionId: `paidly-${planName.toLowerCase().replace(/\s+/g, "-")}-${authUser?.id || Date.now()}`,
         userId: authUser?.id || "",
         userEmail,
         userName,
         plan: planName,
+        itemDescription: itemDescription || undefined,
         billingCycle: "monthly",
-        amount: parseFloat(amountZar) || 199,
+        amount: parseFloat(amountZar) || 0,
         currency: "ZAR",
-        returnPath: createPageUrl("Settings"),
-        cancelPath: createPageUrl("Settings"),
+        returnUrl: returnUrl || getSettingsReturnUrl(),
+        cancelUrl: cancelUrl || getSettingsReturnUrl(),
+        notifyUrl,
       });
     } catch (err) {
       setError(err?.message || "Could not start subscription. Please try again.");
@@ -78,45 +108,63 @@ export default function PayFastSubscriptionForm({
       onSubmit={handleSubmit}
       className={className}
     >
-      {/* Hidden fields for PayFast subscription (full signed payload from API on submit) */}
-      <input type="hidden" name="subscription_type" value={SUBSCRIPTION_TYPE} />
-      <input type="hidden" name="frequency" value={FREQUENCY_MONTHLY} />
-      <input type="hidden" name="cycles" value={CYCLES_INFINITE} />
-      <input type="hidden" name="amount" value={amountZar} />
-      <input type="hidden" name="item_name" value={planName} />
-      <input type="hidden" name="return_url" value={returnUrl} />
-      <input type="hidden" name="cancel_url" value={cancelUrl} />
-
+      {/* No unsigned PayFast fields here — submit handler replaces flow with server-signed POST via PayfastService */}
       {error && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2"
-      >
-        {isSubmitting ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" aria-hidden />
-            Redirecting to PayFast…
-          </>
-        ) : (
-          <>{ctaLabel} (R{amountZar}/mo)</>
-        )}
-      </button>
+      {submitVariant === "image" ? (
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full flex justify-center disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2 rounded-2xl"
+        >
+          {isSubmitting ? (
+            <span className="inline-flex items-center gap-2 py-4 text-sm font-semibold text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" aria-hidden />
+              Redirecting to PayFast…
+            </span>
+          ) : (
+            <img
+              src={PAYFAST_SUBSCRIBE_IMG}
+              alt="Subscribe with Payfast"
+              title="Subscribe with Payfast"
+              className="h-auto max-w-full mx-auto"
+            />
+          )}
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" aria-hidden />
+              Redirecting to PayFast…
+            </>
+          ) : (
+            <>
+              {ctaLabel} (R{amountZar}/mo)
+            </>
+          )}
+        </button>
+      )}
     </form>
   );
 }
 
-export { getSettingsReturnUrl, PAYFAST_PROCESS_URL, PAYFAST_SANDBOX_URL };
+export { PAYFAST_PROCESS_URL, PAYFAST_SANDBOX_URL };
 
 PayFastSubscriptionForm.propTypes = {
   amountZar: PropTypes.string,
   planName: PropTypes.string,
+  itemDescription: PropTypes.string,
   ctaLabel: PropTypes.string,
+  submitVariant: PropTypes.oneOf(["button", "image"]),
   processUrl: PropTypes.string,
   className: PropTypes.string,
 };

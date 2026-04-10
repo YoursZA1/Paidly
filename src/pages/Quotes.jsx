@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Quote } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuotes } from "@/hooks/useQuotes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,20 +20,35 @@ import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-const QUOTES_PAGE_QUERY_KEY = ["quotes-page"];
-
 export default function QuotesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
+    const { user: authUser } = useAuth();
     const quotesFromStore = useAppStore((s) => s.quotes);
-    const setQuotes = useAppStore((s) => s.setQuotes);
     const clients = useAppStore((s) => s.clients);
     const userProfile = useAppStore((s) => s.userProfile);
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [initialError, setInitialError] = useState(null);
+    const {
+        quotes: quotesFromQuery,
+        loading: quotesLoading,
+        isFetching: quotesFetching,
+        isError: quotesQueryError,
+        error: quotesErrorObj,
+        refetch: refetchQuotes,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useQuotes(authUser);
 
-    const quotes = quotesFromStore ?? [];
-    const isLoading = quotes.length === 0 && isRefreshing;
+    const quotes =
+        quotesFromQuery.length > 0 || !quotesLoading
+            ? quotesFromQuery
+            : (quotesFromStore ?? []);
+
+    const isRefreshing = quotesFetching && quotesFromQuery.length > 0;
+    const initialError =
+        quotesQueryError && quotes.length === 0 ? quotesErrorObj : null;
+
+    const isLoading = quotesLoading && quotes.length === 0;
 
     const [searchTerm, setSearchTerm] = useState("");
     const [sortBy, setSortBy] = useState('date_newest');
@@ -40,6 +57,7 @@ export default function QuotesPage() {
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isImporting, setIsImporting] = useState(false);
     const quoteFileInputRef = useRef(null);
+    const quotesLoadMoreRef = useRef(null);
 
     useEffect(() => {
         if (initialError) {
@@ -51,40 +69,31 @@ export default function QuotesPage() {
         }
     }, [initialError, toast]);
 
-    const loadQuotes = useCallback(async (forceRefresh = false) => {
-        if (quotes.length > 0 && !forceRefresh) return;
-        setIsRefreshing(true);
-        setInitialError(null);
-        try {
-            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 });
-            setQuotes(Array.isArray(fresh) ? fresh : []);
-            setInitialError(null);
-        } catch (err) {
-            console.warn("Failed to load quotes:", err);
-            setInitialError(err);
-        } finally {
-            setIsRefreshing(false);
-        }
-    }, [quotes.length, setQuotes]);
-
     const handleRefresh = useCallback(() => {
-        loadQuotes(true);
-    }, [loadQuotes]);
-
-    useEffect(() => {
-        loadQuotes();
-    }, [loadQuotes]);
+        void refetchQuotes();
+    }, [refetchQuotes]);
 
     useSupabaseRealtime(
         ["quotes"],
         async () => {
-            // Refresh in background; keep the page responsive.
-            queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY });
-            const fresh = await Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => null);
-            if (Array.isArray(fresh)) setQuotes(fresh);
+            queryClient.invalidateQueries({ queryKey: ["quotes", "list"], exact: false });
+            await refetchQuotes();
         },
         { channelName: "quotes-page" }
     );
+
+    useEffect(() => {
+        const el = quotesLoadMoreRef.current;
+        if (!el || !hasNextPage) return undefined;
+        const ob = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) void fetchNextPage();
+            },
+            { root: null, rootMargin: "240px", threshold: 0 }
+        );
+        ob.observe(el);
+        return () => ob.disconnect();
+    }, [hasNextPage, fetchNextPage]);
 
     const getClientName = (clientId) => {
         const client = clients.find(c => c.id === clientId);
@@ -93,11 +102,16 @@ export default function QuotesPage() {
 
     const userCurrency = userProfile?.currency || 'ZAR';
 
-    const filteredQuotes = quotes.filter(quote =>
-        quote.project_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        quote.quote_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getClientName(quote.client_id).toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredQuotes = quotes.filter((quote) => {
+        const title = (quote.project_title || "").toLowerCase();
+        const num = (quote.quote_number || "").toLowerCase();
+        const term = searchTerm.toLowerCase();
+        return (
+            title.includes(term) ||
+            num.includes(term) ||
+            getClientName(quote.client_id).toLowerCase().includes(term)
+        );
+    });
 
     // Apply sorting
     const sortedQuotes = [...filteredQuotes].sort((a, b) => {
@@ -196,7 +210,8 @@ export default function QuotesPage() {
                     skipped++;
                 }
             }
-            queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: ["quotes", "list"], exact: false });
+            await refetchQuotes();
             toast({
                 title: "Import complete",
                 description: `${created} quote(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
@@ -366,6 +381,11 @@ export default function QuotesPage() {
                                 </Select>
                             </div>
                         </div>
+                        {hasNextPage && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Search applies to quotes loaded so far. Scroll the list to load older quotes.
+                            </p>
+                        )}
                     </CardHeader>
                     <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
                         {initialError && (
@@ -378,11 +398,11 @@ export default function QuotesPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => loadQuotes(true)}
-                                    disabled={isRefreshing}
+                                    onClick={() => void refetchQuotes()}
+                                    disabled={quotesFetching}
                                     className="shrink-0 gap-1"
                                 >
-                                    {isRefreshing ? "Loading…" : "Try again"}
+                                    {quotesFetching ? "Loading…" : "Try again"}
                                 </Button>
                             </div>
                         )}
@@ -415,17 +435,39 @@ export default function QuotesPage() {
                                         quotes={paginatedQuotes} 
                                         clients={clients} 
                                         userCurrency={userCurrency}
-                                        onActionSuccess={() => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY })}
+                                        onActionSuccess={() => {
+                                            queryClient.invalidateQueries({ queryKey: ["quotes", "list"], exact: false });
+                                            void refetchQuotes();
+                                        }}
                                     />
                                 ) : (
                                     <QuoteGrid 
                                         quotes={paginatedQuotes} 
                                         clients={clients} 
                                         userCurrency={userCurrency}
-                                        onActionSuccess={() => queryClient.invalidateQueries({ queryKey: QUOTES_PAGE_QUERY_KEY })}
+                                        onActionSuccess={() => {
+                                            queryClient.invalidateQueries({ queryKey: ["quotes", "list"], exact: false });
+                                            void refetchQuotes();
+                                        }}
                                     />
                                 )}
-                                
+
+                                {(hasNextPage || isFetchingNextPage) && (
+                                    <div
+                                        ref={quotesLoadMoreRef}
+                                        className="mt-6 flex min-h-[52px] flex-col items-center justify-center gap-2 border-t pt-4"
+                                        aria-live="polite"
+                                    >
+                                        {isFetchingNextPage ? (
+                                            <span className="text-sm text-muted-foreground">Loading more quotes…</span>
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                                More quotes available — scroll down to load older rows
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Pagination Controls */}
                                 {totalPages > 1 && (
                                     <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4">

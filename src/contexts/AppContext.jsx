@@ -1,18 +1,26 @@
 import { createContext, useContext, useState } from "react";
+import { useAppStore } from "@/stores/useAppStore";
 
 const AppContext = createContext(null);
 
+/**
+ * App-level control layer: coordinates UI loading flags with Zustand data hydration (Supabase-backed lists).
+ * Auth state remains in AuthProvider; notifications for the bell live in Supabase + NotificationBell.
+ */
 export function AppProvider({ children }) {
   const [loading, setLoading] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  const isDataHydrating = useAppStore((s) => s.isLoading);
+  const dataHydrationError = useAppStore((s) => s.error);
+  const lastDataFetchedAt = useAppStore((s) => s.lastFetchedAt);
 
   return (
     <AppContext.Provider
       value={{
         loading,
         setLoading,
-        notifications,
-        setNotifications,
+        isDataHydrating,
+        dataHydrationError,
+        lastDataFetchedAt,
       }}
     >
       {children}
@@ -26,5 +34,4 @@ export function useApp() {
   return ctx;
 }
 
-// Alias to avoid breaking interim imports while migrating to useApp.
 export const useAppContext = useApp;

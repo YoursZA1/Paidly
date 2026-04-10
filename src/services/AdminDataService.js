@@ -9,6 +9,7 @@
  */
 
 import AuditLogService, { EVENT_TYPES, SEVERITY_LEVELS } from './AuditLogService';
+import { adminCacheGet, adminCacheSet } from '@/lib/adminLocalCache';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -93,7 +94,7 @@ class AdminDataService {
 
   static getSupabaseData(key) {
     try {
-      const stored = localStorage.getItem(key);
+      const stored = adminCacheGet(key);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -111,7 +112,7 @@ class AdminDataService {
 
     try {
       const supabaseUsers = this.getSupabaseData(SUPABASE_KEYS.USERS);
-      const stored = localStorage.getItem(STORAGE_KEYS.USERS);
+      const stored = adminCacheGet(STORAGE_KEYS.USERS);
       const users = supabaseUsers.length ? supabaseUsers : (stored ? JSON.parse(stored) : []);
       
       dataCache.users = {
@@ -221,7 +222,7 @@ class AdminDataService {
     };
 
     try {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      adminCacheSet(STORAGE_KEYS.USERS, JSON.stringify(users));
       this.clearCache();
       this.broadcastDataChange('userUpdated', { userId, updates });
       
@@ -258,7 +259,7 @@ class AdminDataService {
     }
 
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.LOGIN_HISTORY);
+      const stored = adminCacheGet(STORAGE_KEYS.LOGIN_HISTORY);
       const history = stored ? JSON.parse(stored) : [];
       
       dataCache.loginHistory = {
@@ -298,7 +299,7 @@ class AdminDataService {
     loginHistory.push(entry);
 
     try {
-      localStorage.setItem(STORAGE_KEYS.LOGIN_HISTORY, JSON.stringify(loginHistory));
+      adminCacheSet(STORAGE_KEYS.LOGIN_HISTORY, JSON.stringify(loginHistory));
       this.clearCache();
       
       // Log audit event
@@ -332,7 +333,7 @@ class AdminDataService {
     }
 
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.BILLING_HISTORY);
+      const stored = adminCacheGet(STORAGE_KEYS.BILLING_HISTORY);
       const history = stored ? JSON.parse(stored) : [];
       
       dataCache.billingHistory = {
@@ -365,7 +366,7 @@ class AdminDataService {
     }
 
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.PLAN_CHANGE_HISTORY);
+      const stored = adminCacheGet(STORAGE_KEYS.PLAN_CHANGE_HISTORY);
       const history = stored ? JSON.parse(stored) : [];
       
       dataCache.planChangeHistory = {
@@ -404,7 +405,7 @@ class AdminDataService {
     history.push(entry);
 
     try {
-      localStorage.setItem(STORAGE_KEYS.PLAN_CHANGE_HISTORY, JSON.stringify(history));
+      adminCacheSet(STORAGE_KEYS.PLAN_CHANGE_HISTORY, JSON.stringify(history));
       this.clearCache();
       
       // Log audit event

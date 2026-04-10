@@ -3,6 +3,7 @@
  * Provides operational insight into platform document usage and user activity
  */
 
+import { adminCacheGet } from "@/lib/adminLocalCache";
 
 const DOCUMENT_LOG_KEY = 'breakapi_document_creation_log';
 
@@ -355,7 +356,7 @@ class DocumentOversightService {
   }
 
   static loadUserData() {
-    const stored = localStorage.getItem('breakapi_users');
+    const stored = adminCacheGet('breakapi_users');
     if (stored) {
       return JSON.parse(stored);
     }

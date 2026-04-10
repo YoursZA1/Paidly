@@ -5,6 +5,7 @@
  */
 
 import AdminDataService from '@/services/AdminDataService';
+import { adminCacheGet } from '@/lib/adminLocalCache';
 
 const SUPABASE_KEYS = {
   USERS: 'breakapi_supabase_users',
@@ -17,7 +18,7 @@ const SUPABASE_KEYS = {
 
 const getSupabaseData = (key) => {
   try {
-    const stored = localStorage.getItem(key);
+    const stored = adminCacheGet(key);
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];

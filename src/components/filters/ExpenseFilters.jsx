@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { usePersistedListFilters } from "@/hooks/usePersistedListFilters";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,15 @@ import { Search, Filter, X, CalendarIcon, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = 'expense_filters';
+const DEFAULT_FILTERS = {
+    search: '',
+    category: 'all',
+    amountRange: 'all',
+    paymentMethod: 'all',
+    dateFrom: null,
+    dateTo: null,
+    claimable: 'all'
+};
 
 const categoryOptions = [
     { value: 'all', label: 'All Categories' },
@@ -43,40 +52,17 @@ const paymentMethods = [
 
 export default function ExpenseFilters({ onFilterChange }) {
     const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        return saved ? JSON.parse(saved) : {
-            search: '',
-            category: 'all',
-            amountRange: 'all',
-            paymentMethod: 'all',
-            dateFrom: null,
-            dateTo: null,
-            claimable: 'all'
-        };
-    });
+    const { filters, updateFilter, clearFilters } = usePersistedListFilters(
+        "expenses",
+        DEFAULT_FILTERS
+    );
+
+    const onFilterChangeRef = useRef(onFilterChange);
+    onFilterChangeRef.current = onFilterChange;
 
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
-        onFilterChange(filters);
+        onFilterChangeRef.current(filters);
     }, [filters]);
-
-    const updateFilter = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
-
-    const clearFilters = () => {
-        const cleared = {
-            search: '',
-            category: 'all',
-            amountRange: 'all',
-            paymentMethod: 'all',
-            dateFrom: null,
-            dateTo: null,
-            claimable: 'all'
-        };
-        setFilters(cleared);
-    };
 
     const activeFilterCount = [
         filters.category !== 'all',

@@ -146,22 +146,26 @@ export default function Clients() {
   const userProfileFromStore = useAppStore((s) => s.userProfile);
 
   const lastLoadErrorToastRef = useRef(0);
-  const hasStoreData =
-    (clientsFromStore?.length > 0) ||
-    (invoicesFromStore?.length > 0) ||
-    userProfileFromStore != null;
-  const { data, isLoading, isError, error, isRefetching, refetch } = useClientsQuery({
-    initialData: hasStoreData
-      ? {
-          clients: clientsFromStore ?? [],
-          invoices: invoicesFromStore ?? [],
-          user: userProfileFromStore ?? null,
-        }
-      : undefined,
+  const {
+    clients,
+    invoices,
+    isLoading,
+    isError,
+    error,
+    isRefetching,
+    refetch,
+    fetchNextClientsPage,
+    hasNextClientsPage,
+    isFetchingNextClientsPage,
+    fetchNextInvoicesPage,
+    hasNextInvoicesPage,
+    isFetchingNextInvoicesPage,
+  } = useClientsQuery({
+    user: authUser,
+    clientsBootstrap: clientsFromStore ?? [],
+    invoicesBootstrap: invoicesFromStore ?? [],
   });
-  const clients = data?.clients ?? clientsFromStore ?? [];
-  const invoices = data?.invoices ?? invoicesFromStore ?? [];
-  const user = data?.user ?? userProfileFromStore ?? authUser ?? null;
+  const user = userProfileFromStore ?? authUser ?? null;
   /** Only block the UI when the query failed and we have no rows from cache or store. */
   const loadError =
     isError && clients.length === 0 && invoices.length === 0
@@ -179,6 +183,37 @@ export default function Clients() {
   const [deletingClient, setDeletingClient] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [detailTab, setDetailTab] = useState("invoices");
+
+  const clientsLoadMoreMobileRef = useRef(null);
+  const clientsLoadMoreDesktopRef = useRef(null);
+  const invoicesLoadMoreRef = useRef(null);
+
+  useEffect(() => {
+    if (!hasNextClientsPage) return undefined;
+    const els = [clientsLoadMoreMobileRef.current, clientsLoadMoreDesktopRef.current].filter(Boolean);
+    if (els.length === 0) return undefined;
+    const ob = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void fetchNextClientsPage();
+      },
+      { root: null, rootMargin: "240px", threshold: 0 }
+    );
+    els.forEach((el) => ob.observe(el));
+    return () => ob.disconnect();
+  }, [hasNextClientsPage, fetchNextClientsPage]);
+
+  useEffect(() => {
+    const el = invoicesLoadMoreRef.current;
+    if (!el || !hasNextInvoicesPage) return undefined;
+    const ob = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchNextInvoicesPage();
+      },
+      { root: null, rootMargin: "200px", threshold: 0 }
+    );
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, [hasNextInvoicesPage, fetchNextInvoicesPage, activeClient?.id]);
 
   const outstandingByClient = useMemo(
     () => clientOutstandingMap(invoices),
@@ -288,19 +323,7 @@ export default function Clients() {
           description: `${clientData.name} has been added.`,
           variant: "success",
         });
-        // Optimistically insert into cached clients list so UI/search can find it immediately,
-        // even if the full refetch is slow or rate-limited.
-        queryClient.setQueryData(["clients"], (old) => {
-          if (!old || typeof old !== "object") return old;
-          const prevClients = Array.isArray(old.clients) ? old.clients : [];
-          const exists = prevClients.some((c) => c?.id === newClient?.id);
-          return exists
-            ? old
-            : {
-                ...old,
-                clients: [newClient, ...prevClients],
-              };
-        });
+        queryClient.invalidateQueries({ queryKey: ["clients", "list"], exact: false });
         await refetch();
         setActiveClient(newClient);
       }
@@ -471,19 +494,32 @@ export default function Clients() {
                 {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
               </div>
             ) : (
-              searchFilteredClients.map((client) => {
-                const balance = outstandingByClient[client.id] ?? 0;
-                return (
-                  <QuickBillCard
-                    key={client.id}
-                    client={client}
-                    balance={balance}
-                    userCurrency={userCurrency}
-                    onSelectClient={setActiveClient}
-                    onCreateInvoice={(c) => navigate(createPageUrl("CreateInvoice") + "?client_id=" + encodeURIComponent(c.id))}
-                  />
-                );
-              })
+              <>
+                {searchFilteredClients.map((client) => {
+                  const balance = outstandingByClient[client.id] ?? 0;
+                  return (
+                    <QuickBillCard
+                      key={client.id}
+                      client={client}
+                      balance={balance}
+                      userCurrency={userCurrency}
+                      onSelectClient={setActiveClient}
+                      onCreateInvoice={(c) => navigate(createPageUrl("CreateInvoice") + "?client_id=" + encodeURIComponent(c.id))}
+                    />
+                  );
+                })}
+                {(hasNextClientsPage || isFetchingNextClientsPage) && (
+                  <div
+                    ref={clientsLoadMoreMobileRef}
+                    className="flex min-h-[48px] flex-col items-center justify-center py-3 text-xs text-slate-500 dark:text-slate-400"
+                    aria-live="polite"
+                  >
+                    {isFetchingNextClientsPage
+                      ? "Loading more clients…"
+                      : "Scroll to load more clients"}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -557,46 +593,59 @@ export default function Clients() {
               {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
             </div>
           ) : (
-            searchFilteredClients.map((client) => {
-              const balance = outstandingByClient[client.id] ?? 0;
-              const status = balance > 0 ? "Overdue" : "Settled";
-              const isActive = activeClient?.id === client.id;
-              return (
-                <button
-                  key={client.id}
-                  type="button"
-                  onClick={() => setActiveClient(client)}
-                  data-testid="client-list-item"
-                  data-client-name={client.name}
-                  className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
-                    isActive
-                      ? "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800"
-                      : "hover:bg-slate-50 dark:hover:bg-slate-800/80"
-                  }`}
+            <>
+              {searchFilteredClients.map((client) => {
+                const balance = outstandingByClient[client.id] ?? 0;
+                const status = balance > 0 ? "Overdue" : "Settled";
+                const isActive = activeClient?.id === client.id;
+                return (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => setActiveClient(client)}
+                    data-testid="client-list-item"
+                    data-client-name={client.name}
+                    className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
+                      isActive
+                        ? "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {client.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                        {client.company || client.email || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <p
+                        className={`text-xs font-black ${
+                          balance > 0 ? "text-red-500" : "text-emerald-500"
+                        }`}
+                      >
+                        {formatCurrency(balance, userCurrency)}
+                      </p>
+                      <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                        {status}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+              {(hasNextClientsPage || isFetchingNextClientsPage) && (
+                <div
+                  ref={clientsLoadMoreDesktopRef}
+                  className="flex min-h-[44px] flex-col items-center justify-center py-2 text-[11px] text-slate-500 dark:text-slate-400"
+                  aria-live="polite"
                 >
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {client.name}
-                    </h3>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
-                      {client.company || client.email || "—"}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <p
-                      className={`text-xs font-black ${
-                        balance > 0 ? "text-red-500" : "text-emerald-500"
-                      }`}
-                    >
-                      {formatCurrency(balance, userCurrency)}
-                    </p>
-                    <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
-                      {status}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
+                  {isFetchingNextClientsPage
+                    ? "Loading more clients…"
+                    : "Scroll to load more clients"}
+                </div>
+              )}
+            </>
           )}
         </div>
       </aside>
@@ -692,6 +741,12 @@ export default function Clients() {
                 </Link>
               </div>
             </header>
+
+            {hasNextInvoicesPage && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-2xl">
+                Balances use invoices loaded so far. Scroll down on this page to load older invoices for fuller totals.
+              </p>
+            )}
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
@@ -856,6 +911,24 @@ export default function Clients() {
                 )}
               </div>
             </section>
+
+            {(hasNextInvoicesPage || isFetchingNextInvoicesPage) && (
+              <div
+                ref={invoicesLoadMoreRef}
+                className="mt-8 flex min-h-[52px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-600 px-4 py-4 text-center"
+                aria-live="polite"
+              >
+                {isFetchingNextInvoicesPage ? (
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    Loading more invoices…
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    More invoices on file — scroll this area to load older rows for balances and lists.
+                  </span>
+                )}
+              </div>
+            )}
           </>
         )}
       </main>

@@ -104,7 +104,12 @@ export function tryConsumeApiBudget(ip, reqPath, method) {
       tier: "track_open",
     });
   }
-  if (m === "POST" && path.startsWith("/api/payfast/") && path !== "/api/payfast/itn") {
+  if (
+    m === "POST" &&
+    path.startsWith("/api/payfast/") &&
+    path !== "/api/payfast/itn" &&
+    path !== "/api/payfast/webhook"
+  ) {
     tiers.push({
       key: `payfast:${ip}`,
       max: num("API_RATE_PAYFAST_MAX", 45),
@@ -193,7 +198,10 @@ export function apiAbuseLimiterMiddleware(getClientIp, logSecurity) {
     if (path.startsWith("/api/email-track")) {
       return next();
     }
-    if (path === "/api/payfast/itn" && req.method === "POST") {
+    if (
+      (path === "/api/payfast/itn" || path === "/api/payfast/webhook") &&
+      req.method === "POST"
+    ) {
       return next();
     }
 

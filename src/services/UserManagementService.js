@@ -6,6 +6,7 @@
  */
 
 import AdminDataService from './AdminDataService';
+import { adminCacheGet, adminCacheSet } from '@/lib/adminLocalCache';
 import { updateUserSubscription } from '../api/userManagement';
 
 const STORAGE_KEY = 'breakapi_user_management';
@@ -257,7 +258,7 @@ class UserManagementService {
    * Get user actions/audit log
    */
   static getUserActionLog() {
-    const actions = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_actions`) || '[]');
+    const actions = JSON.parse(adminCacheGet(`${STORAGE_KEY}_actions`) || '[]');
     return actions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }
 
@@ -327,7 +328,7 @@ class UserManagementService {
    * Load users from localStorage
    */
   static loadUsers() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = adminCacheGet(STORAGE_KEY);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -342,7 +343,7 @@ class UserManagementService {
    * Save users to localStorage
    */
   static saveUsers(users) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+    adminCacheSet(STORAGE_KEY, JSON.stringify(users));
   }
 
   /**
@@ -439,7 +440,7 @@ class UserManagementService {
    * Record user action for audit log
    */
   static recordUserAction(action, userId, details = '') {
-    const actions = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_actions`) || '[]');
+    const actions = JSON.parse(adminCacheGet(`${STORAGE_KEY}_actions`) || '[]');
     
     actions.push({
       id: Date.now().toString(),
@@ -450,7 +451,7 @@ class UserManagementService {
       performedBy: 'admin'
     });
 
-    localStorage.setItem(`${STORAGE_KEY}_actions`, JSON.stringify(actions));
+    adminCacheSet(`${STORAGE_KEY}_actions`, JSON.stringify(actions));
   }
 
   /**

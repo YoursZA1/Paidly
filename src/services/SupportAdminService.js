@@ -5,6 +5,7 @@
  */
 
 import AuditLogService from '@/services/AuditLogService';
+import { adminCacheGet, adminCacheSet, adminCacheRemove } from '@/lib/adminLocalCache';
 
 const IMPERSONATION_KEY = 'breakapi_impersonation';
 const ADMIN_NOTES_KEY = 'breakapi_admin_notes';
@@ -39,7 +40,7 @@ class SupportAdminService {
       mode: 'view-only'
     };
 
-    localStorage.setItem(IMPERSONATION_KEY, JSON.stringify(impersonation));
+    adminCacheSet(IMPERSONATION_KEY, JSON.stringify(impersonation));
 
     // Log the impersonation start
     this.logActivity({
@@ -75,14 +76,14 @@ class SupportAdminService {
       });
     }
 
-    localStorage.removeItem(IMPERSONATION_KEY);
+    adminCacheRemove(IMPERSONATION_KEY);
   }
 
   /**
    * Get current impersonation session
    */
   static getCurrentImpersonation() {
-    const stored = localStorage.getItem(IMPERSONATION_KEY);
+    const stored = adminCacheGet(IMPERSONATION_KEY);
     return stored ? JSON.parse(stored) : null;
   }
 
@@ -588,7 +589,7 @@ class SupportAdminService {
    */
   static exportUsersCSV() {
     try {
-      const users = JSON.parse(localStorage.getItem('breakapi_user_management') || '[]');
+      const users = JSON.parse(adminCacheGet('breakapi_user_management') || '[]');
       
       const headers = ['ID', 'Name', 'Email', 'Company', 'Plan', 'Status', 'Created At', 'Last Login'];
       const rows = users.map(u => [
@@ -759,7 +760,7 @@ class SupportAdminService {
   // ==================== Log Retention & Purge ====================
 
   static getRetentionSettings() {
-    const stored = localStorage.getItem(RETENTION_SETTINGS_KEY);
+    const stored = adminCacheGet(RETENTION_SETTINGS_KEY);
     if (!stored) return { ...DEFAULT_RETENTION_SETTINGS };
     try {
       const parsed = JSON.parse(stored);
@@ -773,7 +774,7 @@ class SupportAdminService {
   static updateRetentionSettings(updates) {
     const current = this.getRetentionSettings();
     const next = { ...current, ...updates };
-    localStorage.setItem(RETENTION_SETTINGS_KEY, JSON.stringify(next));
+    adminCacheSet(RETENTION_SETTINGS_KEY, JSON.stringify(next));
     return next;
   }
 
@@ -792,7 +793,7 @@ class SupportAdminService {
 
   static purgeByKey(storageKey, days) {
     if (!Number.isFinite(days) || days <= 0) return { removed: 0, kept: 0 };
-    const stored = localStorage.getItem(storageKey);
+    const stored = adminCacheGet(storageKey);
     if (!stored) return { removed: 0, kept: 0 };
     try {
       const logs = JSON.parse(stored);
@@ -800,7 +801,7 @@ class SupportAdminService {
       cutoff.setDate(cutoff.getDate() - days);
       const retained = logs.filter(entry => new Date(entry.timestamp || entry.createdAt || entry.created_at) >= cutoff);
       const removed = logs.length - retained.length;
-      localStorage.setItem(storageKey, JSON.stringify(retained));
+      adminCacheSet(storageKey, JSON.stringify(retained));
       return { removed, kept: retained.length };
     } catch (error) {
       console.error('Failed to purge logs:', error);
@@ -865,7 +866,7 @@ class SupportAdminService {
 
   static loadAdminNotes() {
     try {
-      const stored = localStorage.getItem(ADMIN_NOTES_KEY);
+      const stored = adminCacheGet(ADMIN_NOTES_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Failed to load admin notes:', error);
@@ -874,12 +875,12 @@ class SupportAdminService {
   }
 
   static saveAdminNotes(notes) {
-    localStorage.setItem(ADMIN_NOTES_KEY, JSON.stringify(notes));
+    adminCacheSet(ADMIN_NOTES_KEY, JSON.stringify(notes));
   }
 
   static loadErrors() {
     try {
-      const stored = localStorage.getItem(ERROR_TRACKING_KEY);
+      const stored = adminCacheGet(ERROR_TRACKING_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Failed to load error tracking data:', error);
@@ -888,12 +889,12 @@ class SupportAdminService {
   }
 
   static saveErrors(errors) {
-    localStorage.setItem(ERROR_TRACKING_KEY, JSON.stringify(errors));
+    adminCacheSet(ERROR_TRACKING_KEY, JSON.stringify(errors));
   }
 
   static loadActivities() {
     try {
-      const stored = localStorage.getItem(ACTIVITY_LOG_KEY);
+      const stored = adminCacheGet(ACTIVITY_LOG_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Failed to load activity logs:', error);
@@ -902,12 +903,12 @@ class SupportAdminService {
   }
 
   static saveActivities(activities) {
-    localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(activities));
+    adminCacheSet(ACTIVITY_LOG_KEY, JSON.stringify(activities));
   }
 
   static loadWebhookFailures() {
     try {
-      const stored = localStorage.getItem(WEBHOOK_FAILURES_KEY);
+      const stored = adminCacheGet(WEBHOOK_FAILURES_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Failed to load webhook failures:', error);
@@ -916,7 +917,7 @@ class SupportAdminService {
   }
 
   static saveWebhookFailures(failures) {
-    localStorage.setItem(WEBHOOK_FAILURES_KEY, JSON.stringify(failures));
+    adminCacheSet(WEBHOOK_FAILURES_KEY, JSON.stringify(failures));
   }
 
   static calculateDuration(startTime, endTime) {

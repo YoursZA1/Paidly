@@ -627,8 +627,17 @@ export default function Layout({ children, currentPageName }) {
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
-    fetchAll();
-  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
+    fetchAll(user);
+  }, [
+    user?.id,
+    user?.role,
+    user?.full_name,
+    user?.company_name,
+    fetchAll,
+    isAdminV2Route,
+    lastFetchedAt,
+    userProfile,
+  ]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo

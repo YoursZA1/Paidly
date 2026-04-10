@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Invoice, Client, User, BankingDetail } from '@/api/entities';
-import { getPublicApiBase } from '@/api/backendClient';
+import { fetchPublicInvoicePayload } from '@/api/publicInvoiceApiClient';
+import { getPublicInvoiceViewerToken } from '@/lib/publicInvoiceViewerStorage';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
@@ -102,18 +103,14 @@ export default function InvoicePDF() {
         setLoadError(null);
         setIsLoading(true);
         try {
-            const apiBase = getPublicApiBase();
-            const res = await fetch(`${apiBase}/api/public-invoice?token=${encodeURIComponent(token)}`);
-            if (res.status === 404) {
-                setLoadError('Invoice not found or link has expired.');
+            const viewerToken = getPublicInvoiceViewerToken(token);
+            const payload = await fetchPublicInvoicePayload(token, viewerToken);
+            if (payload.requiresEmailVerification) {
+                setLoadError(
+                    'This invoice requires email verification. Open the invoice link in your browser, confirm your email, then try downloading the PDF again from that page.'
+                );
                 return;
             }
-            if (!res.ok) {
-                const j = await res.json().catch(() => ({}));
-                setLoadError(j?.error || 'Could not load the invoice.');
-                return;
-            }
-            const payload = await res.json();
             const currentInvoice = payload.invoice;
             if (!currentInvoice) {
                 setLoadError('Invoice not found or link has expired.');

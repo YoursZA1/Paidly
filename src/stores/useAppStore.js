@@ -30,8 +30,11 @@ export const useAppStore = create((set, get) => ({
   error: null,
   lastFetchedAt: null,
 
-  /** Fetch all dashboard/invoices data in parallel. Call once when user is present (e.g. in Layout). */
-  fetchAll: async () => {
+  /**
+   * Fetch all dashboard/invoices data in parallel. Call once when user is present (e.g. in Layout).
+   * @param {object | null} authUser - Prefer `user` from AuthContext (Supabase-backed); avoids duplicate auth resolution.
+   */
+  fetchAll: async (authUser = null) => {
     set({ isLoading: true, error: null });
     try {
       const safe = async (endpoint, fn, fallback, timeoutMs = 30000, retries = 1) => {
@@ -42,9 +45,12 @@ export const useAppStore = create((set, get) => ({
         }
       };
 
-      // Auth resolution: prefer local session/cache first, then bounded profile calls.
-      // This avoids long 15s stalls from auth.me during app bootstrap.
-      let userData = await User.getCurrentUser?.();
+      let userData =
+        authUser && (authUser.id || authUser.supabase_id) ? { ...authUser } : null;
+
+      if (!userData) {
+        userData = await User.getCurrentUser?.();
+      }
       if (!userData) {
         try {
           userData = await withTimeoutRetry(

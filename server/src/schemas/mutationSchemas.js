@@ -56,6 +56,8 @@ export const payfastSubscriptionBodySchema = z.object({
   currency: z.string().optional(),
   returnUrl: z.union([z.string(), z.null()]).optional(),
   cancelUrl: z.union([z.string(), z.null()]).optional(),
+  notifyUrl: z.union([z.string(), z.null()]).optional(),
+  itemDescription: z.union([z.string(), z.null()]).optional(),
   billingDate: z.union([z.string(), z.null()]).optional(),
   cycles: z.union([z.number(), z.string(), z.null()]).optional(),
   subscriptionNotifyEmail: z.union([z.boolean(), z.string(), z.null()]).optional(),

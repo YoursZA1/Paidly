@@ -31,7 +31,9 @@ export function createGlobalApiLimiter(getClientIp) {
       if (p === "/api/health" || p === "/api/health/auth-security" || p === "/health") return true;
       if (p.startsWith("/api/email-track") || p.startsWith("/email-track")) return true;
       if (
-        (p === "/api/payfast/itn" || p === "/payfast/itn") &&
+        (p === "/api/payfast/itn" ||
+          p === "/api/payfast/webhook" ||
+          p === "/payfast/itn") &&
         req.method === "POST"
       ) {
         return true;

@@ -3,7 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Invoice } from '@/api/entities';
 import { createPageUrl } from '@/utils';
-import { getPublicApiBase } from '@/api/backendClient';
+import {
+  fetchPublicInvoicePayload,
+  verifyPublicInvoiceEmail,
+} from '@/api/publicInvoiceApiClient';
+import {
+  clearLegacyInvoiceVerificationSessionKeys,
+  getPublicInvoiceViewerToken,
+  setPublicInvoiceViewerToken,
+} from '@/lib/publicInvoiceViewerStorage';
 import { formatCurrency } from '../components/CurrencySelector';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { AlertCircle, Download, CreditCard, Mail, Loader2 } from 'lucide-react';
@@ -26,8 +34,14 @@ export default function PublicInvoice() {
     const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [verificationError, setVerificationError] = useState('');
+    const [sentToEmailHint, setSentToEmailHint] = useState('');
+    const [shareToken, setShareToken] = useState('');
     const [isPaying, setIsPaying] = useState(false);
     const [payError, setPayError] = useState('');
+
+    useEffect(() => {
+        clearLegacyInvoiceVerificationSessionKeys();
+    }, []);
 
     useEffect(() => {
         const fetchInvoiceData = async () => {
@@ -41,36 +55,24 @@ export default function PublicInvoice() {
                     return;
                 }
 
-                const apiBase = getPublicApiBase();
-                const res = await fetch(
-                    `${apiBase}/api/public-invoice?token=${encodeURIComponent(token)}`
-                );
-                if (res.status === 404) {
-                    setError("Invoice not found or link has expired.");
-                    return;
-                }
-                if (!res.ok) {
-                    const j = await res.json().catch(() => ({}));
-                    setError(j?.error || "Could not load the invoice. Please check the link and try again.");
-                    return;
-                }
-
-                const payload = await res.json();
+                setShareToken(token);
+                const viewerToken = getPublicInvoiceViewerToken(token);
+                const payload = await fetchPublicInvoicePayload(token, viewerToken);
                 const currentInvoice = payload.invoice;
                 if (!currentInvoice) {
                     setError("Invoice not found or link has expired.");
                     return;
                 }
 
-                if (currentInvoice.sent_to_email) {
-                    const verifiedEmail = sessionStorage.getItem(`invoice_${currentInvoice.id}_verified_email`);
-                    if (verifiedEmail !== currentInvoice.sent_to_email) {
-                        setNeedsEmailVerification(true);
-                        setInvoice(currentInvoice);
-                        return;
-                    }
+                if (payload.requiresEmailVerification) {
+                    setSentToEmailHint(payload.sentToEmailHint || '');
+                    setNeedsEmailVerification(true);
+                    setInvoice(currentInvoice);
+                    return;
                 }
 
+                setNeedsEmailVerification(false);
+                setSentToEmailHint('');
                 setInvoice(currentInvoice);
 
                 if (payload.client) {
@@ -93,7 +95,7 @@ export default function PublicInvoice() {
 
             } catch (e) {
                 console.error("Error fetching public invoice:", e);
-                setError("Could not load the invoice. Please check the link and try again.");
+                setError(e?.message || "Could not load the invoice. Please check the link and try again.");
             } finally {
                 setIsLoading(false);
             }
@@ -107,26 +109,47 @@ export default function PublicInvoice() {
             setVerificationError('Please enter your email address');
             return;
         }
+        if (!shareToken) {
+            setVerificationError('Invalid link.');
+            return;
+        }
 
         setIsVerifying(true);
         setVerificationError('');
 
         try {
-            // Check if the entered email matches the sent_to_email
-            if (invoice && emailVerification.toLowerCase().trim() === invoice.sent_to_email.toLowerCase().trim()) {
-                // Store verification in session
-                sessionStorage.setItem(`invoice_${invoice.id}_verified_email`, invoice.sent_to_email);
-                setNeedsEmailVerification(false);
-                
-                // Reload to fetch full data (client, banking details, update status)
-                // Using window.location.reload() will trigger the useEffect again, but this time
-                // the sessionStorage will have the verified email, so the verification step will be skipped.
-                window.location.reload(); 
+            const viewerToken = await verifyPublicInvoiceEmail(shareToken, emailVerification);
+            setPublicInvoiceViewerToken(shareToken, viewerToken);
+            const payload = await fetchPublicInvoicePayload(shareToken, viewerToken);
+            const currentInvoice = payload.invoice;
+            if (!currentInvoice || payload.requiresEmailVerification) {
+                setVerificationError('Verification failed. Please try again.');
+                return;
+            }
+            setNeedsEmailVerification(false);
+            setSentToEmailHint('');
+            setInvoice(currentInvoice);
+            if (payload.client) {
+                setClient(payload.client);
             } else {
-                setVerificationError('The email address does not match our records. Please enter the email address this invoice was sent to.');
+                setClient({ name: "Client", email: "", address: "", phone: "" });
+            }
+            setBankingDetail(payload.bankingDetail || null);
+
+            const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
+            if (autoUpdate) {
+                try {
+                    await Invoice.update(currentInvoice.id, autoUpdate);
+                    setInvoice(prev => ({ ...prev, ...autoUpdate }));
+                } catch (e) {
+                    console.error("Could not update invoice status:", e);
+                }
             }
         } catch (error) {
-            setVerificationError('Verification failed. Please try again.');
+            setVerificationError(
+                error?.message ||
+                    'The email address does not match our records. Please enter the email address this invoice was sent to.'
+            );
         } finally {
             setIsVerifying(false);
         }
@@ -154,7 +177,14 @@ export default function PublicInvoice() {
                         <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
                         <h1 className="text-2xl font-bold text-foreground mb-2">Email Verification Required</h1>
                         <p className="text-muted-foreground">
-                            To view this invoice, please enter the email address it was sent to.
+                            To view this invoice, please enter the email address it was sent to
+                            {sentToEmailHint ? (
+                                <>
+                                    {' '}
+                                    <span className="text-foreground font-medium">(hint: {sentToEmailHint})</span>
+                                </>
+                            ) : null}
+                            .
                         </p>
                     </div>
                     

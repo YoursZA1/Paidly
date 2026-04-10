@@ -1,4 +1,11 @@
-import { getPayfastFrequency, getPayfastProcessUrl, signPayfastPayload } from "../../../server/src/payfast.js";
+import {
+  assertPayfastClientNotifySameOrigin,
+  assertPayfastHttpsUrlsInLive,
+  assertPayfastPassphraseForLiveCheckout,
+  getPayfastFrequency,
+  getPayfastProcessUrl,
+  signPayfastPayload,
+} from "../../../server/src/payfast.js";
 import { parseBody } from "../../../server/src/validateBody.js";
 import { payfastSubscriptionBodySchema } from "../../../server/src/schemas/mutationSchemas.js";
 import { assertFiniteAmount, isSafeHttpUrl, sanitizeOneLine } from "../../../server/src/inputValidation.js";
@@ -16,7 +23,13 @@ function toPayfastBooleanFlag(value, fallback = true) {
   return fallback ? "true" : "false";
 }
 
+/** Builds signed PayFast subscription payload; client must POST `fields` to `payfastUrl` (see PayfastService.startSubscription). */
 export default async function handler(req, res) {
+  if (process.env.VERCEL && process.env.PAYFAST_MODE && process.env.PAYFAST_MODE !== "live") {
+    console.warn(
+      "[payfast/subscription] PAYFAST_MODE is not 'live' — checkout uses the sandbox PayFast host. Set PAYFAST_MODE=live for real charges."
+    );
+  }
   applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
@@ -38,6 +51,8 @@ export default async function handler(req, res) {
     currency,
     returnUrl,
     cancelUrl,
+    notifyUrl: notifyUrlBody,
+    itemDescription,
     billingDate,
     cycles,
     subscriptionNotifyEmail,
@@ -53,9 +68,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid billing cycle" });
   }
 
-  for (const u of [returnUrl, cancelUrl]) {
+  for (const u of [returnUrl, cancelUrl, notifyUrlBody]) {
     if (u != null && String(u).trim() !== "" && !isSafeHttpUrl(String(u))) {
-      return res.status(400).json({ error: "Invalid return or cancel URL" });
+      return res.status(400).json({ error: "Invalid return, cancel, or notify URL" });
     }
   }
 
@@ -70,17 +85,46 @@ export default async function handler(req, res) {
   try {
     if (returnUrl) {
       const origin = new URL(String(returnUrl)).origin;
-      defaultSubscriptionNotifyUrl = `${origin}/payfast/subscription/itn`;
+      defaultSubscriptionNotifyUrl = `${origin}/api/payfast/webhook`;
     }
   } catch {
     /* noop */
   }
   const notifyUrl =
+    (notifyUrlBody != null && String(notifyUrlBody).trim() !== ""
+      ? String(notifyUrlBody).trim()
+      : null) ||
     process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL ||
     process.env.PAYFAST_NOTIFY_URL ||
     defaultSubscriptionNotifyUrl;
   const returnUrlResolved = process.env.PAYFAST_RETURN_URL || returnUrl;
   const cancelUrlResolved = process.env.PAYFAST_CANCEL_URL || cancelUrl;
+
+  const clientSuppliedNotify =
+    notifyUrlBody != null && String(notifyUrlBody).trim() !== "";
+  if (clientSuppliedNotify && (!returnUrl || String(returnUrl).trim() === "")) {
+    return res.status(400).json({ error: "return_url is required when supplying notify_url" });
+  }
+  if (clientSuppliedNotify) {
+    const notifyOrigin = assertPayfastClientNotifySameOrigin(notifyUrl, returnUrl);
+    if (!notifyOrigin.ok) {
+      return res.status(400).json({ error: notifyOrigin.error });
+    }
+  }
+
+  const httpsCheckout = assertPayfastHttpsUrlsInLive([
+    ["return_url", returnUrlResolved],
+    ["cancel_url", cancelUrlResolved],
+    ["notify_url", notifyUrl],
+  ]);
+  if (!httpsCheckout.ok) {
+    return res.status(400).json({ error: httpsCheckout.error });
+  }
+
+  const signingReady = assertPayfastPassphraseForLiveCheckout();
+  if (!signingReady.ok) {
+    return res.status(500).json({ error: signingReady.error });
+  }
 
   const now = new Date();
   const billingDateResolved =
@@ -88,8 +132,12 @@ export default async function handler(req, res) {
       ? billingDate.trim()
       : now.toISOString().slice(0, 10);
   const frequency = getPayfastFrequency(cycleRaw);
-  const planLabel = sanitizeOneLine(plan != null ? String(plan) : "Subscription", 120) || "Subscription";
+  const planLabel = sanitizeOneLine(plan != null ? String(plan) : "Paidly", 120) || "Paidly";
   const userLabel = sanitizeOneLine(userName != null ? String(userName) : "", 200);
+  const descFromClient = sanitizeOneLine(itemDescription != null ? String(itemDescription) : "", 255);
+  const itemDesc =
+    descFromClient ||
+    `Subscription for ${userLabel || userEmail}`;
   const subIdSafe = String(subscriptionId).trim();
   const currencySafe = sanitizeOneLine(String(currency || "ZAR"), 8).toUpperCase();
   const cyclesNumber = Number(cycles);
@@ -104,14 +152,15 @@ export default async function handler(req, res) {
     notify_url: notifyUrl,
     m_payment_id: `${subIdSafe}-${Date.now()}`,
     amount: amountCheck.value.toFixed(2),
-    item_name: `${planLabel} Plan`,
-    item_description: `Subscription for ${userLabel || userEmail}`,
+    item_name: planLabel,
+    item_description: itemDesc,
     custom_str1: subIdSafe,
     custom_str2: userId ? String(userId).trim() : "",
     custom_str3: cycleRaw,
     custom_str4: currencySafe,
     email_address: userEmail,
-    subscription_type: 2,
+    // PayFast: 1 = recurring subscription; 2 = tokenization / ad hoc billing.
+    subscription_type: 1,
     billing_date: billingDateResolved,
     recurring_amount: amountCheck.value.toFixed(2),
     frequency,
@@ -122,6 +171,9 @@ export default async function handler(req, res) {
   };
 
   payload.signature = signPayfastPayload(payload, passphrase);
+  if (!payload.signature) {
+    return res.status(500).json({ error: "Failed to generate PayFast signature" });
+  }
   return res.status(200).json({
     payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
     fields: payload,

@@ -6,10 +6,12 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import {
+  assertPayfastClientNotifySameOrigin,
+  assertPayfastHttpsUrlsInLive,
+  assertPayfastPassphraseForLiveCheckout,
   getPayfastFrequency,
   getPayfastProcessUrl,
   signPayfastPayload,
-  verifyPayfastSignature
 } from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
@@ -83,7 +85,7 @@ import {
 import { sendUnexpectedError } from "./apiResponse.js";
 import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
 import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
-import { recordSubscriptionPaymentCommission } from "./affiliateSubscriptionCommission.js";
+import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
@@ -95,6 +97,9 @@ import {
   handlePostAffiliateApplicationApprove,
   handlePostAffiliateApplicationDecline,
 } from "./affiliateApplicationAdminActions.js";
+import { registerClientPortalRoutes } from "./clientPortalApi.js";
+import { registerPublicInvoiceRoutes } from "./publicInvoiceApi.js";
+import { registerPublicPayslipRoutes } from "./publicPayslipApi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from server directory (so it works when run from project root or server/)
@@ -577,6 +582,10 @@ app.use(express.urlencoded({
 
 app.use("/api", createGlobalApiLimiter(getClientIp));
 app.use(apiAbuseLimiterMiddleware(getClientIp, logSecurity));
+
+registerClientPortalRoutes(app);
+registerPublicInvoiceRoutes(app);
+registerPublicPayslipRoutes(app);
 
 /** Root URL — no SPA here; avoids a bare 404 when someone opens the API port in a browser. */
 app.get("/", (req, res) => {
@@ -1331,144 +1340,16 @@ function toPayfastBooleanFlag(value, fallback = true) {
   return fallback ? "true" : "false";
 }
 
-function parsePayfastWhitelist(raw) {
-  return String(raw || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+const handlePayfastSubscriptionItn = createPayfastSubscriptionItnHandler({
+  supabase: supabaseAdmin,
+  getClientIp,
+});
 
-function payfastItnIpAllowed(req) {
-  const allowed = parsePayfastWhitelist(process.env.PAYFAST_ITN_IP_WHITELIST);
-  if (allowed.length === 0) return true;
-  const ip = String(getClientIp(req) || "").trim();
-  if (!ip) return false;
-  return allowed.includes(ip);
-}
-
-function addMonthsIso(baseDate, months) {
-  const d = new Date(baseDate);
-  if (!Number.isFinite(d.getTime())) return null;
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString();
-}
-
-function monthsFromBillingCycle(cycle) {
-  const c = String(cycle || "monthly").toLowerCase();
-  if (c === "annual") return 12;
-  if (c === "biannual") return 6;
-  if (c === "quarterly") return 3;
-  return 1;
-}
-
-function addHoursIso(baseDate, hours) {
-  const d = new Date(baseDate);
-  if (!Number.isFinite(d.getTime())) return null;
-  d.setTime(d.getTime() + Math.max(1, Number(hours || 24)) * 60 * 60 * 1000);
-  return d.toISOString();
-}
-
-function parsePayfastYyyyMmDdToIso(raw) {
-  const s = String(raw || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const d = new Date(`${s}T00:00:00.000Z`);
-  if (!Number.isFinite(d.getTime())) return null;
-  return d.toISOString();
-}
-
-async function upsertSubscriptionFromItn(supabase, payload) {
-  const userId = String(payload.custom_str2 || "").trim();
-  if (!isValidUuid(userId)) return;
-
-  const paymentStatus = String(payload.payment_status || "").toUpperCase();
-  const eventType = String(payload.type || "").toLowerCase();
-  const isFreeTrialEvent = eventType === "subscription.free-trial";
-  const cycle = String(payload.custom_str3 || "monthly").toLowerCase();
-  const planRaw = String(payload.item_name || payload.custom_str1 || "subscription");
-  const plan = sanitizeOneLine(planRaw.replace(/\s+plan$/i, ""), 120) || "subscription";
-  const token = sanitizeOneLine(
-    String(payload.token || payload.token_id || payload.subscription_token || ""),
-    256
-  );
-  const amountNum = Number(payload.amount_gross ?? payload.amount ?? payload.recurring_amount ?? 0);
-  const amount = Number.isFinite(amountNum) && amountNum > 0 ? amountNum : null;
-  const nowIso = new Date().toISOString();
-  const nextBilling =
-    parsePayfastYyyyMmDdToIso(payload.next_run) ||
-    parsePayfastYyyyMmDdToIso(payload.billing_date) ||
-    addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
-  const { data: existing } = await supabase
-    .from("subscriptions")
-    .select("id, failure_count, retry_interval_hours, max_retry_attempts")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const suspendAfter = Math.max(
-    1,
-    Number(existing?.max_retry_attempts || process.env.PAYFAST_SUBSCRIPTION_SUSPEND_AFTER || 3)
-  );
-  const retryHours = Math.max(
-    1,
-    Number(existing?.retry_interval_hours || process.env.PAYFAST_RETRY_INTERVAL_HOURS || 24)
-  );
-
-  const prevFailures = Number(existing?.failure_count || 0);
-  const isSuccess = paymentStatus === "COMPLETE" || isFreeTrialEvent;
-  const nextFailures = isSuccess ? 0 : prevFailures + 1;
-  const status = isSuccess
-    ? "active"
-    : nextFailures >= suspendAfter
-      ? "canceled"
-      : "past_due";
-
-  const row = {
-    user_id: userId,
-    status,
-    plan,
-    current_plan: plan,
-    billing_cycle: cycle,
-    provider: "payfast",
-    updated_at: nowIso,
-    ...(amount != null ? { amount, custom_price: amount } : {}),
-    ...(token ? { payfast_token: token } : {}),
-    ...(isSuccess
-      ? {
-          // Free-trial webhook confirms subscription activation, not a paid charge.
-          last_payment_at: isFreeTrialEvent ? existing?.last_payment_at || null : nowIso,
-          next_billing_date: nextBilling,
-          start_date: existing ? undefined : nowIso,
-          next_retry_at: null,
-          dunning_stage: 0,
-          past_due_at: null,
-          canceled_at: null,
-          last_payment_failure_at: null,
-        }
-      : {
-          next_retry_at: addHoursIso(nowIso, retryHours) || nowIso,
-          dunning_stage: nextFailures,
-          past_due_at: nowIso,
-          last_payment_failure_at: nowIso,
-        }),
-    failure_count: nextFailures,
-  };
-  Object.keys(row).forEach((k) => row[k] === undefined && delete row[k]);
-
-  if (existing?.id) {
-    await supabase.from("subscriptions").update(row).eq("id", existing.id);
-  } else {
-    await supabase.from("subscriptions").insert({
-      email: sanitizeOneLine(String(payload.email_address || ""), 320) || "unknown@paidly.local",
-      user_email: sanitizeOneLine(String(payload.email_address || ""), 320) || "unknown@paidly.local",
-      full_name: sanitizeOneLine(String(payload.name_first || ""), 200) || null,
-      user_name: sanitizeOneLine(String(payload.name_first || ""), 200) || null,
-      ...row,
-      created_at: nowIso,
-    });
-  }
-}
-
+/**
+ * PayFast subscription checkout (steps 2–3 of flow):
+ * (1) User picks plan + amount on the client → (2) this route builds the PayFast field map →
+ * (3) signs with passphrase → (4) client POSTs returned `fields` to `payfastUrl`.
+ */
 app.post("/api/payfast/subscription", (req, res) => {
   const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
   if (!parsed) return;
@@ -1484,6 +1365,8 @@ app.post("/api/payfast/subscription", (req, res) => {
     currency,
     returnUrl,
     cancelUrl,
+    notifyUrl: notifyUrlBody,
+    itemDescription,
     billingDate,
     cycles,
     subscriptionNotifyEmail,
@@ -1508,9 +1391,9 @@ app.post("/api/payfast/subscription", (req, res) => {
     return res.status(400).json({ error: "Invalid currency" });
   }
 
-  for (const u of [returnUrl, cancelUrl]) {
+  for (const u of [returnUrl, cancelUrl, notifyUrlBody]) {
     if (u != null && String(u).trim() !== "" && !isSafeHttpUrl(String(u))) {
-      return res.status(400).json({ error: "Invalid return or cancel URL" });
+      return res.status(400).json({ error: "Invalid return, cancel, or notify URL" });
     }
   }
 
@@ -1521,12 +1404,15 @@ app.post("/api/payfast/subscription", (req, res) => {
   try {
     if (returnUrl) {
       const origin = new URL(String(returnUrl)).origin;
-      defaultSubscriptionNotifyUrl = `${origin}/payfast/subscription/itn`;
+      defaultSubscriptionNotifyUrl = `${origin}/api/payfast/webhook`;
     }
   } catch {
     /* keep returnUrl fallback */
   }
   const notifyUrl =
+    (notifyUrlBody != null && String(notifyUrlBody).trim() !== ""
+      ? String(notifyUrlBody).trim()
+      : null) ||
     process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL ||
     process.env.PAYFAST_NOTIFY_URL ||
     defaultSubscriptionNotifyUrl;
@@ -1539,6 +1425,32 @@ app.post("/api/payfast/subscription", (req, res) => {
     });
   }
 
+  const clientSuppliedNotify =
+    notifyUrlBody != null && String(notifyUrlBody).trim() !== "";
+  if (clientSuppliedNotify && (!returnUrl || String(returnUrl).trim() === "")) {
+    return res.status(400).json({ error: "return_url is required when supplying notify_url" });
+  }
+  if (clientSuppliedNotify) {
+    const notifyOrigin = assertPayfastClientNotifySameOrigin(notifyUrl, returnUrl);
+    if (!notifyOrigin.ok) {
+      return res.status(400).json({ error: notifyOrigin.error });
+    }
+  }
+
+  const httpsCheckout = assertPayfastHttpsUrlsInLive([
+    ["return_url", returnUrlResolved],
+    ["cancel_url", cancelUrlResolved],
+    ["notify_url", notifyUrl],
+  ]);
+  if (!httpsCheckout.ok) {
+    return res.status(400).json({ error: httpsCheckout.error });
+  }
+
+  const signingReady = assertPayfastPassphraseForLiveCheckout();
+  if (!signingReady.ok) {
+    return res.status(500).json({ error: signingReady.error });
+  }
+
   const now = new Date();
   const billingDateResolved =
     typeof billingDate === "string" && PAYFAST_DATE_RE.test(billingDate.trim())
@@ -1549,8 +1461,12 @@ app.post("/api/payfast/subscription", (req, res) => {
   const cyclesResolved =
     Number.isFinite(cyclesNumber) && cyclesNumber >= 0 ? Math.floor(cyclesNumber) : 0;
 
-  const planLabel = sanitizeOneLine(plan != null ? String(plan) : "Subscription", 120) || "Subscription";
+  const planLabel = sanitizeOneLine(plan != null ? String(plan) : "Paidly", 120) || "Paidly";
   const userLabel = sanitizeOneLine(userName != null ? String(userName) : "", 200);
+  const descFromClient = sanitizeOneLine(itemDescription != null ? String(itemDescription) : "", 255);
+  const itemDesc =
+    descFromClient ||
+    `Subscription for ${userLabel || emailNorm}`;
   const subIdSafe = String(subscriptionId).trim();
 
   const payload = {
@@ -1561,14 +1477,15 @@ app.post("/api/payfast/subscription", (req, res) => {
     notify_url: notifyUrl,
     m_payment_id: `${subIdSafe}-${Date.now()}`,
     amount: amountCheck.value.toFixed(2),
-    item_name: `${planLabel} Plan`,
-    item_description: `Subscription for ${userLabel || emailNorm}`,
+    item_name: planLabel,
+    item_description: itemDesc,
     custom_str1: subIdSafe,
     custom_str2: userId ? String(userId).trim() : "",
     custom_str3: cycleRaw,
     custom_str4: currencySafe,
     email_address: emailNorm,
-    subscription_type: 2,
+    // PayFast: 1 = recurring subscription; 2 = tokenization / ad hoc billing.
+    subscription_type: 1,
     billing_date: billingDateResolved,
     recurring_amount: amountCheck.value.toFixed(2),
     frequency,
@@ -1579,6 +1496,9 @@ app.post("/api/payfast/subscription", (req, res) => {
   };
 
   payload.signature = signPayfastPayload(payload, passphrase);
+  if (!payload.signature) {
+    return res.status(500).json({ error: "Failed to generate PayFast signature" });
+  }
 
   res.json({
     payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
@@ -1622,10 +1542,19 @@ app.post("/api/payfast/once", async (req, res) => {
     const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
     const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
     const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    let defaultOnceNotifyUrl = returnUrl;
+    try {
+      if (returnUrl) {
+        const origin = new URL(String(returnUrl)).origin;
+        defaultOnceNotifyUrl = `${origin}/api/payfast/webhook`;
+      }
+    } catch {
+      /* keep returnUrl */
+    }
     const notifyUrl =
       process.env.PAYFAST_ONCE_NOTIFY_URL ||
       process.env.PAYFAST_NOTIFY_URL ||
-      returnUrl;
+      defaultOnceNotifyUrl;
     const returnUrlResolved =
       process.env.PAYFAST_ONCE_RETURN_URL ||
       process.env.PAYFAST_RETURN_URL ||
@@ -1639,6 +1568,20 @@ app.post("/api/payfast/once", async (req, res) => {
       return res.status(500).json({
         error: "Payfast merchant credentials not configured"
       });
+    }
+
+    const httpsOnce = assertPayfastHttpsUrlsInLive([
+      ["return_url", returnUrlResolved],
+      ["cancel_url", cancelUrlResolved],
+      ["notify_url", notifyUrl],
+    ]);
+    if (!httpsOnce.ok) {
+      return res.status(400).json({ error: httpsOnce.error });
+    }
+
+    const signingOnce = assertPayfastPassphraseForLiveCheckout();
+    if (!signingOnce.ok) {
+      return res.status(500).json({ error: signingOnce.error });
     }
 
     // Load invoice to validate amount and get org/client ids for ITN handling.
@@ -1695,6 +1638,9 @@ app.post("/api/payfast/once", async (req, res) => {
     };
 
     payload.signature = signPayfastPayload(payload, passphrase);
+    if (!payload.signature) {
+      return res.status(500).json({ error: "Failed to generate PayFast signature" });
+    }
 
     return res.json({
       payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
@@ -1710,175 +1656,12 @@ app.post("/api/payfast/once", async (req, res) => {
  * PayFast ITN handler for recurring subscriptions (tokenized billing).
  * Endpoint can be configured as PAYFAST_SUBSCRIPTION_NOTIFY_URL.
  */
-async function handlePayfastSubscriptionItn(req, res) {
-  if (!payfastItnIpAllowed(req)) {
-    return res.status(403).send("IP not allowed");
-  }
-
-  const payload = req.body || {};
-  const passphrase = process.env.PAYFAST_PASSPHRASE || "";
-  const signatureValid = verifyPayfastSignature(payload, passphrase);
-  if (!signatureValid) {
-    return res.status(400).send("Invalid signature");
-  }
-
-  try {
-    await upsertSubscriptionFromItn(supabaseAdmin, payload);
-
-    const paymentStatus = String(payload.payment_status || "").toUpperCase();
-    const userId = String(payload.custom_str2 || "").trim();
-    const paymentAmount = Number(payload.amount_gross ?? payload.amount ?? 0);
-    if (paymentStatus === "COMPLETE" && isValidUuid(userId) && Number.isFinite(paymentAmount) && paymentAmount > 0) {
-      try {
-        await recordSubscriptionPaymentCommission(supabaseAdmin, {
-          userId,
-          grossAmountZar: paymentAmount,
-          source: `payfast_sub_itn:${String(payload.pf_payment_id || payload.m_payment_id || "")}`,
-        });
-      } catch (e) {
-        console.error("[payfast-subscription-itn] affiliate commission failed", e?.message || e);
-      }
-    }
-    return res.status(200).send("OK");
-  } catch (err) {
-    console.error("[payfast-subscription-itn] unexpected error", err);
-    return res.status(200).send("OK");
-  }
-}
-
 app.post("/payfast/subscription/itn", handlePayfastSubscriptionItn);
 app.post("/api/payfast/subscription/itn", handlePayfastSubscriptionItn);
 
-/**
- * PayFast ITN handler for one-time invoice payments only.
- * Expects custom_str1 in the format "invoice:<invoiceId>".
- */
-app.post("/api/payfast/itn", async (req, res) => {
-  if (!payfastItnIpAllowed(req)) {
-    return res.status(403).send("IP not allowed");
-  }
-
-  const payload = req.body || {};
-  const passphrase = process.env.PAYFAST_PASSPHRASE || "";
-  const signatureValid = verifyPayfastSignature(payload, passphrase);
-
-  if (!signatureValid) {
-    console.error("[payfast-itn] Invalid signature", {
-      m_payment_id: payload.m_payment_id,
-      payment_status: payload.payment_status
-    });
-    return res.status(400).send("Invalid signature");
-  }
-
-  const paymentStatus = String(payload.payment_status || "").toUpperCase();
-  if (paymentStatus !== "COMPLETE") {
-    return res.status(200).send("OK");
-  }
-
-  const customStr1 = String(payload.custom_str1 || "");
-  if (!customStr1.startsWith("invoice:")) {
-    return res.status(200).send("OK");
-  }
-
-  const invoiceId = customStr1.split(":")[1]?.trim();
-  if (!invoiceId || !isValidUuid(invoiceId)) {
-    console.error("[payfast-itn] Missing or invalid invoice id in custom_str1", customStr1);
-    return res.status(200).send("OK");
-  }
-
-  const paymentAmountRaw = payload.amount_gross ?? payload.amount;
-  const paymentAmount = Number(paymentAmountRaw);
-
-  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-    console.error("[payfast-itn] Invalid payment amount", paymentAmountRaw);
-    return res.status(200).send("OK");
-  }
-
-  try {
-    const { data: invoice, error: invoiceError } = await supabaseAdmin
-      .from("invoices")
-      .select("id, org_id, client_id, total_amount, status")
-      .eq("id", invoiceId)
-      .maybeSingle();
-
-    if (invoiceError) {
-      console.error("[payfast-itn] Failed to load invoice", invoiceError.message);
-      return res.status(200).send("OK");
-    }
-
-    if (!invoice) {
-      console.error("[payfast-itn] Invoice not found", invoiceId);
-      return res.status(200).send("OK");
-    }
-
-    const { data: existingPayments, error: paymentsError } = await supabaseAdmin
-      .from("payments")
-      .select("amount")
-      .eq("invoice_id", invoiceId);
-
-    if (paymentsError) {
-      console.error("[payfast-itn] Failed to load existing payments", paymentsError.message);
-      return res.status(200).send("OK");
-    }
-
-    const alreadyPaid = (existingPayments || []).reduce(
-      (sum, p) => sum + (Number(p.amount) || 0),
-      0
-    );
-    const newTotalPaid = alreadyPaid + paymentAmount;
-    const invoiceTotal = Number(invoice.total_amount || 0);
-
-    let newStatus = invoice.status;
-    if (invoiceTotal > 0) {
-      if (newTotalPaid >= invoiceTotal - 0.01) {
-        newStatus = "paid";
-      } else if (newTotalPaid > 0 && invoice.status !== "paid") {
-        newStatus = "partial_paid";
-      }
-    }
-
-    const nowIso = new Date().toISOString();
-    const reference = String(payload.pf_payment_id || payload.m_payment_id || "");
-
-    const { error: insertError } = await supabaseAdmin.from("payments").insert({
-      org_id: invoice.org_id,
-      invoice_id: invoice.id,
-      client_id: invoice.client_id,
-      amount: paymentAmount,
-      payment_date: nowIso,
-      payment_method: "payfast",
-      reference_number: reference,
-      notes: "PayFast one-time payment"
-    });
-
-    if (insertError) {
-      console.error("[payfast-itn] Failed to insert payment", insertError.message);
-      return res.status(200).send("OK");
-    }
-
-    if (newStatus && newStatus !== invoice.status) {
-      const { error: updateError } = await supabaseAdmin
-        .from("invoices")
-        .update({ status: newStatus })
-        .eq("id", invoice.id);
-
-      if (updateError) {
-        console.error("[payfast-itn] Failed to update invoice status", updateError.message);
-      }
-    }
-
-    console.log("[payfast-itn] Recorded payment for invoice", {
-      invoiceId,
-      paymentAmount,
-      status: newStatus
-    });
-
-    return res.status(200).send("OK");
-  } catch (err) {
-    console.error("[payfast-itn] Unexpected error", err);
-    return res.status(200).send("OK");
-  }
-});
+/** Unified PayFast ITN: invoice payments (custom_str1 invoice:…) or subscriptions. */
+app.post("/api/payfast/itn", handlePayfastSubscriptionItn);
+app.post("/api/payfast/webhook", handlePayfastSubscriptionItn);
 
 app.post("/api/admin/roles", async (req, res) => {
   try {

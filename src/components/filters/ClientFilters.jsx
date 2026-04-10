@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { usePersistedListFilters } from "@/hooks/usePersistedListFilters";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -7,11 +8,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter, X, CalendarIcon, ChevronDown } from "lucide-react";
-import { format, subDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { industries } from "../clients/IndustryBadge";
 
-const STORAGE_KEY = 'client_filters';
+const DEFAULT_FILTERS = {
+    search: '',
+    segment: 'all',
+    industry: 'all',
+    activity: 'all',
+    spending: 'all',
+    sortBy: 'name_asc'
+};
 
 const segmentOptions = [
     { value: 'all', label: 'All Segments' },
@@ -39,38 +46,17 @@ const spendingRanges = [
 
 export default function ClientFilters({ onFilterChange }) {
     const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        return saved ? JSON.parse(saved) : {
-            search: '',
-            segment: 'all',
-            industry: 'all',
-            activity: 'all',
-            spending: 'all',
-            sortBy: 'name_asc'
-        };
-    });
+    const { filters, updateFilter, clearFilters } = usePersistedListFilters(
+        "clients",
+        DEFAULT_FILTERS
+    );
+
+    const onFilterChangeRef = useRef(onFilterChange);
+    onFilterChangeRef.current = onFilterChange;
 
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
-        onFilterChange(filters);
+        onFilterChangeRef.current(filters);
     }, [filters]);
-
-    const updateFilter = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
-
-    const clearFilters = () => {
-        const cleared = {
-            search: '',
-            segment: 'all',
-            industry: 'all',
-            activity: 'all',
-            spending: 'all',
-            sortBy: 'name_asc'
-        };
-        setFilters(cleared);
-    };
 
     const activeFilterCount = [
         filters.segment !== 'all',

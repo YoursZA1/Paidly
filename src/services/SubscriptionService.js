@@ -4,6 +4,7 @@
  */
 
 import PlanManagementService from "@/services/PlanManagementService";
+import { adminCacheGet } from "@/lib/adminLocalCache";
 
 const STORAGE_KEY = 'breakapi_users';
 const SUBSCRIPTION_ACTIVITY_KEY = 'subscription_activity_log';
@@ -14,7 +15,7 @@ export class SubscriptionService {
    */
   static getAllUsersWithSubscriptions() {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = adminCacheGet(STORAGE_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Error loading users:', error);
