@@ -46,8 +46,13 @@ function getSettingsReturnUrl() {
 }
 
 /**
- * PayFast subscription UI: plan + amount → `PayfastService.startSubscription` → backend payload + signature → programmatic POST to PayFast.
- * Paidly tiers: Individual R25, SME R50, Corporate R110 (`SubscriptionSettings` passes amounts per tier).
+ * PayFast subscription UI (clean flow):
+ * 1. User submits → `PayfastService.startSubscription` POSTs JSON to `/api/payfast/subscription`.
+ * 2–3. Backend returns `{ payfastUrl, fields }`.
+ * 4. Service builds a hidden form and POSTs `fields` to PayFast (`payfastUrl`).
+ *
+ * This visible `<form>` only captures submit; it does not post unsigned data to PayFast (`action="#"`).
+ * Tiers: Individual R25, SME R50, Corporate R110 (`SubscriptionSettings` passes `amountZar`).
  */
 export default function PayFastSubscriptionForm({
   amountZar = DEFAULT_AMOUNT_ZAR,
@@ -55,7 +60,7 @@ export default function PayFastSubscriptionForm({
   itemDescription = "",
   ctaLabel = "Subscribe",
   submitVariant = "button",
-  processUrl,
+  processUrl: _processUrl,
   className = "",
 }) {
   const { user: authUser } = useAuth();
@@ -103,12 +108,12 @@ export default function PayFastSubscriptionForm({
 
   return (
     <form
-      action={processUrl || PAYFAST_PROCESS_URL}
+      action="#"
       method="post"
       onSubmit={handleSubmit}
       className={className}
     >
-      {/* No unsigned PayFast fields here — submit handler replaces flow with server-signed POST via PayfastService */}
+      {/* Signed checkout: handler calls API then programmatic POST to PayFast; `processUrl` is unused (legacy prop). */}
       {error && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400" role="alert">
           {error}

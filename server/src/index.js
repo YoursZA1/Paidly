@@ -1346,11 +1346,14 @@ const handlePayfastSubscriptionItn = createPayfastSubscriptionItnHandler({
 });
 
 /**
- * PayFast subscription checkout (steps 2–3 of flow):
- * (1) User picks plan + amount on the client → (2) this route builds the PayFast field map →
- * (3) signs with passphrase → (4) client POSTs returned `fields` to `payfastUrl`.
+ * PayFast subscription — same clean flow as `api/payfast/subscription.js`:
+ * client POST JSON → this route builds + signs → JSON `{ payfastUrl, fields }` → client POSTs `fields` to PayFast.
  */
 app.post("/api/payfast/subscription", (req, res) => {
+  const smoke = String(process.env.PAYFAST_SUBSCRIPTION_SMOKE_TEST || "").trim().toLowerCase();
+  if (smoke === "true" || smoke === "1") {
+    return res.status(200).json({ success: true, message: "API working" });
+  }
   const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
   if (!parsed) return;
 

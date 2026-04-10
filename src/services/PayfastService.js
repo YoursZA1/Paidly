@@ -1,21 +1,18 @@
 /**
  * PayFast subscription / once-off checkout
  *
- * Phase 1 (NOW) — get checkout working:
- *   Settings → Subscription → Subscribe → POST `/api/payfast/subscription` (Express or `api/payfast/subscription.js` on Vercel)
- *   → `{ payfastUrl, fields }` with `signature` → programmatic form POST to PayFast → user lands on `/success`.
- *   Dev: run `npm run server` (default :5179); Vite proxies `/api` to it.
+ * ## Subscription clean flow (intended behaviour)
+ * 1. **Frontend** — `fetch` POST JSON to `/api/payfast/subscription` (this app’s API, not PayFast).
+ * 2. **Backend** — validates input, builds PayFast field map, signs with passphrase.
+ * 3. **Backend** — responds with JSON `{ payfastUrl, fields }` (`fields.signature` required).
+ * 4. **Frontend** — `submitPayfastForm` builds a hidden `<form>` and POSTs `fields` to `payfastUrl` (browser navigates to PayFast).
  *
- * Phase 2 (NEXT) — mostly implemented server-side:
- *   PayFast ITN hits `/api/payfast/webhook` → `payfastSubscriptionItn.js` upserts `subscriptions` and updates `profiles.subscription_plan`.
+ * Once-off payments use the same pattern against `/api/payfast/once`.
  *
- * Request flow (both phases):
- *   1. User chooses plan or invoice payment (amount + metadata on the client).
- *   2. Client POSTs JSON to `/api/payfast/subscription` or `/api/payfast/once`.
- *   3. Server returns `{ payfastUrl, fields }` where `fields` includes `signature`.
- *   4. `submitPayfastForm` POSTs `fields` to PayFast.
+ * ## After checkout
+ * PayFast ITN → `/api/payfast/webhook` → `payfastSubscriptionItn.js` updates `subscriptions` / `profiles.subscription_plan`.
  *
- * Production: same-origin `/api` on Vercel, or set `VITE_SERVER_URL` if the API is on another host.
+ * **Dev:** `npm run server` (e.g. :5179); Vite can proxy `/api`. **Prod:** same-origin `/api` on Vercel, or `VITE_SERVER_URL` if the API is elsewhere.
  */
 const getPayfastApiBase = () => {
   if (import.meta.env.DEV) return "";

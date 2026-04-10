@@ -5,14 +5,27 @@ import {
   getPayfastFrequency,
   getPayfastProcessUrl,
   signPayfastPayload,
-} from "../../../server/src/payfast.js";
-import { parseBody } from "../../../server/src/validateBody.js";
-import { payfastSubscriptionBodySchema } from "../../../server/src/schemas/mutationSchemas.js";
-import { assertFiniteAmount, isSafeHttpUrl, sanitizeOneLine } from "../../../server/src/inputValidation.js";
-import { applyPaidlyServerlessCors } from "../../../server/src/vercelPaidlyCors.js";
+} from "../../server/src/payfast.js";
+import { parseBody } from "../../server/src/validateBody.js";
+import { payfastSubscriptionBodySchema } from "../../server/src/schemas/mutationSchemas.js";
+import { assertFiniteAmount, isSafeHttpUrl, sanitizeOneLine } from "../../server/src/inputValidation.js";
+import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+
+/**
+ * PayFast subscription — serverless handler (Vercel `api/payfast/subscription.js`).
+ *
+ * Flow: (1) Client POSTs JSON here → (2) we build + sign PayFast fields → (3) return `{ payfastUrl, fields }` →
+ * (4) client POSTs `fields` to PayFast (see `PayfastService.submitPayfastForm`).
+ */
 
 const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
 const PAYFAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Set `PAYFAST_SUBSCRIPTION_SMOKE_TEST=true` on Vercel to return `{ success, message }` without PayFast deps (routing / env sanity check). Remove when done. */
+function payfastSubscriptionSmokeTestEnabled() {
+  const v = String(process.env.PAYFAST_SUBSCRIPTION_SMOKE_TEST || "").trim().toLowerCase();
+  return v === "true" || v === "1";
+}
 
 function toPayfastBooleanFlag(value, fallback = true) {
   if (value == null) return fallback ? "true" : "false";
@@ -26,6 +39,15 @@ function toPayfastBooleanFlag(value, fallback = true) {
 /** Builds signed PayFast subscription payload; client must POST `fields` to `payfastUrl` (see PayfastService.startSubscription). */
 export default async function handler(req, res) {
   try {
+  if (payfastSubscriptionSmokeTestEnabled()) {
+    applyPaidlyServerlessCors(req, res, { methods: "GET, POST, OPTIONS" });
+    if (req.method === "OPTIONS") return res.status(200).end();
+    return res.status(200).json({
+      success: true,
+      message: "API working",
+    });
+  }
+
   if (process.env.VERCEL && process.env.PAYFAST_MODE && process.env.PAYFAST_MODE !== "live") {
     console.warn(
       "[payfast/subscription] PAYFAST_MODE is not 'live' — checkout uses the sandbox PayFast host. Set PAYFAST_MODE=live for real charges."

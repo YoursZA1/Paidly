@@ -1,8 +1,21 @@
-import crypto from "crypto";
+import { createHash } from "node:crypto";
+
+/**
+ * PayFast signing string must not include undefined/null values (avoids "undefined" in URLs / runtime errors).
+ */
+function omitUndefinedAndNull(input) {
+  if (input == null || typeof input !== "object" || Array.isArray(input)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(input).filter(([_, v]) => v !== undefined && v !== null)
+  );
+}
 
 const serializeParams = (params) => {
-  const entries = Object.entries(params)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+  const safe = omitUndefinedAndNull(params);
+  const entries = Object.entries(safe)
+    .filter(([, value]) => value !== "")
     .sort(([a], [b]) => a.localeCompare(b));
 
   return entries
@@ -11,16 +24,18 @@ const serializeParams = (params) => {
 };
 
 export const signPayfastPayload = (params, passphrase) => {
-  const baseString = serializeParams(params);
+  const data = omitUndefinedAndNull(params);
+  const baseString = serializeParams(data);
   const signatureString = passphrase
-    ? `${baseString}&passphrase=${encodeURIComponent(passphrase)}`
+    ? `${baseString}&passphrase=${encodeURIComponent(String(passphrase))}`
     : baseString;
 
-  return crypto.createHash("md5").update(signatureString).digest("hex");
+  return createHash("md5").update(signatureString).digest("hex");
 };
 
 export const verifyPayfastSignature = (payload, passphrase) => {
-  if (!payload?.signature) return false;
+  if (payload == null || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (!payload.signature) return false;
   const { signature, ...rest } = payload;
   const expected = signPayfastPayload(rest, passphrase);
   return signature === expected;
