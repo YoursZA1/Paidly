@@ -25,6 +25,7 @@ function toPayfastBooleanFlag(value, fallback = true) {
 
 /** Builds signed PayFast subscription payload; client must POST `fields` to `payfastUrl` (see PayfastService.startSubscription). */
 export default async function handler(req, res) {
+  try {
   if (process.env.VERCEL && process.env.PAYFAST_MODE && process.env.PAYFAST_MODE !== "live") {
     console.warn(
       "[payfast/subscription] PAYFAST_MODE is not 'live' — checkout uses the sandbox PayFast host. Set PAYFAST_MODE=live for real charges."
@@ -68,6 +69,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid billing cycle" });
   }
 
+  const currencySafe = sanitizeOneLine(String(currency || "ZAR"), 8).toUpperCase();
+  if (!/^[A-Z0-9]{3,8}$/.test(currencySafe)) {
+    return res.status(400).json({ error: "Invalid currency" });
+  }
+
   for (const u of [returnUrl, cancelUrl, notifyUrlBody]) {
     if (u != null && String(u).trim() !== "" && !isSafeHttpUrl(String(u))) {
       return res.status(400).json({ error: "Invalid return, cancel, or notify URL" });
@@ -78,7 +84,10 @@ export default async function handler(req, res) {
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
   const passphrase = process.env.PAYFAST_PASSPHRASE || "";
   if (!merchantId || !merchantKey) {
-    return res.status(500).json({ error: "Payfast merchant credentials not configured" });
+    return res.status(422).json({
+      code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
+      error: "Set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY in Vercel → Settings → Environment Variables.",
+    });
   }
 
   let defaultSubscriptionNotifyUrl = returnUrl;
@@ -99,6 +108,14 @@ export default async function handler(req, res) {
     defaultSubscriptionNotifyUrl;
   const returnUrlResolved = process.env.PAYFAST_RETURN_URL || returnUrl;
   const cancelUrlResolved = process.env.PAYFAST_CANCEL_URL || cancelUrl;
+
+  if (notifyUrl == null || String(notifyUrl).trim() === "") {
+    return res.status(400).json({
+      code: "PAYFAST_NOTIFY_URL_MISSING",
+      error:
+        "Could not determine notify_url. Use https returnUrl/cancelUrl or set PAYFAST_SUBSCRIPTION_NOTIFY_URL on Vercel.",
+    });
+  }
 
   const clientSuppliedNotify =
     notifyUrlBody != null && String(notifyUrlBody).trim() !== "";
@@ -123,7 +140,10 @@ export default async function handler(req, res) {
 
   const signingReady = assertPayfastPassphraseForLiveCheckout();
   if (!signingReady.ok) {
-    return res.status(500).json({ error: signingReady.error });
+    return res.status(422).json({
+      code: signingReady.code || "PAYFAST_CHECKOUT_CONFIG",
+      error: signingReady.error,
+    });
   }
 
   const now = new Date();
@@ -139,7 +159,6 @@ export default async function handler(req, res) {
     descFromClient ||
     `Subscription for ${userLabel || userEmail}`;
   const subIdSafe = String(subscriptionId).trim();
-  const currencySafe = sanitizeOneLine(String(currency || "ZAR"), 8).toUpperCase();
   const cyclesNumber = Number(cycles);
   const cyclesResolved =
     Number.isFinite(cyclesNumber) && cyclesNumber >= 0 ? Math.floor(cyclesNumber) : 0;
@@ -172,10 +191,20 @@ export default async function handler(req, res) {
 
   payload.signature = signPayfastPayload(payload, passphrase);
   if (!payload.signature) {
-    return res.status(500).json({ error: "Failed to generate PayFast signature" });
+    return res.status(500).json({
+      code: "PAYFAST_SIGNATURE_FAILED",
+      error: "Failed to generate PayFast signature",
+    });
   }
   return res.status(200).json({
     payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
     fields: payload,
   });
+  } catch (e) {
+    console.error("[payfast/subscription]", e);
+    return res.status(500).json({
+      code: "PAYFAST_SUBSCRIPTION_HANDLER_ERROR",
+      error: e?.message || "Internal error",
+    });
+  }
 }

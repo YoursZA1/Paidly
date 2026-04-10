@@ -1419,9 +1419,18 @@ app.post("/api/payfast/subscription", (req, res) => {
   const returnUrlResolved = process.env.PAYFAST_RETURN_URL || returnUrl;
   const cancelUrlResolved = process.env.PAYFAST_CANCEL_URL || cancelUrl;
 
+  if (notifyUrl == null || String(notifyUrl).trim() === "") {
+    return res.status(400).json({
+      code: "PAYFAST_NOTIFY_URL_MISSING",
+      error:
+        "Could not determine notify_url. Use https returnUrl/cancelUrl from your app or set PAYFAST_SUBSCRIPTION_NOTIFY_URL in env.",
+    });
+  }
+
   if (!merchantId || !merchantKey) {
-    return res.status(500).json({
-      error: "Payfast merchant credentials not configured"
+    return res.status(422).json({
+      code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
+      error: "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY (e.g. on Vercel → Environment Variables).",
     });
   }
 
@@ -1448,7 +1457,10 @@ app.post("/api/payfast/subscription", (req, res) => {
 
   const signingReady = assertPayfastPassphraseForLiveCheckout();
   if (!signingReady.ok) {
-    return res.status(500).json({ error: signingReady.error });
+    return res.status(422).json({
+      code: signingReady.code || "PAYFAST_CHECKOUT_CONFIG",
+      error: signingReady.error,
+    });
   }
 
   const now = new Date();
@@ -1497,7 +1509,10 @@ app.post("/api/payfast/subscription", (req, res) => {
 
   payload.signature = signPayfastPayload(payload, passphrase);
   if (!payload.signature) {
-    return res.status(500).json({ error: "Failed to generate PayFast signature" });
+    return res.status(500).json({
+      code: "PAYFAST_SIGNATURE_FAILED",
+      error: "Failed to generate PayFast signature",
+    });
   }
 
   res.json({
@@ -1564,9 +1579,18 @@ app.post("/api/payfast/once", async (req, res) => {
       process.env.PAYFAST_CANCEL_URL ||
       cancelUrl;
 
+    if (notifyUrl == null || String(notifyUrl).trim() === "") {
+      return res.status(400).json({
+        code: "PAYFAST_NOTIFY_URL_MISSING",
+        error:
+          "Could not determine notify_url for invoice payment. Use an https returnUrl or set PAYFAST_ONCE_NOTIFY_URL / PAYFAST_NOTIFY_URL.",
+      });
+    }
+
     if (!merchantId || !merchantKey) {
-      return res.status(500).json({
-        error: "Payfast merchant credentials not configured"
+      return res.status(422).json({
+        code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
+        error: "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.",
       });
     }
 
@@ -1581,7 +1605,10 @@ app.post("/api/payfast/once", async (req, res) => {
 
     const signingOnce = assertPayfastPassphraseForLiveCheckout();
     if (!signingOnce.ok) {
-      return res.status(500).json({ error: signingOnce.error });
+      return res.status(422).json({
+        code: signingOnce.code || "PAYFAST_CHECKOUT_CONFIG",
+        error: signingOnce.error,
+      });
     }
 
     // Load invoice to validate amount and get org/client ids for ITN handling.

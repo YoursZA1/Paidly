@@ -61,10 +61,12 @@ const PayfastService = {
         payload = null;
       }
     }
-    const msg =
-      payload?.error ||
+    const base =
+      (typeof payload?.error === "string" ? payload.error : null) ||
       payload?.message ||
-      `${fallbackMessage} (HTTP ${response.status})`;
+      fallbackMessage;
+    const code = typeof payload?.code === "string" ? payload.code : null;
+    const msg = code ? `${base} (${code})` : `${base} (HTTP ${response.status})`;
     return new Error(msg);
   },
 

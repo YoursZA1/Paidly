@@ -55,13 +55,24 @@ export function payfastItnMustVerifyWithPassphrase() {
   return payfastLiveMode() || payfastDeployedLikeProduction();
 }
 
+/**
+ * Live checkout signing: passphrase must match PayFast dashboard unless you explicitly allow unsigned (dashboard has no passphrase).
+ * Set PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT=true only when your PayFast merchant profile has no security passphrase.
+ */
 export function assertPayfastPassphraseForLiveCheckout() {
   if (!payfastLiveMode()) return { ok: true };
   if (isPayfastPassphraseSet()) return { ok: true };
+  if (String(process.env.PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT || "").toLowerCase() === "true") {
+    console.warn(
+      "[payfast] LIVE checkout: PAYFAST_PASSPHRASE empty — allowed via PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT=true (must match PayFast dashboard)"
+    );
+    return { ok: true };
+  }
   return {
     ok: false,
+    code: "PAYFAST_PASSPHRASE_REQUIRED",
     error:
-      "PAYFAST_PASSPHRASE is required when PAYFAST_MODE=live; without it PayFast will reject or payments will be insecure",
+      "Set PAYFAST_PASSPHRASE in your server env to match the PayFast security passphrase, or set PAYFAST_MODE=sandbox for testing. If your PayFast account has no passphrase, set PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT=true.",
   };
 }
 
