@@ -1,5 +1,5 @@
 /**
- * PayFast ITN (Instant Transaction Notification) — shared by Express and Vercel (`api/payfast/[...segments].js`).
+ * PayFast ITN (Instant Transaction Notification) — shared by Express and Vercel (`api/payfast-handler.js`).
  *
  * Phase 2: verifies signature + IP allowlist, then either records invoice payments (`custom_str1` = `invoice:…`)
  * or upserts `subscriptions` and sets `profiles.subscription_plan` on success / trial (see `upsertSubscriptionFromItn`).

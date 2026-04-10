@@ -1,18 +1,12 @@
 /**
- * Single Vercel function: checkout + ITN (Hobby plan function limit).
- * - POST /api/payfast/subscription
- * - POST /api/payfast/webhook, /api/payfast/subscription/itn (and rewrites from vercel.json)
+ * PayFast: subscription checkout + ITN (single function for Hobby limit).
+ * Catch-all paths like `api/payfast/[...segments].js` are unreliable on Vercel without Next.js;
+ * public URLs stay `/api/payfast/subscription`, `/api/payfast/webhook`, etc. via vercel.json rewrites → `__pf`.
  */
 import { createClient } from "@supabase/supabase-js";
-import { getClientIp } from "../../server/src/loginIpRateLimit.js";
-import { createPayfastSubscriptionItnHandler } from "../../server/src/payfastSubscriptionItn.js";
-import payfastSubscriptionCheckout from "./_checkout.js";
-
-function normalizeSegments(req) {
-  const raw = req.query?.segments;
-  if (raw == null) return [];
-  return Array.isArray(raw) ? raw : [raw];
-}
+import { getClientIp } from "../server/src/loginIpRateLimit.js";
+import { createPayfastSubscriptionItnHandler } from "../server/src/payfastSubscriptionItn.js";
+import payfastSubscriptionCheckout from "./payfast/_checkout.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -31,8 +25,7 @@ async function payfastSubscriptionItnApi(req, res) {
 }
 
 export default async function handler(req, res) {
-  const segs = normalizeSegments(req);
-  const route = segs.join("/");
+  const route = String(req.query.__pf || "").trim();
 
   if (route === "subscription") {
     return payfastSubscriptionCheckout(req, res);

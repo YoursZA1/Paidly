@@ -12,7 +12,7 @@ import { assertFiniteAmount, isSafeHttpUrl, sanitizeOneLine } from "../../server
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
 
 /**
- * PayFast subscription checkout — imported by `api/payfast/[...segments].js` only.
+ * PayFast subscription checkout — imported by `api/payfast-handler.js` (Vercel rewrite).
  * Underscore prefix: not a standalone Vercel function (Hobby function-count limit).
  */
 

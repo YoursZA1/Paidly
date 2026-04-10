@@ -1346,7 +1346,7 @@ const handlePayfastSubscriptionItn = createPayfastSubscriptionItnHandler({
 });
 
 /**
- * PayFast subscription — same clean flow as `api/payfast/[...segments].js` (checkout segment):
+ * PayFast subscription — same clean flow as `api/payfast-handler.js` (rewrite → `__pf=subscription`):
  * client POST JSON → this route builds + signs → JSON `{ payfastUrl, fields }` → client POSTs `fields` to PayFast.
  */
 app.post("/api/payfast/subscription", (req, res) => {
