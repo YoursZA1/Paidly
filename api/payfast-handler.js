@@ -1,6 +1,6 @@
 /**
  * PayFast: subscription checkout + ITN (single function for Hobby limit).
- * Catch-all paths like `api/payfast/[...segments].js` are unreliable on Vercel without Next.js;
+ * Dynamic catch-all files under `/api` are unreliable on Vercel without Next.js;
  * public URLs stay `/api/payfast/subscription`, `/api/payfast/webhook`, etc. via vercel.json rewrites → `__pf`.
  */
 import { createClient } from "@supabase/supabase-js";
