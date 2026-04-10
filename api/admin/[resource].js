@@ -76,7 +76,7 @@ async function ensureApproveDeclineDeps() {
   if (affiliateApproveHandler && handleVercelAffiliateDeclinePost) return;
   if (approveDeclineDepsPromise) return approveDeclineDepsPromise;
   approveDeclineDepsPromise = Promise.all([
-    import("../affiliates/approve.js"),
+    import("../affiliates/_approveHandler.js"),
     import("../../server/src/vercelAffiliateDeclinePost.js"),
   ]).then(([affiliateApproveMod, affiliateDeclineMod]) => {
     affiliateApproveHandler = affiliateApproveMod.default;

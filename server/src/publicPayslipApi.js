@@ -1,7 +1,7 @@
 import {
   handlePublicPayslipGet,
   handlePublicPayslipVerify,
-} from "../../api/public-payslip-shared.js";
+} from "../../api/_publicPayslipShared.js";
 
 export function registerPublicPayslipRoutes(app) {
   app.get("/api/public-payslip", handlePublicPayslipGet);

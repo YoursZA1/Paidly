@@ -17,7 +17,7 @@ import {
   recordPortalPayment,
   signPortalToken,
   verifyPortalToken,
-} from "../../api/client-portal/shared.js";
+} from "../../api/client-portal/_shared.js";
 
 const router = express.Router();
 

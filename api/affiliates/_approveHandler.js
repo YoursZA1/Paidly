@@ -1,10 +1,6 @@
 /**
- * Vercel serverless: POST /api/affiliates/approve (legacy path; prefer POST /api/admin/approve).
- *
- * Auth: Authorization: Bearer <Supabase access_token>
- * Body: { applicationId } | { application_id } | { id }, optional commissionRate | commission_rate
- *
- * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, optional RESEND_FROM, PUBLIC_APP_ORIGIN / CLIENT_ORIGIN
+ * POST /api/affiliates/approve — shared with `api/admin/[resource].js` (approve).
+ * Underscore: not a standalone Vercel function.
  */
 import { createClient } from "@supabase/supabase-js";
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";

@@ -4,7 +4,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
-import { getPortalSigningSecret } from "./client-portal/shared.js";
+import { getPortalSigningSecret } from "./client-portal/_shared.js";
 
 const VIEWER_TTL_SEC = 7 * 24 * 60 * 60;
 const VIEWER_TYP = "inv_pub_v1";

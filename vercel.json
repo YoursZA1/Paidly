@@ -22,7 +22,39 @@
   "rewrites": [
     {
       "source": "/affiliate/dashboard",
-      "destination": "/api/affiliate/dashboard"
+      "destination": "/api/affiliates?__affiliateDashboard=1"
+    },
+    {
+      "source": "/api/affiliate/dashboard",
+      "destination": "/api/affiliates?__affiliateDashboard=1"
+    },
+    {
+      "source": "/api/referrals/create",
+      "destination": "/api/affiliates?__referralsCreate=1"
+    },
+    {
+      "source": "/api/cron/payment-reminders",
+      "destination": "/api/cron?job=payment-reminders"
+    },
+    {
+      "source": "/api/cron/subscription-dunning",
+      "destination": "/api/cron?job=subscription-dunning"
+    },
+    {
+      "source": "/api/public-invoice",
+      "destination": "/api/public-share?doc=invoice&op=get"
+    },
+    {
+      "source": "/api/public-invoice-verify",
+      "destination": "/api/public-share?doc=invoice&op=verify"
+    },
+    {
+      "source": "/api/public-payslip",
+      "destination": "/api/public-share?doc=payslip&op=get"
+    },
+    {
+      "source": "/api/public-payslip-verify",
+      "destination": "/api/public-share?doc=payslip&op=verify"
     },
     {
       "source": "/api/security/events",
@@ -37,16 +69,8 @@
       "destination": "/api/email-track?mode=link"
     },
     {
-      "source": "/api/payfast/subscription/itn",
-      "destination": "/api/payfast-subscription-itn"
-    },
-    {
       "source": "/payfast/subscription/itn",
-      "destination": "/api/payfast-subscription-itn"
-    },
-    {
-      "source": "/api/payfast/webhook",
-      "destination": "/api/payfast-subscription-itn"
+      "destination": "/api/payfast/subscription/itn"
     },
     {
       "source": "/((?!api/).*)",

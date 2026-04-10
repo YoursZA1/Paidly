@@ -1,6 +1,6 @@
 /**
- * Vercel serverless: POST /api/referrals/create
- * Same contract as Express (server/src/index.js) — JWT + referral_code; service-role attribution.
+ * POST /api/referrals/create — reached via vercel.json rewrite with ?__referralsCreate=1
+ * Underscore: not a standalone Vercel function.
  */
 import { createClient } from "@supabase/supabase-js";
 import { createReferralAttributionForUser } from "../../server/src/affiliateReferralCreate.js";

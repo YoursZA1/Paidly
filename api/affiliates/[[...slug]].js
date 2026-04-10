@@ -1,10 +1,13 @@
 /**
- * Vercel serverless (single function): GET /api/affiliates + POST /api/affiliates/resend-link
- * Keeps Hobby serverless count ≤12 by merging former index.js + resend-link.js.
+ * Vercel serverless (single function): affiliates bundle + resend-link + approve + dashboard/referrals rewrites.
+ * Underscore-prefixed siblings are shared modules, not separate functions.
  */
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
+import handleAffiliateDashboard from "./_affiliateDashboard.js";
+import handleAffiliateApprove from "./_approveHandler.js";
+import handleReferralsCreate from "./_referralsCreate.js";
 import {
   buildAffiliateSignupShareUrl,
   resolvePublicAppOriginForShareLinks,
@@ -163,6 +166,13 @@ async function handlePostResendLink(req, res, supabase) {
 }
 
 export default async function handler(req, res) {
+  if (String(req.query.__affiliateDashboard || "") === "1") {
+    return handleAffiliateDashboard(req, res);
+  }
+  if (String(req.query.__referralsCreate || "") === "1") {
+    return handleReferralsCreate(req, res);
+  }
+
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
 
@@ -171,6 +181,11 @@ export default async function handler(req, res) {
 
   const supabase = getSupabaseAdmin();
   if (!supabase) return res.status(503).json({ error: "Server misconfigured (Supabase)" });
+
+  if (head === "approve") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    return handleAffiliateApprove(req, res);
+  }
 
   if (!head) {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });

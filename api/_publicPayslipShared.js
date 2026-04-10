@@ -3,14 +3,14 @@
  * Viewer token: HMAC-signed JWT-like blob (same secret as client-portal / public invoice).
  */
 import crypto from "node:crypto";
-import { getPortalSigningSecret } from "./client-portal/shared.js";
+import { getPortalSigningSecret } from "./client-portal/_shared.js";
 import {
   bearerTokenFromReq,
   getSupabaseAdmin,
   isValidShareTokenUuid,
   maskEmail,
   normalizeEmail,
-} from "./public-invoice-shared.js";
+} from "./_publicInvoiceShared.js";
 
 const VIEWER_TTL_SEC = 7 * 24 * 60 * 60;
 const VIEWER_TYP = "payslip_pub_v1";

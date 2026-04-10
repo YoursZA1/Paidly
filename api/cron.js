@@ -1,3 +1,6 @@
+/**
+ * Single Vercel cron entry (Hobby plan). Jobs dispatched via `?job=` (see vercel.json rewrites).
+ */
 import { createClient } from "@supabase/supabase-js";
 
 function isAuthorized(req) {
@@ -11,6 +14,15 @@ function isAuthorized(req) {
     return { ok: false, reason: "unauthorized" };
   }
   return { ok: true };
+}
+
+async function runPaymentReminderBatch() {
+  return {
+    ran: false,
+    processedUsers: 0,
+    message:
+      "Batch not implemented yet. Persist reminder_settings to profiles (or JSONB) and query invoices by org_id, then send via Resend. See docs/CRON_PAYMENT_REMINDERS.md",
+  };
 }
 
 function getSupabaseAdmin() {
@@ -141,22 +153,44 @@ export default async function handler(req, res) {
 
   const authz = isAuthorized(req);
   if (authz.reason === "misconfigured") {
-    return res.status(503).json({ error: "CRON_SECRET is not set (min 8 chars)." });
+    return res.status(503).json({
+      error: "CRON_SECRET is not set (min 8 chars). Add it in Vercel env for production.",
+    });
   }
   if (authz.reason === "unauthorized") {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  const job = String(req.query?.job || "").trim();
+  if (!job) {
+    return res.status(400).json({ error: "Missing job" });
+  }
+
   try {
-    const out = await runSubscriptionDunningBatch();
-    return res.status(200).json({
-      ok: true,
-      at: new Date().toISOString(),
-      path: "subscription-dunning",
-      ...out,
-    });
+    if (job === "payment-reminders") {
+      const batch = await runPaymentReminderBatch();
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "payment-reminders",
+        ...batch,
+      });
+    }
+    if (job === "subscription-dunning") {
+      const out = await runSubscriptionDunningBatch();
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "subscription-dunning",
+        ...out,
+      });
+    }
+    return res.status(404).json({ error: "Unknown cron job" });
   } catch (e) {
-    console.error("[cron/subscription-dunning]", e);
-    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+    console.error("[api/cron]", job, e);
+    return res.status(500).json({
+      ok: false,
+      error: e?.message || String(e),
+    });
   }
 }

@@ -1,6 +1,6 @@
 /**
- * Vercel serverless: GET /api/affiliate/dashboard
- * Also reachable as GET /affiliate/dashboard (see vercel.json rewrite).
+ * GET /api/affiliate/dashboard — reached via vercel.json rewrite with ?__affiliateDashboard=1
+ * Underscore: not a standalone Vercel function.
  */
 import { createClient } from "@supabase/supabase-js";
 import { buildAffiliateDashboardPayload } from "../../server/src/affiliateDashboardData.js";
@@ -15,20 +15,18 @@ function getSupabaseAdmin() {
 }
 
 export default async function handler(req, res) {
-  // CORS headers for production - allow both domains due to Vercel redirects
-  const allowedOrigins = ['https://paidly.co.za', 'https://www.paidly.co.za'];
+  const allowedOrigins = ["https://paidly.co.za", "https://www.paidly.co.za"];
   const origin = req.headers.origin;
 
   if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 

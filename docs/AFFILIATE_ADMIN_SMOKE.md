@@ -118,6 +118,6 @@ curl -sS -X POST "${HOST}/api/affiliates/approve" \
 ## Related code
 
 - Core logic: `server/src/affiliateModerationCore.js`  
-- Vercel approve: `api/affiliates/approve.js` · decline: `server/src/vercelAffiliateDeclinePost.js` via `api/admin/[resource].js`  
+- Vercel approve: `POST /api/affiliates/approve` → `api/affiliates/[[...slug]].js` + `api/affiliates/_approveHandler.js` · decline: `server/src/vercelAffiliateDeclinePost.js` via `api/admin/[resource].js`  
 - Express: `server/src/affiliateApplicationAdminActions.js`  
 - Frontend: `src/api/affiliateAdminModerationApi.js`
