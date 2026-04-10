@@ -3,10 +3,18 @@
  * Dynamic catch-all files under `/api` are unreliable on Vercel without Next.js;
  * public URLs stay `/api/payfast/subscription`, `/api/payfast/webhook`, etc. via vercel.json rewrites → `__pf`.
  */
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import { getClientIp } from "../server/src/loginIpRateLimit.js";
 import { createPayfastSubscriptionItnHandler } from "../server/src/payfastSubscriptionItn.js";
 import payfastSubscriptionCheckout from "./payfast/_checkout.js";
+
+const __pfDir = path.dirname(fileURLToPath(import.meta.url));
+// `vercel dev` injects env; for local tooling / missing injection, load repo + server .env (server wins on duplicate keys)
+dotenv.config({ path: path.resolve(__pfDir, "..", ".env") });
+dotenv.config({ path: path.resolve(__pfDir, "..", "server", ".env"), override: true });
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;

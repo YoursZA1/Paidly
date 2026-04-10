@@ -3,7 +3,9 @@ import {
   assertPayfastHttpsUrlsInLive,
   assertPayfastPassphraseForLiveCheckout,
   getPayfastFrequency,
+  getPayfastMerchantCredentialsFromEnv,
   getPayfastProcessUrl,
+  logPayfastPayloadDebug,
   signPayfastPayload,
 } from "../../server/src/payfast.js";
 import { parseBody } from "../../server/src/validateBody.js";
@@ -98,13 +100,17 @@ export default async function payfastSubscriptionCheckout(req, res) {
       }
     }
 
-    const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
-    const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
-    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsFromEnv();
     if (!merchantId || !merchantKey) {
+      console.error("[payfast/subscription] Missing PAYFAST_MERCHANT_ID or PAYFAST_MERCHANT_KEY", {
+        hasId: Boolean(merchantId),
+        hasKey: Boolean(merchantKey),
+        vercelEnv: process.env.VERCEL_ENV,
+      });
       return res.status(422).json({
         code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
-        error: "Set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY in Vercel → Settings → Environment Variables.",
+        error:
+          "Set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY in Vercel → Environment Variables (Production), or in repo-root .env / server/.env for local dev.",
       });
     }
 
@@ -205,6 +211,8 @@ export default async function payfastSubscriptionCheckout(req, res) {
       subscription_notify_webhook: toPayfastBooleanFlag(subscriptionNotifyWebhook, true),
       subscription_notify_buyer: toPayfastBooleanFlag(subscriptionNotifyBuyer, true),
     };
+
+    logPayfastPayloadDebug(payload);
 
     payload.signature = signPayfastPayload(payload, passphrase);
     if (!payload.signature) {

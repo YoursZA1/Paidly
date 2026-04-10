@@ -10,7 +10,9 @@ import {
   assertPayfastHttpsUrlsInLive,
   assertPayfastPassphraseForLiveCheckout,
   getPayfastFrequency,
+  getPayfastMerchantCredentialsFromEnv,
   getPayfastProcessUrl,
+  logPayfastPayloadDebug,
   signPayfastPayload,
 } from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
@@ -104,6 +106,8 @@ import { registerPublicPayslipRoutes } from "./publicPayslipApi.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from server directory (so it works when run from project root or server/)
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
+// Repo root .env (Vite uses this; PayFast vars are often here if not duplicated in server/.env)
+dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
 const app = express();
 // So req.ip / X-Forwarded-For are correct behind a reverse proxy (e.g. nginx, Vercel, Railway).
@@ -1400,9 +1404,7 @@ app.post("/api/payfast/subscription", (req, res) => {
     }
   }
 
-  const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
-  const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
-  const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+  const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsFromEnv();
   let defaultSubscriptionNotifyUrl = returnUrl;
   try {
     if (returnUrl) {
@@ -1431,9 +1433,15 @@ app.post("/api/payfast/subscription", (req, res) => {
   }
 
   if (!merchantId || !merchantKey) {
+    console.error("[payfast/subscription] Missing PAYFAST_MERCHANT_ID or PAYFAST_MERCHANT_KEY", {
+      hasId: Boolean(merchantId),
+      hasKey: Boolean(merchantKey),
+      vercelEnv: process.env.VERCEL_ENV,
+    });
     return res.status(422).json({
       code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
-      error: "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY (e.g. on Vercel → Environment Variables).",
+      error:
+        "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY in Vercel (Production) or repo-root .env / server/.env for local dev, then redeploy.",
     });
   }
 
@@ -1510,6 +1518,7 @@ app.post("/api/payfast/subscription", (req, res) => {
     subscription_notify_buyer: toPayfastBooleanFlag(subscriptionNotifyBuyer, true)
   };
 
+  logPayfastPayloadDebug(payload);
   payload.signature = signPayfastPayload(payload, passphrase);
   if (!payload.signature) {
     return res.status(500).json({
@@ -1557,9 +1566,7 @@ app.post("/api/payfast/once", async (req, res) => {
       }
     }
 
-    const merchantId = process.env.PAYFAST_MERCHANT_ID || "";
-    const merchantKey = process.env.PAYFAST_MERCHANT_KEY || "";
-    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsFromEnv();
     let defaultOnceNotifyUrl = returnUrl;
     try {
       if (returnUrl) {
@@ -1591,9 +1598,15 @@ app.post("/api/payfast/once", async (req, res) => {
     }
 
     if (!merchantId || !merchantKey) {
+      console.error("[payfast-once] Missing PAYFAST_MERCHANT_ID or PAYFAST_MERCHANT_KEY", {
+        hasId: Boolean(merchantId),
+        hasKey: Boolean(merchantKey),
+        vercelEnv: process.env.VERCEL_ENV,
+      });
       return res.status(422).json({
         code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
-        error: "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.",
+        error:
+          "PayFast merchant id/key missing: set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY (Vercel or .env).",
       });
     }
 
@@ -1667,6 +1680,7 @@ app.post("/api/payfast/once", async (req, res) => {
       custom_str5: invoice.currency || currency || "ZAR"
     };
 
+    logPayfastPayloadDebug(payload);
     payload.signature = signPayfastPayload(payload, passphrase);
     if (!payload.signature) {
       return res.status(500).json({ error: "Failed to generate PayFast signature" });

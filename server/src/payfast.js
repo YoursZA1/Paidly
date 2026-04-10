@@ -147,6 +147,39 @@ export const getPayfastProcessUrl = (mode) => {
   return "https://sandbox.payfast.co.za/eng/process";
 };
 
+/**
+ * Read PayFast merchant credentials from env (Vercel dashboard or .env).
+ * Always returns trimmed strings — never `undefined` — so JSON responses always include keys.
+ */
+export function getPayfastMerchantCredentialsFromEnv() {
+  const merchantId = String(process.env.PAYFAST_MERCHANT_ID ?? "").trim();
+  const merchantKey = String(process.env.PAYFAST_MERCHANT_KEY ?? "").trim();
+  const passphrase = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
+  return { merchantId, merchantKey, passphrase };
+}
+
+/**
+ * Log PayFast field map before signing. Confirms `merchant_id` / `merchant_key` in logs.
+ * `merchant_key` is redacted unless `PAYFAST_LOG_FULL_MERCHANT_KEY=true` (avoid leaking secrets in Vercel logs).
+ * @param {Record<string, unknown>} payload
+ */
+export function logPayfastPayloadDebug(payload) {
+  if (payload == null || typeof payload !== "object") return;
+  const data = { ...payload };
+  const full =
+    String(process.env.PAYFAST_LOG_FULL_MERCHANT_KEY || "").trim().toLowerCase() === "true" ||
+    process.env.PAYFAST_LOG_FULL_MERCHANT_KEY === "1";
+  const logPayload = full
+    ? data
+    : {
+        ...data,
+        merchant_key: data.merchant_key
+          ? `[present, ${String(data.merchant_key).length} chars]`
+          : "[MISSING]",
+      };
+  console.log("PAYFAST DATA:", logPayload);
+}
+
 export const getPayfastFrequency = (billingCycle) => {
   switch (billingCycle) {
     case "annual":
