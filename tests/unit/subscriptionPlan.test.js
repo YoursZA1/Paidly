@@ -82,8 +82,9 @@ describe("describeSubscriptionState", () => {
 });
 
 describe("slugFromProfile", () => {
-  it("prefers plan then subscription_plan", () => {
-    expect(slugFromProfile({ plan: "sme", subscription_plan: "individual" })).toBe("sme");
+  it("prefers subscription_plan then plan (billing source of truth)", () => {
+    expect(slugFromProfile({ plan: "sme", subscription_plan: "individual" })).toBe("individual");
+    expect(slugFromProfile({ plan: "individual", subscription_plan: "sme" })).toBe("sme");
     expect(slugFromProfile({ subscription_plan: "corporate" })).toBe("corporate");
   });
 });

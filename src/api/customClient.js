@@ -273,7 +273,7 @@ class EntityManager {
 
   static getAuthBillingPlanSlug() {
     const u = EntityManager.breakApiClient?.auth?.user;
-    return String(u?.plan || u?.subscription_plan || "").trim();
+    return String(u?.subscription_plan || u?.plan || "").trim();
   }
 
   /**

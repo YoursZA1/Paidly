@@ -13,10 +13,11 @@ const FREEISH = new Set(["free", "starter", "trial", "none", ""]);
 
 export function slugFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
+  /** Prefer `subscription_plan` (PayFast / `subscriptions` sync); then `plan` (legacy or mirror). */
   const raw =
-    profile.plan ??
     profile.subscription_plan ??
     profile.subscriptionPlan ??
+    profile.plan ??
     "";
   return String(raw).trim().toLowerCase();
 }

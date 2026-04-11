@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Quote } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,11 +21,14 @@ import { useAppStore } from "@/stores/useAppStore";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { hasFeature } from "@/data/paidlySubscriptionPlans";
 import UpgradePrompt from "@/components/subscription/UpgradePrompt";
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import { normalizePaidPackageKey, slugFromProfile } from "@/lib/subscriptionPlan";
 
 export default function QuotesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const { user: authUser } = useAuth();
+    const { profile: profileFromQuery, isPending: profileQueryPending } = useUserProfileQuery();
     const quotesFromStore = useAppStore((s) => s.quotes);
     const clients = useAppStore((s) => s.clients);
     const userProfile = useAppStore((s) => s.userProfile);
@@ -228,9 +231,18 @@ export default function QuotesPage() {
         }
     };
 
-    const billingPlan = String(userProfile?.plan || authUser?.plan || "").trim();
-    const canGate = Boolean(billingPlan) || !appStoreLoading;
-    if (canGate && !hasFeature(billingPlan || "free", "quotes")) {
+    const billingProfile = useMemo(() => {
+        const a = authUser && typeof authUser === "object" ? authUser : {};
+        const s = userProfile && typeof userProfile === "object" ? userProfile : {};
+        const q = profileFromQuery && typeof profileFromQuery === "object" ? profileFromQuery : {};
+        return { ...a, ...s, ...q };
+    }, [authUser, userProfile, profileFromQuery]);
+
+    const billingSlug = slugFromProfile(billingProfile);
+    const packageKeyForFeatures = normalizePaidPackageKey(billingProfile);
+    const canGate =
+        Boolean(billingSlug) || (!appStoreLoading && !profileQueryPending);
+    if (canGate && !hasFeature(packageKeyForFeatures, "quotes")) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <UpgradePrompt
