@@ -162,7 +162,13 @@ export async function selectProfileByUserId(supabase, authUserId) {
   ];
   let last = null;
   for (const cols of attempts) {
-    const result = await supabase.from("profiles").select(cols).eq("id", authUserId).maybeSingle();
+    const result = await retryOnAbort(async () => {
+      const r = await supabase.from("profiles").select(cols).eq("id", authUserId).maybeSingle();
+      if (r.error && isAbortError(r.error)) {
+        throw r.error;
+      }
+      return r;
+    }, 2, 350);
     last = result;
     if (!result.error) {
       const d = result.data ? { ...result.data } : null;
@@ -1824,7 +1830,11 @@ class AuthManager {
         supabaseUserId = su.id;
         const { data: profile, error: profileError } = await selectProfileByUserId(supabase, su.id);
         if (profileError) {
-          console.warn("Failed to load profile for login:", getSupabaseErrorMessage(profileError, "Load profile failed"));
+          if (!isAbortError(profileError)) {
+            console.warn("Failed to load profile for login:", getSupabaseErrorMessage(profileError, "Load profile failed"));
+          } else if (import.meta.env.DEV) {
+            console.debug("[auth] Profile select aborted during login; role/plan may use defaults until me() refetch.");
+          }
         }
         resolvedRole = resolveUserRoleFromSessionAndProfile(su, profile || {});
         if (profile) {
@@ -1846,7 +1856,15 @@ class AuthManager {
         }
       }
     } catch (error) {
-      console.warn("Failed to load profile from Supabase:", getSupabaseErrorMessage(error, "Load profile failed"));
+      if (isAbortError(error)) {
+        if (import.meta.env.DEV) {
+          console.debug(
+            "[auth] Profile load aborted (tab refresh, Strict Mode, or parallel auth); continuing with session/credentials defaults."
+          );
+        }
+      } else {
+        console.warn("Failed to load profile from Supabase:", getSupabaseErrorMessage(error, "Load profile failed"));
+      }
       // Do NOT fall back to localStorage - database is the source of truth.
       // Stale localStorage can cause profile data to appear "lost" after logout/login.
     }
@@ -2014,7 +2032,7 @@ class AuthManager {
           );
         }
       }
-      if (error) {
+      if (error && !isAbortError(error)) {
         warnProfileSlowOnce(getSupabaseErrorMessage(error, "Load profile failed"));
       }
       if (!error && profile) {
@@ -2059,7 +2077,9 @@ class AuthManager {
         this.saveUserToStorage();
       }
     } catch (e) {
-      warnProfileSlowOnce(getSupabaseErrorMessage(e, "Load profile failed"));
+      if (!isAbortError(e)) {
+        warnProfileSlowOnce(getSupabaseErrorMessage(e, "Load profile failed"));
+      }
     }
     return this.user;
   }

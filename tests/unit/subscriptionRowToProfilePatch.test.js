@@ -4,11 +4,23 @@ import { subscriptionRowToProfilePatch } from "@/lib/subscriptionRowToProfilePat
 const TS = "2026-04-11T12:00:00.000Z";
 
 describe("subscriptionRowToProfilePatch", () => {
-  it("returns null without user_id or invalid plan", () => {
+  it("returns null without user_id or empty plan fields", () => {
     expect(subscriptionRowToProfilePatch(null, TS)).toBeNull();
     expect(subscriptionRowToProfilePatch({}, TS)).toBeNull();
-    expect(subscriptionRowToProfilePatch({ user_id: "u1", plan: "free" }, TS)).toBeNull();
+    expect(subscriptionRowToProfilePatch({ user_id: "u1" }, TS)).toBeNull();
+    expect(subscriptionRowToProfilePatch({ user_id: "u1", plan: "", current_plan: "" }, TS)).toBeNull();
     expect(subscriptionRowToProfilePatch({ user_id: "", plan: "sme" }, TS)).toBeNull();
+  });
+
+  it("normalizes free to individual tier for profile sync", () => {
+    const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "free", status: "active" }, TS);
+    expect(out.patch.plan).toBe("individual");
+    expect(out.patch.subscription_status).toBe("active");
+  });
+
+  it("maps enterprise-style slug to corporate", () => {
+    const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "enterprise", status: "active" }, TS);
+    expect(out.patch.plan).toBe("corporate");
   });
 
   it("throws if updatedAtIso is missing or empty", () => {

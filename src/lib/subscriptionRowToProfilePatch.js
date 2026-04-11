@@ -1,3 +1,5 @@
+import { normalizePaidPackageKey } from "@/lib/subscriptionPlan";
+
 /**
  * Maps an admin-managed `subscriptions` row to a `profiles` update payload.
  * Pure: pass `updatedAtIso` explicitly (e.g. `new Date().toISOString()` from the caller).
@@ -12,11 +14,13 @@ export function subscriptionRowToProfilePatch(row, updatedAtIso) {
   const userId = row.user_id;
   if (userId == null || String(userId).trim() === "") return null;
 
-  const planRaw = String(row.plan || row.current_plan || "")
-    .trim()
-    .toLowerCase();
-  const valid = ["individual", "sme", "corporate"];
-  if (!valid.includes(planRaw)) return null;
+  const rawCombined = String(row.plan || row.current_plan || row.subscription_plan || "").trim();
+  if (!rawCombined) return null;
+
+  const planRaw = normalizePaidPackageKey({
+    plan: row.plan || row.current_plan || rawCombined,
+    subscription_plan: row.subscription_plan || row.plan || row.current_plan || rawCombined,
+  });
 
   if (typeof updatedAtIso !== "string" || !updatedAtIso.trim()) {
     throw new TypeError("subscriptionRowToProfilePatch: updatedAtIso must be a non-empty ISO string");

@@ -551,8 +551,8 @@ async function syncProfileFromAdminSubscriptionRow(row) {
     () => supabase.from("profiles").update(mapped.patch).eq("id", mapped.userId),
     { kind: "write", silent: true, label: "paidly.profile.syncSubscription" }
   );
-  if (error && import.meta.env?.DEV) {
-    console.warn("[paidlyDataClient] sync profiles from admin subscription:", error.message);
+  if (error) {
+    console.warn("[paidlyDataClient] sync profiles from admin subscription failed:", error.message || error);
   }
 }
 

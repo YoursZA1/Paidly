@@ -81,6 +81,14 @@ export default function SubscriptionSettings() {
     }, [refetchProfile]);
 
     useEffect(() => {
+        const onVis = () => {
+            if (document.visibilityState === "visible") void refetchProfile();
+        };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+    }, [refetchProfile]);
+
+    useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
