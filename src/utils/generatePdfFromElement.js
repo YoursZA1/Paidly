@@ -18,6 +18,20 @@ function html2CanvasOnClone(clonedDoc) {
         /* ignore per-node */
       }
     });
+    /* html2canvas mis-renders -webkit-line-clamp (second line sliced). Strip inside captured invoice/preview roots only. */
+    const roots = clonedDoc.querySelectorAll(
+      '[data-invoice-pdf-capture="true"], .document-preview-styled'
+    );
+    roots.forEach((root) => {
+      root.querySelectorAll(".line-clamp-1, .line-clamp-2, .line-clamp-3, .line-clamp-4, .line-clamp-5, .line-clamp-6").forEach((el) => {
+        el.style.setProperty("display", "block", "important");
+        el.style.setProperty("overflow", "visible", "important");
+        el.style.setProperty("max-height", "none", "important");
+        el.style.setProperty("-webkit-box-orient", "unset", "important");
+        el.style.setProperty("-webkit-line-clamp", "unset", "important");
+        el.style.setProperty("line-clamp", "unset", "important");
+      });
+    });
   } catch {
     /* ignore */
   }
@@ -33,6 +47,7 @@ function buildHtml2PdfOptions(filename) {
       useCORS: true,
       letterRendering: true,
       logging: false,
+      backgroundColor: "#ffffff",
       onclone: html2CanvasOnClone,
     },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },

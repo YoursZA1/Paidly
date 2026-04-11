@@ -58,6 +58,7 @@ const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
 const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
 const UsersPage = lazy(() => import("./UsersPage"));
+const AdminPlatformMessages = lazy(() => import("./AdminPlatformMessages"));
 const SubscriptionsPage = lazy(() => import("./SubscriptionsPage"));
 const AffiliatesPage = lazy(() => import("./AffiliatesPage"));
 const WaitlistPage = lazy(() => import("./WaitlistPage"));
@@ -292,6 +293,10 @@ const ADMIN_ROUTES = [
     {
         path: "/admin-v2/users",
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><UsersPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/messages",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminPlatformMessages /></AdminLayout></RequireAuth>,
     },
     {
         path: "/admin-v2/subscriptions",

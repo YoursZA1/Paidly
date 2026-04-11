@@ -455,6 +455,15 @@ body {
   page-break-inside: avoid;
 }
 
+/*
+ * DocumentPreview (invoice/quote PDF): keep blocks together.
+ * Do not use a class name like "page-break" — easy to confuse with html2pdf/jsPDF break heuristics.
+ */
+.docpdf-keep-together {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 /* Invoice list: Stripe / Notion / Linear — minimal, confident, not kit-like */
 .invoice-list-table {
   border-collapse: collapse;

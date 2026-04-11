@@ -74,7 +74,7 @@ function buildDocumentHtmlFromData(doc, docType) {
     .map(
       (row) => `
         <tr>
-          <td>${escapeHtml(row.description)}</td>
+          <td class="line-item-description">${escapeHtml(row.description)}</td>
           <td>${escapeHtml(row.qty)}</td>
           <td>${escapeHtml(fmtCurrency(row.unit, currency))}</td>
           <td class="bold">${escapeHtml(fmtCurrency(row.total, currency))}</td>
@@ -128,7 +128,13 @@ function buildDocumentHtmlFromData(doc, docType) {
   </table>
 
   ${notes ? `<div class="footer"><div class="bold">Notes</div><div>${escapeHtml(notes).replaceAll("\n", "<br/>")}</div></div>` : ""}
-  ${terms ? `<div class="footer"><div class="bold">Terms & Conditions</div><div>${escapeHtml(terms).replaceAll("\n", "<br/>")}</div></div>` : ""}
+  ${terms
+    ? (() => {
+        const line = String(terms).replace(/\s+/g, " ").trim();
+        const safe = escapeHtml(line);
+        return `<div class="footer footer-terms"><div class="footer-terms-label">Terms</div><div class="footer-terms-body" title="${safe}">${safe}</div></div>`;
+      })()
+    : ""}
   ${companyEmail ? `<div class="footer-info"><span>${escapeHtml(companyEmail)}</span></div>` : ""}
 </body>
 </html>`;

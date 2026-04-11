@@ -26,6 +26,13 @@ import {
 } from "./adminPlatformUsersList.js";
 import { fetchSyncUsersForAdmin } from "./adminSyncUsersList.js";
 import { runAdminDeleteOrphanProfiles } from "./adminCleanOrphanProfiles.js";
+import {
+  getAdminPlatformUserMessages,
+  insertAdminPlatformMessage,
+  isAdminPlatformMessageClientError,
+  isAdminPlatformMessagesSchemaMissingError,
+} from "./adminPlatformUserMessages.js";
+import { sendAdminPlatformMessageToSignupEmail } from "./adminPlatformUserOutreachEmail.js";
 import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
@@ -2112,6 +2119,100 @@ app.get("/api/admin/platform-users", async (req, res) => {
     return res.status(500).json({
       error: err?.message || "Failed to list platform users"
     });
+  }
+});
+
+app.get("/api/admin/platform-user-messages", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const recipientId = String(req.query.recipient_id || "").trim();
+    let threadLimit = 100;
+    if (req.query.thread_limit != null && String(req.query.thread_limit).trim() !== "") {
+      const n = Number(String(req.query.thread_limit).trim());
+      if (!Number.isInteger(n) || n < 1 || n > 200) {
+        return res.status(400).json({ error: "Invalid thread_limit (use integer 1–200)" });
+      }
+      threadLimit = n;
+    }
+    let listLimit = 500;
+    if (req.query.list_limit != null && String(req.query.list_limit).trim() !== "") {
+      const n = Number(String(req.query.list_limit).trim());
+      if (!Number.isInteger(n) || n < 1 || n > 1000) {
+        return res.status(400).json({ error: "Invalid list_limit (use integer 1–1000)" });
+      }
+      listLimit = n;
+    }
+
+    const data = await getAdminPlatformUserMessages(supabaseAdmin, {
+      recipientId: recipientId || undefined,
+      threadLimit,
+      listLimit,
+    });
+    logAdminApi(req.method, req.path, 200, recipientId ? `thread ${recipientId}` : "conversations");
+    return res.json({ ok: true, ...data });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    const msg = err?.message || "Failed to load platform user messages";
+    const status = isAdminPlatformMessageClientError(msg) ? 400 : 500;
+    logAdminApi(req.method, req.path, status, msg);
+    return res.status(status).json({ error: msg });
+  }
+});
+
+app.post("/api/admin/send-platform-message", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const recipient_id = String(req.body?.recipient_id ?? "").trim();
+    const subject = req.body?.subject != null ? String(req.body.subject) : "";
+    const content = String(req.body?.content ?? "").trim();
+
+    if (!recipient_id) {
+      return res.status(400).json({ error: "recipient_id is required" });
+    }
+    if (!content) {
+      return res.status(400).json({ error: "content is required" });
+    }
+
+    const { message } = await insertAdminPlatformMessage(supabaseAdmin, {
+      recipientId: recipient_id,
+      senderId: adminUser.id,
+      subject,
+      content,
+    });
+    const email_delivery = await sendAdminPlatformMessageToSignupEmail(supabaseAdmin, {
+      recipientId: recipient_id,
+      subject: message?.subject ?? subject,
+      plainBody: content,
+    });
+    logAdminApi(
+      req.method,
+      req.path,
+      200,
+      `message ${message?.id} email=${email_delivery.status}`
+    );
+    return res.json({ ok: true, message, email_delivery });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    const msg = err?.message || "Failed to send message";
+    const status = isAdminPlatformMessageClientError(msg)
+      ? 400
+      : isAdminPlatformMessagesSchemaMissingError(msg)
+        ? 503
+        : 500;
+    logAdminApi(req.method, req.path, status, msg);
+    return res.status(status).json({ error: msg });
   }
 });
 

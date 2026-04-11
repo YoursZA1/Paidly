@@ -81,6 +81,7 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
   const users = authUsers.map((authUser) => {
     const profile = profileMap.get(authUser.id) || null;
     const ev = authEmailVerificationFields(authUser);
+    /** Supabase Auth primary email (signup / login identity) when present; else profiles.email. */
     const email = String(authUser.email || profile?.email || "").trim();
     const full_name = String(
       profile?.full_name ||

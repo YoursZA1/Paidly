@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
-import InvoiceTemplatePdfCapture from "./InvoiceTemplatePdfCapture";
+import DocumentPreview from "@/components/DocumentPreview";
 import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
+import { profileForQuotePreview, recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 
 async function waitForImages(container) {
   const imgs = [...container.querySelectorAll("img")];
@@ -28,15 +29,15 @@ function flushLayout() {
 }
 
 /**
- * PDF blob using the same HTML templates as the invoice preview (Classic / Modern / Minimal / Bold).
- * Browser only — uses html2pdf.js on a hidden render tree.
+ * Invoice PDF blob using the same DocumentPreview + html2pdf path as {@link generateQuotePDF}.
+ * Avoids multi-page template shells that cause extra/blank pages in html2pdf v0.10.
  *
  * @param {{ invoice: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
  */
 export async function generateInvoicePDF({ invoice, client, user, bankingDetail = null }) {
   if (typeof document === "undefined") {
-    throw new Error("Template PDF generation requires a browser environment.");
+    throw new Error("Invoice PDF generation requires a browser environment.");
   }
 
   const host = document.createElement("div");
@@ -49,16 +50,26 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
   const filename = `${invoice?.invoice_number || invoice?.reference_number || "invoice"}.pdf`;
 
   try {
+    const resolvedClient =
+      client && typeof client === "object"
+        ? client
+        : { name: invoice?.client_name || "Client", id: invoice?.client_id };
+    const profile = profileForQuotePreview(invoice, user);
+    const previewDoc = recordToStyledPreviewDoc(invoice, resolvedClient, "invoice", profile);
+
     root.render(
-      <InvoiceTemplatePdfCapture
-        invoice={invoice}
-        client={client}
-        user={user}
+      <DocumentPreview
+        doc={previewDoc}
+        docType="invoice"
+        clients={[resolvedClient]}
+        user={profile}
         bankingDetail={bankingDetail}
+        hideStatus
       />
     );
+
     await flushLayout();
-    const el = host.querySelector("[data-invoice-pdf-capture]");
+    const el = host.firstElementChild;
     if (!el) throw new Error("Invoice PDF capture node missing");
     await waitForImages(el);
     return await generatePdfBlobFromElement(el, filename);

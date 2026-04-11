@@ -263,6 +263,34 @@ export default function InvoicePDF() {
 
     return (
         <>
+            <style>{`
+                @media print {
+                    .no-print { display: none !important; }
+                    body { margin: 0; background-color: white; }
+                    .print-container { box-shadow: none !important; margin: 0 !important; border: none !important; }
+                    .pdf-page { padding: 0 !important; }
+                }
+                @page {
+                    margin: 0.5in;
+                    size: A4;
+                }
+                @media screen {
+                    .pdf-page { max-width: 8.27in; margin: 0 auto; }
+                    .pdf-content table { width: 100%; border-collapse: collapse; }
+                    .pdf-content th,
+                    .pdf-content td { word-break: break-word; }
+                }
+                @media (max-width: 640px) {
+                    .pdf-wrapper { padding: 12px !important; }
+                    .pdf-page { padding: 16px !important; border-radius: 12px !important; }
+                    .pdf-content { font-size: 12px; }
+                    .pdf-content h1 { font-size: 20px; }
+                    .pdf-content h2 { font-size: 18px; }
+                    .pdf-content h3 { font-size: 14px; }
+                    .pdf-content table { font-size: 12px; }
+                }
+            `}</style>
+
             <div className="min-h-[100dvh] w-full bg-gray-100 py-2 sm:py-4 print:bg-white print:min-h-0 print:py-0">
                 <div className="pdf-wrapper w-full max-w-none mx-auto px-page sm:px-6">
                     <div className="no-print invoice-pdf-actions mb-4 flex flex-col sm:flex-row justify-end gap-2">
@@ -282,17 +310,21 @@ export default function InvoicePDF() {
                         </Button>
                     </div>
 
-                    <div ref={printRef} className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto max-w-[210mm] mx-auto">
-                        {previewDoc ? (
-                            <DocumentPreview
-                                doc={previewDoc}
-                                docType="invoice"
-                                clients={clientsForPreview}
-                                user={pdfPack.resolvedUser}
-                                bankingDetail={bankingDetail}
-                                hideStatus
-                            />
-                        ) : null}
+                    <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto max-w-[210mm] mx-auto">
+                        <div className="pdf-content">
+                            <div ref={printRef}>
+                                {previewDoc ? (
+                                    <DocumentPreview
+                                        doc={previewDoc}
+                                        docType="invoice"
+                                        clients={clientsForPreview}
+                                        user={pdfPack.resolvedUser}
+                                        bankingDetail={bankingDetail}
+                                        hideStatus
+                                    />
+                                ) : null}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

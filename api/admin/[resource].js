@@ -4,8 +4,8 @@ import { mergeAffiliateApplicationsWithPartnersAndStats } from "../../server/src
 /**
  * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
  *
- * GET: affiliates | platform-users | sync-users | security-events
- * POST: approve | decline | invite-user | clean-orphaned-users
+ * GET: affiliates | platform-users | platform-user-messages | sync-users | security-events
+ * POST: approve | decline | invite-user | clean-orphaned-users | send-platform-message
  *
  * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
@@ -22,11 +22,14 @@ let affiliateApproveHandler;
 let applyPaidlyServerlessCors;
 let validateServiceRoleKey;
 let runAdminDeleteOrphanProfiles;
+let getAdminPlatformUserMessages;
+let isAdminPlatformMessageClientError;
 
 let corsPromise = null;
 let getDepsPromise = null;
 let approveDeclineDepsPromise = null;
 let inviteUserDepsPromise = null;
+let sendPlatformMessageDepsPromise = null;
 
 async function ensureCorsDeps() {
   if (applyPaidlyServerlessCors) return;
@@ -49,6 +52,7 @@ async function ensureGetDeps() {
     import("../../server/src/adminCleanOrphanProfiles.js"),
     import("../../server/src/securityMiddleware.js"),
     import("../../server/src/supabaseServiceRoleGuard.js"),
+    import("../../server/src/adminPlatformUserMessages.js"),
   ]).then(
     ([
       supabaseMod,
@@ -58,6 +62,7 @@ async function ensureGetDeps() {
       adminCleanMod,
       securityMiddlewareMod,
       roleGuardMod,
+      adminPlatformUserMessagesMod,
     ]) => {
       createClient = supabaseMod.createClient;
       assertCallerForAdminRoute = adminRouteAccessMod.assertCallerForAdminRoute;
@@ -66,6 +71,8 @@ async function ensureGetDeps() {
       runAdminDeleteOrphanProfiles = adminCleanMod.runAdminDeleteOrphanProfiles;
       getSecurityEventsSnapshot = securityMiddlewareMod.getSecurityEventsSnapshot;
       validateServiceRoleKey = roleGuardMod.validateServiceRoleKey;
+      getAdminPlatformUserMessages = adminPlatformUserMessagesMod.getAdminPlatformUserMessages;
+      isAdminPlatformMessageClientError = adminPlatformUserMessagesMod.isAdminPlatformMessageClientError;
     }
   );
   return getDepsPromise;
@@ -93,6 +100,17 @@ async function ensureInviteUserDeps() {
     handleVercelAdminInviteUserPost = m.handleVercelAdminInviteUserPost;
   });
   return inviteUserDepsPromise;
+}
+
+let handleVercelSendPlatformMessagePost;
+async function ensureSendPlatformMessageDeps() {
+  await ensureCorsDeps();
+  if (handleVercelSendPlatformMessagePost) return;
+  if (sendPlatformMessageDepsPromise) return sendPlatformMessageDepsPromise;
+  sendPlatformMessageDepsPromise = import("../../server/src/vercelAdminSendPlatformMessagePost.js").then((m) => {
+    handleVercelSendPlatformMessagePost = m.handleVercelSendPlatformMessagePost;
+  });
+  return sendPlatformMessageDepsPromise;
 }
 
 /** Vercel usually sets `query.resource`; fall back to path if missing (rewrites / some runtimes). */
@@ -211,8 +229,20 @@ function handleSecurityEvents(res) {
 export default async function handler(req, res) {
   try {
     const resource = adminResourceFromRequest(req);
-    const getResources = new Set(["affiliates", "platform-users", "sync-users", "security-events"]);
-    const postResources = new Set(["approve", "decline", "invite-user", "clean-orphaned-users"]);
+    const getResources = new Set([
+      "affiliates",
+      "platform-users",
+      "platform-user-messages",
+      "sync-users",
+      "security-events",
+    ]);
+    const postResources = new Set([
+      "approve",
+      "decline",
+      "invite-user",
+      "clean-orphaned-users",
+      "send-platform-message",
+    ]);
 
     if (postResources.has(resource)) {
       if (req.method === "OPTIONS") {
@@ -258,6 +288,10 @@ export default async function handler(req, res) {
           await ensureInviteUserDeps();
           return handleVercelAdminInviteUserPost(req, res);
         }
+        if (resource === "send-platform-message") {
+          await ensureSendPlatformMessageDeps();
+          return handleVercelSendPlatformMessagePost(req, res);
+        }
       }
       return res.status(405).json({ error: "Method not allowed" });
     }
@@ -290,6 +324,39 @@ export default async function handler(req, res) {
 
     if (resource === "sync-users") {
       return handleSyncUsers(req, res, supabase);
+    }
+
+    if (resource === "platform-user-messages") {
+      const recipientId = String(req.query?.recipient_id ?? "").trim();
+      let threadLimit = 100;
+      if (req.query?.thread_limit != null && String(req.query.thread_limit).trim() !== "") {
+        const n = Number(String(req.query.thread_limit).trim());
+        if (!Number.isInteger(n) || n < 1 || n > 200) {
+          return res.status(400).json({ error: "Invalid thread_limit (use integer 1–200)" });
+        }
+        threadLimit = n;
+      }
+      let listLimit = 500;
+      if (req.query?.list_limit != null && String(req.query.list_limit).trim() !== "") {
+        const n = Number(String(req.query.list_limit).trim());
+        if (!Number.isInteger(n) || n < 1 || n > 1000) {
+          return res.status(400).json({ error: "Invalid list_limit (use integer 1–1000)" });
+        }
+        listLimit = n;
+      }
+      try {
+        const data = await getAdminPlatformUserMessages(supabase, {
+          recipientId: recipientId || undefined,
+          threadLimit,
+          listLimit,
+        });
+        return res.status(200).json({ ok: true, ...data });
+      } catch (e) {
+        const msg = e?.message || "Failed to load messages";
+        const status = isAdminPlatformMessageClientError(msg) ? 400 : 500;
+        console.error("[GET /api/admin/platform-user-messages]", msg);
+        return res.status(status).json({ error: msg });
+      }
     }
 
     if (resource === "affiliates") {

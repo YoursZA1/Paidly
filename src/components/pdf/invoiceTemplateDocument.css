@@ -83,8 +83,23 @@
 .invoice-template-doc .unified-invoice-totals {
     align-items: start;
 }
+/* Keep cohesive blocks (addresses, payment + totals, footer) on one page when possible */
+.invoice-template-doc .invoice-section {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+}
 .invoice-template-doc .unified-invoice-line-table {
     table-layout: fixed;
+}
+.invoice-template-doc .unified-invoice-line-table th,
+.invoice-template-doc .unified-invoice-line-table td {
+    padding: 6px 0;
+    font-size: 12px;
+}
+/* Long line-item descriptions: constrain width and wrap predictably for PDF/print */
+.invoice-template-doc .unified-invoice-line-description {
+    max-width: 300px;
+    word-break: break-word;
 }
 .invoice-template-doc .currency-value {
     text-align: right;
@@ -94,6 +109,34 @@
 }
 .invoice-template-doc .section {
     margin-bottom: 28px;
+}
+/* Long notes / terms may continue on the next page instead of clipping */
+.invoice-template-doc .unified-invoice-template .invoice-flow-section {
+    page-break-inside: auto;
+    break-inside: auto;
+}
+/*
+ * Terms: do NOT use -webkit-line-clamp here — html2canvas/html2pdf clips the last line (half-glyphs).
+ * Full text, capped width, normal block flow (matches preview + PDF pixel-for-pixel).
+ */
+.invoice-template-doc .unified-invoice-template .invoice-terms-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+}
+.invoice-template-doc .unified-invoice-template .invoice-terms-body {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #9ca3af;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: visible;
 }
 /* Explicit fixed page containers for deterministic PDF flow. */
 .invoice-template-doc .unified-invoice-template .page {
@@ -213,9 +256,9 @@
         page-break-after: auto;
     }
     .invoice-template-doc .unified-invoice-template {
-        /* Compact print density for invoice + quote while staying readable. */
+        /* Body scale: 12px per design system; line-height for premium readability */
         font-size: 12px;
-        line-height: 1.3;
+        line-height: 1.4;
         min-height: auto !important;
         padding-bottom: 12px;
     }
@@ -228,7 +271,8 @@
         margin-bottom: 12px !important;
     }
     .invoice-template-doc .unified-invoice-template .unified-invoice-totals,
-    .invoice-template-doc .unified-invoice-template .invoice-grid-bill-dates {
+    .invoice-template-doc .unified-invoice-template .invoice-grid-bill-dates,
+    .invoice-template-doc .unified-invoice-template .invoice-section {
         break-inside: avoid-page;
         page-break-inside: avoid;
     }

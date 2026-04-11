@@ -253,7 +253,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
         backgroundColor: "#fff",
         color: "#111827",
         fontSize: "12px",
-        lineHeight: 1.3,
+        lineHeight: 1.4,
         maxWidth: "720px",
         margin: "0 auto",
       }}
@@ -306,11 +306,11 @@ const DocumentPreview = forwardRef(function DocumentPreview(
             <div style={{ marginTop: "4px" }}>
               <div
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: 700,
                   color: BRAND_PRIMARY,
                   textTransform: "uppercase",
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.06em",
                   marginBottom: "10px",
                 }}
               >
@@ -361,11 +361,11 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                 <div style={{ marginTop: company_phone || company_email || company_website ? "12px" : 0 }}>
                   <div
                     style={{
-                      fontSize: "10px",
+                      fontSize: "12px",
                       fontWeight: 700,
                       color: BRAND_PRIMARY,
                       textTransform: "uppercase",
-                      letterSpacing: "0.1em",
+                      letterSpacing: "0.06em",
                       marginBottom: "6px",
                     }}
                   >
@@ -429,14 +429,14 @@ const DocumentPreview = forwardRef(function DocumentPreview(
             marginBottom: "32px",
           }}
         >
-          <div className="page-break">
+          <div className="docpdf-keep-together">
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 fontWeight: 700,
                 color: BRAND_PRIMARY,
                 textTransform: "uppercase",
-                letterSpacing: "0.1em",
+                letterSpacing: "0.06em",
                 marginBottom: "10px",
               }}
             >
@@ -454,32 +454,32 @@ const DocumentPreview = forwardRef(function DocumentPreview(
             <div style={{ marginBottom: "16px" }}>
               <div
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: 700,
                   color: BRAND_PRIMARY,
                   textTransform: "uppercase",
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.06em",
                   marginBottom: "4px",
                 }}
               >
                 Issue date
               </div>
-              <div style={{ fontSize: "14px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(issue_date)}</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(issue_date)}</div>
             </div>
             <div>
               <div
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: 700,
                   color: BRAND_PRIMARY,
                   textTransform: "uppercase",
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.06em",
                   marginBottom: "4px",
                 }}
               >
                 {dueLabel}
               </div>
-              <div style={{ fontSize: "14px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(due_date)}</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(due_date)}</div>
             </div>
           </div>
         </div>
@@ -501,7 +501,12 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                   className="rounded-xl border border-slate-200 bg-white px-4 py-3"
                   style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
                 >
-                  <div className="text-sm font-semibold leading-snug text-slate-900">{item.description || "—"}</div>
+                  <div
+                    className="text-sm font-semibold leading-snug text-slate-900"
+                    style={{ maxWidth: "min(100%, 300px)", wordBreak: "break-word" }}
+                  >
+                    {item.description || "—"}
+                  </div>
                   <div className="mt-3 space-y-1.5 text-sm text-slate-600">
                     <div>
                       <span className="font-medium text-slate-500">Qty: </span>
@@ -525,61 +530,61 @@ const DocumentPreview = forwardRef(function DocumentPreview(
           <div className="document-line-items-table-wrap hidden overflow-x-auto md:block" style={{ marginBottom: 0 }}>
             <table
               className="document-line-items-table"
-              style={{ width: "100%", borderCollapse: "collapse", minWidth: "520px" }}
+              style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}
             >
               <thead>
                 <tr style={{ background: SLATE_900 }}>
                   <th
                     style={{
-                      padding: "12px 16px",
+                      padding: "6px 0",
                       textAlign: "left",
-                      fontSize: "11px",
+                      fontSize: "12px",
                       fontWeight: 600,
                       color: "#94a3b8",
                       textTransform: "uppercase",
-                      letterSpacing: "0.08em",
+                      letterSpacing: "0.06em",
                     }}
                   >
                     Description
                   </th>
                   <th
                     style={{
-                      padding: "12px 16px",
+                      padding: "6px 0",
                       textAlign: "right",
-                      fontSize: "11px",
+                      fontSize: "12px",
                       fontWeight: 600,
                       color: "#94a3b8",
                       textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      width: "80px",
+                      letterSpacing: "0.06em",
+                      width: "72px",
                     }}
                   >
                     Qty
                   </th>
                   <th
                     style={{
-                      padding: "12px 16px",
+                      padding: "6px 0",
                       textAlign: "right",
-                      fontSize: "11px",
+                      fontSize: "12px",
                       fontWeight: 600,
                       color: "#94a3b8",
                       textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      width: "110px",
+                      letterSpacing: "0.06em",
+                      width: "100px",
                     }}
                   >
                     Unit price
                   </th>
                   <th
                     style={{
-                      padding: "12px 16px",
+                      padding: "6px 0",
                       textAlign: "right",
-                      fontSize: "11px",
+                      fontSize: "12px",
                       fontWeight: 600,
                       color: BRAND_SECONDARY,
                       textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      width: "120px",
+                      letterSpacing: "0.06em",
+                      width: "108px",
                     }}
                   >
                     Total
@@ -589,23 +594,32 @@ const DocumentPreview = forwardRef(function DocumentPreview(
               <tbody>
                 {lineRows.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ padding: "12px 16px", fontSize: "11px", color: "#9ca3af", lineHeight: "16px" }}>
+                    <td colSpan={4} style={{ padding: "6px 0", fontSize: "12px", color: "#9ca3af", lineHeight: "16px" }}>
                       No line items
                     </td>
                   </tr>
                 ) : (
                   lineRows.map((item, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151" }}>
+                      <td
+                        style={{
+                          padding: "6px 0",
+                          fontSize: "12px",
+                          lineHeight: "16px",
+                          color: "#374151",
+                          maxWidth: "300px",
+                          wordBreak: "break-word",
+                        }}
+                      >
                         {item.description}
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
                         {item.quantity}
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
+                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
                         {fmt(item.unit_price)}
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: "11px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right" }}>
+                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right" }}>
                         {fmt(item.total)}
                       </td>
                     </tr>
@@ -616,26 +630,70 @@ const DocumentPreview = forwardRef(function DocumentPreview(
           </div>
         </div>
 
-        <div className="page-break" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "24px" }}>
-          <div style={{ width: "100%", maxWidth: "280px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "12px" }}>
+        <div
+          className="docpdf-keep-together"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "32px",
+            alignItems: "start",
+            marginBottom: "16px",
+            paddingTop: "24px",
+            borderTop: "1px solid #f1f5f9",
+          }}
+        >
+          <div className="min-w-0">
+            <div
+              style={{
+                fontSize: "12px",
+                fontWeight: 700,
+                color: BRAND_PRIMARY,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: "6px",
+              }}
+            >
+              Payment details
+            </div>
+            {bankingLines ? (
+              <div
+                role="group"
+                aria-label="Bank details for payment"
+                style={{
+                  fontSize: "8px",
+                  color: "#374151",
+                  lineHeight: 1.45,
+                  whiteSpace: "pre-line",
+                  wordBreak: "break-word",
+                }}
+              >
+                {bankingLines}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "8px", color: "#9ca3af", lineHeight: 1.45 }}>
+                Add bank details in Settings or on the document.
+              </p>
+            )}
+          </div>
+          <div className="min-w-0" style={{ justifySelf: "end", width: "100%", maxWidth: "280px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
               <span style={{ color: "#6b7280" }}>Subtotal</span>
               <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(lineSubtotal)}</span>
             </div>
             {discount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
                 <span style={{ color: "#6b7280" }}>Discount</span>
                 <span style={{ fontWeight: 500, color: "#ef4444" }}>-{fmt(discount)}</span>
               </div>
             )}
             {tax_rate > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
                 <span style={{ color: "#6b7280" }}>Tax ({tax_rate}%)</span>
                 <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(tax_amount)}</span>
               </div>
             )}
             {tax_rate === 0 && tax_amount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
                 <span style={{ color: "#6b7280" }}>Tax</span>
                 <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(tax_amount)}</span>
               </div>
@@ -644,75 +702,75 @@ const DocumentPreview = forwardRef(function DocumentPreview(
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-                padding: "12px",
+                alignItems: "baseline",
                 marginTop: "8px",
-                borderRadius: "10px",
-                background: BRAND_PRIMARY,
+                paddingTop: "8px",
+                borderTop: "1px solid #e5e7eb",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: SLATE_900,
               }}
             >
-              <span style={{ fontWeight: 600, fontSize: "12px", color: "#ffffff" }}>
-                {docType === "quote" ? "Total" : "Total due"}
-              </span>
-              <span style={{ fontWeight: 700, fontSize: "18px", color: "#ffffff" }}>{fmt(total)}</span>
+              <span>{docType === "quote" ? "Total" : "Total due"}</span>
+              <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
             </div>
           </div>
         </div>
 
-        {(notes || terms_conditions || bankingLines) && (
+        {(notes || terms_conditions) && (
           <>
-            <div style={{ height: "1px", background: "#f1f5f9", marginBottom: "24px" }} />
+            <div style={{ height: "1px", background: "#f1f5f9", marginBottom: "10px" }} />
             {notes ? (
-              <div style={{ marginBottom: terms_conditions || bankingLines ? "24px" : 0 }}>
+              <div style={{ marginBottom: terms_conditions ? "12px" : 0 }}>
                 <div
                   style={{
-                    fontSize: "10px",
+                    fontSize: "12px",
                     fontWeight: 700,
                     color: BRAND_PRIMARY,
                     textTransform: "uppercase",
-                    letterSpacing: "0.1em",
+                    letterSpacing: "0.06em",
                     marginBottom: "8px",
                   }}
                 >
                   Notes
                 </div>
-                <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.45, whiteSpace: "pre-line" }}>{notes}</div>
+                <div style={{ fontSize: "11px", color: "#6b7280", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "break-word" }}>
+                  {notes}
+                </div>
               </div>
             ) : null}
-            {terms_conditions || bankingLines ? (
-              <div>
-                <div
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: 700,
-                    color: BRAND_PRIMARY,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.1em",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Terms & conditions
-                </div>
-                {terms_conditions ? (
-                  <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.45, whiteSpace: "pre-line" }}>
-                    {terms_conditions}
-                  </div>
-                ) : null}
-                {bankingLines ? (
-                  <div
-                    role="group"
-                    aria-label="Bank details for payment"
+            {terms_conditions ? (
+              <div style={{ paddingRight: "28px" }}>
+                <div className="min-w-0" style={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+                  <p
                     style={{
-                      marginTop: terms_conditions ? "10px" : 0,
-                      fontSize: "10px",
-                      color: "#94a3b8",
-                      lineHeight: 1.5,
-                      whiteSpace: "pre-line",
+                      margin: "0 0 6px 0",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#737373",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
                     }}
                   >
-                    {bankingLines}
-                  </div>
-                ) : null}
+                    Terms
+                  </p>
+                  <p
+                    className="document-preview-terms-body"
+                    style={{
+                      margin: 0,
+                      maxWidth: "100%",
+                      fontSize: "11px",
+                      lineHeight: 1.45,
+                      color: "#9ca3af",
+                      wordBreak: "break-word",
+                      overflowWrap: "anywhere",
+                      overflow: "visible",
+                    }}
+                    title={String(terms_conditions).trim()}
+                  >
+                    {String(terms_conditions).replace(/\s+/g, " ").trim()}
+                  </p>
+                </div>
               </div>
             ) : null}
           </>
@@ -730,8 +788,8 @@ const DocumentPreview = forwardRef(function DocumentPreview(
             gap: "8px",
           }}
         >
-          <div style={{ fontSize: "11px", color: "#9ca3af" }}>Thank you for your business.</div>
-          <div style={{ fontSize: "11px", color: "#9ca3af" }}>{company_email}</div>
+          <div style={{ fontSize: "11px", lineHeight: 1.45, color: "#9ca3af" }}>Thank you for your business.</div>
+          <div style={{ fontSize: "11px", lineHeight: 1.45, color: "#9ca3af" }}>{company_email}</div>
         </div>
       </div>
 

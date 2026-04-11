@@ -70,7 +70,8 @@ import {
   Wrench,
   Terminal,
   Receipt,
-  Handshake
+  Handshake,
+  MessageCircle
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -108,6 +109,14 @@ const adminNavigationItems = [
     feature: null,
     roles: ADMIN_V2_NAV_ROLES,
     id: "nav-admin-users",
+  },
+  {
+    title: "Messages",
+    url: "/admin-v2/messages",
+    icon: MessageCircle,
+    feature: null,
+    roles: ADMIN_V2_NAV_ROLES,
+    id: "nav-admin-messages",
   },
   {
     title: "Subscriptions",
