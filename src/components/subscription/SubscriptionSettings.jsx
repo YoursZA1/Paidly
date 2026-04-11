@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
+import { payfastAmountZar, priceLabelZar } from "@/data/paidlySubscriptionPlans";
 import { getBillingPortalUrl } from "@/utils";
 
 const CONTACT_SALES_EMAIL = (
@@ -17,7 +18,7 @@ const TIERS = [
     {
         id: "individual",
         name: "Individual",
-        price: "R 25",
+        price: priceLabelZar("Individual"),
         normalPrice: "R 99",
         savingsLabel: "You save R 74/mo",
         description: "Solo operators and side projects.",
@@ -28,7 +29,7 @@ const TIERS = [
     {
         id: "sme",
         name: "SME",
-        price: "R 50",
+        price: priceLabelZar("SME"),
         normalPrice: "R 199",
         savingsLabel: "You save R 149/mo",
         description: "Built for growing businesses that need more control and flexibility.",
@@ -47,7 +48,7 @@ const TIERS = [
     {
         id: "corporate",
         name: "Corporate",
-        price: "R 110",
+        price: priceLabelZar("Corporate"),
         normalPrice: "R 299",
         savingsLabel: "You save R 189/mo",
         description: "For established businesses with advanced operational needs.",
@@ -92,9 +93,18 @@ export default function SubscriptionSettings() {
             }
         })();
         return () => { cancelled = true; };
-    }, [authUser?.id]);
+    }, [
+        authUser?.id,
+        authUser?.subscription_plan,
+        authUser?.plan,
+    ]);
 
-    const currentPlanId = getTierFromPlan(userData?.subscription_plan || userData?.plan || authUser?.plan);
+    const currentPlanId = getTierFromPlan(
+        userData?.subscription_plan ??
+            userData?.plan ??
+            authUser?.subscription_plan ??
+            authUser?.plan
+    );
     const currentTier = TIERS.find((t) => t.id === currentPlanId) || TIERS[0];
 
     const handleManageBilling = () => {
@@ -212,7 +222,7 @@ export default function SubscriptionSettings() {
 
                                 {tier.id === "individual" && !isCurrent ? (
                                     <PayFastSubscriptionForm
-                                        amountZar="25.00"
+                                        amountZar={payfastAmountZar(tier.name)}
                                         planName={tier.name}
                                         itemDescription={tier.description}
                                         ctaLabel="Subscribe — Individual"
@@ -221,7 +231,7 @@ export default function SubscriptionSettings() {
                                     />
                                 ) : tier.id === "sme" && !isCurrent ? (
                                     <PayFastSubscriptionForm
-                                        amountZar="50.00"
+                                        amountZar={payfastAmountZar(tier.name)}
                                         planName={tier.name}
                                         itemDescription={tier.description}
                                         ctaLabel="Subscribe — SME"
@@ -230,7 +240,7 @@ export default function SubscriptionSettings() {
                                     />
                                 ) : tier.id === "corporate" && !isCurrent ? (
                                     <PayFastSubscriptionForm
-                                        amountZar="110.00"
+                                        amountZar={payfastAmountZar(tier.name)}
                                         planName={tier.name}
                                         itemDescription={tier.description}
                                         ctaLabel="Upgrade to Pro +"

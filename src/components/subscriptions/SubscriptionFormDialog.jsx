@@ -15,12 +15,7 @@ import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint'
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-
-const PLAN_DEFAULT_AMOUNT = {
-  individual: 25,
-  sme: 50,
-  corporate: 110,
-};
+import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 
 /** Map profile / app plan names to subscription plan keys */
 export function mapProfilePlanToSubPlan(plan) {
@@ -55,7 +50,7 @@ function emptyForm() {
     user_email: '',
     plan: 'individual',
     status: 'active',
-    amount: 25,
+    amount: PLAN_DEFAULT_AMOUNT.individual,
     billing_cycle: 'monthly',
     start_date: todayDate(),
     next_billing_date: endOfMonthDate(),
@@ -84,7 +79,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
         user_email: subscription.user_email || '',
         plan: subscription.plan || 'individual',
         status: subscription.status || 'active',
-        amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? 25,
+        amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? PLAN_DEFAULT_AMOUNT.individual,
         billing_cycle: subscription.billing_cycle || 'monthly',
         start_date: subscription.start_date
           ? String(subscription.start_date).slice(0, 10)
@@ -103,7 +98,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
           user_name: subscription.user_name || '',
           user_email: subscription.user_email || '',
           plan: p,
-          amount: PLAN_DEFAULT_AMOUNT[p] ?? 25,
+          amount: PLAN_DEFAULT_AMOUNT[p] ?? PLAN_DEFAULT_AMOUNT.individual,
           status: 'active',
           billing_cycle: subscription.billing_cycle || 'monthly',
           start_date: todayDate(),

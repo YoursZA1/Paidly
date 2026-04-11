@@ -23,8 +23,8 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
+import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 
-const PLAN_DEFAULT_AMOUNT = { individual: 25, sme: 50, corporate: 110 };
 const LIST_LIMIT = 500;
 
 function pickLatestSubscriptionForUser(subs, userId) {
@@ -186,9 +186,19 @@ export default function SubscriptionsPage() {
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
-          { plan: 'individual', label: 'Individual', price: 'R25/mo', color: 'border-blue-500/30' },
-          { plan: 'sme', label: 'SME', price: 'R50/mo', color: 'border-primary/30' },
-          { plan: 'corporate', label: 'Corporate', price: 'R110/mo', color: 'border-purple-500/30' },
+          {
+            plan: 'individual',
+            label: 'Individual',
+            price: `R${PLAN_DEFAULT_AMOUNT.individual}/mo`,
+            color: 'border-blue-500/30',
+          },
+          { plan: 'sme', label: 'SME', price: `R${PLAN_DEFAULT_AMOUNT.sme}/mo`, color: 'border-primary/30' },
+          {
+            plan: 'corporate',
+            label: 'Corporate',
+            price: `R${PLAN_DEFAULT_AMOUNT.corporate}/mo`,
+            color: 'border-purple-500/30',
+          },
         ].map((p) => {
           const count = rows.filter((s) => s.plan === p.plan && s.status === 'active').length;
           return (

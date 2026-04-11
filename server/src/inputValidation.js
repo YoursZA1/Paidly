@@ -17,6 +17,17 @@ export function isValidUuid(value) {
   return typeof value === "string" && UUID_RE.test(value.trim());
 }
 
+/** PayFast `m_payment_id` from subscription checkout: `sub_<userUuid>_<epochMs>`. */
+const SUBSCRIPTION_M_PAYMENT_ID_RE =
+  /^sub_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_(\d+)$/i;
+
+export function parseUserIdFromSubscriptionMPaymentId(mPaymentIdRaw) {
+  const m = SUBSCRIPTION_M_PAYMENT_ID_RE.exec(String(mPaymentIdRaw || "").trim());
+  if (!m) return null;
+  const id = m[1];
+  return isValidUuid(id) ? id : null;
+}
+
 export function isValidEmail(value) {
   if (typeof value !== "string") return false;
   const t = value.trim().toLowerCase();

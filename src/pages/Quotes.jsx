@@ -19,6 +19,8 @@ import QuoteGrid from "../components/quote/QuoteGrid";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { hasFeature } from "@/data/paidlySubscriptionPlans";
+import UpgradePrompt from "@/components/subscription/UpgradePrompt";
 
 export default function QuotesPage() {
     const { toast } = useToast();
@@ -27,6 +29,7 @@ export default function QuotesPage() {
     const quotesFromStore = useAppStore((s) => s.quotes);
     const clients = useAppStore((s) => s.clients);
     const userProfile = useAppStore((s) => s.userProfile);
+    const appStoreLoading = useAppStore((s) => s.isLoading);
     const {
         quotes: quotesFromQuery,
         loading: quotesLoading,
@@ -224,6 +227,20 @@ export default function QuotesPage() {
             setIsImporting(false);
         }
     };
+
+    const billingPlan = String(userProfile?.plan || authUser?.plan || "").trim();
+    const canGate = Boolean(billingPlan) || !appStoreLoading;
+    if (canGate && !hasFeature(billingPlan || "free", "quotes")) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                <UpgradePrompt
+                    featureKey="quotes"
+                    title="Quotes aren’t on your current plan"
+                    description="Quotes are included on SME (R50/mo) and Corporate. Pick a tier and pay with PayFast to unlock."
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background">

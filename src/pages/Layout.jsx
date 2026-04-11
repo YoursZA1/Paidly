@@ -38,6 +38,8 @@ import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible } from "@/utils";
 import { ROLES, STAFF_ROLES } from "@/lib/permissions";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
+import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
+import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
@@ -746,6 +748,17 @@ export default function Layout({ children, currentPageName }) {
     }
   };
 
+  const profileForBilling = userProfile || user;
+  const expired = user?.id && isSubscriptionExpired(profileForBilling);
+  const billingBypassRole =
+    isStaffDashboardRole(user?.role) || String(user?.role || "").toLowerCase() === "admin";
+  const settingsPathLower = createPageUrl("Settings").toLowerCase();
+  const pathLower = (location.pathname || "").toLowerCase();
+  const onSettingsRoute = pathLower === settingsPathLower || pathLower.endsWith("/settings");
+
+  if (expired && !billingBypassRole && !isAdminV2Route && !onSettingsRoute) {
+    return <UpgradeScreen onLogout={handleLogout} />;
+  }
 
   if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
     return (

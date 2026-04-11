@@ -3,6 +3,7 @@ import '@/styles/animations.css'
 import { useEffect } from "react"
 import { Analytics } from "@vercel/analytics/react"
 import Pages from "@/pages/index.jsx"
+import UpgradeModalHost from "@/components/subscription/UpgradeModalHost"
 import { Toaster } from "@/components/ui/toaster"
 import { connectExcelDatabase } from "@/services/ExcelDatabaseService"
 import PaymentReminderScheduler from "@/components/reminders/PaymentReminderScheduler"
@@ -17,6 +18,7 @@ function App() {
   return (
     <>
       <Pages />
+      <UpgradeModalHost />
       <PaymentReminderScheduler />
       <Toaster />
       {/* Vercel Web Analytics: production bundles only (avoids extra scripts/noise in local dev). */}

@@ -102,6 +102,11 @@ import {
 import { registerClientPortalRoutes } from "./clientPortalApi.js";
 import { registerPublicInvoiceRoutes } from "./publicInvoiceApi.js";
 import { registerPublicPayslipRoutes } from "./publicPayslipApi.js";
+import { runExpireOverdueTrialsBatch } from "./trialExpiryBatch.js";
+import {
+  assertUserHasAnyFeature,
+  assertUserHasFeature,
+} from "./featureGate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from server directory (so it works when run from project root or server/)
@@ -1207,6 +1212,8 @@ app.post("/api/generate-pdf-html", requireAuthMiddleware, async (req, res) => {
   try {
     const user = req.authUser;
 
+    await assertUserHasAnyFeature(supabaseAdmin, user.id, ["invoices", "quotes"]);
+
     const parsed = parseBody(generatePdfHtmlBodySchema, req, res);
     if (!parsed) return;
 
@@ -1254,6 +1261,9 @@ app.post("/api/generate-pdf-html", requireAuthMiddleware, async (req, res) => {
 app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
   try {
     const user = req.authUser;
+
+    await assertUserHasFeature(supabaseAdmin, user.id, "invoices");
+    await assertUserHasFeature(supabaseAdmin, user.id, "email");
 
     const parsed = parseBody(sendInvoiceBodySchema, req, res, () =>
       logSecurity("warn", "send_invoice_bad_request", {
@@ -1304,6 +1314,8 @@ app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
 app.post("/api/send-email", requireAuthMiddleware, async (req, res) => {
   try {
     const user = req.authUser;
+
+    await assertUserHasFeature(supabaseAdmin, user.id, "email");
 
     const parsed = parseBody(sendEmailBodySchema, req, res);
     if (!parsed) return;
@@ -1362,7 +1374,7 @@ app.post("/api/payfast/subscription", (req, res) => {
   if (!parsed) return;
 
   const {
-    subscriptionId,
+    subscriptionId: _subscriptionId,
     userId,
     userEmail,
     userName,
@@ -1380,6 +1392,8 @@ app.post("/api/payfast/subscription", (req, res) => {
     subscriptionNotifyWebhook,
     subscriptionNotifyBuyer
   } = parsed;
+
+  void _subscriptionId;
 
   const emailNorm = userEmail;
 
@@ -1490,7 +1504,8 @@ app.post("/api/payfast/subscription", (req, res) => {
   const itemDesc =
     descFromClient ||
     `Subscription for ${userLabel || emailNorm}`;
-  const subIdSafe = String(subscriptionId).trim();
+  const userIdSafe = String(userId).trim();
+  const planForWebhook = planLabel;
 
   const payload = {
     merchant_id: merchantId,
@@ -1498,12 +1513,12 @@ app.post("/api/payfast/subscription", (req, res) => {
     return_url: returnUrlResolved,
     cancel_url: cancelUrlResolved,
     notify_url: notifyUrl,
-    m_payment_id: `${subIdSafe}-${Date.now()}`,
+    m_payment_id: `sub_${userIdSafe}_${Date.now()}`,
     amount: amountCheck.value.toFixed(2),
     item_name: planLabel,
     item_description: itemDesc,
-    custom_str1: subIdSafe,
-    custom_str2: userId ? String(userId).trim() : "",
+    custom_str1: userIdSafe,
+    custom_str2: planForWebhook,
     custom_str3: cycleRaw,
     custom_str4: currencySafe,
     email_address: emailNorm,
@@ -2666,6 +2681,12 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, "0.0.0.0", () => {
+  void runExpireOverdueTrialsBatch(supabaseAdmin);
+  const batchMs = Number(process.env.TRIAL_EXPIRY_BATCH_INTERVAL_MS || "");
+  if (Number.isFinite(batchMs) && batchMs >= 60_000) {
+    setInterval(() => void runExpireOverdueTrialsBatch(supabaseAdmin), batchMs);
+  }
+
   const url = `http://localhost:${port}`;
   console.log(`Backend running at ${url}`);
   console.log(`  Health check: ${url}/api/health`);

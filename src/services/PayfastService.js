@@ -1,6 +1,12 @@
 /**
  * PayFast subscription / once-off checkout
  *
+ * Guards (do not regress):
+ * - Subscription/plan changes are applied in the verified ITN webhook (`payfastSubscriptionItn.js`), not by updating the user from the frontend.
+ * - Checkout must send `userId` so PayFast payloads link to the payer (`m_payment_id`, `custom_str1`).
+ * - Webhook must verify the PayFast signature before trusting `req.body` / payload fields.
+ * - Platform state includes `public.subscriptions` plus `profiles` plan fields (ITN upserts both).
+ *
  * ## Subscription clean flow (intended behaviour)
  * 1. **Frontend** — `fetch` POST JSON to `/api/payfast/subscription` (this app’s API, not PayFast).
  * 2. **Backend** — validates input, builds PayFast field map, signs with passphrase.
@@ -11,6 +17,7 @@
  *
  * ## After checkout
  * PayFast ITN → `/api/payfast/webhook` → `payfastSubscriptionItn.js` updates `subscriptions` / `profiles.subscription_plan`.
+ * Checkout signs `custom_str1` = user id, `custom_str2` = plan (echoed on ITN).
  *
  * **Dev:** `npm run server` (e.g. :5179); Vite can proxy `/api`. **Prod:** same-origin `/api` on Vercel, or `VITE_SERVER_URL` if the API is elsewhere.
  */
@@ -134,9 +141,13 @@ const PayfastService = {
     cancelUrl: cancelUrlAbsolute,
     notifyUrl
   }) {
+    const uid = String(userId || "").trim();
+    if (!uid) {
+      throw new Error("userId is required to link this PayFast payment to your account.");
+    }
     const payload = {
       subscriptionId,
-      userId,
+      userId: uid,
       userEmail,
       userName,
       plan,

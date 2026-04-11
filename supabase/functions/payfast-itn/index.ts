@@ -50,26 +50,59 @@ serve(async (req) => {
       return new Response("Invalid signature", { status: 400 });
     }
 
-    // 4. Resolve profile id: custom_str2 is userId from our server; fallback to m_payment_id if it looks like a UUID
+    // 4. Profile id: custom_str1 = user UUID (subscription checkout); legacy custom_str2; or m_payment_id sub_<uuid>_<ts>
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const SUB_MPAY_RE =
+      /^sub_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_\d+$/i;
+    const customStr1 = (data.custom_str1 ?? "").trim();
     const customStr2 = (data.custom_str2 ?? "").trim();
     const mPaymentId = (data.m_payment_id ?? "").trim();
-    const profileId = customStr2 || mPaymentId;
+    let profileId = UUID_RE.test(customStr1) ? customStr1 : "";
+    if (!profileId && UUID_RE.test(customStr2)) profileId = customStr2;
+    if (!profileId && mPaymentId) {
+      const m = SUB_MPAY_RE.exec(mPaymentId);
+      if (m?.[1] && UUID_RE.test(m[1])) profileId = m[1];
+    }
+    if (!profileId && UUID_RE.test(mPaymentId)) profileId = mPaymentId;
     if (!profileId) {
-      console.error("[payfast-itn] No profile id in m_payment_id or custom_str2", { m_payment_id: mPaymentId, custom_str2: customStr2 });
+      console.error("[payfast-itn] No profile id in custom_str1, custom_str2, or m_payment_id", {
+        m_payment_id: mPaymentId,
+        custom_str1: customStr1,
+        custom_str2: customStr2,
+      });
       return new Response("Missing payment id", { status: 400 });
     }
 
-    // 5. Supabase Admin client
+    // 5. Map PayFast item_name / custom_str2 → profiles.plan slug (align with server/src/payfastSubscriptionItn.js)
+    const mapPayfastPlanToProfilePlan = (itemName: string) => {
+      const t = String(itemName || "")
+        .toLowerCase()
+        .replace(/\s+plan$/i, "");
+      if (t.includes("corporate") || t.includes("enterprise")) return "corporate";
+      if (t.includes("sme") || t.includes("professional") || t.includes("business")) return "sme";
+      if (t.includes("individual") || t.includes("starter") || t.includes("solo")) return "individual";
+      return "individual";
+    };
+    const planLabel = String(data.item_name ?? data.custom_str2 ?? "")
+      .replace(/\s+plan$/i, "")
+      .trim();
+    const profilePlan = mapPayfastPlanToProfilePlan(planLabel);
+
+    // 6. Supabase Admin client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 6. Update profiles: is_pro, payfast_token (for recurring), subscription_status
+    // 7. Update profiles (webhook — same intent as Node `upsertSubscriptionFromItn` profile sync)
     const token = (data.token ?? "").trim();
     const { error } = await supabase
       .from("profiles")
       .update({
+        plan: profilePlan,
+        subscription_plan: profilePlan,
+        subscription_status: "active",
+        trial_ends_at: null,
         is_pro: true,
         ...(token ? { payfast_token: token } : {}),
-        subscription_status: "active",
       })
       .eq("id", profileId);
 

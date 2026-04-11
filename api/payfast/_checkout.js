@@ -62,7 +62,7 @@ export default async function payfastSubscriptionCheckout(req, res) {
     if (!parsed) return;
 
     const {
-      subscriptionId,
+      subscriptionId: _subscriptionId,
       userId,
       userEmail,
       userName,
@@ -80,6 +80,8 @@ export default async function payfastSubscriptionCheckout(req, res) {
       subscriptionNotifyWebhook,
       subscriptionNotifyBuyer,
     } = parsed;
+
+    void _subscriptionId;
 
     const amountCheck = assertFiniteAmount(amount, { min: 0.01, max: 1_000_000_000 });
     if (!amountCheck.ok) return res.status(400).json({ error: amountCheck.error });
@@ -182,7 +184,8 @@ export default async function payfastSubscriptionCheckout(req, res) {
     const itemDesc =
       descFromClient ||
       `Subscription for ${userLabel || userEmail}`;
-    const subIdSafe = String(subscriptionId).trim();
+    const userIdSafe = String(userId).trim();
+    const planForWebhook = planLabel;
     const cyclesNumber = Number(cycles);
     const cyclesResolved =
       Number.isFinite(cyclesNumber) && cyclesNumber >= 0 ? Math.floor(cyclesNumber) : 0;
@@ -193,12 +196,12 @@ export default async function payfastSubscriptionCheckout(req, res) {
       return_url: returnUrlResolved,
       cancel_url: cancelUrlResolved,
       notify_url: notifyUrl,
-      m_payment_id: `${subIdSafe}-${Date.now()}`,
+      m_payment_id: `sub_${userIdSafe}_${Date.now()}`,
       amount: amountCheck.value.toFixed(2),
       item_name: planLabel,
       item_description: itemDesc,
-      custom_str1: subIdSafe,
-      custom_str2: userId ? String(userId).trim() : "",
+      custom_str1: userIdSafe,
+      custom_str2: planForWebhook,
       custom_str3: cycleRaw,
       custom_str4: currencySafe,
       email_address: userEmail,

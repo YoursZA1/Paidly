@@ -246,7 +246,7 @@ export default function Signup() {
         }
       }
 
-      // Create Supabase user (trigger creates profile + org + membership)
+      // Create Supabase user (trigger creates profile: plan=individual, subscription_status=trial, trial_ends_at=+7d)
       let authUserId = null;
       try {
         const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
@@ -258,7 +258,6 @@ export default function Signup() {
             company_name: companyName.trim(),
             company_address: companyAddress.trim(),
             phone: phone.trim(),
-            plan,
             role: "user",
           },
           { turnstileToken: turnstile.token }
@@ -441,10 +440,6 @@ export default function Signup() {
             company_address: companyAddress.trim(),
             phone: phone.trim(),
             currency: "ZAR",
-            plan,
-            status: "trial",
-            trial_started_at: now.toISOString(),
-            trial_ends_at: trialEndsAt.toISOString(),
           }),
           new Promise((_, reject) => {
             setTimeout(() => reject(new Error("Profile sync timed out")), PROFILE_SYNC_MS);

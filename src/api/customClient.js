@@ -18,6 +18,8 @@ import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
+import { expireTrialIfDueViaRpc } from "@/lib/trialExpiry";
+import { hasFeature } from "@shared/plans.js";
 
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
@@ -103,7 +105,7 @@ const SUPABASE_SELECT_COLUMNS = {
   services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
-    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",
+    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
@@ -121,11 +123,11 @@ function getSelectColumns(table) {
 
 /** Full list minus optional jsonb (scripts/add-profiles-business-jsonb.sql). */
 const PROFILES_SELECT_WITHOUT_BUSINESS =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, role, user_role, invoice_template, invoice_header, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, invoice_template, invoice_header, created_at, updated_at";
 
 /** Older DBs without invoice_template / invoice_header. */
 const PROFILES_SELECT_LEGACY =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, currency, timezone, role, user_role, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, created_at, updated_at";
 
 /** Minimal read still useful for app shell (Settings merges defaults). */
 const PROFILES_SELECT_MINIMAL =
@@ -163,6 +165,9 @@ export async function selectProfileByUserId(supabase, authUserId) {
         if (d.phone === undefined) d.phone = null;
         if (d.company_website === undefined) d.company_website = null;
         if (d.subscription_plan === undefined) d.subscription_plan = null;
+        if (d.plan === undefined) d.plan = null;
+        if (d.subscription_status === undefined) d.subscription_status = null;
+        if (d.trial_ends_at === undefined) d.trial_ends_at = null;
         if (d.avatar_url === undefined) d.avatar_url = null;
         if (d.role === undefined) d.role = null;
         if (d.user_role === undefined) d.user_role = null;
@@ -243,6 +248,39 @@ function getSupabaseTableForEntityName(entityName) {
 }
 
 class EntityManager {
+  /** @type {{ auth: { user?: object } } | null} */
+  static breakApiClient = null;
+
+  static setBreakApiClient(client) {
+    EntityManager.breakApiClient = client;
+  }
+
+  static getAuthBillingPlanSlug() {
+    const u = EntityManager.breakApiClient?.auth?.user;
+    return String(u?.plan || u?.subscription_plan || "").trim();
+  }
+
+  /**
+   * Blocks Supabase writes for tiered features (mirrors `shared/plans.js`).
+   * Uses in-memory `auth.user.plan` from the active Break API client.
+   */
+  static assertSupabaseTableFeatureGate(supabaseTable) {
+    if (!isSupabaseConfigured || !supabaseTable) return;
+    const featureByTable = {
+      invoices: "invoices",
+      quotes: "quotes",
+      clients: "clients",
+      recurring_invoices: "invoices",
+      payments: "invoices",
+    };
+    const feature = featureByTable[supabaseTable];
+    if (!feature) return;
+    const plan = EntityManager.getAuthBillingPlanSlug() || "free";
+    if (!hasFeature(plan, feature)) {
+      throw new Error("Upgrade required");
+    }
+  }
+
   constructor(entityName = '', userId = null) {
     this.entityName = entityName;
     this.userId = userId;
@@ -1192,6 +1230,8 @@ class EntityManager {
         });
       }
 
+      EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
+
       // Log for debugging
       console.log(`Creating ${this.entityName}:`, { supabaseTable, supabaseData });
 
@@ -1333,6 +1373,8 @@ class EntityManager {
                            table === 'notes' ? 'notes' :
                            table === 'documentsends' ? 'document_sends' :
                            table === 'messagelogs' ? 'message_logs' : null;
+
+      EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
 
       // Prepare update data
       const updateData = {
@@ -1881,6 +1923,10 @@ class AuthManager {
       return this.user;
     }
 
+    if (isSupabaseConfigured) {
+      await expireTrialIfDueViaRpc(supabase);
+    }
+
     try {
       let profile = null;
       let error = null;
@@ -1923,6 +1969,8 @@ class AuthManager {
       if (!error && profile) {
         // Merge Supabase profile (one row per user, id = auth.users.id) into local user
         const fullName = profile.full_name || this.user.full_name;
+        const planMerged =
+          profile.plan || profile.subscription_plan || this.user.plan || "free";
         this.user = {
           ...this.user,
           id: effectiveId,
@@ -1942,6 +1990,10 @@ class AuthManager {
           document_brand_secondary: profile.document_brand_secondary ?? this.user.document_brand_secondary ?? null,
           phone: profile.phone ?? this.user.phone ?? "",
           company_website: profile.company_website ?? this.user.company_website ?? null,
+          plan: planMerged,
+          subscription_plan: profile.subscription_plan || profile.plan || planMerged,
+          subscription_status: profile.subscription_status ?? this.user.subscription_status ?? null,
+          trial_ends_at: profile.trial_ends_at ?? this.user.trial_ends_at ?? null,
           business:
             profile.business !== undefined && profile.business !== null && typeof profile.business === "object"
               ? profile.business
@@ -1981,6 +2033,10 @@ class AuthManager {
         su = data.session.user;
       }
 
+      if (isSupabaseConfigured) {
+        await expireTrialIfDueViaRpc(supabase);
+      }
+
       let profileData = {};
       try {
         const { data: profile, error: profileErr } = await retryOnAbort(
@@ -2005,7 +2061,8 @@ class AuthManager {
       }
 
       const fullName = profileData.full_name || su.user_metadata?.full_name || (su.email || "").split("@")[0] || "User";
-      const plan = profileData.subscription_plan || su.app_metadata?.plan || "free";
+      const plan =
+        profileData.plan || profileData.subscription_plan || su.app_metadata?.plan || "free";
       this.user = {
         id: su.id,
         supabase_id: su.id,
@@ -2030,7 +2087,9 @@ class AuthManager {
             ? profileData.business
             : null,
         plan,
-        subscription_plan: profileData.subscription_plan || plan,
+        subscription_plan: profileData.subscription_plan || profileData.plan || plan,
+        subscription_status: profileData.subscription_status ?? null,
+        trial_ends_at: profileData.trial_ends_at ?? null,
       };
       this.isAuthenticated = true;
       this.saveUserToStorage();
@@ -2055,10 +2114,33 @@ class AuthManager {
   /**
    * Update current user and persist to Supabase profiles table.
    * Profile is stored per user: one row per auth user, keyed by auth.users(id). Only writes when session exists.
+   *
+   * Billing / subscription columns must NOT be updated from the browser — only PayFast ITN (service role) or admin.
    */
   async updateMyUserData(data) {
     if (!this.user) {
       this.user = {};
+    }
+
+    const billingFieldsLockedForClient = [
+      "subscription_plan",
+      "plan",
+      "subscription_status",
+      "trial_ends_at",
+      "payfast_token",
+      "payfast_subscription_id",
+      "is_pro",
+    ];
+    const safeData = data && typeof data === "object" ? { ...data } : {};
+    for (const k of billingFieldsLockedForClient) {
+      if (Object.prototype.hasOwnProperty.call(safeData, k)) {
+        if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+          console.warn(
+            `[profile] Ignoring "${k}" in updateMyUserData — set only via verified PayFast webhook / server, not the client.`
+          );
+        }
+        delete safeData[k];
+      }
     }
 
     const { data: sessionData } = await getSessionDataForProfileWrite(this.user);
@@ -2070,12 +2152,12 @@ class AuthManager {
     // Keep id as auth user id when available so all consumers get the real user id
     const updatedUser = {
       ...this.user,
-      ...data,
+      ...safeData,
       id: authUserId ?? this.user.id,
       supabase_id: authUserId ?? this.user.supabase_id,
     };
-    if (data.business !== undefined) {
-      updatedUser.business = data.business;
+    if (safeData.business !== undefined) {
+      updatedUser.business = safeData.business;
     }
     this.user = updatedUser;
     this.saveUserToStorage();
@@ -2096,21 +2178,25 @@ class AuthManager {
     };
 
     const profileData = {
-      full_name: data.full_name ?? data.display_name ?? updatedUser.full_name,
-      email: data.email ?? updatedUser.email,
-      avatar_url: data.avatar_url ?? updatedUser.avatar_url,
-      logo_url: data.logo_url !== undefined ? data.logo_url : updatedUser.logo_url,
-      company_name: data.company_name !== undefined ? data.company_name : updatedUser.company_name,
-      company_address: data.company_address !== undefined ? data.company_address : updatedUser.company_address,
-      phone: data.phone !== undefined ? data.phone : updatedUser.phone,
-      company_website: data.company_website !== undefined ? data.company_website : updatedUser.company_website,
-      currency: data.currency ?? updatedUser.currency ?? "USD",
-      timezone: data.timezone ?? updatedUser.timezone ?? "UTC",
-      invoice_template: data.invoice_template ?? updatedUser.invoice_template ?? DEFAULT_INVOICE_TEMPLATE,
-      invoice_header: data.invoice_header !== undefined ? data.invoice_header : updatedUser.invoice_header,
-      ...(data.business !== undefined ? { business: data.business } : {}),
-      ...(data.document_brand_primary !== undefined ? { document_brand_primary: data.document_brand_primary } : {}),
-      ...(data.document_brand_secondary !== undefined ? { document_brand_secondary: data.document_brand_secondary } : {}),
+      full_name: safeData.full_name ?? safeData.display_name ?? updatedUser.full_name,
+      email: safeData.email ?? updatedUser.email,
+      avatar_url: safeData.avatar_url ?? updatedUser.avatar_url,
+      logo_url: safeData.logo_url !== undefined ? safeData.logo_url : updatedUser.logo_url,
+      company_name: safeData.company_name !== undefined ? safeData.company_name : updatedUser.company_name,
+      company_address: safeData.company_address !== undefined ? safeData.company_address : updatedUser.company_address,
+      phone: safeData.phone !== undefined ? safeData.phone : updatedUser.phone,
+      company_website: safeData.company_website !== undefined ? safeData.company_website : updatedUser.company_website,
+      currency: safeData.currency ?? updatedUser.currency ?? "USD",
+      timezone: safeData.timezone ?? updatedUser.timezone ?? "UTC",
+      invoice_template: safeData.invoice_template ?? updatedUser.invoice_template ?? DEFAULT_INVOICE_TEMPLATE,
+      invoice_header: safeData.invoice_header !== undefined ? safeData.invoice_header : updatedUser.invoice_header,
+      ...(safeData.business !== undefined ? { business: safeData.business } : {}),
+      ...(safeData.document_brand_primary !== undefined
+        ? { document_brand_primary: safeData.document_brand_primary }
+        : {}),
+      ...(safeData.document_brand_secondary !== undefined
+        ? { document_brand_secondary: safeData.document_brand_secondary }
+        : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -2552,6 +2638,7 @@ class CustomAPIClient {
     this.auth = new AuthManager();
     this.integrations = new IntegrationManager();
     this.entities = this.createEntities();
+    EntityManager.setBreakApiClient(this);
     this.setupAuthListener();
   }
 

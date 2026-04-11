@@ -46,9 +46,8 @@ export const payfastSubscriptionBodySchema = z.object({
   userEmail: apiEmailSchema,
   amount: z.union([z.number(), z.string()]),
   userId: z.preprocess(
-    (v) =>
-      v === "" || v === null || v === undefined ? undefined : String(v).trim(),
-    z.string().uuid().optional()
+    (v) => (v === "" || v === null || v === undefined ? undefined : String(v).trim()),
+    z.string().uuid({ message: "userId must be the signed-in user UUID (links PayFast ITN to profile)" })
   ),
   userName: z.union([z.string(), z.null()]).optional(),
   plan: z.union([z.string(), z.null()]).optional(),

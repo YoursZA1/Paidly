@@ -340,6 +340,7 @@ function denormalizeEntity(entityName, payload) {
       ...payload,
       company_name: payload.company_name || payload.company,
       subscription_plan: payload.subscription_plan || payload.plan,
+      plan: payload.plan || payload.subscription_plan,
     };
   }
 

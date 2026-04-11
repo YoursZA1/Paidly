@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createPageUrl } from "@/utils";
+import { payfastAmountZar } from "@/data/paidlySubscriptionPlans";
 import PayfastService from "@/services/PayfastService";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
@@ -9,8 +10,8 @@ import PropTypes from "prop-types";
 const PAYFAST_PROCESS_URL = "https://www.payfast.co.za/eng/process";
 const PAYFAST_SANDBOX_URL = "https://sandbox.payfast.co.za/eng/process";
 
-/** Default matches Individual tier (Settings → Subscription); SME R50 / Corporate R110 pass `amountZar` explicitly. */
-const DEFAULT_AMOUNT_ZAR = "25.00";
+/** Default matches Individual — amounts for all tiers live in `shared/plans.js` (via `@/data/paidlySubscriptionPlans`). */
+const DEFAULT_AMOUNT_ZAR = payfastAmountZar("Individual");
 
 const PAYFAST_SUBSCRIBE_IMG =
   "https://my.payfast.io/images/buttons/Subscribe/Light-Large-Subscribe.png";
@@ -52,7 +53,7 @@ function getSettingsReturnUrl() {
  * 4. Service builds a hidden form and POSTs `fields` to PayFast (`payfastUrl`).
  *
  * This visible `<form>` only captures submit; it does not post unsigned data to PayFast (`action="#"`).
- * Tiers: Individual R25, SME R50, Corporate R110 (`SubscriptionSettings` passes `amountZar`).
+ * Amounts: `shared/plans.js` → `paidlySubscriptionPlans.js` (`plans` / `payfastAmountZar`). `SubscriptionSettings` passes `amountZar` per tier.
  */
 export default function PayFastSubscriptionForm({
   amountZar = DEFAULT_AMOUNT_ZAR,
