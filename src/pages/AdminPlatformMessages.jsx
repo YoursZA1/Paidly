@@ -26,6 +26,10 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint';
+import {
+  buildAdminPlatformMessagePresets,
+  DEFAULT_ADMIN_PLATFORM_SUBJECT,
+} from '@/lib/adminPlatformMessagePresets';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { cn } from '@/lib/utils';
 
@@ -49,7 +53,8 @@ function toastAfterEmailDelivery(d) {
 
   if (status === 'sent') {
     toast.success('Message sent', {
-      description: 'Delivered to the email on their Paidly signup (login) account.',
+      description:
+        'Delivered to the email address on their Paidly account (the one they use to sign in).',
     });
     return;
   }
@@ -62,13 +67,14 @@ function toastAfterEmailDelivery(d) {
   if (reason === 'resend_not_configured') {
     toast.success('Message saved', {
       description:
-        'In-app record only: set RESEND_API_KEY and RESEND_FROM on the API server to email signup addresses.',
+        'Saved in-app only: set RESEND_API_KEY and RESEND_FROM on the API server to email signup addresses.',
     });
     return;
   }
   if (reason === 'invalid_signup_email') {
     toast.success('Message saved', {
-      description: 'Signup email on the auth account is invalid; the user was not emailed.',
+      description:
+        'The signup email on their auth account looks invalid, so we did not send an email.',
     });
     return;
   }
@@ -78,7 +84,8 @@ function toastAfterEmailDelivery(d) {
     reason === 'Auth lookup failed'
   ) {
     toast.success('Message saved', {
-      description: 'No signup email found for this auth account; only the in-app record was created.',
+      description:
+        'No signup email found for this auth account — only the in-app message was created.',
     });
     return;
   }
@@ -92,14 +99,23 @@ function toastAfterEmailDelivery(d) {
 export default function AdminPlatformMessages() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useCurrentUser();
+  const messagePresets = useMemo(
+    () =>
+      buildAdminPlatformMessagePresets(
+        typeof window !== 'undefined' ? window.location.origin : 'https://www.paidly.co.za'
+      ),
+    []
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [userPickerQuery, setUserPickerQuery] = useState('');
   const [selectedRecipientId, setSelectedRecipientId] = useState(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [newRecipientId, setNewRecipientId] = useState('');
-  const [newSubject, setNewSubject] = useState('Message from Paidly');
+  const [newTemplateId, setNewTemplateId] = useState('');
+  const [newSubject, setNewSubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [newBody, setNewBody] = useState('');
-  const [replySubject, setReplySubject] = useState('Message from Paidly');
+  const [replyTemplateId, setReplyTemplateId] = useState('');
+  const [replySubject, setReplySubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [replyBody, setReplyBody] = useState('');
 
   const {
@@ -183,7 +199,7 @@ export default function AdminPlatformMessages() {
 
   const handleSendNew = async () => {
     const rid = String(newRecipientId || '').trim();
-    const sub = String(newSubject || '').trim() || 'Message from Paidly';
+    const sub = String(newSubject || '').trim() || DEFAULT_ADMIN_PLATFORM_SUBJECT;
     const body = String(newBody || '').trim();
     if (!rid) {
       toast.error('Choose a recipient');
@@ -202,7 +218,8 @@ export default function AdminPlatformMessages() {
       toastAfterEmailDelivery(emailDelivery);
       setComposerOpen(false);
       setNewRecipientId('');
-      setNewSubject('Message from Paidly');
+      setNewTemplateId('');
+      setNewSubject(DEFAULT_ADMIN_PLATFORM_SUBJECT);
       setNewBody('');
       setUserPickerQuery('');
     } catch {
@@ -212,7 +229,7 @@ export default function AdminPlatformMessages() {
 
   const handleSendReply = async () => {
     if (!selectedRecipientId) return;
-    const sub = String(replySubject || '').trim() || 'Message from Paidly';
+    const sub = String(replySubject || '').trim() || DEFAULT_ADMIN_PLATFORM_SUBJECT;
     const body = String(replyBody || '').trim();
     if (!body) {
       toast.error('Enter a message');
@@ -225,6 +242,7 @@ export default function AdminPlatformMessages() {
         content: body,
       });
       toastAfterEmailDelivery(emailDelivery);
+      setReplyTemplateId('');
       setReplyBody('');
     } catch {
       /* toast in mutation */
@@ -260,7 +278,7 @@ export default function AdminPlatformMessages() {
     <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
       <PageHeader
         title="User messages"
-        description="Stored in-app; email goes to each user’s signup address via Resend with HTML + plain text, transactional headers, and Reply-To. Use a verified domain with SPF/DKIM/DMARC in Resend for best inbox placement. Optional: ADMIN_OUTREACH_REPLY_TO, ADMIN_OUTREACH_MAILER_FOOTER on the API server."
+        description="Messages are stored in-app and emailed to each user’s signup (login) address via Resend — HTML and plain text, with Reply-To support. Ideal for product updates, moving waitlist sign-ups onto Paidly, and nudging users who have not confirmed their email. Use a verified sending domain with SPF, DKIM, and DMARC in Resend. Optional server env: ADMIN_OUTREACH_REPLY_TO, ADMIN_OUTREACH_MAILER_FOOTER."
       />
 
       {loadError ? (
@@ -462,6 +480,30 @@ export default function AdminPlatformMessages() {
 
                 <div className="border-t border-border p-3 sm:p-4 space-y-2 bg-card">
                   <div className="space-y-1">
+                    <Label htmlFor="reply-template">Starter template</Label>
+                    <select
+                      id="reply-template"
+                      value={replyTemplateId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setReplyTemplateId(id);
+                        const p = messagePresets.find((x) => x.id === id);
+                        if (p) {
+                          setReplySubject(p.subject);
+                          setReplyBody(p.body);
+                        }
+                      }}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="">None — write your own</option>
+                      {messagePresets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
                     <Label htmlFor="reply-subject">Subject</Label>
                     <Input
                       id="reply-subject"
@@ -547,6 +589,34 @@ export default function AdminPlatformMessages() {
                 )}
               </div>
             </ScrollArea>
+            <div className="space-y-1">
+              <Label htmlFor="new-template">Starter template</Label>
+              <select
+                id="new-template"
+                value={newTemplateId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setNewTemplateId(id);
+                  const p = messagePresets.find((x) => x.id === id);
+                  if (p) {
+                    setNewSubject(p.subject);
+                    setNewBody(p.body);
+                  }
+                }}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">None — write your own</option>
+                {messagePresets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                South African English starters for waitlist conversion, email confirmation, and updates.
+                Login links use this site&apos;s origin — edit before sending if needed.
+              </p>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="new-subject">Subject</Label>
               <Input

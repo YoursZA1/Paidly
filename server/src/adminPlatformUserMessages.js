@@ -160,7 +160,7 @@ export async function insertAdminPlatformMessage(supabaseAdmin, payload) {
   const row = {
     recipient_id: recipientId,
     sender_id: senderId,
-    subject: subject || "Message from Paidly",
+    subject: subject || "Message from the Paidly team",
     content,
     is_read: false,
   };

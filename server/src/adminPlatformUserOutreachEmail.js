@@ -79,8 +79,8 @@ export async function sendAdminPlatformMessageToSignupEmail(supabaseAdmin, opts)
   }
 
   const sub =
-    sanitizeOneLine(subject || "Message from Paidly", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
-    "Message from Paidly";
+    sanitizeOneLine(subject || "Message from the Paidly team", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
+    "Message from the Paidly team";
   const html = buildAdminPlatformOutreachHtml({ plainBody });
   const text = buildAdminPlatformOutreachPlainText({ plainBody, recipientEmail: email });
 

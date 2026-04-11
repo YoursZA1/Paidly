@@ -21,12 +21,16 @@ describe("linkifyPlainTextForEmail", () => {
 });
 
 describe("buildAdminPlatformOutreachHtml", () => {
-  it("includes header, body, and CTA", () => {
+  it("includes header, body, CTA, and header logo", () => {
     const html = buildAdminPlatformOutreachHtml({ plainBody: "Hello team." });
     expect(html).toContain("Paidly");
     expect(html).toContain("Hello team.");
     expect(html).toContain("Open Paidly");
     expect(html).toContain('role="presentation"');
+    expect(html).toContain('src="https://www.paidly.co.za/logo_icon.svg"');
+    expect(html).toContain('alt="Paidly"');
+    expect(html).toContain('lang="en-ZA"');
+    expect(html).toContain("A quick note from Paidly");
   });
 });
 
