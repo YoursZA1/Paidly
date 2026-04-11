@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -866,8 +866,56 @@ function CompanyProfileSettings() {
                 </Button>
             </div>
         </form>
+            <ResetAppSection />
             <DeleteAccountSection />
         </>
+    );
+}
+
+function ResetAppSection() {
+    const { hardResetApp } = useAuth();
+    const [open, setOpen] = useState(false);
+
+    return (
+        <SettingsCard
+            title="This device"
+            description="If Paidly acts strangely only in this browser, reset local data and sign in again."
+        >
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+                Supabase keeps auth in <span className="font-medium">session</span> storage for this tab (not mixed with
+                long-lived local storage used for things like theme). Reset clears{" "}
+                <span className="font-medium">all</span> site data in this browser and opens sign-in.
+            </p>
+            <AlertDialog open={open} onOpenChange={setOpen}>
+                <AlertDialogTrigger asChild>
+                    <Button type="button" variant="outline" className="mt-4 border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300">
+                        Reset app
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reset this browser&apos;s Paidly data?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-left">
+                            You will be signed out. Local theme, drafts, and other cached data for this site are removed.
+                            Your data in the cloud is not deleted.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => {
+                                setOpen(false);
+                                hardResetApp();
+                            }}
+                        >
+                            Reset and go to sign in
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </SettingsCard>
     );
 }
 

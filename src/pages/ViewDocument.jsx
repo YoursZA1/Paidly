@@ -12,6 +12,7 @@ import SendEmailDialog from "@/components/SendEmailDialog";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from "@/utils/fetchWithTimeout";
+import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
 
 const INVOICE_STATUSES = [
@@ -122,7 +123,9 @@ export default function ViewDocument() {
   }, [id, docType, toast]);
 
   useEffect(() => {
-    loadDocument();
+    const clearFailSafe = startLoadingFailSafe(setLoading);
+    loadDocument().finally(clearFailSafe);
+    return () => clearFailSafe();
   }, [loadDocument]);
 
   const updateStatus = async (status) => {

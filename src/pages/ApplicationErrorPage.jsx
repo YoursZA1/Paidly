@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronDown, ChevronUp, Home, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, DatabaseZap, Home, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { resetApp } from '@/utils/resetApp';
 
 /**
- * Full-screen recovery UI when the app throws during render (see AppErrorBoundary in main.jsx).
+ * Full-screen recovery UI when the app throws during render (see ErrorBoundary in main.jsx).
  * @param {{ error: Error | null, onReset: () => void }} props
  */
 export default function ApplicationErrorPage({ error, onReset }) {
@@ -37,6 +38,10 @@ export default function ApplicationErrorPage({ error, onReset }) {
           Paidly ran into an unexpected problem. This is usually temporary — try again, refresh the page, or go back
           home. If the application just got updated, try a hard refresh so your browser loads the latest version.
         </p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          If this screen keeps coming back or data looks wrong, you can clear all site data for Paidly and open a clean
+          sign-in page. This removes cached session, theme, and offline preferences for this browser only.
+        </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Button type="button" onClick={onReset} className="gap-2">
@@ -49,6 +54,10 @@ export default function ApplicationErrorPage({ error, onReset }) {
           <Button type="button" variant="secondary" onClick={handleHome} className="gap-2">
             <Home className="h-4 w-4" aria-hidden />
             Go home
+          </Button>
+          <Button type="button" variant="destructive" className="gap-2" onClick={() => resetApp()}>
+            <DatabaseZap className="h-4 w-4" aria-hidden />
+            Clear site data &amp; sign in
           </Button>
         </div>
 

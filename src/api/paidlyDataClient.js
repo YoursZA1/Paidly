@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { runPostgrestWithResilience } from '@/lib/supabaseDataResilience';
 import { subscriptionRowToProfilePatch } from '@/lib/subscriptionRowToProfilePatch';
 import {
   getAuditLogsSupabaseAccessForbidden,
@@ -463,10 +464,10 @@ function coerceListLimit(limitOrOpts, fallback = 100) {
 async function enrichAffiliateSubmissionsRows(rows) {
   const userIds = [...new Set((rows || []).map((a) => a.user_id).filter(Boolean))];
   if (!userIds.length) return rows || [];
-  const { data: affiliateRows, error: affiliatesEnrichError } = await supabase
-    .from('affiliates')
-    .select('*')
-    .in('user_id', userIds);
+  const { data: affiliateRows, error: affiliatesEnrichError } = await runPostgrestWithResilience(
+    () => supabase.from('affiliates').select('*').in('user_id', userIds),
+    { kind: 'read', silent: true, label: 'paidly.affiliates.enrich' }
+  );
   if (import.meta.env.DEV) {
     console.log(affiliateRows, affiliatesEnrichError);
     if (!affiliatesEnrichError && userIds.length && (!affiliateRows || affiliateRows.length === 0)) {
@@ -513,11 +514,15 @@ export async function finalizeAffiliateApplicationsForAdmin(rawRows) {
 export async function loadAffiliateSubmissionsForAdmin(orderBy = '-created_date', limitOrOpts = 150) {
   const limit = coerceListLimit(limitOrOpts, 150);
   const { column, ascending } = normalizeOrder(orderBy);
-  const { data, error } = await supabase
-    .from('affiliate_applications')
-    .select('*')
-    .order(column, { ascending })
-    .limit(limit);
+  const { data, error } = await runPostgrestWithResilience(
+    () =>
+      supabase
+        .from('affiliate_applications')
+        .select('*')
+        .order(column, { ascending })
+        .limit(limit),
+    { kind: 'read', label: 'paidly.affiliateApplications.list' }
+  );
   if (import.meta.env.DEV) {
     console.log(data, error);
     if (!error && (!data || data.length === 0)) {
@@ -542,7 +547,10 @@ async function syncProfileFromAdminSubscriptionRow(row) {
   const mapped = subscriptionRowToProfilePatch(row, nowIso);
   if (!mapped) return;
 
-  const { error } = await supabase.from("profiles").update(mapped.patch).eq("id", mapped.userId);
+  const { error } = await runPostgrestWithResilience(
+    () => supabase.from("profiles").update(mapped.patch).eq("id", mapped.userId),
+    { kind: "write", silent: true, label: "paidly.profile.syncSubscription" }
+  );
   if (error && import.meta.env?.DEV) {
     console.warn("[paidlyDataClient] sync profiles from admin subscription:", error.message);
   }
@@ -569,20 +577,33 @@ async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
   let error;
   for (const candidate of tableCandidates) {
     table = candidate;
-    ({ data, error } = await runListQuery(selectClause, true));
+    ({ data, error } = await runPostgrestWithResilience(() => runListQuery(selectClause, true), {
+      kind: 'read',
+      label: `paidly.list.${entityName}`,
+    }));
     if (error) {
-      // Some tables do not expose the requested sort column; retry unsorted.
-      const retryUnsorted = await runListQuery(selectClause, false);
+      const retryUnsorted = await runPostgrestWithResilience(() => runListQuery(selectClause, false), {
+        kind: 'read',
+        silent: true,
+        label: `paidly.list.${entityName}.unsorted`,
+      });
       data = retryUnsorted.data;
       error = retryUnsorted.error;
     }
     if (error && selectClause !== '*') {
-      // Schema may differ between environments; retry with wildcard columns.
-      const retryWildcard = await runListQuery('*', true);
+      const retryWildcard = await runPostgrestWithResilience(() => runListQuery('*', true), {
+        kind: 'read',
+        silent: true,
+        label: `paidly.list.${entityName}.wildcard`,
+      });
       data = retryWildcard.data;
       error = retryWildcard.error;
       if (error) {
-        const retryWildcardUnsorted = await runListQuery('*', false);
+        const retryWildcardUnsorted = await runPostgrestWithResilience(() => runListQuery('*', false), {
+          kind: 'read',
+          silent: true,
+          label: `paidly.list.${entityName}.wildcardUnsorted`,
+        });
         data = retryWildcardUnsorted.data;
         error = retryWildcardUnsorted.error;
       }
@@ -617,7 +638,10 @@ async function create(entityName, payload) {
   let data;
   let error;
   for (const table of tableCandidates) {
-    const result = await supabase.from(table).insert(toInsert).select().limit(1);
+    const result = await runPostgrestWithResilience(
+      () => supabase.from(table).insert(toInsert).select().limit(1),
+      { kind: 'write', label: `paidly.${entityName}.create` }
+    );
     data = Array.isArray(result.data) ? result.data[0] : result.data;
     error = result.error;
     if (!error) break;
@@ -639,7 +663,10 @@ async function update(entityName, id, payload) {
   let data;
   let error;
   for (const table of tableCandidates) {
-    const result = await supabase.from(table).update(toUpdate).eq('id', id).select().limit(1);
+    const result = await runPostgrestWithResilience(
+      () => supabase.from(table).update(toUpdate).eq('id', id).select().limit(1),
+      { kind: 'write', label: `paidly.${entityName}.update` }
+    );
     data = Array.isArray(result.data) ? result.data[0] : result.data;
     error = result.error;
     if (!error) break;
@@ -651,7 +678,10 @@ async function update(entityName, id, payload) {
     if (status === 'approved') retryPatch.status = 'approved';
     if (status === 'declined') retryPatch.status = 'rejected';
     for (const table of tableCandidates) {
-      const result = await supabase.from(table).update(retryPatch).eq('id', id).select().limit(1);
+      const result = await runPostgrestWithResilience(
+        () => supabase.from(table).update(retryPatch).eq('id', id).select().limit(1),
+        { kind: 'write', silent: true, label: `paidly.${entityName}.updateRetry` }
+      );
       data = Array.isArray(result.data) ? result.data[0] : result.data;
       error = result.error;
       if (!error) break;
@@ -666,7 +696,10 @@ async function update(entityName, id, payload) {
     let syncRow = normalizeEntity(entityName, data);
     if (!syncRow?.user_id && id) {
       for (const table of tableCandidates) {
-        const { data: reread } = await supabase.from(table).select("*").eq("id", id).maybeSingle();
+        const { data: reread } = await runPostgrestWithResilience(
+          () => supabase.from(table).select("*").eq("id", id).maybeSingle(),
+          { kind: 'read', silent: true, label: 'paidly.subscription.reread' }
+        );
         if (reread) {
           syncRow = normalizeEntity(entityName, reread);
           break;
@@ -736,7 +769,10 @@ async function remove(entityName, id) {
   const tableCandidates = getTableCandidates(entityName);
   let error;
   for (const table of tableCandidates) {
-    const result = await supabase.from(table).delete().eq('id', id);
+    const result = await runPostgrestWithResilience(
+      () => supabase.from(table).delete().eq('id', id),
+      { kind: 'write', label: `paidly.${entityName}.delete` }
+    );
     error = result.error;
     if (!error) break;
   }
@@ -749,7 +785,11 @@ async function me() {
   if (authError || !authData?.user) throw authError || new Error('Not authenticated');
 
   const user = authData.user;
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  const { data: profile, error: profileErr } = await runPostgrestWithResilience(
+    () => supabase.from('profiles').select('*').eq('id', user.id).single(),
+    { kind: 'read', label: 'paidly.me.profile' }
+  );
+  if (profileErr) throw profileErr;
   return {
     id: user.id,
     email: user.email,

@@ -5,6 +5,7 @@
 
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
+import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 import {
@@ -411,35 +412,53 @@ class EntityManager {
 
       if (supabaseTable) {
         const columns = getSelectColumns(supabaseTable);
-        let query = supabase.from(supabaseTable).select(columns);
+        const { data, error } = await runPostgrestWithResilience(
+          async () => {
+            let query = supabase.from(supabaseTable).select(columns);
 
-        // Notes: filter by user_id (auth.uid())
-        if (supabaseTable === 'notes') {
-          query = query.eq('user_id', userId);
-        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
-          query = query.eq('org_id', orgId);
-        }
-        // Packages: platform (org_id null) or user's org
-        if (supabaseTable === 'packages') {
-          if (orgId) {
-            query = query.or('org_id.is.null,org_id.eq.' + orgId);
-          } else {
-            query = query.is('org_id', null);
-          }
-        }
+            if (supabaseTable === "notes") {
+              query = query.eq("user_id", userId);
+            } else if (
+              [
+                "clients",
+                "services",
+                "invoices",
+                "quotes",
+                "payments",
+                "banking_details",
+                "recurring_invoices",
+                "invoice_views",
+                "document_sends",
+                "message_logs",
+                "payslips",
+                "expenses",
+                "tasks",
+              ].includes(supabaseTable)
+            ) {
+              query = query.eq("org_id", orgId);
+            }
+            if (supabaseTable === "packages") {
+              if (orgId) {
+                query = query.or("org_id.is.null,org_id.eq." + orgId);
+              } else {
+                query = query.is("org_id", null);
+              }
+            }
 
-        // Optional limit/offset and ordering (biggest performance win: avoid loading all rows)
-        const opts = this._listOptions || {};
-        const orderColumn = opts.orderBy?.column ?? 'created_at';
-        const orderAsc = opts.orderBy?.ascending ?? false;
-        if (opts.limit != null && opts.limit > 0) {
-          query = query.order(orderColumn, { ascending: orderAsc });
-          const from = opts.offset ?? 0;
-          const to = from + opts.limit - 1;
-          query = query.range(from, to);
-        }
+            const opts = this._listOptions || {};
+            const orderColumn = opts.orderBy?.column ?? "created_at";
+            const orderAsc = opts.orderBy?.ascending ?? false;
+            if (opts.limit != null && opts.limit > 0) {
+              query = query.order(orderColumn, { ascending: orderAsc });
+              const from = opts.offset ?? 0;
+              const to = from + opts.limit - 1;
+              query = query.range(from, to);
+            }
 
-        const { data, error } = await query;
+            return query;
+          },
+          { kind: "read", silent: true, label: `pull.${this.entityName}` }
+        );
         
         if (!error && data) {
           // Clear existing data and reload from Supabase
@@ -530,18 +549,37 @@ class EntityManager {
 
             if (supabaseTable) {
               const columns = getSelectColumns(supabaseTable);
-              let query = supabase.from(supabaseTable).select(columns).eq('id', idStr);
-              if (supabaseTable === 'notes') {
-                query = query.eq('user_id', userId);
-              } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
-                if (!orgId) {
-                  throw new Error('Unable to determine organization for current user');
-                }
-                query = query.eq('org_id', orgId);
-              }
-              // packages: RLS enforces visibility (platform or own org)
-
-              const { data, error } = await query.single();
+              const { data, error } = await runPostgrestWithResilience(
+                async () => {
+                  let query = supabase.from(supabaseTable).select(columns).eq("id", idStr);
+                  if (supabaseTable === "notes") {
+                    query = query.eq("user_id", userId);
+                  } else if (
+                    [
+                      "clients",
+                      "services",
+                      "invoices",
+                      "quotes",
+                      "payments",
+                      "banking_details",
+                      "recurring_invoices",
+                      "invoice_views",
+                      "document_sends",
+                      "message_logs",
+                      "payslips",
+                      "expenses",
+                      "tasks",
+                    ].includes(supabaseTable)
+                  ) {
+                    if (!orgId) {
+                      throw new Error("Unable to determine organization for current user");
+                    }
+                    query = query.eq("org_id", orgId);
+                  }
+                  return query.single();
+                },
+                { kind: "read", silent: true, label: `get.${this.entityName}` }
+              );
               if (!error && data) {
                 const record = {
                   ...data,
@@ -559,10 +597,11 @@ class EntityManager {
                   const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
                   const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
                   const itemColumns = getSelectColumns(itemsTable);
-                  const { data: itemsData, error: itemsError } = await supabase
-                    .from(itemsTable)
-                    .select(itemColumns)
-                    .eq(parentIdField, idStr);
+                  const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
+                    async () =>
+                      supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
+                    { kind: "read", silent: true, label: `getItems.${this.entityName}` }
+                  );
                   if (!itemsError && Array.isArray(itemsData)) {
                     record.items = itemsData.map(row => ({
                       service_name: row.service_name,
@@ -595,10 +634,10 @@ class EntityManager {
       const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
       try {
         const itemColumns = getSelectColumns(itemsTable);
-        const { data: itemsData, error: itemsError } = await supabase
-          .from(itemsTable)
-          .select(itemColumns)
-          .eq(parentIdField, idStr);
+        const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
+          async () => supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
+          { kind: "read", silent: true, label: `lineItems.${this.entityName}` }
+        );
         if (!itemsError && Array.isArray(itemsData)) {
           record.items = itemsData.map(row => ({
             service_name: row.service_name,

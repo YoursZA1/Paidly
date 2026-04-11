@@ -5,6 +5,7 @@
  */
 import axios from "axios";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
+import { installBackendApiResilience } from "@/api/installBackendApiResilience";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -106,6 +107,13 @@ export const backendApi = axios.create({
   timeout: 30000,
   withCredentials: true,
 });
+
+/**
+ * Transient retries + Sonner toast on final failure. Per-request: `{ __paidlySilent: true }` skips toast;
+ * `__paidlySilent404` skips toast for 404. Prefer silent when the caller already surfaces the error
+ * (e.g. team invite, account delete, Node auth sign-in/sign-up/forgot-password, optional currency API).
+ */
+installBackendApiResilience(backendApi);
 
 export function getBackendBaseUrl() {
   if (rawServerUrl) return serverUrl;

@@ -43,7 +43,9 @@ export const setUserCurrency = async (currencyCode) => {
 export const getBusinessCurrency = async (businessId) => {
   try {
     if (typeof backendApi.get === 'function') {
-      const response = await backendApi.get(`/api/business/${businessId}/currency`);
+      const response = await backendApi.get(`/api/business/${businessId}/currency`, {
+        __paidlySilent: true,
+      });
       return response.data || { currency: 'ZAR', allowMultipleCurrencies: false };
     }
   } catch (error) {
@@ -63,7 +65,8 @@ export const setBusinessCurrency = async (businessId, settings) => {
     if (typeof backendApi.put === 'function') {
       const response = await backendApi.put(
         `/api/business/${businessId}/currency`,
-        settings
+        settings,
+        { __paidlySilent: true }
       );
       return response.data;
     }
@@ -85,6 +88,7 @@ export const getExchangeRates = async (baseCurrency = 'ZAR') => {
       const response = await backendApi.get('/api/exchange-rates', {
         params: { base: baseCurrency },
         timeout: 5000,
+        __paidlySilent: true,
       });
       return response.data || {};
     }
@@ -110,7 +114,7 @@ export const getHistoricalExchangeRates = async (
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get(
         '/api/exchange-rates/historical',
-        { params: { base: baseCurrency, date }, timeout: 5000 }
+        { params: { base: baseCurrency, date }, timeout: 5000, __paidlySilent: true }
       );
       return response.data || {};
     }
@@ -138,6 +142,7 @@ export const convertCurrencyAPI = async (
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get('/api/currency/convert', {
         params: { amount, from: fromCurrency, to: toCurrency },
+        __paidlySilent: true,
       });
       return response.data?.convertedAmount ?? amount;
     }
@@ -154,7 +159,7 @@ export const convertCurrencyAPI = async (
 export const getSupportedCurrencies = async () => {
   try {
     if (typeof backendApi.get === 'function') {
-      const response = await backendApi.get('/api/currencies');
+      const response = await backendApi.get('/api/currencies', { __paidlySilent: true });
       return response.data || [];
     }
   } catch (error) {
@@ -187,9 +192,9 @@ export const saveInvoiceCurrency = async (invoiceId, currencyCode) => {
 export const getInvoiceCurrencyHistory = async (invoiceId) => {
   try {
     if (typeof backendApi.get === 'function') {
-      const response = await backendApi.get(
-        `/api/invoices/${invoiceId}/currency-history`
-      );
+      const response = await backendApi.get(`/api/invoices/${invoiceId}/currency-history`, {
+        __paidlySilent: true,
+      });
       return response.data || [];
     }
   } catch (error) {
@@ -206,7 +211,9 @@ export const getInvoiceCurrencyHistory = async (invoiceId) => {
 export const getCurrencyRatesForDate = async (date) => {
   try {
     if (typeof backendApi.get === 'function') {
-      const response = await backendApi.get(`/api/exchange-rates/${date}`);
+      const response = await backendApi.get(`/api/exchange-rates/${date}`, {
+        __paidlySilent: true,
+      });
       return response.data || {};
     }
   } catch (error) {

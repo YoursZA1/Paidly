@@ -7,11 +7,18 @@ import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
+import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser } from "@/utils/authStorage";
+import {
+  reportSupabaseGetSessionFailure,
+  reportSupabaseGetSessionRecovered,
+} from "@/lib/authSessionReconnectToast";
+import { resetApp } from "@/utils/resetApp";
+import { DEFAULT_LOADING_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -39,16 +46,23 @@ function isSessionValid(sessionNorm) {
  * Prefer the typed getSession(); on failure (network, refresh race), fall back to the raw client so we
  * don't clear the app user and trigger RequireAuth → Login after mutations or token refresh.
  */
-async function readSessionSafe() {
+async function readSessionSafe(reportSessionHealth = false) {
   try {
     const s = await SupabaseAuthService.getSession();
-    if (s?.user) return s;
+    if (s?.user) {
+      if (reportSessionHealth) reportSupabaseGetSessionRecovered();
+      return s;
+    }
   } catch (e) {
     if (import.meta.env?.DEV) {
       console.warn("[Auth] SupabaseAuthService.getSession failed; using raw session:", e?.message || e);
     }
   }
   const { data, error } = await supabase.auth.getSession();
+  if (reportSessionHealth) {
+    if (error) reportSupabaseGetSessionFailure();
+    else reportSupabaseGetSessionRecovered();
+  }
   if (error || !data?.session?.user) return null;
   return normalizeSessionFromClient(data.session);
 }
@@ -117,6 +131,23 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const refreshUserDebounceRef = useRef(null);
   const sessionResyncTimerRef = useRef(null);
+  const userIdRef = useRef(null);
+  const sessionUserIdRef = useRef(null);
+  const authLoadingFailSafeRef = useRef(null);
+  const loadingRef = useRef(loading);
+  const routeInvariantTimerRef = useRef(null);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    sessionUserIdRef.current = session?.user?.id ?? null;
+  }, [session?.user?.id]);
 
   // Drop legacy `breakapi_user` mirror when using Supabase — session + profiles are authoritative.
   useEffect(() => {
@@ -125,11 +156,25 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Fail-safe timer cleared when bootstrap finishes (same pattern as fetch + finally).
+  useEffect(() => {
+    authLoadingFailSafeRef.current = setTimeout(() => {
+      setLoading(false);
+      authLoadingFailSafeRef.current = null;
+    }, DEFAULT_LOADING_FAILSAFE_MS);
+    return () => {
+      if (authLoadingFailSafeRef.current) {
+        clearTimeout(authLoadingFailSafeRef.current);
+        authLoadingFailSafeRef.current = null;
+      }
+    };
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       const SESSION_READ_MS = 8000;
       const first = await Promise.race([
-        readSessionSafe(),
+        readSessionSafe(false),
         new Promise((resolve) => {
           setTimeout(() => resolve(SESSION_READ_TIMEOUT), SESSION_READ_MS);
         }),
@@ -139,11 +184,14 @@ export function AuthProvider({ children }) {
       if (first === SESSION_READ_TIMEOUT || !first?.user) {
         // Slow or inconclusive read — ask the client once without a fake “empty session” timeout.
         const { data, error } = await supabase.auth.getSession();
+        if (error) reportSupabaseGetSessionFailure();
+        else reportSupabaseGetSessionRecovered();
         if (!error && data?.session?.user) {
           sessionNorm = normalizeSessionFromClient(data.session);
         }
       } else {
         sessionNorm = first;
+        reportSupabaseGetSessionRecovered();
       }
 
       if (sessionNorm?.user) {
@@ -162,8 +210,39 @@ export function AuthProvider({ children }) {
         }
         setError("");
       } else {
-        setUser(null);
-        setError("");
+        const { data, error: gsErr } = await supabase.auth.getSession();
+        if (gsErr) {
+          reportSupabaseGetSessionFailure();
+          setError("");
+          return;
+        }
+        reportSupabaseGetSessionRecovered();
+        if (!data?.session?.user) {
+          setUser(null);
+          setError("");
+        } else {
+          const s = normalizeSessionFromClient(data.session);
+          if (!isSessionValid(s)) {
+            setUser(null);
+            setError("");
+            return;
+          }
+          setSession(s);
+          const PROFILE_RESTORE_MS = 10000;
+          const currentUser = await Promise.race([
+            User.restoreFromSupabaseSession(s),
+            new Promise((resolve) => {
+              setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
+            }),
+          ]);
+          if (currentUser) {
+            setUser(currentUser);
+          } else {
+            const min = minimalUserFromJwtUser(s.user);
+            if (min) setUser(min);
+          }
+          setError("");
+        }
       }
     } catch (e) {
       if (!isAbortError(e)) {
@@ -171,6 +250,8 @@ export function AuthProvider({ children }) {
       }
       try {
         const { data, error } = await supabase.auth.getSession();
+        if (error) reportSupabaseGetSessionFailure();
+        else reportSupabaseGetSessionRecovered();
         const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
           const min = minimalUserFromJwtUser(su);
@@ -179,6 +260,7 @@ export function AuthProvider({ children }) {
           setUser(null);
         }
       } catch {
+        reportSupabaseGetSessionFailure();
         setUser(null);
       }
       setError("");
@@ -203,22 +285,15 @@ export function AuthProvider({ children }) {
     []
   );
 
+  /** Tab focus / visibility: refresh React session from storage only — never log out on flaky reads. */
   const refreshSession = useCallback(async () => {
     try {
-      const newSession = await SupabaseAuthService.getSession();
-      if (!isSessionValid(newSession)) {
-        setSession(null);
-        setUser(null);
-        setError("");
-        redirectToLoginIfProtectedPath();
-        return;
+      const newSession = await readSessionSafe(true);
+      if (newSession?.user && isSessionValid(newSession)) {
+        setSession(newSession);
       }
-      setSession(newSession);
     } catch {
-      setSession(null);
-      setUser(null);
-      setError("");
-      redirectToLoginIfProtectedPath();
+      /* offline or race — keep current session + user */
     }
   }, []);
 
@@ -232,7 +307,7 @@ export function AuthProvider({ children }) {
         let initialSession = null;
         try {
           const first = await Promise.race([
-            readSessionSafe(),
+            readSessionSafe(false),
             new Promise((resolve) => {
               setTimeout(() => resolve(SESSION_READ_TIMEOUT), SESSION_INIT_MS);
             }),
@@ -292,11 +367,20 @@ export function AuthProvider({ children }) {
         }
 
         if (cancelled) return;
-        // 4) Render UI with resolved auth state; if user fetch failed, reset/redirect.
+        // 4) Render UI; profile/API may be slow — keep JWT-derived user so we don't bounce to login.
         if (!currentUser) {
-          setUser(null);
-          setError("Failed to restore session");
-          redirectToLoginIfProtectedPath();
+          const min = minimalUserFromJwtUser(initialSession.user);
+          if (min) {
+            setUser(min);
+            setError("");
+            if (import.meta.env?.DEV) {
+              console.info("[Auth] Profile restore deferred; using JWT user until API is reachable.");
+            }
+          } else {
+            setUser(null);
+            setError("Failed to restore session");
+            redirectToLoginIfProtectedPath();
+          }
           return;
         }
         setUser(currentUser);
@@ -306,12 +390,38 @@ export function AuthProvider({ children }) {
           console.warn("Auth init error:", err);
         }
         if (!cancelled) {
-          setSession(null);
-          setUser(null);
-          setError("");
-          redirectToLoginIfProtectedPath();
+          try {
+            const recovered = await readSessionSafe(false);
+            if (recovered?.user && isSessionValid(recovered)) {
+              setSession(recovered);
+              const min = minimalUserFromJwtUser(recovered.user);
+              if (min) {
+                setUser(min);
+                setError("");
+              } else {
+                setSession(null);
+                setUser(null);
+                setError("");
+                redirectToLoginIfProtectedPath();
+              }
+            } else {
+              setSession(null);
+              setUser(null);
+              setError("");
+              redirectToLoginIfProtectedPath();
+            }
+          } catch {
+            setSession(null);
+            setUser(null);
+            setError("");
+            redirectToLoginIfProtectedPath();
+          }
         }
       } finally {
+        if (authLoadingFailSafeRef.current) {
+          clearTimeout(authLoadingFailSafeRef.current);
+          authLoadingFailSafeRef.current = null;
+        }
         if (!cancelled) setLoading(false);
       }
     })();
@@ -320,22 +430,42 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Fail-safe: never leave auth loading spinner running forever.
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 5000);
-    return () => clearTimeout(timeout);
+  /**
+   * Intentionally no auto `if (!user && !loading) resetApp()`: that is true for every guest on public routes after
+   * bootstrap and would wipe localStorage/sessionStorage (theme, prefs, offline data) for normal visitors.
+   * Use {@link resetApp} from the crash screen (ApplicationErrorPage) or `hardResetApp` from support flows.
+   */
+  const hardResetApp = useCallback(() => {
+    resetApp();
   }, []);
 
-  // One debounced resync on tab focus / visibility — avoids stacked getSession + refresh races.
+  // Debounced resync on focus / visibility / bfcache: ask Supabase for a fresh token, then align React state.
   const scheduleSessionResync = useCallback(() => {
     if (sessionResyncTimerRef.current) clearTimeout(sessionResyncTimerRef.current);
     sessionResyncTimerRef.current = setTimeout(() => {
       sessionResyncTimerRef.current = null;
-      void supabase.auth.getSession();
-      void refreshSession();
-      void refreshUser();
+      void (async () => {
+        const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
+        try {
+          const { error: refErr } = await supabase.auth.refreshSession();
+          if (refErr && import.meta.env.DEV) {
+            console.warn("[Auth] Tab resync refreshSession:", refErr.message || refErr);
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn("[Auth] Tab resync refreshSession threw:", e?.message || e);
+          }
+        }
+        await refreshSession();
+        await refreshUser();
+        await enforceProtectedRouteSessionInvariant(
+          typeof window !== "undefined" ? window.location.pathname : "",
+          {
+            loading: loadingRef.current,
+            believedSignedIn,
+          }
+        );
+      })();
     }, 400);
   }, [refreshSession, refreshUser]);
 
@@ -368,16 +498,74 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("focus", handleFocus);
   }, [scheduleSessionResync]);
 
+  // Back/forward cache restore: session timers were frozen — same recovery path as visibility.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const onPageShow = (e) => {
+      if (e.persisted) scheduleSessionResync();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [scheduleSessionResync]);
+
+  /**
+   * Third condition: protected route navigation after bootstrap — same invariant as tab resync, without waiting for focus.
+   * Debounced; skips public paths and guests (`believedSignedIn` from refs).
+   */
+  const verifySessionOnProtectedRoute = useCallback((pathname) => {
+    if (routeInvariantTimerRef.current) clearTimeout(routeInvariantTimerRef.current);
+    routeInvariantTimerRef.current = setTimeout(() => {
+      routeInvariantTimerRef.current = null;
+      const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
+      void enforceProtectedRouteSessionInvariant(
+        pathname || (typeof window !== "undefined" ? window.location.pathname : ""),
+        {
+          loading: loadingRef.current,
+          believedSignedIn,
+        }
+      );
+    }, 200);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (routeInvariantTimerRef.current) clearTimeout(routeInvariantTimerRef.current);
+    },
+    []
+  );
+
   // Listen to Supabase auth state (sign in/out, token refresh) to keep session and user in sync
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      if (!nextSession) {
+      if (event === "SIGNED_OUT") {
         setSession(null);
         setUser(null);
         setError("");
+        // Hard navigation clears stale React/chunk state (layer 1 stability).
         redirectToLoginIfProtectedPath();
+        return;
+      }
+
+      if (!nextSession) {
+        if (event === "INITIAL_SESSION") {
+          setSession(null);
+          setUser(null);
+          setError("");
+          redirectToLoginIfProtectedPath();
+          return;
+        }
+        try {
+          const recovered = await readSessionSafe(true);
+          if (recovered?.user && isSessionValid(recovered)) {
+            setSession(recovered);
+            scheduleRefreshUser();
+          }
+        } catch {
+          /* offline — do not clear */
+        }
         return;
       }
 
@@ -389,11 +577,10 @@ export function AuthProvider({ children }) {
           user: nextSession.user,
         });
         await refreshUser();
-      } else if (event === "SIGNED_OUT") {
-        setSession(null);
-        setUser(null);
-        redirectToLoginIfProtectedPath();
       } else if (event === "TOKEN_REFRESHED" && nextSession) {
+        if (import.meta.env.DEV) {
+          console.info("[Auth] Session refreshed (TOKEN_REFRESHED)");
+        }
         setSession({
           accessToken: nextSession.access_token,
           refreshToken: nextSession.refresh_token,
@@ -568,7 +755,7 @@ export function AuthProvider({ children }) {
           plan,
           redirect_to,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` }, __paidlySilent: true }
       );
       if (data?.ok) {
         return `An invitation email was sent to ${email.trim()}. They can use the link in that email to set their password and sign in.`;
@@ -605,6 +792,8 @@ export function AuthProvider({ children }) {
       isAuthenticated: !!user,
       login,
       logout,
+      hardResetApp,
+      verifySessionOnProtectedRoute,
       refreshUser,
       refreshSession,
       sendPasswordReset,
@@ -624,6 +813,8 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
+    hardResetApp,
+    verifySessionOnProtectedRoute,
     refreshUser,
     refreshSession,
     sendPasswordReset,
@@ -673,6 +864,8 @@ const AUTH_FALLBACK = {
   login: async () => {},
   signup: async () => {},
   logout: () => {},
+  hardResetApp: () => {},
+  verifySessionOnProtectedRoute: () => {},
   refreshUser: async () => {},
   refreshSession: async () => {},
   sendPasswordReset: async () => {},

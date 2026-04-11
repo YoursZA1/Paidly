@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { startLoadingFailSafe } from '@/hooks/useLoadingFailSafe';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { Payment } from '@/api/entities';
@@ -22,6 +23,7 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
   const symbol = getCurrencySymbol(currency);
 
   useEffect(() => {
+    const clearFailSafe = startLoadingFailSafe(setLoading);
     const loadPayments = async () => {
       if (!invoice?.id) {
         setLoading(false);
@@ -40,7 +42,8 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
         setLoading(false);
       }
     };
-    loadPayments();
+    loadPayments().finally(clearFailSafe);
+    return () => clearFailSafe();
   }, [invoice?.id, invoice?.total_amount]);
 
   const handleConfirm = () => {

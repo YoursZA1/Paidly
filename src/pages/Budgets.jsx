@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { startLoadingFailSafe } from '@/hooks/useLoadingFailSafe';
 import { Budget, Expense, Invoice } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -19,7 +20,9 @@ export default function BudgetsPage() {
     const [editingBudget, setEditingBudget] = useState(null);
 
     useEffect(() => {
-        loadData();
+        const clearFailSafe = startLoadingFailSafe(setLoading);
+        loadData().finally(clearFailSafe);
+        return () => clearFailSafe();
     }, []);
 
     const loadData = async () => {

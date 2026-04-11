@@ -17,6 +17,9 @@ import { withApiLogging } from "@/utils/apiLogger";
  * const state = useAppStore();
  */
 
+/** Bumps on each fetchAll start so overlapping runs do not clear `isLoading` while a newer fetch is still in flight. */
+let fetchAllGeneration = 0;
+
 export const useAppStore = create((set, get) => ({
   invoices: [],
   quotes: [],
@@ -35,6 +38,10 @@ export const useAppStore = create((set, get) => ({
    * @param {object | null} authUser - Prefer `user` from AuthContext (Supabase-backed); avoids duplicate auth resolution.
    */
   fetchAll: async (authUser = null) => {
+    const gen = ++fetchAllGeneration;
+    const clearLoadingIfLatest = () => {
+      if (gen === fetchAllGeneration) set({ isLoading: false });
+    };
     set({ isLoading: true, error: null });
     try {
       const safe = async (endpoint, fn, fallback, timeoutMs = 30000, retries = 1) => {
@@ -71,7 +78,7 @@ export const useAppStore = create((set, get) => ({
       }
 
       if (!userData) {
-        set({ isLoading: false, error: "Not authenticated" });
+        if (gen === fetchAllGeneration) set({ error: "Not authenticated" });
         return;
       }
 
@@ -101,6 +108,8 @@ export const useAppStore = create((set, get) => ({
         resolvedInvoices = resolvedInvoices.map((inv) => ({ ...inv, ...(updatedMap.get(inv.id) || {}) }));
       }
 
+      if (gen !== fetchAllGeneration) return;
+
       set({
         invoices: resolvedInvoices,
         quotes: Array.isArray(quotesData) ? quotesData : [],
@@ -111,15 +120,17 @@ export const useAppStore = create((set, get) => ({
         // Invoice views are hydrated lazily on the Invoices page.
         invoiceViews: get().invoiceViews || [],
         expenses: Array.isArray(expensesData) ? expensesData : [],
-        isLoading: false,
         error: null,
         lastFetchedAt: Date.now(),
       });
     } catch (err) {
-      set({
-        isLoading: false,
-        error: err?.message || "Failed to load data",
-      });
+      if (gen === fetchAllGeneration) {
+        set({
+          error: err?.message || "Failed to load data",
+        });
+      }
+    } finally {
+      clearLoadingIfLatest();
     }
   },
 

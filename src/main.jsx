@@ -1,21 +1,19 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createAppQueryClient } from '@/lib/query-client'
 import App from '@/App.jsx'
-import ApplicationErrorPage from '@/pages/ApplicationErrorPage.jsx'
 import '@/index.css'
+import ErrorBoundary from '@/components/ErrorBoundary.jsx'
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
-import { logUnhandledError, getCurrentPage } from '@/utils/apiLogger'
 import {
     installGlobalAsyncErrorHandlers,
-    PAIDLY_APPLICATION_ERROR_EVENT,
 } from '@/utils/globalAsyncErrorHandlers'
 
 installGlobalAsyncErrorHandlers()
 
+/** Legacy `paidly_data` only. Supabase auth keys use `safeAuthStorage` (scrub on read) and are not nuked here. */
 function recoverFromCorruptedStorage() {
     if (typeof window === "undefined") return;
 
@@ -45,60 +43,18 @@ function recoverFromCorruptedStorage() {
 
 recoverFromCorruptedStorage()
 
-class AppErrorBoundary extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = { hasError: false, error: null };
-    }
-
-    static getDerivedStateFromError(error) {
-        return { hasError: true, error };
-    }
-
-    componentDidMount() {
-        this._onApplicationError = (e) => {
-            const err = e?.detail?.error;
-            if (!(err instanceof Error)) return;
-            this.setState({ hasError: true, error: err });
-        };
-        window.addEventListener(PAIDLY_APPLICATION_ERROR_EVENT, this._onApplicationError);
-    }
-
-    componentWillUnmount() {
-        window.removeEventListener(PAIDLY_APPLICATION_ERROR_EVENT, this._onApplicationError);
-    }
-
-    componentDidCatch(error, info) {
-        logUnhandledError(error, getCurrentPage());
-        console.error('App crashed:', error, info);
-    }
-
-    render() {
-        if (this.state.hasError) {
-            return (
-                <ApplicationErrorPage
-                    error={this.state.error}
-                    onReset={() => this.setState({ hasError: false, error: null })}
-                />
-            );
-        }
-
-        return this.props.children;
-    }
-}
-
 const queryClient = createAppQueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
-        <AuthProvider>
-          <AppProvider>
-            <AppErrorBoundary>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppProvider>
               <App />
-            </AppErrorBoundary>
-          </AppProvider>
-        </AuthProvider>
+            </AppProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </ThemeProvider>
     </QueryClientProvider>
 )

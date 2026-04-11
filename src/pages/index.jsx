@@ -83,6 +83,7 @@ const NotFoundPage = lazy(() =>
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
+import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 
@@ -378,13 +379,20 @@ function PagesContent() {
         </Suspense>
     );
 
+    const content = (
+        <>
+            <AuthProtectedRouteInvariant />
+            {routes}
+        </>
+    );
+
     if (shouldBypassAppLayout(location.pathname)) {
-        return routes;
+        return content;
     }
 
     return (
         <Layout currentPageName={currentPageName}>
-            {routes}
+            {content}
         </Layout>
     );
 }

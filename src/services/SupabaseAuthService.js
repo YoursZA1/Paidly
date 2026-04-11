@@ -170,7 +170,7 @@ const SupabaseAuthService = {
           turnstile_token: turnstileToken || undefined,
           redirectTo: emailRedirectTo || undefined,
         },
-        { validateStatus: () => true }
+        { validateStatus: () => true, __paidlySilent: true }
       );
 
       if (status === 200 && data) {
@@ -278,7 +278,7 @@ const SupabaseAuthService = {
       const { data, status, headers } = await backendApi.post(
         "/api/auth/sign-in",
         { email: normalized, password },
-        { validateStatus: () => true }
+        { validateStatus: () => true, __paidlySilent: true }
       );
 
       if (status === 200 && data?.access_token && data?.refresh_token) {
@@ -397,7 +397,7 @@ const SupabaseAuthService = {
           redirectTo: to || undefined,
           turnstile_token: turnstileToken || undefined,
         },
-        { validateStatus: () => true }
+        { validateStatus: () => true, __paidlySilent: true }
       );
       if (status === 200 && data?.ok) return true;
       if (status === 403) {

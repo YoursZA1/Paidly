@@ -50,12 +50,16 @@ export async function submitWaitlistSignup(payload) {
   }
 
   try {
-    const { data } = await backendApi.post("/api/waitlist", {
-      email,
-      name: name || undefined,
-      source: source || "landing",
-      turnstile_token: turnstileToken || undefined,
-    });
+    const { data } = await backendApi.post(
+      "/api/waitlist",
+      {
+        email,
+        name: name || undefined,
+        source: source || "landing",
+        turnstile_token: turnstileToken || undefined,
+      },
+      { __paidlySilent: true }
+    );
     return data;
   } catch (err) {
     const msg =

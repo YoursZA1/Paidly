@@ -598,6 +598,8 @@ export default function Layout({ children, currentPageName }) {
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
   const { user, logout } = useAuth();
+  const userRef = useRef(user);
+  userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
   const planForNavFeatures =
     layoutProfile?.subscription_plan ||
@@ -648,6 +650,27 @@ export default function Layout({ children, currentPageName }) {
     lastFetchedAt,
     userProfile,
   ]);
+
+  // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
+  useEffect(() => {
+    if (!user?.id || isAdminV2Route) return undefined;
+    let debounceId = null;
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const stale = lastFetchedAt == null || Date.now() - lastFetchedAt >= STALE_MS;
+      if (!stale) return;
+      if (debounceId) clearTimeout(debounceId);
+      debounceId = window.setTimeout(() => {
+        debounceId = null;
+        fetchAll(userRef.current);
+      }, 400);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (debounceId) clearTimeout(debounceId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo

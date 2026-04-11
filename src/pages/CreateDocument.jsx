@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { withApiLogging } from "@/utils/apiLogger";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
@@ -176,6 +177,7 @@ export default function CreateDocument() {
 
   useEffect(() => {
     let cancelled = false;
+    const clearFailSafe = startLoadingFailSafe(setLoadingClients);
     (async () => {
       setLoadingClients(true);
       try {
@@ -195,14 +197,17 @@ export default function CreateDocument() {
       } finally {
         if (!cancelled) setLoadingClients(false);
       }
-    })();
+    })()
+      .finally(clearFailSafe);
     return () => {
       cancelled = true;
+      clearFailSafe();
     };
   }, [toast]);
 
   useEffect(() => {
     let cancelled = false;
+    const clearFailSafe = startLoadingFailSafe(setLoadingBankingDetails);
     (async () => {
       setLoadingBankingDetails(true);
       try {
@@ -232,9 +237,11 @@ export default function CreateDocument() {
       } finally {
         if (!cancelled) setLoadingBankingDetails(false);
       }
-    })();
+    })()
+      .finally(clearFailSafe);
     return () => {
       cancelled = true;
+      clearFailSafe();
     };
   }, [docType, toast]);
 

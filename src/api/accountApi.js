@@ -19,6 +19,7 @@ export async function deleteMyAccount(accessToken) {
     {
       headers: { Authorization: `Bearer ${t}` },
       validateStatus: () => true,
+      __paidlySilent: true,
     }
   );
   if (status !== 200) {

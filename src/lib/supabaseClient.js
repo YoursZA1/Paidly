@@ -15,6 +15,7 @@
  * - If env vars are missing, the app still loads and shows a setup message instead of a blank screen.
  */
 import { createClient } from "@supabase/supabase-js";
+import { wrapStorageWithCorruptionGuard } from "@/lib/safeAuthStorage";
 
 // Normalize URL: Supabase project APIs use .supabase.co only. .supabase.com does not resolve → ERR_NAME_NOT_RESOLVED.
 let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
@@ -41,7 +42,12 @@ const effectiveUrl = supabaseUrl || "https://supabase.com";
 const effectiveKey = supabaseAnonKey || "not-configured";
 
 const inMemoryStorage = new Map();
-const authSessionStorage =
+/**
+ * Auth session JSON lives in sessionStorage only (per-tab, cleared when the tab closes).
+ * Keeps long-lived localStorage for lightweight UI prefs (theme, drafts, etc.) — not refresh/access tokens.
+ * GoTrue still owns format, refresh, and invalidation via the Supabase client.
+ */
+const authPersistStorageRaw =
   typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
     ? window.sessionStorage
     : {
@@ -54,11 +60,14 @@ const authSessionStorage =
         },
       };
 
+const authPersistStorage = wrapStorageWithCorruptionGuard(authPersistStorageRaw);
+
 export const supabase = createClient(effectiveUrl, effectiveKey, {
   auth: {
     persistSession: true,
+    /** GoTrue refreshes access tokens in the foreground; AuthContext also calls refreshSession on visibility/focus/bfcache. */
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: authSessionStorage,
+    storage: authPersistStorage,
   },
 });

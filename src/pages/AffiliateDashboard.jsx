@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
+import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 
 function shareOrigin() {
   const raw = (import.meta.env.VITE_APP_URL || "").toString().trim();
@@ -89,6 +90,7 @@ export default function AffiliateDashboard() {
   const setLoadError = useAffiliateDashboardStore((s) => s.setLoadError);
 
   useEffect(() => {
+    const clearFailSafe = startLoadingFailSafe(setLoading);
     if (import.meta.env.DEV) {
       console.log("[AffiliateDashboard] Mount: fetching dashboard data");
     }
@@ -122,11 +124,13 @@ export default function AffiliateDashboard() {
         setLoadError(err?.message || "Failed to fetch affiliate data");
       })
       .finally(() => {
+        clearFailSafe();
         if (import.meta.env.DEV) {
           console.log("[AffiliateDashboard] Fetch complete, setting loading=false");
         }
         setLoading(false);
       });
+    return () => clearFailSafe();
   }, [setAffiliateDashboard, setLoadError, setLoading]);
 
   const affiliate = payload?.affiliate;
