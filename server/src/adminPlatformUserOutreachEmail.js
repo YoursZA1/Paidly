@@ -6,13 +6,30 @@
 import { sendHtmlEmail } from "./sendInvoice.js";
 import { sanitizeOneLine, isValidEmail } from "./inputValidation.js";
 import { ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT } from "./adminPlatformUserMessages.js";
+import {
+  buildAdminPlatformOutreachHtml,
+  buildAdminPlatformOutreachPlainText,
+} from "./adminPlatformMailerTemplate.js";
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+/** Reply-To: explicit env, else parse mailbox from RESEND_FROM. */
+function outreachReplyToAddress() {
+  const explicit = String(process.env.ADMIN_OUTREACH_REPLY_TO || "").trim();
+  if (explicit && isValidEmail(explicit)) {
+    return explicit;
+  }
+  const from = String(process.env.RESEND_FROM || "");
+  const bracket = from.match(/<([^>]+)>/);
+  if (bracket) {
+    const inner = bracket[1].trim();
+    if (isValidEmail(inner)) {
+      return inner;
+    }
+  }
+  const loose = from.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/);
+  if (loose && isValidEmail(loose[0])) {
+    return loose[0];
+  }
+  return null;
 }
 
 /**
@@ -40,13 +57,14 @@ export async function getAuthSignupEmail(supabaseAdmin, userId) {
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
- * @param {{ recipientId: string, subject: string, plainBody: string }} opts
+ * @param {{ recipientId: string, subject: string, plainBody: string, messageId?: string }} opts
  * @returns {Promise<{ status: "sent" | "skipped" | "failed", reason?: string }>}
  */
 export async function sendAdminPlatformMessageToSignupEmail(supabaseAdmin, opts) {
   const recipientId = String(opts.recipientId || "").trim();
   const subject = String(opts.subject || "");
   const plainBody = String(opts.plainBody || "");
+  const messageId = opts.messageId != null ? String(opts.messageId).trim() : "";
 
   const { email, error: lookupErr } = await getAuthSignupEmail(supabaseAdmin, recipientId);
   if (!email) {
@@ -63,17 +81,32 @@ export async function sendAdminPlatformMessageToSignupEmail(supabaseAdmin, opts)
   const sub =
     sanitizeOneLine(subject || "Message from Paidly", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
     "Message from Paidly";
-  const safeBody = escapeHtml(plainBody).replace(/\n/g, "<br/>");
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="font-size:18px;">Update from Paidly</h2>
-      <div style="font-size: 15px; line-height: 1.5; color: #333;">${safeBody}</div>
-      <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;" />
-      <p style="color: #666; font-size: 13px;">Sign in to Paidly for more details.</p>
-    </div>
-  `;
+  const html = buildAdminPlatformOutreachHtml({ plainBody });
+  const text = buildAdminPlatformOutreachPlainText({ plainBody, recipientEmail: email });
 
-  const result = await sendHtmlEmail(email, sub, html, "Paidly");
+  // Omit Auto-Submitted: auto-generated — that value is for machine auto-replies (RFC 3834);
+  // these are staff-initiated account notices and should not mimic vacation/list software.
+  const headers = {
+    "X-Auto-Response-Suppress": "OOF, AutoReply",
+  };
+  if (messageId) {
+    headers["X-Entity-Ref-ID"] = `paidly-admin-msg-${messageId}`;
+  }
+
+  const replyTo = outreachReplyToAddress();
+  const mailOpts = {
+    text,
+    headers,
+    tags: [
+      { name: "category", value: "transactional" },
+      { name: "message_type", value: "admin_account_notice" },
+    ],
+  };
+  if (replyTo) {
+    mailOpts.reply_to = replyTo;
+  }
+
+  const result = await sendHtmlEmail(email, sub, html, "Paidly", mailOpts);
   if (!result.success) {
     return { status: "failed", reason: result.error || "send_failed" };
   }

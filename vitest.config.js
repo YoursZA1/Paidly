@@ -8,6 +8,8 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@shared": path.resolve(__dirname, "./shared"),
+      // Tests only: server code imports `resend`; Vitest often does not apply vi.mock there.
+      resend: path.resolve(__dirname, "./tests/mocks/resend-test-double.js"),
     },
   },
   test: {

@@ -2193,6 +2193,7 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
       recipientId: recipient_id,
       subject: message?.subject ?? subject,
       plainBody: content,
+      messageId: message?.id,
     });
     logAdminApi(
       req.method,

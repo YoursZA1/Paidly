@@ -98,11 +98,37 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
   }
 }
 
+function isSendHtmlMailOptsObject(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(value, "text") ||
+    Object.prototype.hasOwnProperty.call(value, "headers") ||
+    Object.prototype.hasOwnProperty.call(value, "reply_to") ||
+    Object.prototype.hasOwnProperty.call(value, "tags")
+  );
+}
+
 /**
  * Send HTML email (e.g. invoice/quote with download link) via Resend.
  * Same env as sendInvoiceEmail: RESEND_API_KEY, RESEND_FROM.
+ *
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} html
+ * @param {string | {
+ *   text?: string,
+ *   headers?: Record<string, string>,
+ *   reply_to?: string | string[],
+ *   tags?: Array<{ name: string; value: string }>,
+ * }} [fromNameOrMailOpts="Paidly"] — display name, or (when exactly 4 args) mail options object
+ * @param {{
+ *   text?: string,
+ *   headers?: Record<string, string>,
+ *   reply_to?: string | string[],
+ *   tags?: Array<{ name: string; value: string }>,
+ * }} [mailOpts] — optional multipart + headers (deliverability / classification).
  */
-export async function sendHtmlEmail(to, subject, html, fromName = "Paidly") {
+export async function sendHtmlEmail(to, subject, html, fromNameOrMailOpts = "Paidly", mailOpts = {}) {
   if (!process.env.RESEND_API_KEY) {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
@@ -118,13 +144,34 @@ export async function sendHtmlEmail(to, subject, html, fromName = "Paidly") {
     return { success: false, error: "Missing to or subject" };
   }
 
+  let opts;
+  if (arguments.length === 4 && isSendHtmlMailOptsObject(fromNameOrMailOpts)) {
+    opts = fromNameOrMailOpts;
+  } else {
+    opts = mailOpts && typeof mailOpts === "object" && !Array.isArray(mailOpts) ? mailOpts : {};
+  }
+  const payload = {
+    from: fromAddress,
+    to: [to.trim()],
+    subject: subject.trim(),
+    html: html || "<p>No content.</p>",
+  };
+
+  if (typeof opts.text === "string" && opts.text.trim() !== "") {
+    payload.text = opts.text;
+  }
+  if (opts.reply_to != null && opts.reply_to !== "") {
+    payload.reply_to = Array.isArray(opts.reply_to) ? opts.reply_to : [opts.reply_to];
+  }
+  if (opts.headers && typeof opts.headers === "object" && !Array.isArray(opts.headers)) {
+    payload.headers = opts.headers;
+  }
+  if (Array.isArray(opts.tags) && opts.tags.length > 0) {
+    payload.tags = opts.tags;
+  }
+
   try {
-    const data = await resend.emails.send({
-      from: fromAddress,
-      to: [to.trim()],
-      subject: subject.trim(),
-      html: html || "<p>No content.</p>",
-    });
+    const data = await resend.emails.send(payload);
 
     return { success: true, data };
   } catch (error) {

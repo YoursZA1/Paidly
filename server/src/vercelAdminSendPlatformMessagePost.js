@@ -88,6 +88,7 @@ export async function handleVercelSendPlatformMessagePost(req, res) {
       recipientId: recipient_id,
       subject: message?.subject ?? subject,
       plainBody: content,
+      messageId: message?.id,
     });
     return res.status(200).json({ ok: true, message, email_delivery });
   } catch (e) {

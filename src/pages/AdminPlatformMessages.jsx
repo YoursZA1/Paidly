@@ -260,7 +260,7 @@ export default function AdminPlatformMessages() {
     <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
       <PageHeader
         title="User messages"
-        description="Messages are stored in-app; email goes to each user’s signup address from Supabase Auth (sent via Resend when configured on the server)."
+        description="Stored in-app; email goes to each user’s signup address via Resend with HTML + plain text, transactional headers, and Reply-To. Use a verified domain with SPF/DKIM/DMARC in Resend for best inbox placement. Optional: ADMIN_OUTREACH_REPLY_TO, ADMIN_OUTREACH_MAILER_FOOTER on the API server."
       />
 
       {loadError ? (
