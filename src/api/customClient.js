@@ -22,6 +22,15 @@ import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/
 import { expireTrialIfDueViaRpc } from "@/lib/trialExpiry";
 import { hasFeature } from "@shared/plans.js";
 
+/**
+ * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
+ * - Org-scoped tables (invoices, quotes, clients, services, payslips, payments, expenses, tasks, …): every
+ *   row has `org_id`. This client resolves the active org via `ensureUserHasOrganization(sessionUserId)` and
+ *   applies `.eq('org_id', orgId)` on list/get/update/delete. Creates overwrite any client-supplied `org_id`
+ *   for those tables (except packages: forced to the same org below).
+ * - Per-user / profile: `public.profiles.id` = Supabase auth user id; `notes.user_id` = auth uid.
+ * - Line items (`invoice_items`, `quote_items`): scoped indirectly via parent invoice/quote RLS.
+ */
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 
@@ -790,11 +799,12 @@ class EntityManager {
     }
 
     try {
-      // Check if user has a membership
+      // Check if user has a membership (same ordering as bootstrap_user_organization: oldest first)
       const { data: existingMembership, error: membershipCheckError } = await supabase
         .from('memberships')
         .select('org_id')
         .eq('user_id', userId)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -813,6 +823,7 @@ class EntityManager {
         .from('organizations')
         .select('id')
         .eq('owner_id', userId)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -978,7 +989,8 @@ class EntityManager {
         supabaseData.org_id = orgId;
       }
       if (supabaseTable === 'packages') {
-        supabaseData.org_id = data.org_id !== undefined ? data.org_id : null;
+        // Never trust client payload for tenancy: org members may only create org-scoped packages (RLS requires membership).
+        supabaseData.org_id = orgId;
       }
 
       // Invoices / quotes: force auth user (getUser-validated id) on created_by + user_id columns
@@ -1484,7 +1496,7 @@ class EntityManager {
         });
       }
       const PACKAGE_UPDATE_COLUMNS = [
-        'org_id', 'name', 'price', 'currency', 'frequency', 'features', 'is_recommended',
+        'name', 'price', 'currency', 'frequency', 'features', 'is_recommended',
         'website_link', 'is_sample', 'updated_at'
       ];
       if (supabaseTable === 'packages') {
@@ -2405,6 +2417,7 @@ class IntegrationManager {
         .from('memberships')
         .select('org_id')
         .eq('user_id', userId)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (membershipCheckError && !/0 rows|PGRST116/i.test(membershipCheckError.message || '')) {
@@ -2419,6 +2432,7 @@ class IntegrationManager {
         .from('organizations')
         .select('id')
         .eq('owner_id', userId)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
