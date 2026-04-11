@@ -16,15 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
+import { normalizePaidPackageKey } from '@/lib/subscriptionPlan';
 
-/** Map profile / app plan names to subscription plan keys */
+/** Map profile / app plan names to subscription plan keys (aligns with `profiles` + PayFast). */
 export function mapProfilePlanToSubPlan(plan) {
-  const x = String(plan || '').toLowerCase();
-  if (['individual', 'basic', 'starter', 'free'].includes(x)) return 'individual';
-  if (['sme', 'professional', 'business'].includes(x)) return 'sme';
-  if (['corporate', 'enterprise'].includes(x)) return 'corporate';
-  if (x === 'none' || x === 'trial' || !x) return 'individual';
-  return 'individual';
+  return normalizePaidPackageKey(plan);
 }
 
 function toLocalDateInput(date) {
@@ -139,6 +135,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Subscription created');
       onClose();
     },
@@ -150,6 +147,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Subscription updated');
       onClose();
     },

@@ -52,6 +52,8 @@ import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import PlanBadge from "@/components/dashboard/PlanBadge";
+import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
@@ -1568,6 +1570,14 @@ export default function Dashboard() {
     return due && due >= today && due <= endOfThisWeek;
   }).length;
 
+  const subscriptionBanner =
+    !isAdmin && user
+      ? {
+          sub: describeSubscriptionState(user),
+          badgePlan: slugFromProfile(user) || user?.subscription_plan || user?.plan || "none",
+        }
+      : null;
+
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
       <div className="max-w-7xl mx-auto w-full min-w-0 py-2 sm:py-6 md:py-8">
@@ -1583,6 +1593,28 @@ export default function Dashboard() {
           </h1>
           <p className="finbank-body text-xs sm:text-sm text-foreground hidden sm:block">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
+
+        {subscriptionBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.3 }}
+              className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3"
+            >
+              <span className="text-xs sm:text-sm font-medium text-muted-foreground">Subscription</span>
+              <PlanBadge plan={subscriptionBanner.badgePlan} />
+              <span className="text-xs sm:text-sm text-foreground">
+                {subscriptionBanner.sub.packageLabel}
+                <span className="text-muted-foreground"> · {subscriptionBanner.sub.statusLabel}</span>
+              </span>
+              <Link
+                to={`${createPageUrl("Settings")}?tab=subscription`}
+                className="text-xs sm:text-sm font-semibold text-primary hover:underline underline-offset-2 ml-auto sm:ml-0"
+              >
+                Manage
+              </Link>
+            </motion.div>
+        )}
 
         <AffiliateProgramBanner />
 

@@ -23,6 +23,7 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
+import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 
 const LIST_LIMIT = 500;
@@ -30,10 +31,7 @@ const LIST_LIMIT = 500;
 function pickLatestSubscriptionForUser(subs, userId) {
   const uid = String(userId);
   const matches = subs.filter((s) => s.user_id && String(s.user_id) === uid);
-  if (!matches.length) return null;
-  return matches.sort(
-    (a, b) => new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0)
-  )[0];
+  return pickPreferredSubscriptionRow(matches);
 }
 
 /** One row per platform user: real subscription or synthetic “no record” row */

@@ -40,6 +40,7 @@ import {
   EMPTY_AFFILIATE_ADMIN_BUNDLE,
   normalizeAffiliateAdminQueryResult,
 } from '@/utils/affiliateApplicationCounts';
+import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -321,11 +322,13 @@ export default function AdminV2Dashboard() {
   const totalPayslips = payslips.length;
   const userBehaviorRows = useMemo(() => {
     const usersWithInvoiceCounts = mergeUsersWithInvoiceCounts(users, invoices);
-    const subByUserId = new Map(
-      subscriptions
-        .filter((s) => s.user_id)
-        .map((s) => [String(s.user_id), s])
-    );
+    const subByUserId = new Map();
+    for (const s of subscriptions) {
+      if (!s.user_id) continue;
+      const id = String(s.user_id);
+      const cur = subByUserId.get(id);
+      subByUserId.set(id, pickPreferredSubscriptionRow(cur ? [cur, s] : [s]));
+    }
     const subByEmail = new Map(
       subscriptions
         .filter((s) => s.user_email || s.email)
@@ -340,13 +343,17 @@ export default function AdminV2Dashboard() {
           subByUserId.get(String(u.id)) ||
           (email ? subByEmail.get(email) : null) ||
           null;
+        const profilePlan = u.plan || u.subscription_plan || '';
+        const subSt = String(sub?.status || '').toLowerCase();
+        const planFromSub =
+          sub && subSt === 'active' && sub.plan ? String(sub.plan).trim() : '';
         return {
           id: u.id,
           full_name: u.full_name || '—',
           email: u.email || '—',
           email_verified: u.email_verified,
           company_name: u.company_name || u.company || '—',
-          plan: u.plan || u.subscription_plan || 'none',
+          plan: planFromSub || profilePlan || 'none',
           status: u.status || 'active',
           invoices_sent: Number(u.invoices_sent || 0),
           quotes_created: Number(quoteCountByUser.get(String(u.id)) || 0),

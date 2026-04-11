@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { User } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Star, Rocket, Globe, ExternalLink } from "lucide-react";
+import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 import { payfastAmountZar, priceLabelZar } from "@/data/paidlySubscriptionPlans";
-import { getBillingPortalUrl } from "@/utils";
+import { createPageUrl, getBillingPortalUrl } from "@/utils";
+import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 
 const CONTACT_SALES_EMAIL = (
   import.meta.env.VITE_CONTACT_SALES_EMAIL ||
@@ -66,19 +69,16 @@ const TIERS = [
     },
 ];
 
-function getTierFromPlan(plan) {
-    const normalized = (plan || "individual").toLowerCase();
-    // Map legacy plan names to new tiers
-    if (["individual", "starter", "free", "basic"].includes(normalized)) return "individual";
-    if (["sme", "professional", "business"].includes(normalized)) return "sme";
-    if (["corporate", "enterprise"].includes(normalized)) return "corporate";
-    return "individual";
-}
-
 export default function SubscriptionSettings() {
+    const navigate = useNavigate();
     const { user: authUser } = useAuth();
+    const { profile: profileFromQuery, refetch: refetchProfile } = useUserProfileQuery();
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        void refetchProfile();
+    }, [refetchProfile]);
 
     useEffect(() => {
         let cancelled = false;
@@ -99,18 +99,18 @@ export default function SubscriptionSettings() {
         authUser?.plan,
     ]);
 
-    const currentPlanId = getTierFromPlan(
-        userData?.subscription_plan ??
-            userData?.plan ??
-            authUser?.subscription_plan ??
-            authUser?.plan
+    const billingProfile = useMemo(
+        () => ({
+            ...(authUser || {}),
+            ...(userData || {}),
+            ...(profileFromQuery || {}),
+        }),
+        [authUser, userData, profileFromQuery]
     );
-    const currentTier = TIERS.find((t) => t.id === currentPlanId) || TIERS[0];
 
-    const handleManageBilling = () => {
-        const url = getBillingPortalUrl();
-        if (url) window.open(url, "_blank", "noopener,noreferrer");
-    };
+    const accountState = describeSubscriptionState(billingProfile);
+    const currentPlanId = normalizePaidPackageKey(billingProfile);
+    const currentTier = TIERS.find((t) => t.id === currentPlanId) || TIERS[0];
 
     const handleContactSales = () => {
         window.location.href = `mailto:${CONTACT_SALES_EMAIL}`;
@@ -118,9 +118,17 @@ export default function SubscriptionSettings() {
 
     const handleTierAction = (tier) => {
         if (tier.id !== currentPlanId) {
-            handleManageBilling();
+            navigate(createPageUrl("BillingAndInvoices"));
         }
     };
+
+    const externalBillingUrl = (() => {
+        const url = (getBillingPortalUrl() || "").trim();
+        if (!url || !/^https?:\/\//i.test(url)) return "";
+        const origin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+        if (origin && url.replace(/\/$/, "") === origin) return "";
+        return url;
+    })();
 
     if (isLoading) {
         return (
@@ -146,17 +154,40 @@ export default function SubscriptionSettings() {
                     </div>
                     <div>
                         <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest">Active Plan</p>
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100">{currentTier.name} Tier</h2>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100">
+                            {accountState.packageLabel}
+                            {accountState.packageLabel !== "Free" ? " Tier" : ""}
+                        </h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                            {accountState.statusLabel}
+                            {accountState.rawSlug && accountState.rawSlug !== accountState.packageKey ? (
+                                <span className="text-slate-400 dark:text-slate-500"> · Plan: {accountState.rawSlug}</span>
+                            ) : null}
+                        </p>
                     </div>
                 </div>
-                <Button
-                    onClick={handleManageBilling}
-                    variant="outline"
-                    className="px-8 py-3 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-700 dark:text-slate-300 hover:shadow-md transition-all"
-                >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Manage Billing & Invoices
-                </Button>
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                    <Button
+                        asChild
+                        variant="outline"
+                        className="px-8 py-3 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-700 dark:text-slate-300 hover:shadow-md transition-all"
+                    >
+                        <Link to={createPageUrl("BillingAndInvoices")} className="inline-flex items-center justify-center">
+                            <ChevronRight className="w-4 h-4 mr-2 shrink-0" aria-hidden />
+                            Manage Billing &amp; Invoices
+                        </Link>
+                    </Button>
+                    {externalBillingUrl ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="rounded-2xl font-semibold text-slate-600 dark:text-slate-400"
+                            onClick={() => window.open(externalBillingUrl, "_blank", "noopener,noreferrer")}
+                        >
+                            External billing portal
+                        </Button>
+                    ) : null}
+                </div>
             </div>
 
             {/* 2. Plan Selection Grid */}

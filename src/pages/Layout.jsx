@@ -33,6 +33,7 @@ import {
   OPEN_EVENT as QUICK_SEARCH_OPEN_EVENT,
 } from "@/components/layout/AppQuickSearch";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible } from "@/utils";
@@ -597,6 +598,13 @@ export default function Layout({ children, currentPageName }) {
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
   const { user, logout } = useAuth();
+  const { profile: layoutProfile } = useUserProfileQuery();
+  const planForNavFeatures =
+    layoutProfile?.subscription_plan ||
+    layoutProfile?.plan ||
+    user?.subscription_plan ||
+    user?.plan ||
+    "individual";
 
   useEffect(() => {
     if (!user?.id) return;
@@ -753,10 +761,13 @@ export default function Layout({ children, currentPageName }) {
   const billingBypassRole =
     isStaffDashboardRole(user?.role) || String(user?.role || "").toLowerCase() === "admin";
   const settingsPathLower = createPageUrl("Settings").toLowerCase();
+  const billingPathLower = createPageUrl("BillingAndInvoices").toLowerCase();
   const pathLower = (location.pathname || "").toLowerCase();
   const onSettingsRoute = pathLower === settingsPathLower || pathLower.endsWith("/settings");
+  const onBillingInvoicesRoute =
+    pathLower === billingPathLower || pathLower.endsWith("/billingandinvoices");
 
-  if (expired && !billingBypassRole && !isAdminV2Route && !onSettingsRoute) {
+  if (expired && !billingBypassRole && !isAdminV2Route && !onSettingsRoute && !onBillingInvoicesRoute) {
     return <UpgradeScreen onLogout={handleLogout} />;
   }
 
@@ -836,7 +847,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
             <div className="mt-3" data-tour="dashboard-summary">
               <NavLink
-                item={getNavigationItems(user?.subscription_plan || 'Individual', user?.role).find(item => item.title === "Dashboard")}
+                item={getNavigationItems(planForNavFeatures, user?.role).find(item => item.title === "Dashboard")}
                 collapsed={isSidebarCollapsed}
               />
             </div>
@@ -845,7 +856,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Navigation */}
           <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "pl-4 pr-12"}`}>
             <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-1"}>
-              {getNavigationItems(user?.subscription_plan || 'Individual', user?.role)
+              {getNavigationItems(planForNavFeatures, user?.role)
                 .filter(item => item.title && item.id && item.title !== "Dashboard")
                 .map(item => {
                   // Add data-tour for Accounts/Clients and Reports
@@ -914,7 +925,7 @@ export default function Layout({ children, currentPageName }) {
           aria-describedby={undefined}
         >
           <MobileNav
-            items={getNavigationItems(user?.subscription_plan || "Individual", user?.role)}
+            items={getNavigationItems(planForNavFeatures, user?.role)}
             onClose={() => setIsMobileMenuOpen(false)}
             user={user}
             navigate={navigate}

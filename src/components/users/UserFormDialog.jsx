@@ -52,22 +52,36 @@ export default function UserFormDialog({ open, onClose, user }) {
     }
   }, [open, user]);
 
-  const buildPayload = () => ({
-    full_name: form.full_name.trim(),
-    email: form.email.trim().toLowerCase(),
-    phone: form.phone.trim(),
-    company_name: form.company_name.trim(),
-    company_address: form.company_address.trim(),
-    company_website: form.company_website.trim(),
-    status: form.status,
-    plan: form.plan,
-    subscription_plan: form.plan,
-  });
+  const buildPayload = () => {
+    const planSlug = String(form.plan || "none").trim().toLowerCase();
+    const billingPlan = planSlug === "none" ? "free" : planSlug;
+    const payload = {
+      full_name: form.full_name.trim(),
+      email: form.email.trim().toLowerCase(),
+      phone: form.phone.trim(),
+      company_name: form.company_name.trim(),
+      company_address: form.company_address.trim(),
+      company_website: form.company_website.trim(),
+      status: form.status,
+      plan: billingPlan,
+      subscription_plan: billingPlan,
+    };
+    if (["individual", "sme", "corporate"].includes(planSlug)) {
+      payload.subscription_status = "active";
+      payload.trial_ends_at = null;
+      payload.is_pro = true;
+    } else {
+      payload.subscription_status = "inactive";
+      payload.is_pro = false;
+    }
+    return payload;
+  };
 
   const createMutation = useMutation({
     mutationFn: (payload) => paidly.entities.PlatformUser.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('User created');
       onClose();
     },
@@ -78,6 +92,7 @@ export default function UserFormDialog({ open, onClose, user }) {
     mutationFn: ({ id, data }) => paidly.entities.PlatformUser.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('User updated successfully');
       onClose();
     },

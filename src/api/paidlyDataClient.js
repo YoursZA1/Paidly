@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { subscriptionRowToProfilePatch } from '@/lib/subscriptionRowToProfilePatch';
 import {
   getAuditLogsSupabaseAccessForbidden,
   markAuditLogsSupabaseAccessForbidden,
@@ -532,6 +533,21 @@ export async function loadAffiliateSubmissionsForAdmin(orderBy = '-created_date'
   return finalizeAffiliateApplicationsForAdmin(data || []);
 }
 
+/**
+ * When an admin edits `subscriptions`, mirror plan + lifecycle into `profiles` so the member app
+ * (Dashboard, Settings, nav) matches without PayFast. Requires admin JWT + `admin full access profiles` RLS.
+ */
+async function syncProfileFromAdminSubscriptionRow(row) {
+  const nowIso = new Date().toISOString();
+  const mapped = subscriptionRowToProfilePatch(row, nowIso);
+  if (!mapped) return;
+
+  const { error } = await supabase.from("profiles").update(mapped.patch).eq("id", mapped.userId);
+  if (error && import.meta.env?.DEV) {
+    console.warn("[paidlyDataClient] sync profiles from admin subscription:", error.message);
+  }
+}
+
 async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
   if (entityName === 'AuditLog') {
     return listAuditLogs(coerceListLimit(limitOrOpts, 200));
@@ -610,7 +626,11 @@ async function create(entityName, payload) {
   if (entityName === 'AffiliateSubmission' && !data) {
     logAffiliateRowNotVisibleOnce('create');
   }
-  return normalizeEntity(entityName, data);
+  const created = normalizeEntity(entityName, data);
+  if (entityName === "Subscription" && created?.user_id) {
+    await syncProfileFromAdminSubscriptionRow(created);
+  }
+  return created;
 }
 
 async function update(entityName, id, payload) {
@@ -640,6 +660,22 @@ async function update(entityName, id, payload) {
   if (error) throw error;
   if (entityName === 'AffiliateSubmission' && !data) {
     logAffiliateRowNotVisibleOnce('update');
+  }
+
+  if (entityName === "Subscription") {
+    let syncRow = normalizeEntity(entityName, data);
+    if (!syncRow?.user_id && id) {
+      for (const table of tableCandidates) {
+        const { data: reread } = await supabase.from(table).select("*").eq("id", id).maybeSingle();
+        if (reread) {
+          syncRow = normalizeEntity(entityName, reread);
+          break;
+        }
+      }
+    }
+    if (syncRow?.user_id) {
+      await syncProfileFromAdminSubscriptionRow({ ...syncRow, ...toUpdate });
+    }
   }
 
   // Keep canonical affiliate profile in sync so /dashboard/affiliate and commission webhooks match admin edits.

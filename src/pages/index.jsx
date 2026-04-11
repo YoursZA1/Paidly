@@ -23,6 +23,7 @@ const Clients = lazy(() => import("./Clients"));
 const Invoices = lazy(() => import("./Invoices"));
 const InvoicePDF = lazy(() => import("./InvoicePDF"));
 const Settings = lazy(() => import("./Settings"));
+const BillingAndInvoices = lazy(() => import("./BillingAndInvoices"));
 const Notes = lazy(() => import("./Notes"));
 const Services = lazy(() => import("./Services"));
 const ViewInvoice = lazy(() => import("./ViewInvoice"));
@@ -129,6 +130,8 @@ const MAIN_ROUTES = [
     { path: "/clients", element: <RequireAuth><Clients /></RequireAuth> },
     { path: "/Settings", element: <RequireAuth><Settings /></RequireAuth> },
     { path: "/settings", element: <RequireAuth><Settings /></RequireAuth> },
+    { path: "/BillingAndInvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
+    { path: "/billingandinvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
     { path: "/Notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/Services", element: <RequireAuth><Services /></RequireAuth> },

@@ -11,7 +11,7 @@
 
 const FREEISH = new Set(["free", "starter", "trial", "none", ""]);
 
-function slugFromProfile(profile) {
+export function slugFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
   const raw =
     profile.plan ??
@@ -89,4 +89,101 @@ export function hasActivePaidSubscription(profile) {
 export async function fetchUserProfile(supabase, userId) {
   if (!supabase || !userId) return { data: null, error: new Error("missing supabase or userId") };
   return supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+}
+
+/**
+ * Canonical Paidly product package for admin subscriptions UI, PayFast tiers, and pricing cards.
+ * Maps profile slugs (and legacy names) to `individual` | `sme` | `corporate`.
+ */
+export function normalizePaidPackageKey(planOrProfile) {
+  const raw =
+    typeof planOrProfile === "object" && planOrProfile
+      ? slugFromProfile(planOrProfile)
+      : String(planOrProfile ?? "").trim().toLowerCase();
+  if (
+    ["individual", "starter", "free", "basic", "trial", "none", ""].includes(raw)
+  ) {
+    return "individual";
+  }
+  if (["sme", "professional", "business"].includes(raw)) return "sme";
+  if (["corporate", "enterprise", "pro"].includes(raw)) return "corporate";
+  return "individual";
+}
+
+const PACKAGE_LABELS = {
+  individual: "Individual",
+  sme: "SME",
+  corporate: "Corporate",
+};
+
+export function getPackageDisplayName(packageKey) {
+  return PACKAGE_LABELS[packageKey] || "Individual";
+}
+
+/**
+ * Prefer the row PayFast / the app should treat as “current” when multiple `subscriptions` rows exist per user.
+ */
+export function pickPreferredSubscriptionRow(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const score = (s) => {
+    const x = String(s?.status || "").toLowerCase();
+    if (x === "active") return 5;
+    if (x === "past_due") return 4;
+    if (x === "inactive") return 2;
+    if (x === "canceled" || x === "cancelled") return 1;
+    if (x === "none" || x === "") return 0;
+    return 3;
+  };
+  return [...rows].sort((a, b) => {
+    const d = score(b) - score(a);
+    if (d !== 0) return d;
+    const tb = new Date(b.created_at || b.created_date || 0).getTime();
+    const ta = new Date(a.created_at || a.created_date || 0).getTime();
+    return tb - ta;
+  })[0];
+}
+
+/**
+ * Dashboard / settings copy aligned with `profiles.plan`, `profiles.subscription_plan`, `profiles.subscription_status`.
+ */
+export function describeSubscriptionState(profile) {
+  if (!profile || typeof profile !== "object") {
+    return {
+      packageKey: "individual",
+      packageLabel: "Individual",
+      statusLabel: "—",
+      rawSlug: "",
+      subscriptionStatus: "",
+    };
+  }
+  const raw = slugFromProfile(profile);
+  const st = String(profile.subscription_status || "").toLowerCase() || "inactive";
+  const packageKey = normalizePaidPackageKey(profile);
+  let packageLabel = getPackageDisplayName(packageKey);
+  if (raw === "free" && st !== "active" && st !== "trial") {
+    packageLabel = "Free";
+  }
+
+  let statusLabel = "Inactive";
+  if (st === "trial") {
+    statusLabel = isOnTrialSubscription(profile) ? "Trial" : "Trial ended";
+  } else if (st === "active") {
+    statusLabel = hasActivePaidSubscription(profile) ? "Paid · Active" : "Active";
+  } else if (st === "expired") {
+    statusLabel = "Expired";
+  } else if (st === "past_due") {
+    statusLabel = "Past due";
+  } else if (st === "cancelled" || st === "canceled") {
+    statusLabel = "Cancelled";
+  } else if (st === "inactive") {
+    statusLabel = "No active subscription";
+  }
+
+  return {
+    packageKey,
+    packageLabel,
+    statusLabel,
+    rawSlug: raw,
+    subscriptionStatus: st,
+  };
 }
