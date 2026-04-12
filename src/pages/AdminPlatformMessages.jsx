@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, isToday } from 'date-fns';
 import { motion } from 'framer-motion';
-import { MessageCircle, Plus, Search, Send, User, ArrowLeft } from 'lucide-react';
+import {
+  MessageCircle,
+  Plus,
+  Search,
+  Send,
+  User,
+  ArrowLeft,
+  LayoutTemplate,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
@@ -19,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -96,6 +105,73 @@ function toastAfterEmailDelivery(d) {
   });
 }
 
+function presetBodyPreview(body, max = 96) {
+  const line = String(body || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (line.length <= max) return line;
+  return `${line.slice(0, max)}…`;
+}
+
+/**
+ * @param {object} props
+ * @param {boolean} props.open
+ * @param {(open: boolean) => void} props.onOpenChange
+ * @param {Array<{ id: string, label: string, subject: string, body: string }>} props.presets
+ * @param {(preset: { id: string, label: string, subject: string, body: string } | null) => void} props.onSelect
+ */
+function AdminStarterTemplatesDialog({ open, onOpenChange, presets, onSelect }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[min(90dvh,720px)] flex flex-col gap-0 p-0 overflow-hidden sm:max-w-lg">
+        <DialogHeader className="px-6 pt-6 pb-3 shrink-0 text-left">
+          <DialogTitle className="flex items-center gap-2">
+            <LayoutTemplate className="h-5 w-5 text-primary" aria-hidden />
+            Starter templates
+          </DialogTitle>
+          <DialogDescription>
+            South African English starters for waitlist, confirmations, and updates. Edit before sending;
+            login links use this site&apos;s origin.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="min-h-0 flex-1 max-h-[min(52vh,480px)] border-y border-border">
+          <div className="space-y-2 p-4 pr-5">
+            <button
+              type="button"
+              onClick={() => onSelect(null)}
+              className="w-full rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="font-medium text-foreground">Write from scratch</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Keep your current subject and message; no template applied
+              </span>
+            </button>
+            {presets.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onSelect(p)}
+                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="font-medium text-foreground">{p.label}</span>
+                <span className="mt-1 block text-xs font-medium text-muted-foreground">{p.subject}</span>
+                <span className="mt-1.5 block text-xs leading-snug text-muted-foreground line-clamp-2">
+                  {presetBodyPreview(p.body)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+        <DialogFooter className="shrink-0 border-t border-border bg-muted/10 px-6 py-4 sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminPlatformMessages() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useCurrentUser();
@@ -117,6 +193,10 @@ export default function AdminPlatformMessages() {
   const [replyTemplateId, setReplyTemplateId] = useState('');
   const [replySubject, setReplySubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [replyBody, setReplyBody] = useState('');
+  const [templatePickerTarget, setTemplatePickerTarget] = useState(
+    /** @type {null | 'reply' | 'new'} */ (null)
+  );
+  const threadEndRef = useRef(null);
 
   const {
     data: platformUsers = [],
@@ -270,7 +350,34 @@ export default function AdminPlatformMessages() {
     [threadMessages]
   );
 
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sortedThread.length, selectedRecipientId]);
+
   const selectedUser = selectedRecipientId ? userMap.get(selectedRecipientId) : null;
+  const replyPresetLabel = messagePresets.find((p) => p.id === replyTemplateId)?.label;
+  const newPresetLabel = messagePresets.find((p) => p.id === newTemplateId)?.label;
+
+  const applyTemplateSelection = (preset) => {
+    const target = templatePickerTarget;
+    if (!target) return;
+    if (!preset) {
+      if (target === 'reply') setReplyTemplateId('');
+      else setNewTemplateId('');
+      setTemplatePickerTarget(null);
+      return;
+    }
+    if (target === 'reply') {
+      setReplyTemplateId(preset.id);
+      setReplySubject(preset.subject);
+      setReplyBody(preset.body);
+    } else {
+      setNewTemplateId(preset.id);
+      setNewSubject(preset.subject);
+      setNewBody(preset.body);
+    }
+    setTemplatePickerTarget(null);
+  };
 
   const loadError = convError?.message || threadError?.message;
 
@@ -291,25 +398,32 @@ export default function AdminPlatformMessages() {
         <PlatformUsersLoadErrorHint message={usersErr?.message} />
       ) : null}
 
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => setComposerOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New message
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] gap-0 min-w-0 lg:gap-px lg:rounded-xl lg:border lg:border-border lg:bg-border lg:shadow-sm overflow-hidden min-h-[min(85dvh,820px)]">
         <motion.div
           initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
-          className={cn(selectedRecipientId ? 'hidden lg:block' : '')}
+          className={cn(
+            'min-h-0 bg-card lg:rounded-none',
+            selectedRecipientId ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'
+          )}
         >
-          <Card className="border border-border shadow-sm">
-            <CardHeader className="border-b border-border space-y-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MessageCircle className="h-5 w-5" />
-                Conversations
-              </CardTitle>
+          <Card className="border-0 shadow-none rounded-none flex flex-col min-h-0 flex-1">
+            <CardHeader className="border-b border-border space-y-3 shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg mb-0">
+                  <MessageCircle className="h-5 w-5 shrink-0" />
+                  Inbox
+                </CardTitle>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setComposerOpen(true)}
+                  className="gap-1.5 shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                  Compose
+                </Button>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -321,7 +435,7 @@ export default function AdminPlatformMessages() {
                 />
               </div>
             </CardHeader>
-            <CardContent className="p-2 pt-4">
+            <CardContent className="p-2 pt-3 flex-1 min-h-0 flex flex-col">
               {convLoading ? (
                 <div className="space-y-2 p-2">
                   <Skeleton className="h-16 w-full" />
@@ -331,10 +445,10 @@ export default function AdminPlatformMessages() {
                 <div className="text-center py-12 text-muted-foreground">
                   <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
                   <p>No conversations yet</p>
-                  <p className="text-sm mt-1">Use New message to reach a user.</p>
+                  <p className="text-sm mt-1">Use Compose to message a user.</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[min(70vh,560px)] pr-2">
+                <ScrollArea className="flex-1 min-h-[200px] lg:min-h-0 pr-2">
                   <div className="space-y-2">
                     {filteredConversations.map((c) => {
                       const u = userMap.get(c.recipient_id);
@@ -392,41 +506,41 @@ export default function AdminPlatformMessages() {
           initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
           className={cn(
-            'lg:col-span-2',
-            !selectedRecipientId ? 'hidden lg:block' : ''
+            'min-h-0 bg-card flex flex-col lg:rounded-none',
+            !selectedRecipientId ? 'hidden lg:flex' : 'flex flex-col flex-1 min-h-[50dvh] lg:min-h-0'
           )}
         >
-          <Card
-            className={cn(
-              'border border-border shadow-sm flex flex-col min-h-0 overflow-hidden',
-              selectedRecipientId
-                ? 'h-[min(70vh,calc(100dvh-10rem))] lg:h-[70vh]'
-                : 'min-h-[240px] lg:h-[70vh]'
-            )}
-          >
+          <Card className="border-0 shadow-none rounded-none flex flex-col flex-1 min-h-0 overflow-hidden">
             {selectedRecipientId ? (
               <>
-                <div className="border-b border-border p-3 sm:p-4 flex items-center gap-3">
+                <div className="border-b border-border px-3 py-3 sm:px-5 sm:py-4 flex items-start gap-3 shrink-0 bg-card">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="lg:hidden"
+                    className="lg:hidden shrink-0 mt-0.5"
                     onClick={() => setSelectedRecipientId(null)}
-                    aria-label="Back to conversations"
+                    aria-label="Back to inbox"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
                   <div className="min-w-0 flex-1">
-                    <h2 className="font-semibold text-lg truncate">{platformUserLabel(selectedUser)}</h2>
-                    <p className="text-sm text-muted-foreground truncate">
+                    <h2 className="font-semibold text-base sm:text-lg leading-tight truncate">
+                      {platformUserLabel(selectedUser)}
+                    </h2>
+                    <p className="text-sm text-muted-foreground truncate mt-0.5">
                       {platformUserEmail(selectedUser) || selectedRecipientId}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2 hidden sm:block">
+                      {sortedThread.length}{' '}
+                      {sortedThread.length === 1 ? 'message' : 'messages'} in this thread
                     </p>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="shrink-0"
                     onClick={() => refetchThread()}
                     disabled={threadLoading || threadFetching}
                   >
@@ -434,122 +548,162 @@ export default function AdminPlatformMessages() {
                   </Button>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 bg-muted/20">
-                  {threadLoading && sortedThread.length === 0 ? (
-                    <Skeleton className="h-24 w-full max-w-md ml-auto" />
-                  ) : (
-                    sortedThread.map((m) => {
-                      const mine =
-                        m.sender_id === currentUser?.id ||
-                        m.sender_id === currentUser?.supabase_id;
-                      const at = m.created_at ? new Date(m.created_at) : null;
-                      return (
-                        <div
-                          key={m.id}
-                          className={cn('flex', mine ? 'justify-end' : 'justify-start')}
-                        >
-                          <div
+                <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
+                  <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
+                    {threadLoading && sortedThread.length === 0 ? (
+                      <>
+                        <Skeleton className="h-32 w-full rounded-xl" />
+                        <Skeleton className="h-28 w-full rounded-xl" />
+                      </>
+                    ) : sortedThread.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        No messages yet. Send the first one below.
+                      </p>
+                    ) : (
+                      sortedThread.map((m) => {
+                        const mine =
+                          m.sender_id === currentUser?.id ||
+                          m.sender_id === currentUser?.supabase_id;
+                        const at = m.created_at ? new Date(m.created_at) : null;
+                        const peerLabel = platformUserLabel(selectedUser);
+                        const peerInitial = peerLabel.charAt(0).toUpperCase() || 'U';
+                        return (
+                          <article
+                            key={m.id}
                             className={cn(
-                              'max-w-[88%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm',
-                              mine
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-card border border-border'
+                              'rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden',
+                              mine ? 'border-primary/25 ring-1 ring-primary/10' : 'border-border'
                             )}
                           >
-                            {!mine ? (
-                              <p className="text-xs text-muted-foreground mb-1">Team</p>
-                            ) : null}
-                            <p className="text-xs opacity-80 mb-1">{m.subject || 'Message'}</p>
-                            <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                            {at ? (
-                              <p
-                                className={cn(
-                                  'text-[10px] mt-2 opacity-70',
-                                  mine ? 'text-primary-foreground/80' : 'text-muted-foreground'
-                                )}
-                              >
-                                {format(at, 'MMM d, yyyy HH:mm')}
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                            <header className="flex items-start justify-between gap-3 border-b border-border/80 bg-muted/20 px-4 py-2.5">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  className={cn(
+                                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                                    mine ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                                  )}
+                                  aria-hidden
+                                >
+                                  {mine ? 'You' : peerInitial}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold leading-tight truncate">
+                                    {mine ? 'You (Paidly team)' : peerLabel}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {mine
+                                      ? `To ${platformUserEmail(selectedUser) || 'user'}`
+                                      : 'Message in this thread'}
+                                  </p>
+                                </div>
+                              </div>
+                              {at ? (
+                                <time
+                                  dateTime={at.toISOString()}
+                                  className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums pt-0.5"
+                                >
+                                  {format(at, 'EEE, MMM d, yyyy · HH:mm')}
+                                </time>
+                              ) : null}
+                            </header>
+                            <div className="px-4 py-3 sm:py-4">
+                              <h3 className="text-sm sm:text-base font-medium text-foreground mb-2">
+                                {m.subject?.trim() || 'Message'}
+                              </h3>
+                              <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
+                                {m.content}
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                    <div ref={threadEndRef} className="h-px shrink-0" aria-hidden />
+                  </div>
                 </div>
 
-                <div className="border-t border-border p-3 sm:p-4 space-y-2 bg-card">
-                  <div className="space-y-1">
-                    <Label htmlFor="reply-template">Starter template</Label>
-                    <select
-                      id="reply-template"
-                      value={replyTemplateId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setReplyTemplateId(id);
-                        const p = messagePresets.find((x) => x.id === id);
-                        if (p) {
-                          setReplySubject(p.subject);
-                          setReplyBody(p.body);
-                        }
-                      }}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <option value="">None — write your own</option>
-                      {messagePresets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="reply-subject">Subject</Label>
-                    <Input
-                      id="reply-subject"
-                      value={replySubject}
-                      onChange={(e) => setReplySubject(e.target.value)}
-                      placeholder="Subject"
-                      maxLength={300}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="reply-body">Message</Label>
-                    <Textarea
-                      id="reply-body"
-                      value={replyBody}
-                      onChange={(e) => setReplyBody(e.target.value)}
-                      placeholder="Type your update…"
-                      rows={4}
-                      className="resize-y min-h-[96px]"
-                      maxLength={50000}
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      onClick={handleSendReply}
-                      disabled={sendMutation.isPending || usersLoading}
-                      className="gap-2"
-                    >
-                      <Send className="h-4 w-4" />
-                      Send
-                    </Button>
+                <div className="border-t border-border bg-card shrink-0 shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.12)]">
+                  <div className="max-w-3xl mx-auto px-3 py-3 sm:px-6 sm:py-4 space-y-3">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex-1 min-w-[200px] space-y-1">
+                        <Label htmlFor="reply-subject" className="text-xs text-muted-foreground">
+                          Subject
+                        </Label>
+                        <Input
+                          id="reply-subject"
+                          value={replySubject}
+                          onChange={(e) => setReplySubject(e.target.value)}
+                          placeholder="Subject"
+                          maxLength={300}
+                          className="h-9"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0 h-9"
+                        onClick={() => setTemplatePickerTarget('reply')}
+                      >
+                        <LayoutTemplate className="h-4 w-4" />
+                        Templates
+                      </Button>
+                    </div>
+                    {replyPresetLabel ? (
+                      <p className="text-xs text-muted-foreground">
+                        Starter: <span className="text-foreground font-medium">{replyPresetLabel}</span>
+                      </p>
+                    ) : null}
+                    <div className="space-y-1">
+                      <Label htmlFor="reply-body" className="text-xs text-muted-foreground">
+                        Reply
+                      </Label>
+                      <Textarea
+                        id="reply-body"
+                        value={replyBody}
+                        onChange={(e) => setReplyBody(e.target.value)}
+                        placeholder="Type your update…"
+                        rows={5}
+                        className="resize-y min-h-[120px] text-sm"
+                        maxLength={50000}
+                      />
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="button"
+                        onClick={handleSendReply}
+                        disabled={sendMutation.isPending || usersLoading}
+                        className="gap-2"
+                      >
+                        <Send className="h-4 w-4" />
+                        Send
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
+              <div className="flex flex-col items-center justify-center flex-1 min-h-[280px] text-muted-foreground p-8">
                 <MessageCircle className="w-16 h-16 mb-4 opacity-40" />
                 <p className="text-lg font-medium text-foreground">Select a conversation</p>
                 <p className="text-sm text-center max-w-sm mt-1">
-                  Pick someone you have messaged, or start with New message. Platform users load from the same directory as the Users page.
+                  Choose a thread from the inbox, or use Compose to message someone new. Users match the
+                  platform directory on the Users page.
                 </p>
               </div>
             )}
           </Card>
         </motion.div>
       </div>
+
+      <AdminStarterTemplatesDialog
+        open={templatePickerTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setTemplatePickerTarget(null);
+        }}
+        presets={messagePresets}
+        onSelect={applyTemplateSelection}
+      />
 
       <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
@@ -589,34 +743,31 @@ export default function AdminPlatformMessages() {
                 )}
               </div>
             </ScrollArea>
-            <div className="space-y-1">
-              <Label htmlFor="new-template">Starter template</Label>
-              <select
-                id="new-template"
-                value={newTemplateId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setNewTemplateId(id);
-                  const p = messagePresets.find((x) => x.id === id);
-                  if (p) {
-                    setNewSubject(p.subject);
-                    setNewBody(p.body);
-                  }
-                }}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="">None — write your own</option>
-                {messagePresets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                South African English starters for waitlist conversion, email confirmation, and updates.
-                Login links use this site&apos;s origin — edit before sending if needed.
-              </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex-1 min-w-[180px] space-y-1">
+                <Label className="text-xs text-muted-foreground">Starter</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2 h-9"
+                  onClick={() => setTemplatePickerTarget('new')}
+                >
+                  <LayoutTemplate className="h-4 w-4 shrink-0" />
+                  {newPresetLabel || 'Browse templates…'}
+                </Button>
+              </div>
             </div>
+            {newPresetLabel ? (
+              <p className="text-xs text-muted-foreground -mt-1">
+                Using starter &quot;{newPresetLabel}&quot; — edit below before sending.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground -mt-1">
+                Optional: open templates for SA English starters (waitlist, email confirm, updates). Links use
+                this site&apos;s origin.
+              </p>
+            )}
             <div className="space-y-1">
               <Label htmlFor="new-subject">Subject</Label>
               <Input
