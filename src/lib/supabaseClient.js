@@ -65,7 +65,11 @@ const authPersistStorage = wrapStorageWithCorruptionGuard(authPersistStorageRaw)
 export const supabase = createClient(effectiveUrl, effectiveKey, {
   auth: {
     persistSession: true,
-    /** GoTrue refreshes access tokens in the foreground; AuthContext also calls refreshSession on visibility/focus/bfcache. */
+    /**
+     * GoTrue rotates JWTs on a timer; AuthContext adds:
+     * - proactive refresh before expiry (`supabaseAuthRefresh` + `msUntilProactiveRefresh`)
+     * - tab visibility / focus / bfcache resync with fatal refresh-token handling
+     */
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: authPersistStorage,

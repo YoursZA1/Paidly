@@ -17,6 +17,10 @@ import {
   reportSupabaseGetSessionFailure,
   reportSupabaseGetSessionRecovered,
 } from "@/lib/authSessionReconnectToast";
+import {
+  msUntilProactiveRefresh,
+  refreshSupabaseSessionWithRecovery,
+} from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
 import { DEFAULT_LOADING_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 
@@ -125,6 +129,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
+  /** Email for resend when login blocked verification before `user` is hydrated. */
+  const [verifyGateEmail, setVerifyGateEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState("");
   const [error, setError] = useState("");
@@ -284,6 +290,41 @@ export function AuthProvider({ children }) {
     },
     []
   );
+
+  /**
+   * Proactive JWT refresh before expiry (tab timers can lag after sleep / backgrounding).
+   * Works with GoTrue autoRefreshToken; avoids surprise 401 bursts on API calls.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const exp = session?.expiresAt;
+    const ms = msUntilProactiveRefresh(exp);
+    if (ms == null) return undefined;
+    const id = window.setTimeout(() => {
+      void (async () => {
+        const { data: snap } = await supabase.auth.getSession();
+        if (!snap?.session?.refresh_token) return;
+
+        const r = await refreshSupabaseSessionWithRecovery();
+        if (r.fatal) {
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {
+            /* ignore */
+          }
+          setSession(null);
+          setUser(null);
+          setError("");
+          redirectToLoginIfProtectedPath();
+          return;
+        }
+        if (r.ok) {
+          scheduleRefreshUser();
+        }
+      })();
+    }, ms);
+    return () => clearTimeout(id);
+  }, [session?.expiresAt, session?.accessToken, scheduleRefreshUser]);
 
   /** Tab focus / visibility: refresh React session from storage only — never log out on flaky reads. */
   const refreshSession = useCallback(async () => {
@@ -447,13 +488,25 @@ export function AuthProvider({ children }) {
       void (async () => {
         const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
         try {
-          const { error: refErr } = await supabase.auth.refreshSession();
-          if (refErr && import.meta.env.DEV) {
-            console.warn("[Auth] Tab resync refreshSession:", refErr.message || refErr);
+          const recovered = await refreshSupabaseSessionWithRecovery();
+          if (recovered.fatal) {
+            try {
+              await supabase.auth.signOut({ scope: "local" });
+            } catch {
+              /* ignore */
+            }
+            setSession(null);
+            setUser(null);
+            setError("");
+            redirectToLoginIfProtectedPath();
+            return;
+          }
+          if (recovered.error && import.meta.env.DEV) {
+            console.warn("[Auth] Tab resync refresh:", recovered.error?.message || recovered.error);
           }
         } catch (e) {
           if (import.meta.env.DEV) {
-            console.warn("[Auth] Tab resync refreshSession threw:", e?.message || e);
+            console.warn("[Auth] Tab resync refresh threw:", e?.message || e);
           }
         }
         await refreshSession();
@@ -618,6 +671,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async ({ email, password, role }) => {
     setError("");
+    setVerifyGateEmail("");
     const normalizedEmail = (email || "").trim().toLowerCase();
     const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
     if (session?.user && session.user.email_confirmed_at == null) {
@@ -629,6 +683,7 @@ export function AuthProvider({ children }) {
       }
       setSession(null);
       setUser(null);
+      setVerifyGateEmail(normalizedEmail);
       setShowVerifyDialog(true);
       throw new Error("Email not verified. Please verify your email before signing in.");
     }
@@ -698,6 +753,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setError("");
       setShowVerifyDialog(false);
+      setVerifyGateEmail("");
       setResendLoading(false);
       setResendSuccess("");
 
@@ -774,8 +830,10 @@ export function AuthProvider({ children }) {
     setResendLoading(true);
     setResendSuccess("");
     try {
-      await SupabaseAuthService.signInWithMagicLink(email);
-      setResendSuccess("Confirmation email resent! Please check your inbox.");
+      await SupabaseAuthService.resendSignupEmail((email || "").trim().toLowerCase());
+      setResendSuccess(
+        "If an account exists for this email, we sent a confirmation message. Please check your inbox."
+      );
     } catch (e) {
       setResendSuccess(e?.message || "Failed to resend confirmation email.");
     } finally {
@@ -829,28 +887,38 @@ export function AuthProvider({ children }) {
   return (
     <>
       <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-      {/* Email not verified dialog (global) */}
-      {showVerifyDialog && user && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
-            <h2 className="text-xl font-bold mb-2">Email not verified</h2>
-            <p className="mb-4">
-              Your email address has not been confirmed. Please check your inbox and click the confirmation link.
+      {/* Email not verified dialog (global) — works when user was cleared after blocking unverified sign-in */}
+      {showVerifyDialog && (user?.email || verifyGateEmail) ? (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40 backdrop-blur-[2px] px-4">
+          <div className="bg-card text-card-foreground rounded-2xl border border-border shadow-xl p-8 max-w-sm w-full text-center">
+            <h2 className="text-xl font-semibold mb-2">Confirm your email</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              We need a verified email before you can use Paidly. Check your inbox for the confirmation link,
+              or resend the message below.
             </p>
             <Button
-              onClick={() => handleResendConfirmation(user.email)}
+              onClick={() => handleResendConfirmation(user?.email || verifyGateEmail)}
               disabled={resendLoading}
-              className="w-full mb-2"
+              className="w-full mb-2 rounded-xl"
             >
-              {resendLoading ? "Resending..." : "Resend confirmation email"}
+              {resendLoading ? "Sending…" : "Resend confirmation email"}
             </Button>
-            {resendSuccess && <div className="text-green-600 text-sm mt-2">{resendSuccess}</div>}
-            <Button variant="outline" onClick={() => setShowVerifyDialog(false)} className="w-full mt-2">
+            {resendSuccess ? (
+              <div className="text-sm text-primary mt-2">{resendSuccess}</div>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVerifyGateEmail("");
+                setShowVerifyDialog(false);
+              }}
+              className="w-full mt-2 rounded-xl"
+            >
               Close
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

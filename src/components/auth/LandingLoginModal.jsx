@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import {
@@ -151,7 +152,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
               <CardTitle className="text-xl sm:text-2xl font-semibold text-zinc-50 font-display">
                 Welcome back
               </CardTitle>
-              <p className="text-sm text-zinc-400">Sign in to manage your business.</p>
+              <p className="text-sm text-zinc-400">Sign in securely to your Paidly workspace.</p>
             </CardHeader>
             <CardContent className="px-4 sm:px-6 pb-6">
               <form onSubmit={handleSubmit} className="space-y-5">
@@ -163,7 +164,10 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
                       id="landing-login-email"
+                      name="email"
                       type="email"
+                      autoComplete="username"
+                      inputMode="email"
                       placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -181,7 +185,9 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
                       id="landing-login-password"
+                      name="password"
                       type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -200,26 +206,44 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                 </div>
 
                 {error && (
-                  <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-xl">
+                  <div
+                    className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-xl"
+                    role="alert"
+                  >
                     {error}
                   </div>
                 )}
 
                 <Button
                   type="submit"
-                  className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation"
+                  className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation font-semibold"
                   disabled={isLoading}
                   aria-busy={isLoading}
                 >
                   {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="size-4 animate-spin" />
-                      Signing in...
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                      Signing you in…
                     </span>
                   ) : (
-                    "Sign In"
+                    "Sign in"
                   )}
                 </Button>
+
+                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                  <ShieldCheck className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
+                  <span>
+                    Session is kept in this browser tab only and refreshes automatically while you work.
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 py-1">
+                  <Separator className="flex-1 bg-zinc-700/80" />
+                  <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                    Or continue with
+                  </span>
+                  <Separator className="flex-1 bg-zinc-700/80" />
+                </div>
 
                 <AuthSocialButtons mode="signin" />
 
