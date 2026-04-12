@@ -10,9 +10,12 @@ import {
   User,
   ArrowLeft,
   LayoutTemplate,
+  ClipboardList,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import {
   fetchAdminPlatformUserMessages,
@@ -34,6 +37,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint';
 import {
   buildAdminPlatformMessagePresets,
@@ -53,6 +57,137 @@ function platformUserLabel(u) {
 /** Display only: merged admin API uses Auth email first; profile fallback when using profiles-only list. */
 function platformUserEmail(u) {
   return String(u?.email || u?.profile?.email || '').trim();
+}
+
+function normalizeEmailKey(email) {
+  return String(email || '')
+    .trim()
+    .toLowerCase();
+}
+
+/** @param {Array<{ email?: string }>} entries */
+function buildWaitlistByEmail(entries) {
+  const m = new Map();
+  for (const e of entries || []) {
+    const k = normalizeEmailKey(e?.email);
+    if (k) m.set(k, e);
+  }
+  return m;
+}
+
+/** @param {Record<string, unknown> | null | undefined} entry */
+function buildWaitlistClipboardSummary(entry) {
+  if (!entry) return '';
+  const email = String(entry.email || '').trim();
+  const name = String(entry.name || '').trim() || '—';
+  const joined = entry.created_date
+    ? format(new Date(entry.created_date), 'MMM d, yyyy')
+    : '—';
+  const source = String(entry.source || '').trim() || '—';
+  const converted = entry.converted ? 'yes' : 'no';
+  return `Waitlist (internal): ${name} <${email}> | Joined: ${joined} | Source: ${source} | Marked converted: ${converted}`;
+}
+
+/** If waitlist has a name, replace leading `Hi there,` with `Hi {First},` in starter bodies. */
+function personalizeTemplateBodyFromWaitlist(body, waitlistEntry) {
+  const raw = String(body || '');
+  const full = String(waitlistEntry?.name || '').trim();
+  if (!full) return raw;
+  const first = full.split(/\s+/)[0];
+  if (!first) return raw;
+  return raw.replace(/^Hi there,/m, `Hi ${first},`);
+}
+
+/**
+ * @param {object} props
+ * @param {Record<string, unknown> | null | undefined} props.entry
+ * @param {boolean} props.loading
+ * @param {string} [props.errorMessage]
+ * @param {string} [props.className]
+ */
+function WaitlistContextBlock({ entry, loading, errorMessage, className }) {
+  if (loading) {
+    return <Skeleton className={cn('h-16 w-full rounded-lg', className)} />;
+  }
+  if (errorMessage) {
+    return (
+      <p className={cn('text-xs text-muted-foreground', className)} role="status">
+        Could not load waitlist ({errorMessage})
+      </p>
+    );
+  }
+  if (!entry) {
+    return (
+      <div
+        className={cn(
+          'rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-2 text-xs text-muted-foreground',
+          className
+        )}
+      >
+        No waitlist row matches this signup email — they may have registered without joining the waitlist.
+      </div>
+    );
+  }
+
+  const joined = entry.created_date
+    ? format(new Date(entry.created_date), 'MMM d, yyyy')
+    : '—';
+
+  const handleCopy = async () => {
+    const text = buildWaitlistClipboardSummary(entry);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Waitlist summary copied');
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
+
+  return (
+    <div className={cn('rounded-lg border border-border bg-muted/15 px-3 py-2.5', className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <ClipboardList className="h-4 w-4 text-primary shrink-0" aria-hidden />
+          <span className="text-sm font-medium">Waitlist</span>
+          {entry.converted ? (
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              Converted
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              Not converted
+            </Badge>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs shrink-0"
+          onClick={handleCopy}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Copy summary
+        </Button>
+      </div>
+      <dl className="mt-2 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
+        <div className="min-w-0 sm:col-span-1">
+          <dt className="font-medium text-foreground/85">Name on waitlist</dt>
+          <dd className="truncate">{String(entry.name || '').trim() || '—'}</dd>
+        </div>
+        <div className="min-w-0 sm:col-span-1">
+          <dt className="font-medium text-foreground/85">Signed up</dt>
+          <dd>{joined}</dd>
+        </div>
+        {String(entry.source || '').trim() ? (
+          <div className="min-w-0 sm:col-span-2">
+            <dt className="font-medium text-foreground/85">Source</dt>
+            <dd className="break-words">{String(entry.source).trim()}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </div>
+  );
 }
 
 /** Toasts from server `email_delivery` (signup email via Auth + Resend). */
@@ -218,6 +353,19 @@ export default function AdminPlatformMessages() {
   }, [platformUsers]);
 
   const {
+    data: waitlistEntries = [],
+    isLoading: waitlistLoading,
+    isError: waitlistIsError,
+    error: waitlistQueryError,
+  } = useQuery({
+    queryKey: ['waitlist', 'admin-platform-messages'],
+    queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 2500),
+    staleTime: 60_000,
+  });
+
+  const waitlistByEmail = useMemo(() => buildWaitlistByEmail(waitlistEntries), [waitlistEntries]);
+
+  const {
     data: convPayload,
     isLoading: convLoading,
     error: convError,
@@ -355,6 +503,21 @@ export default function AdminPlatformMessages() {
   }, [sortedThread.length, selectedRecipientId]);
 
   const selectedUser = selectedRecipientId ? userMap.get(selectedRecipientId) : null;
+  const selectedSignupEmailKey = normalizeEmailKey(platformUserEmail(selectedUser));
+  const selectedWaitlistEntry = selectedSignupEmailKey
+    ? waitlistByEmail.get(selectedSignupEmailKey)
+    : null;
+
+  const composePickUser = newRecipientId ? userMap.get(newRecipientId) : null;
+  const composeSignupEmailKey = normalizeEmailKey(platformUserEmail(composePickUser));
+  const composeWaitlistEntry = composeSignupEmailKey
+    ? waitlistByEmail.get(composeSignupEmailKey)
+    : null;
+
+  const waitlistErrorMessage = waitlistIsError
+    ? String(waitlistQueryError?.message || 'Failed to load')
+    : '';
+
   const replyPresetLabel = messagePresets.find((p) => p.id === replyTemplateId)?.label;
   const newPresetLabel = messagePresets.find((p) => p.id === newTemplateId)?.label;
 
@@ -370,11 +533,11 @@ export default function AdminPlatformMessages() {
     if (target === 'reply') {
       setReplyTemplateId(preset.id);
       setReplySubject(preset.subject);
-      setReplyBody(preset.body);
+      setReplyBody(personalizeTemplateBodyFromWaitlist(preset.body, selectedWaitlistEntry));
     } else {
       setNewTemplateId(preset.id);
       setNewSubject(preset.subject);
-      setNewBody(preset.body);
+      setNewBody(personalizeTemplateBodyFromWaitlist(preset.body, composeWaitlistEntry));
     }
     setTemplatePickerTarget(null);
   };
@@ -546,6 +709,17 @@ export default function AdminPlatformMessages() {
                   >
                     Refresh
                   </Button>
+                </div>
+
+                <div className="border-b border-border px-3 py-2.5 sm:px-5 bg-muted/10 shrink-0 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    Waitlist (matched by signup email)
+                  </p>
+                  <WaitlistContextBlock
+                    entry={selectedWaitlistEntry}
+                    loading={waitlistLoading}
+                    errorMessage={waitlistErrorMessage || undefined}
+                  />
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
@@ -743,6 +917,18 @@ export default function AdminPlatformMessages() {
                 )}
               </div>
             </ScrollArea>
+            {newRecipientId ? (
+              <div className="space-y-1.5 rounded-lg border border-border bg-muted/10 p-3">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Waitlist (signup email)
+                </p>
+                <WaitlistContextBlock
+                  entry={composeWaitlistEntry}
+                  loading={waitlistLoading}
+                  errorMessage={waitlistErrorMessage || undefined}
+                />
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex-1 min-w-[180px] space-y-1">
                 <Label className="text-xs text-muted-foreground">Starter</Label>
