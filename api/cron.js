@@ -145,6 +145,184 @@ async function runSubscriptionDunningBatch() {
   };
 }
 
+function toIsoDate(d) {
+  if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  if (!Number.isFinite(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + Number(days || 0));
+  return d;
+}
+
+function subscriptionInvoiceProjectTitle(sub) {
+  const plan = String(sub.plan || sub.current_plan || "Subscription").trim();
+  return `Subscription renewal (${plan})`;
+}
+
+function subscriptionInvoiceDescription(sub) {
+  const plan = String(sub.plan || sub.current_plan || "subscription").trim();
+  const cycle = String(sub.billing_cycle || "monthly").trim();
+  const nextBilling = sub.next_billing_date
+    ? new Date(sub.next_billing_date).toISOString().slice(0, 10)
+    : "N/A";
+  return `Auto-generated ${cycle} ${plan} subscription invoice. Next billing date: ${nextBilling}.`;
+}
+
+function buildSubscriptionInvoiceNumber(sub, now = new Date()) {
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  const suffix = String(sub.id || "").replace(/-/g, "").slice(-6).toUpperCase() || "SUB";
+  return `SUB-${y}${m}${d}-${suffix}`;
+}
+
+async function fetchPrimaryOrgByUserId(supabase, userIds) {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean).map((x) => String(x))));
+  if (!ids.length) return new Map();
+  const { data, error } = await supabase
+    .from("memberships")
+    .select("user_id, org_id, created_at")
+    .in("user_id", ids)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  const out = new Map();
+  for (const row of data || []) {
+    const uid = String(row.user_id || "");
+    if (!uid || out.has(uid) || !row.org_id) continue;
+    out.set(uid, row.org_id);
+  }
+  return out;
+}
+
+async function runSubscriptionInvoicePrebillingBatch() {
+  const supabase = getSupabaseAdmin();
+  const now = new Date();
+  const todayIso = toIsoDate(now);
+  const leadDays = Math.max(
+    1,
+    Number.parseInt(String(process.env.SUBSCRIPTION_INVOICE_LEAD_DAYS || "5"), 10) || 5
+  );
+  const scanDays = Math.max(leadDays + 2, 10);
+  const upperBound = addDays(now, scanDays)?.toISOString();
+  if (!todayIso || !upperBound) {
+    throw new Error("Failed to resolve cron date window");
+  }
+
+  const { data: candidates, error: candidatesErr } = await supabase
+    .from("subscriptions")
+    .select(
+      "id, user_id, user_name, user_email, email, plan, current_plan, status, amount, billing_cycle, next_billing_date"
+    )
+    .in("status", ["active"])
+    .not("next_billing_date", "is", null)
+    .lte("next_billing_date", upperBound)
+    .order("next_billing_date", { ascending: true })
+    .limit(Math.max(50, Number(process.env.SUBSCRIPTION_PREBILL_BATCH_SIZE || 500)));
+  if (candidatesErr) throw candidatesErr;
+
+  const dueSubs = (candidates || []).filter((sub) => {
+    const nextBilling = sub?.next_billing_date ? new Date(sub.next_billing_date) : null;
+    if (!nextBilling || !Number.isFinite(nextBilling.getTime())) return false;
+    const triggerDate = addDays(nextBilling, -leadDays);
+    return toIsoDate(triggerDate) === todayIso;
+  });
+
+  const userIds = dueSubs.map((s) => s.user_id).filter(Boolean);
+  const orgByUserId = await fetchPrimaryOrgByUserId(supabase, userIds);
+
+  let created = 0;
+  let skippedNoOrg = 0;
+  let skippedMissingAmount = 0;
+  let skippedAlreadyExists = 0;
+
+  for (const sub of dueSubs) {
+    const userId = sub.user_id ? String(sub.user_id) : "";
+    const orgId = userId ? orgByUserId.get(userId) : null;
+    if (!orgId) {
+      skippedNoOrg += 1;
+      continue;
+    }
+
+    const amount = Number(sub.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      skippedMissingAmount += 1;
+      continue;
+    }
+
+    const projectTitle = subscriptionInvoiceProjectTitle(sub);
+    const invoiceDate = todayIso;
+    const { data: existing, error: existingErr } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("user_id", userId || null)
+      .eq("invoice_date", invoiceDate)
+      .eq("project_title", projectTitle)
+      .limit(1);
+    if (existingErr) throw existingErr;
+    if ((existing || []).length > 0) {
+      skippedAlreadyExists += 1;
+      continue;
+    }
+
+    const invoiceNumber = buildSubscriptionInvoiceNumber(sub, now);
+    const invoiceRow = {
+      org_id: orgId,
+      user_id: userId || null,
+      created_by: userId || null,
+      client_id: null,
+      invoice_number: invoiceNumber,
+      status: "draft",
+      project_title: projectTitle,
+      project_description: subscriptionInvoiceDescription(sub),
+      invoice_date: invoiceDate,
+      subtotal: amount,
+      tax_rate: 0,
+      tax_amount: 0,
+      total_amount: amount,
+      currency: "ZAR",
+      notes: `Auto-generated ${leadDays} days before subscription billing date.`,
+      owner_email: String(sub.user_email || sub.email || "").trim() || null,
+    };
+
+    const { data: createdInvoice, error: createErr } = await supabase
+      .from("invoices")
+      .insert(invoiceRow)
+      .select("id")
+      .single();
+    if (createErr) throw createErr;
+
+    if (createdInvoice?.id) {
+      const { error: itemErr } = await supabase.from("invoice_items").insert({
+        invoice_id: createdInvoice.id,
+        service_name: projectTitle,
+        description: subscriptionInvoiceDescription(sub),
+        quantity: 1,
+        unit_price: amount,
+        total_price: amount,
+      });
+      if (itemErr) {
+        console.warn("[api/cron] created invoice but failed invoice_items insert", itemErr.message);
+      }
+    }
+    created += 1;
+  }
+
+  return {
+    ran: true,
+    leadDays,
+    scanned: (candidates || []).length,
+    dueToday: dueSubs.length,
+    created,
+    skippedNoOrg,
+    skippedMissingAmount,
+    skippedAlreadyExists,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
@@ -182,6 +360,15 @@ export default async function handler(req, res) {
         ok: true,
         at: new Date().toISOString(),
         path: "subscription-dunning",
+        ...out,
+      });
+    }
+    if (job === "subscription-prebill-invoices") {
+      const out = await runSubscriptionInvoicePrebillingBatch();
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "subscription-prebill-invoices",
         ...out,
       });
     }

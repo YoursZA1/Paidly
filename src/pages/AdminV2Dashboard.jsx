@@ -320,6 +320,19 @@ export default function AdminV2Dashboard() {
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
   const totalPayslips = payslips.length;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const prebillInvoicesToday = invoices.filter((inv) => {
+    const invoiceDateIso = String(
+      inv.invoice_date || inv.created_date || inv.created_at || ""
+    ).slice(0, 10);
+    const title = String(inv.project_title || "").toLowerCase();
+    const notes = String(inv.notes || "").toLowerCase();
+    return (
+      invoiceDateIso === todayIso &&
+      (title.includes("subscription renewal") || notes.includes("auto-generated")) &&
+      notes.includes("before subscription billing date")
+    );
+  }).length;
   const userBehaviorRows = useMemo(() => {
     const usersWithInvoiceCounts = mergeUsersWithInvoiceCounts(users, invoices);
     const subByUserId = new Map();
@@ -449,7 +462,7 @@ export default function AdminV2Dashboard() {
         />
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Quotes (platform)"
           value={totalQuotes}
@@ -461,6 +474,11 @@ export default function AdminV2Dashboard() {
           value={totalPayslips}
           change={`+${Math.min(totalPayslips, 20)}`}
           icon={Banknote}
+        />
+        <StatCard
+          title="Pre-bill invoices (today)"
+          value={prebillInvoicesToday}
+          icon={FileText}
         />
       </div>
 
@@ -490,8 +508,8 @@ export default function AdminV2Dashboard() {
           securitySpike ? 'border-red-500/50 bg-red-500/5' : 'border-border'
         }`}
       >
-        <div className="border-b border-border px-6 py-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="border-b border-border px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <h2 className="inline-flex items-center gap-2 font-semibold">
               {securitySpike ? (
                 <ShieldAlert className="h-4 w-4 text-red-500" />
@@ -519,7 +537,7 @@ export default function AdminV2Dashboard() {
                 : 'No active anomaly spikes detected.'}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 px-6 py-4 text-sm md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 px-4 py-4 text-sm sm:px-6 md:grid-cols-5">
           <div><span className="text-muted-foreground">401</span><p className="font-semibold">{securityEvents?.counts?.status401 ?? '—'}</p></div>
           <div><span className="text-muted-foreground">403</span><p className="font-semibold">{securityEvents?.counts?.status403 ?? '—'}</p></div>
           <div><span className="text-muted-foreground">404</span><p className="font-semibold">{securityEvents?.counts?.status404 ?? '—'}</p></div>
@@ -590,13 +608,45 @@ export default function AdminV2Dashboard() {
       </Dialog>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-6 py-4">
+        <div className="border-b border-border px-4 py-4 sm:px-6">
           <h2 className="font-semibold inline-flex items-center gap-2">
             Recent Subscriptions
             {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-4 sm:hidden">
+          {subscriptions.slice(0, 5).map((sub) => (
+            <article key={sub.id} className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{sub.user_name || 'Unknown'}</p>
+                  <p className="truncate text-xs text-muted-foreground">{sub.user_email || '—'}</p>
+                </div>
+                <StatusBadge status={sub.status} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Plan</p>
+                  <div className="mt-1"><PlanBadge plan={sub.plan || 'none'} /></div>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Amount</p>
+                  <p className="mt-1 font-medium">R {sub.amount}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Date</p>
+                  <p className="mt-1 text-sm">
+                    {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
+                  </p>
+                </div>
+              </div>
+            </article>
+          ))}
+          {subscriptions.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No subscriptions yet</p>
+          ) : null}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
@@ -641,7 +691,7 @@ export default function AdminV2Dashboard() {
       </div>
 
       <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-6 py-4">
+        <div className="border-b border-border px-4 py-4 sm:px-6">
           <h2 className="font-semibold inline-flex items-center gap-2">
             User Behavior
             {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
@@ -650,7 +700,71 @@ export default function AdminV2Dashboard() {
             Per-user activity from invoices, quotes, and payslips (linked by user id), plus plan and billing.
           </p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-4 sm:hidden">
+          {userBehaviorRows.slice(0, 20).map((row) => {
+            const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
+            return (
+              <article key={row.id} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{primary}</p>
+                    {secondary ? (
+                      <p className="truncate text-xs text-muted-foreground">{secondary}</p>
+                    ) : null}
+                  </div>
+                  <StatusBadge status={row.status} />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Company</p>
+                    <p className="mt-1 truncate text-sm">{row.company_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Plan</p>
+                    <div className="mt-1"><PlanBadge plan={row.plan} /></div>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Invoices</p>
+                    <p className="mt-1 text-sm font-medium">{row.invoices_sent}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Quotes</p>
+                    <p className="mt-1 text-sm font-medium">{row.quotes_created}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payslips</p>
+                    <p className="mt-1 text-sm font-medium">{row.payslips_created}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Subscription</p>
+                    <div className="mt-1"><StatusBadge status={row.subscription_status} /></div>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Email confirmation</p>
+                    <div className="mt-1">
+                      {row.email_verified === false ? (
+                        <StatusBadge status="unverified" />
+                      ) : row.email_verified === true ? (
+                        <StatusBadge status="verified" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {userBehaviorRows.length > 20 ? (
+            <p className="text-xs text-muted-foreground">
+              Showing top 20 users on mobile. View desktop for the full user behavior table.
+            </p>
+          ) : null}
+          {userBehaviorRows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No user behavior data yet</p>
+          ) : null}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">

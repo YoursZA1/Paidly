@@ -54,9 +54,29 @@ function platformUserLabel(u) {
   return email || u.id || 'Unknown user';
 }
 
+function platformUserRole(u) {
+  const role = String(u?.role || u?.profile?.role || u?.profile?.user_role || '').trim().toLowerCase();
+  return role || 'user';
+}
+
 /** Display only: merged admin API uses Auth email first; profile fallback when using profiles-only list. */
 function platformUserEmail(u) {
   return String(u?.email || u?.profile?.email || '').trim();
+}
+
+function platformUserSearchBlob(u) {
+  if (!u) return '';
+  const label = platformUserLabel(u);
+  const email = platformUserEmail(u);
+  const id = String(u.id || '').trim();
+  const role = platformUserRole(u);
+  const profileName = String(u?.profile?.full_name || '').trim();
+  const profileCompany = String(u?.profile?.company_name || u?.company_name || u?.company || '').trim();
+  const metadataName = String(u?.user_metadata?.full_name || u?.user_metadata?.name || '').trim();
+  return [label, email, id, role, profileName, profileCompany, metadataName]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 }
 
 function normalizeEmailKey(email) {
@@ -483,9 +503,7 @@ export default function AdminPlatformMessages() {
     if (!q) return list.slice(0, 80);
     return list
       .filter((u) => {
-        const label = platformUserLabel(u).toLowerCase();
-        const email = platformUserEmail(u).toLowerCase();
-        return label.includes(q) || email.includes(q) || String(u.id).toLowerCase().includes(q);
+        return platformUserSearchBlob(u).includes(q);
       })
       .slice(0, 80);
   }, [platformUsers, userPickerQuery]);
@@ -890,7 +908,7 @@ export default function AdminPlatformMessages() {
               <Input
                 value={userPickerQuery}
                 onChange={(e) => setUserPickerQuery(e.target.value)}
-                placeholder="Search name or email…"
+                placeholder="Search name, email, role, or user ID…"
               />
             </div>
             <ScrollArea className="h-48 rounded-md border border-border">
@@ -910,7 +928,7 @@ export default function AdminPlatformMessages() {
                     >
                       <span className="font-medium block truncate">{platformUserLabel(u)}</span>
                       <span className="text-xs text-muted-foreground truncate block">
-                        {platformUserEmail(u) || u.id}
+                        {platformUserEmail(u) || 'No email'} • {platformUserRole(u)} • ID: {u.id}
                       </span>
                     </button>
                   ))

@@ -41,6 +41,10 @@
       "destination": "/api/cron?job=subscription-dunning"
     },
     {
+      "source": "/api/cron/subscription-prebill-invoices",
+      "destination": "/api/cron?job=subscription-prebill-invoices"
+    },
+    {
       "source": "/api/public-invoice",
       "destination": "/api/public-share?doc=invoice&op=get"
     },
@@ -124,6 +128,10 @@
     {
       "path": "/api/cron/subscription-dunning",
       "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/subscription-prebill-invoices",
+      "schedule": "0 9 * * *"
     }
   ]
 }
