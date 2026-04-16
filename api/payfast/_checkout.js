@@ -3,8 +3,9 @@ import {
   assertPayfastHttpsUrlsInLive,
   assertPayfastPassphraseForLiveCheckout,
   getPayfastFrequency,
-  getPayfastMerchantCredentialsFromEnv,
+  getPayfastMerchantCredentialsForMode,
   getPayfastProcessUrl,
+  isPayfastKnownSandboxMerchantId,
   logPayfastPayloadDebug,
   signPayfastPayload,
 } from "../../server/src/payfast.js";
@@ -102,7 +103,35 @@ export default async function payfastSubscriptionCheckout(req, res) {
       }
     }
 
-    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsFromEnv();
+    const mode = String(process.env.PAYFAST_MODE || "sandbox").trim().toLowerCase();
+    // Fail fast on common misconfig: PAYFAST_MODE doesn't match configured credential set.
+    if (mode === "live") {
+      const liveId = String(process.env.PAYFAST_LIVE_MERCHANT_ID || "").trim();
+      const liveKey = String(process.env.PAYFAST_LIVE_MERCHANT_KEY || "").trim();
+      const sandboxId = String(process.env.PAYFAST_SANDBOX_MERCHANT_ID || "").trim();
+      const sandboxKey = String(process.env.PAYFAST_SANDBOX_MERCHANT_KEY || "").trim();
+      if ((!liveId || !liveKey) && (sandboxId || sandboxKey)) {
+        return res.status(422).json({
+          code: "PAYFAST_LIVE_CREDENTIALS_MISSING",
+          error:
+            "PAYFAST_MODE=live but PAYFAST_LIVE_MERCHANT_ID/PAYFAST_LIVE_MERCHANT_KEY are not set (only sandbox credentials found). Set the live credentials or switch PAYFAST_MODE=sandbox for testing.",
+        });
+      }
+    } else {
+      const sandboxId = String(process.env.PAYFAST_SANDBOX_MERCHANT_ID || "").trim();
+      const sandboxKey = String(process.env.PAYFAST_SANDBOX_MERCHANT_KEY || "").trim();
+      const liveId = String(process.env.PAYFAST_LIVE_MERCHANT_ID || "").trim();
+      const liveKey = String(process.env.PAYFAST_LIVE_MERCHANT_KEY || "").trim();
+      if ((!sandboxId || !sandboxKey) && (liveId || liveKey)) {
+        return res.status(422).json({
+          code: "PAYFAST_SANDBOX_CREDENTIALS_MISSING",
+          error:
+            "PAYFAST_MODE=sandbox but PAYFAST_SANDBOX_MERCHANT_ID/PAYFAST_SANDBOX_MERCHANT_KEY are not set (only live credentials found). Set the sandbox credentials for testing.",
+        });
+      }
+    }
+
+    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsForMode(mode);
     if (!merchantId || !merchantKey) {
       console.error("[payfast/subscription] Missing PAYFAST_MERCHANT_ID or PAYFAST_MERCHANT_KEY", {
         hasId: Boolean(merchantId),
@@ -112,7 +141,16 @@ export default async function payfastSubscriptionCheckout(req, res) {
       return res.status(422).json({
         code: "PAYFAST_MERCHANT_NOT_CONFIGURED",
         error:
-          "Set PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY in Vercel → Environment Variables (Production), or in repo-root .env / server/.env for local dev.",
+          "Set PayFast merchant credentials in env vars. For sandbox use PAYFAST_SANDBOX_MERCHANT_ID/PAYFAST_SANDBOX_MERCHANT_KEY; for live use PAYFAST_LIVE_MERCHANT_ID/PAYFAST_LIVE_MERCHANT_KEY (or the legacy PAYFAST_MERCHANT_* fallback).",
+      });
+    }
+
+    // Prevent the most common PayFast hosted 400: using sandbox merchant credentials against live host (or vice versa).
+    if (mode === "live" && isPayfastKnownSandboxMerchantId(merchantId)) {
+      return res.status(422).json({
+        code: "PAYFAST_LIVE_SANDBOX_CREDENTIALS",
+        error:
+          "PAYFAST_MODE=live but PAYFAST merchant_id looks like a sandbox test account. Set PAYFAST_LIVE_MERCHANT_ID/PAYFAST_LIVE_MERCHANT_KEY to your real PayFast merchant details, or switch PAYFAST_MODE=sandbox for testing.",
       });
     }
 

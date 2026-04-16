@@ -159,6 +159,41 @@ export function getPayfastMerchantCredentialsFromEnv() {
 }
 
 /**
+ * Mode-aware credentials to avoid sandbox/live mix-ups.
+ *
+ * Supported env (fallback order):
+ * - sandbox: PAYFAST_SANDBOX_MERCHANT_ID / PAYFAST_SANDBOX_MERCHANT_KEY → PAYFAST_MERCHANT_ID / PAYFAST_MERCHANT_KEY
+ * - live: PAYFAST_LIVE_MERCHANT_ID / PAYFAST_LIVE_MERCHANT_KEY → PAYFAST_MERCHANT_ID / PAYFAST_MERCHANT_KEY
+ */
+export function getPayfastMerchantCredentialsForMode(mode) {
+  const m = String(mode || payfastMode() || "sandbox").trim().toLowerCase();
+  const passphrase = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
+
+  const pick = (idKey, keyKey) => {
+    const merchantId = String(process.env[idKey] ?? "").trim();
+    const merchantKey = String(process.env[keyKey] ?? "").trim();
+    return { merchantId, merchantKey };
+  };
+
+  const primary =
+    m === "live"
+      ? pick("PAYFAST_LIVE_MERCHANT_ID", "PAYFAST_LIVE_MERCHANT_KEY")
+      : pick("PAYFAST_SANDBOX_MERCHANT_ID", "PAYFAST_SANDBOX_MERCHANT_KEY");
+  const fallback = pick("PAYFAST_MERCHANT_ID", "PAYFAST_MERCHANT_KEY");
+
+  return {
+    merchantId: primary.merchantId || fallback.merchantId,
+    merchantKey: primary.merchantKey || fallback.merchantKey,
+    passphrase,
+  };
+}
+
+export function isPayfastKnownSandboxMerchantId(merchantId) {
+  const id = String(merchantId || "").trim();
+  return id === "10000100" || id === "10005646";
+}
+
+/**
  * Log PayFast field map before signing. Confirms `merchant_id` / `merchant_key` in logs.
  * `merchant_key` is redacted unless `PAYFAST_LOG_FULL_MERCHANT_KEY=true` (avoid leaking secrets in Vercel logs).
  * @param {Record<string, unknown>} payload
