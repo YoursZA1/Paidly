@@ -255,7 +255,13 @@ export default async function payfastSubscriptionCheckout(req, res) {
 
     logPayfastPayloadDebug(payload);
 
-    payload.signature = signPayfastPayload(payload, passphrase);
+    // Default: do not append the global passphrase when in sandbox. It's common to have a live passphrase
+    // configured in production env, and using it for sandbox checkouts causes signature/account errors.
+    const sandboxUsesPassphrase =
+      String(process.env.PAYFAST_SANDBOX_USE_PASSPHRASE || "").trim().toLowerCase() === "true";
+    const signingPassphrase = mode === "live" || sandboxUsesPassphrase ? passphrase : "";
+
+    payload.signature = signPayfastPayload(payload, signingPassphrase);
     if (!payload.signature) {
       return res.status(500).json({
         code: "PAYFAST_SIGNATURE_FAILED",
