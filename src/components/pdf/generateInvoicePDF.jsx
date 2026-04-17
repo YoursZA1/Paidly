@@ -28,6 +28,16 @@ function flushLayout() {
   });
 }
 
+async function waitForCaptureNode(host, timeoutMs = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const el = host.firstElementChild;
+    if (el) return el;
+    await new Promise((resolve) => setTimeout(resolve, 32));
+  }
+  return host.firstElementChild;
+}
+
 /**
  * Invoice PDF blob using the same DocumentPreview + html2pdf path as {@link generateQuotePDF}.
  * Avoids multi-page template shells that cause extra/blank pages in html2pdf v0.10.
@@ -69,7 +79,7 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
     );
 
     await flushLayout();
-    const el = host.firstElementChild;
+    const el = await waitForCaptureNode(host);
     if (!el) throw new Error("Invoice PDF capture node missing");
     await waitForImages(el);
     return await generatePdfBlobFromElement(el, filename);
