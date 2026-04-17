@@ -314,6 +314,7 @@ export default function AdminV2Dashboard() {
   }, [lastUpdatedAt, tick]);
 
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
+  const verifiedUsers = users.filter((u) => u.email_verified === true);
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
   /** Pending count from `affiliate_applications` via GET /api/admin/affiliates (not a client-side filter on a truncated list). */
   const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
@@ -484,7 +485,12 @@ export default function AdminV2Dashboard() {
 
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RevenueChart subscriptions={subscriptions} />
+          <RevenueChart
+            subscriptions={subscriptions}
+            totalUsers={users.length}
+            activeSubscriptions={activeSubscriptions.length}
+            verifiedUsers={verifiedUsers.length}
+          />
         </div>
         <RecentActivity
           users={users}

@@ -326,6 +326,7 @@ function CompanyProfileSettings() {
         e.preventDefault();
         setIsSaving(true);
         let updatedData = { ...formData };
+        const saveStamp = Date.now();
 
         try {
             if (logoFile) {
@@ -345,7 +346,9 @@ function CompanyProfileSettings() {
                         return;
                     }
                     const publicUrl = await uploadLogo(logoFile, userId);
-                    updatedData.logo_url = publicUrl;
+                    // Force fresh asset after replacement (storage/CDN may cache same file path).
+                    const cacheBustedLogoUrl = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}v=${saveStamp}`;
+                    updatedData.logo_url = cacheBustedLogoUrl;
                 } catch (uploadError) {
                     console.error("Logo upload error:", uploadError);
                     toast({
@@ -380,6 +383,21 @@ function CompanyProfileSettings() {
                 business: compactBusinessForProfile(updatedData),
             };
             await User.updateMyUserData(payload);
+            // Defense in depth: always upsert current profile row so settings are replaced even when
+            // local auth state/SDK write helpers are stale.
+            if (authUser?.id) {
+                const directProfilePayload = {
+                    id: authUser.id,
+                    ...payload,
+                    updated_at: new Date().toISOString(),
+                };
+                const { error: directSaveError } = await supabase
+                    .from("profiles")
+                    .upsert(directProfilePayload, { onConflict: "id" });
+                if (directSaveError) {
+                    throw directSaveError;
+                }
+            }
             setFormData((prev) => ({
                 ...prev,
                 ...payload,

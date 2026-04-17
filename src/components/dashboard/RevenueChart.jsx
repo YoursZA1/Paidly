@@ -1,4 +1,15 @@
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 
 function buildMonthlyRevenue(subscriptions) {
   const now = new Date();
@@ -28,8 +39,15 @@ function buildMonthlyRevenue(subscriptions) {
   return monthKeys.map((m) => ({ month: m.label, revenue: Math.max(0, Number(m.revenue.toFixed(2)))}));
 }
 
-export default function RevenueChart({ subscriptions }) {
+const PIE_COLORS = ['hsl(24, 95%, 53%)', 'hsl(210, 90%, 55%)', 'hsl(142, 71%, 45%)'];
+
+export default function RevenueChart({ subscriptions, totalUsers = 0, activeSubscriptions = 0, verifiedUsers = 0 }) {
   const data = buildMonthlyRevenue(subscriptions);
+  const pieData = [
+    { name: 'Total users', value: Number(totalUsers || 0) },
+    { name: 'Active subscriptions', value: Number(activeSubscriptions || 0) },
+    { name: 'Verified users', value: Number(verifiedUsers || 0) },
+  ];
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
@@ -57,6 +75,55 @@ export default function RevenueChart({ subscriptions }) {
           <Area type="monotone" dataKey="revenue" stroke="hsl(24, 95%, 53%)" fill="url(#revGradient)" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>
+      <div className="mt-6 border-t border-border pt-4">
+        <p className="mb-3 text-xs text-muted-foreground">Users & subscriptions breakdown</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,220px)_1fr]">
+          <div className="h-[220px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={52}
+                  outerRadius={82}
+                  stroke="none"
+                  paddingAngle={2}
+                >
+                  {pieData.map((entry, idx) => (
+                    <Cell key={entry.name} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: 'hsl(220, 18%, 9%)',
+                    border: '1px solid hsl(220, 15%, 16%)',
+                    borderRadius: '8px',
+                    color: 'hsl(220, 10%, 95%)',
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-2">
+            {pieData.map((item, idx) => (
+              <div key={item.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
+                    aria-hidden
+                  />
+                  <span className="text-muted-foreground">{item.name}</span>
+                </div>
+                <span className="font-semibold text-foreground">{item.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
