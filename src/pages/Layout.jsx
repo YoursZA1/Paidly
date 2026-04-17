@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
+import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
@@ -603,10 +604,11 @@ export default function Layout({ children, currentPageName }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [showActivationOnboarding, setShowActivationOnboarding] = useState(false);
   const mainContentRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const userRef = useRef(user);
   userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
@@ -615,7 +617,23 @@ export default function Layout({ children, currentPageName }) {
     layoutProfile?.plan ||
     user?.subscription_plan ||
     user?.plan ||
-    "individual";
+    "none";
+
+  useEffect(() => {
+    if (!user?.id || !layoutProfile?.id) return;
+    if (currentPageName !== "Dashboard") return;
+    const business =
+      layoutProfile?.business && typeof layoutProfile.business === "object" ? layoutProfile.business : {};
+    const onboarding =
+      business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
+    if (onboarding?.status === "completed") {
+      setShowActivationOnboarding(false);
+      return;
+    }
+    const dismissedKey = `paidly_onboarding_v2_dismissed_${user.id}`;
+    const dismissed = typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "1";
+    if (!dismissed) setShowActivationOnboarding(true);
+  }, [user?.id, layoutProfile?.id, layoutProfile?.business, currentPageName]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1171,6 +1189,19 @@ export default function Layout({ children, currentPageName }) {
         </main>
 
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
+        <FastActivationOnboarding
+          isOpen={showActivationOnboarding}
+          profile={layoutProfile || user}
+          onClose={() => {
+            if (user?.id && typeof window !== "undefined") {
+              window.sessionStorage.setItem(`paidly_onboarding_v2_dismissed_${user.id}`, "1");
+            }
+            setShowActivationOnboarding(false);
+          }}
+          onProfileRefresh={() => {
+            refreshUser?.();
+          }}
+        />
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
         <MobileBottomNav onOpenMenu={() => setIsMobileMenuOpen(true)} />
         {user?.id && isCompactLayout ? (

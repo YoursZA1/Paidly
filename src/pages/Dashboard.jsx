@@ -220,7 +220,11 @@ StatCard.propTypes = {
 export default function Dashboard() {
   const { user: authUser } = useAuth();
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
-  const { profile: profileFromQuery } = useUserProfileQuery();
+  const {
+    profile: profileFromQuery,
+    error: profileLoadError,
+    isLoading: profileLoading,
+  } = useUserProfileQuery();
   const { toast } = useToast();
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
@@ -336,7 +340,54 @@ export default function Dashboard() {
   const expenses = isAdmin ? expensesState : storeExpenses;
   const payments = isAdmin ? paymentsState : storePayments;
   const user = isAdmin ? userState : profileFromQuery ?? authUser;
+  useEffect(() => {
+    if (isAdmin || !authUser?.id || !profileFromQuery) return;
+    const fromSignupOrSession = String(authUser?.plan || authUser?.subscription_plan || "").trim().toLowerCase();
+    const fromProfile = String(profileFromQuery?.subscription_plan || profileFromQuery?.plan || "").trim().toLowerCase();
+    if (fromSignupOrSession && fromProfile && fromSignupOrSession !== fromProfile) {
+      console.error("[dashboard-plan-mismatch] auth user plan differs from DB profile plan", {
+        userId: authUser.id,
+        authPlan: fromSignupOrSession,
+        profilePlan: fromProfile,
+      });
+    }
+  }, [isAdmin, authUser?.id, authUser?.plan, authUser?.subscription_plan, profileFromQuery]);
+
   const isLoading = isAdmin ? isLoadingState : storeIsLoading || appLoading;
+
+  const onboardingChecklist = useMemo(() => {
+    const businessName = String(user?.company_name || "").trim();
+    const business = user?.business && typeof user.business === "object" ? user.business : {};
+    const onboarding = business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
+    const industry = String(onboarding?.industry || business?.industry || "").trim();
+    return {
+      setup_business: Boolean(businessName && industry),
+      create_first_invoice: Array.isArray(invoices) && invoices.length > 0,
+      add_first_client: Array.isArray(clients) && clients.length > 0,
+    };
+  }, [user?.company_name, user?.business, invoices, clients]);
+
+  useEffect(() => {
+    if (isAdmin || !user?.id) return;
+    const business = user?.business && typeof user.business === "object" ? user.business : {};
+    const onboarding = business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
+    const currentChecklist =
+      onboarding?.checklist && typeof onboarding.checklist === "object" ? onboarding.checklist : {};
+    const changed =
+      currentChecklist.setup_business !== onboardingChecklist.setup_business ||
+      currentChecklist.create_first_invoice !== onboardingChecklist.create_first_invoice ||
+      currentChecklist.add_first_client !== onboardingChecklist.add_first_client;
+    if (!changed) return;
+    User.updateMyUserData({
+      business: {
+        onboarding_v2: {
+          ...onboarding,
+          checklist: onboardingChecklist,
+          updated_at: new Date().toISOString(),
+        },
+      },
+    }).catch(() => {});
+  }, [isAdmin, user?.id, user?.business, onboardingChecklist]);
 
   const openAccount = (user) => {
     const params = new URLSearchParams();
@@ -1570,13 +1621,17 @@ export default function Dashboard() {
     return due && due >= today && due <= endOfThisWeek;
   }).length;
 
-  const subscriptionBanner =
-    !isAdmin && user
-      ? {
-          sub: describeSubscriptionState(user),
-          badgePlan: slugFromProfile(user) || user?.subscription_plan || user?.plan || "none",
-        }
-      : null;
+  const subscriptionBanner = useMemo(() => {
+    if (isAdmin) return null;
+    const profileSlug = slugFromProfile(profileFromQuery);
+    const authSlug = slugFromProfile(authUser) || authUser?.subscription_plan || authUser?.plan || "";
+    const source = profileSlug ? profileFromQuery : authUser;
+    if (!source) return null;
+    return {
+      sub: describeSubscriptionState(source),
+      badgePlan: profileSlug || authSlug || "none",
+    };
+  }, [isAdmin, profileFromQuery, authUser]);
 
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
@@ -1593,6 +1648,12 @@ export default function Dashboard() {
           </h1>
           <p className="finbank-body text-xs sm:text-sm text-foreground hidden sm:block">Track cash flow, get paid faster, and stay on top of your business.</p>
         </motion.div>
+
+        {!isAdmin && !profileLoading && profileLoadError && (
+            <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              Could not load your profile details right now. Core dashboard data is still available; please refresh in a moment.
+            </div>
+        )}
 
         {subscriptionBanner && (
             <motion.div
@@ -2034,7 +2095,7 @@ export default function Dashboard() {
             className="space-y-6"
           >
             {user && !isAdmin && (
-              <SetupProgressStepper user={user} hasBankingDetails={hasBankingDetails} invoices={invoices} />
+              <SetupProgressStepper checklist={onboardingChecklist} />
             )}
 
             {/* Quick Creator — hidden on mobile (shown in mobile block above) */}

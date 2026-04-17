@@ -101,24 +101,24 @@ export function normalizePaidPackageKey(planOrProfile) {
     typeof planOrProfile === "object" && planOrProfile
       ? slugFromProfile(planOrProfile)
       : String(planOrProfile ?? "").trim().toLowerCase();
-  if (
-    ["individual", "starter", "free", "basic", "trial", "none", ""].includes(raw)
-  ) {
+  if (!raw || raw === "none") return "none";
+  if (["individual", "starter", "free", "basic", "trial"].includes(raw)) {
     return "individual";
   }
   if (["sme", "professional", "business"].includes(raw)) return "sme";
   if (["corporate", "enterprise", "pro"].includes(raw)) return "corporate";
-  return "individual";
+  return "none";
 }
 
 const PACKAGE_LABELS = {
   individual: "Individual",
   sme: "SME",
   corporate: "Corporate",
+  none: "—",
 };
 
 export function getPackageDisplayName(packageKey) {
-  return PACKAGE_LABELS[packageKey] || "Individual";
+  return PACKAGE_LABELS[packageKey] || "—";
 }
 
 /**
@@ -150,8 +150,8 @@ export function pickPreferredSubscriptionRow(rows) {
 export function describeSubscriptionState(profile) {
   if (!profile || typeof profile !== "object") {
     return {
-      packageKey: "individual",
-      packageLabel: "Individual",
+      packageKey: "none",
+      packageLabel: "—",
       statusLabel: "—",
       rawSlug: "",
       subscriptionStatus: "",

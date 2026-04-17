@@ -4,10 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 
 export default function RequireAuth({ children, roles }) {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, session } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  // Keep protected pages interactive when we already have a hydrated user
+  // and auth is doing a background session/profile reconciliation.
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-sm text-gray-500">Checking session...</div>
@@ -15,7 +17,7 @@ export default function RequireAuth({ children, roles }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !session?.user?.id) {
     return (
       <Navigate
         to={`${createPageUrl("Home")}#sign-in`}

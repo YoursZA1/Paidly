@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
@@ -50,6 +51,7 @@ async function fetchCashFlowPageData() {
 const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'];
 
 export default function CashFlowPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const setExpensesInStore = useAppStore((s) => s.setExpenses);
@@ -106,6 +108,22 @@ export default function CashFlowPage() {
     const [isExportingExpenses, setIsExportingExpenses] = useState(false);
     const [isImportingExpenses, setIsImportingExpenses] = useState(false);
     const expenseFileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (searchParams.get("openAddExpense") !== "1") return;
+        setEditingExpense({
+            date: new Date().toISOString().slice(0, 10),
+            category: "General",
+            description: "Initial income/expense record",
+            amount: "",
+            payment_method: "bank_transfer",
+        });
+        setExpenseFormFromScan(false);
+        setShowExpenseForm(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete("openAddExpense");
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
 
     const invalidateCashFlow = () => queryClient.invalidateQueries({ queryKey: CASHFLOW_PAGE_QUERY_KEY });
 

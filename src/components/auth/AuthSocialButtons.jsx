@@ -28,9 +28,10 @@ function GoogleIcon({ className = "w-5 h-5" }) {
   );
 }
 
-export default function AuthSocialButtons({ mode = "signin", className = "" }) {
+export default function AuthSocialButtons({ mode = "signin", className = "", compact = false }) {
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [error, setError] = useState("");
+  const isCompact = mode === "signup" || compact;
 
   const showGoogle = isGoogleOAuthEnabled();
 
@@ -54,7 +55,7 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
 
   return (
     <div className={className}>
-      <div className="relative my-5">
+      <div className={`relative ${isCompact ? "my-3" : "my-5"}`}>
         <div className="absolute inset-0 flex items-center">
           <span className="w-full border-t border-border" />
         </div>
@@ -63,11 +64,11 @@ export default function AuthSocialButtons({ mode = "signin", className = "" }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className={`grid grid-cols-1 ${isCompact ? "gap-2" : "gap-3"}`}>
         <Button
           type="button"
           variant="outline"
-          className="h-12 rounded-xl border-border bg-background hover:bg-muted/50"
+          className={`rounded-xl border-border bg-background hover:bg-muted/50 ${isCompact ? "h-11" : "h-12"}`}
           onClick={() => handleOAuth("google")}
           disabled={!!loadingProvider}
         >

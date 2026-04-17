@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Check, Building2, Landmark, FileText, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, Building2, FileText, Users, ChevronDown, ChevronUp } from 'lucide-react';
 
 const steps = [
-  { id: 'profile', label: 'Company profile', href: createPageUrl('Settings'), icon: Building2 },
-  { id: 'banking', label: 'Banking details', href: createPageUrl('Settings') + '?tab=payments', icon: Landmark },
-  { id: 'first_invoice', label: 'First invoice', href: createPageUrl('CreateInvoice'), icon: FileText },
-  { id: 'send_invoice', label: 'Send invoice', href: createPageUrl('Invoices'), icon: Send },
+  { id: 'setup_business', label: 'Setup business', href: createPageUrl('Settings') + '?tab=profile', icon: Building2 },
+  { id: 'create_first_invoice', label: 'Create first invoice', href: createPageUrl('CreateInvoice'), icon: FileText },
+  { id: 'add_first_client', label: 'Add first client', href: createPageUrl('Clients'), icon: Users },
 ];
 
-export default function SetupProgressStepper({ user, hasBankingDetails, invoices }) {
+export default function SetupProgressStepper({ checklist }) {
   const [collapsed, setCollapsed] = useState(true);
-  const completed = {
-    profile: !!(user?.company_name && user?.company_address),
-    banking: !!hasBankingDetails,
-    first_invoice: !!(invoices?.length > 0),
-    send_invoice: !!(invoices?.length > 0 && invoices.some((i) => ['sent', 'viewed', 'paid'].includes(i.status || ''))),
-  };
-  const allDone = steps.every((s) => completed[s.id]);
+  const completed = checklist || {};
+  const doneCount = steps.filter((s) => !!completed[s.id]).length;
+  const allDone = doneCount === steps.length;
 
   if (allDone) return null;
 
@@ -30,7 +25,8 @@ export default function SetupProgressStepper({ user, hasBankingDetails, invoices
         className="w-full flex items-center justify-between gap-2 mb-4 sm:mb-4 md:pointer-events-none md:cursor-default touch-manipulation min-h-[44px] -m-2 p-2 rounded-lg hover:bg-muted/50 md:hover:bg-transparent"
         aria-expanded={!collapsed}
       >
-        <h3 className="text-sm font-semibold text-foreground font-display">Setup progress</h3>
+        <h3 className="text-sm font-semibold text-foreground font-display">Onboarding checklist</h3>
+        <span className="hidden md:inline text-xs text-muted-foreground">{doneCount}/{steps.length}</span>
         <span className="md:hidden text-muted-foreground shrink-0">
           {collapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
         </span>

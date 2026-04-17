@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import {
@@ -131,7 +130,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="max-w-md border-0 bg-transparent p-0 shadow-none sm:max-w-md [&>button]:text-zinc-400 [&>button]:hover:text-white"
+          className="w-full max-w-[420px] border-0 bg-transparent p-0 shadow-none sm:max-w-[420px] [&>button]:text-zinc-400 [&>button]:hover:text-white"
           onOpenAutoFocus={(e) => {
             const el = e.currentTarget.querySelector("#landing-login-email");
             if (el && typeof el.focus === "function") {
@@ -144,19 +143,22 @@ export default function LandingLoginModal({ open, onOpenChange }) {
           <DialogDescription className="sr-only">
             Sign in to manage your business with email and password or Google.
           </DialogDescription>
-          <Card className="w-full rounded-2xl border border-zinc-700/80 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-md overflow-hidden">
-            <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#FF4F00] rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-[#FF4F00]/25">
-                <img src="/logo.svg" alt="Paidly" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
+          <Card
+            data-login-card
+            className="w-full max-h-[90vh] overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-md"
+          >
+            <CardHeader className="shrink-0 space-y-1 pb-2 sm:pb-3 text-center px-4 sm:px-5 pt-4 sm:pt-5">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#FF4F00] rounded-xl flex items-center justify-center mx-auto mb-2 shadow-lg shadow-[#FF4F00]/25">
+                <img src="/logo.svg" alt="Paidly" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
               </div>
-              <CardTitle className="text-xl sm:text-2xl font-semibold text-zinc-50 font-display">
+              <CardTitle className="text-lg sm:text-xl font-semibold text-zinc-50 font-display">
                 Welcome back
               </CardTitle>
-              <p className="text-sm text-zinc-400">Sign in securely to your Paidly workspace.</p>
+              <p className="text-xs sm:text-sm text-zinc-400">Sign in securely to your Paidly workspace.</p>
             </CardHeader>
-            <CardContent className="px-4 sm:px-6 pb-6">
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="space-y-2">
+            <CardContent className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5 pb-4 sm:pb-5">
+              <form onSubmit={handleSubmit} className="space-y-3.5">
+                <div className="space-y-1.5">
                   <Label htmlFor="landing-login-email" className="text-zinc-200">
                     Email
                   </Label>
@@ -171,13 +173,13 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                       placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                      className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="landing-login-password" className="text-zinc-200">
                     Password
                   </Label>
@@ -191,7 +193,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                      className="h-11 pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                       required
                     />
                     <button
@@ -216,7 +218,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
 
                 <Button
                   type="submit"
-                  className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation font-semibold"
+                  className="w-full h-11 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation font-semibold"
                   disabled={isLoading}
                   aria-busy={isLoading}
                 >
@@ -230,22 +232,14 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                   )}
                 </Button>
 
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <div className="flex items-center gap-2 text-[11px] text-zinc-500">
                   <ShieldCheck className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
                   <span>
                     Session is kept in this browser tab only and refreshes automatically while you work.
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 py-1">
-                  <Separator className="flex-1 bg-zinc-700/80" />
-                  <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                    Or continue with
-                  </span>
-                  <Separator className="flex-1 bg-zinc-700/80" />
-                </div>
-
-                <AuthSocialButtons mode="signin" />
+                <AuthSocialButtons mode="signin" compact />
 
                 <div className="text-center">
                   <button

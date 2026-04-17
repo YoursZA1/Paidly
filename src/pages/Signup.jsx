@@ -32,6 +32,7 @@ import {
   clearSignupAttempts,
 } from "@/utils/signupRateLimit";
 import { getSupabaseErrorMessage, isAuthSignupEmailRateLimitError } from "@/utils/supabaseErrorUtils";
+import { supabase } from "@/lib/supabaseClient";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -53,10 +54,62 @@ const ENABLE_LOCAL_SIGNUP_MIRROR =
     .trim()
     .toLowerCase() === "true";
 const PLAN_OPTIONS = [
-  { value: "starter", label: "Starter" },
-  { value: "professional", label: "Professional" },
-  { value: "enterprise", label: "Enterprise" }
+  { value: "individual", label: "Individual" },
+  { value: "sme", label: "SME" },
+  { value: "corporate", label: "Corporate" }
 ];
+
+function normalizeSignupPlan(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (["individual", "starter", "free", "basic", "trial", "none"].includes(v)) return "individual";
+  if (["sme", "professional", "business"].includes(v)) return "sme";
+  if (["corporate", "enterprise", "pro"].includes(v)) return "corporate";
+  return "individual";
+}
+
+async function persistSignupProfilePlan({
+  userId,
+  selectedPlan,
+  fullName,
+  email,
+  companyName,
+  companyAddress,
+  phone,
+}) {
+  const canonicalPlan = normalizeSignupPlan(selectedPlan);
+  const payload = {
+    id: userId,
+    full_name: (fullName || "").trim(),
+    email: String(email || "").trim().toLowerCase(),
+    company_name: (companyName || "").trim(),
+    company_address: (companyAddress || "").trim(),
+    phone: (phone || "").trim(),
+    plan: canonicalPlan,
+    subscription_plan: canonicalPlan,
+    subscription_status: "trial",
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error: upsertError } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+  if (upsertError) throw upsertError;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, plan, subscription_plan, subscription_status")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  const storedPlan = normalizeSignupPlan(profile?.subscription_plan || profile?.plan || "");
+  if (storedPlan !== canonicalPlan) {
+    console.error("[signup-plan-mismatch] Selected plan differs from stored profile plan", {
+      userId,
+      selectedPlan: canonicalPlan,
+      storedPlan,
+      storedProfile: profile,
+    });
+  }
+}
 
 function readSignupOnboardingDraft() {
   try {
@@ -100,7 +153,7 @@ export default function Signup() {
   const [companyName, setCompanyName] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [plan, setPlan] = useState("starter");
+  const [plan, setPlan] = useState("individual");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [createdUserId, setCreatedUserId] = useState("");
@@ -144,7 +197,7 @@ export default function Signup() {
     if (draft?.companyName) setCompanyName(String(draft.companyName));
     if (draft?.companyAddress) setCompanyAddress(String(draft.companyAddress));
     if (draft?.phone) setPhone(String(draft.phone));
-    if (draft?.plan) setPlan(String(draft.plan));
+    if (draft?.plan) setPlan(normalizeSignupPlan(draft.plan));
     if (draft?.createdUserId) setCreatedUserId(String(draft.createdUserId));
 
     const confirmedAt = session?.user?.email_confirmed_at;
@@ -250,6 +303,7 @@ export default function Signup() {
       let authUserId = null;
       try {
         const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
+        const selectedPlan = normalizeSignupPlan(plan);
         const { user: createdAuthUser } = await SupabaseAuthService.signUpWithEmail(
           normalizedEmail,
           password,
@@ -259,6 +313,8 @@ export default function Signup() {
             company_address: companyAddress.trim(),
             phone: phone.trim(),
             role: "user",
+            plan: selectedPlan,
+            subscription_plan: selectedPlan,
           },
           { turnstileToken: turnstile.token }
         );
@@ -292,7 +348,7 @@ export default function Signup() {
           email: normalizedEmail,
           full_name: fullName.trim(),
           role: "user",
-          plan,
+          plan: normalizeSignupPlan(plan),
           status: "pending",
           company_name: companyName.trim(),
           company_address: companyAddress.trim(),
@@ -314,7 +370,7 @@ export default function Signup() {
           company_name: companyName.trim(),
           company_address: companyAddress.trim(),
           role: "user",
-          plan,
+          plan: normalizeSignupPlan(plan),
           status: "pending",
           currency: "ZAR",
           timezone: "UTC",
@@ -369,6 +425,7 @@ export default function Signup() {
     try {
       const now = new Date();
       const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const selectedPlan = normalizeSignupPlan(plan);
       const normalizedEmail = email.trim().toLowerCase();
       const currentSession = await SupabaseAuthService.getSession().catch(() => null);
       const hasVerifiedSession =
@@ -382,7 +439,7 @@ export default function Signup() {
         if (userIndex >= 0) {
           storedUsers[userIndex] = {
             ...storedUsers[userIndex],
-            plan,
+            plan: selectedPlan,
             status: "trial",
             trial_started_at: now.toISOString(),
             trial_ends_at: trialEndsAt.toISOString(),
@@ -397,7 +454,7 @@ export default function Signup() {
         const excelUser = userService.getUserByEmail(normalizedEmail);
         if (excelUser) {
           userService.updateUser(excelUser.id, {
-            plan,
+            plan: selectedPlan,
             status: "trial",
             trial_started_at: now.toISOString(),
             trial_ends_at: trialEndsAt.toISOString(),
@@ -428,6 +485,21 @@ export default function Signup() {
       } catch {
         /* non-fatal */
       }
+
+      const sessionWrapAfterLogin = await SupabaseAuthService.getSession().catch(() => null);
+      const profileUserId = sessionWrapAfterLogin?.user?.id || createdUserId;
+      if (!profileUserId) {
+        throw new Error("Could not resolve signed-in user id for profile persistence.");
+      }
+      await persistSignupProfilePlan({
+        userId: profileUserId,
+        selectedPlan,
+        fullName,
+        email: normalizedEmail,
+        companyName,
+        companyAddress,
+        phone,
+      });
 
       // After login, sync Step 2 company updates to Supabase profile (bounded — never block success UI)
       try {
@@ -506,18 +578,18 @@ export default function Signup() {
         authSlot={
           <section
             id="sign-up"
-            className="scroll-mt-28 border-t border-white/[0.06] px-4 py-14 sm:px-6 sm:py-20"
+            className="scroll-mt-28 border-t border-white/[0.06] px-4 py-4 sm:px-6 sm:py-6 md:min-h-[100dvh] md:flex md:items-center md:justify-center"
           >
-            <div className="mx-auto flex w-full max-w-lg justify-center">
-              <Card className="w-full max-h-[calc(100dvh-8rem)] flex flex-col overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-md sm:max-h-[calc(100dvh-6rem)]">
-        <CardHeader className="space-y-1 pb-4 sm:pb-6 text-center px-4 sm:px-6 pt-6 shrink-0">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#FF4F00] rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-[#FF4F00]/25">
-            <img src="/logo.svg" alt="Paidly" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
+            <div className="mx-auto flex w-full max-w-[420px] justify-center">
+              <Card data-signup-card className="w-full flex flex-col overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-md md:max-h-[90vh]">
+        <CardHeader className="space-y-1 pb-1.5 sm:pb-2 text-center px-4 sm:px-5 pt-3.5 shrink-0">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#FF4F00] rounded-xl flex items-center justify-center mx-auto mb-1.5 sm:mb-2 shadow-lg shadow-[#FF4F00]/25">
+            <img src="/logo.svg" alt="Paidly" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
           </div>
-          <CardTitle className="text-xl sm:text-2xl font-semibold text-zinc-50 font-display">Create your account</CardTitle>
-          <p className="text-sm text-zinc-400">Step {step} of 2</p>
+          <CardTitle className="text-base sm:text-lg font-semibold text-zinc-50 font-display">Create your account</CardTitle>
+          <p className="text-xs text-zinc-400">Step {step} of 2</p>
         </CardHeader>
-        <CardContent className="px-4 sm:px-6 pb-6 overflow-y-auto min-h-0 flex-1">
+        <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 overflow-y-auto min-h-0 flex-1">
           {success ? (
             <div className="text-center space-y-6 py-8">
               <div className="text-3xl">🎉</div>
@@ -542,40 +614,42 @@ export default function Signup() {
               </Button>
             </div>
           ) : step === 1 ? (
-            <form onSubmit={handleStepOne} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-zinc-200">Full name</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                  <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="Jane Doe"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
-                    required
-                  />
+            <form onSubmit={handleStepOne} className="space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="fullName" className="text-zinc-200">Full name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                    <Input
+                      id="fullName"
+                      type="text"
+                      placeholder="Jane Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-zinc-200">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-200">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="password" className="text-zinc-200">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -585,7 +659,7 @@ export default function Signup() {
                     placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                    className="h-11 pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                   <button
@@ -599,7 +673,7 @@ export default function Signup() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="confirmPassword" className="text-zinc-200">Confirm password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -609,7 +683,7 @@ export default function Signup() {
                     placeholder="********"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                    className="h-11 pl-10 pr-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                     required
                   />
                   <button
@@ -639,14 +713,14 @@ export default function Signup() {
 
               <Button
                 type="submit"
-                className="w-full min-h-12 rounded-xl bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/20 transition hover:bg-[#E64700] touch-manipulation"
+                className="w-full h-11 rounded-xl bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/20 transition hover:bg-[#E64700] touch-manipulation"
                 disabled={loading || (turnstile.required && !turnstile.ready)}
                 aria-busy={loading}
               >
                 {loading ? "Creating account..." : "Sign up"}
               </Button>
 
-              <AuthSocialButtons mode="signup" />
+              <AuthSocialButtons mode="signup" className="pt-0.5" />
 
               <div className="text-center">
                 <button
@@ -659,14 +733,14 @@ export default function Signup() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleStepTwo} className="space-y-5">
-              <div className="space-y-2">
+            <form onSubmit={handleStepTwo} className="space-y-2.5">
+              <div className="space-y-1.5">
                 <Label htmlFor="plan" className="text-zinc-200">Plan</Label>
                 <select
                   id="plan"
                   value={plan}
                   onChange={(e) => setPlan(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-zinc-600/80 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-100 ring-offset-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+                  className="flex h-11 w-full rounded-md border border-zinc-600/80 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-100 ring-offset-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
                   required
                 >
                   {PLAN_OPTIONS.map((option) => (
@@ -678,7 +752,7 @@ export default function Signup() {
                 <p className="text-xs text-zinc-400">Your 7-day trial starts after this step.</p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="companyName" className="text-zinc-200">Company (optional)</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -688,12 +762,12 @@ export default function Signup() {
                     placeholder="Acme Inc"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                    className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="companyAddress" className="text-zinc-200">Company address</Label>
                 <Input
                   id="companyAddress"
@@ -701,11 +775,11 @@ export default function Signup() {
                   placeholder="123 Main St, City, Country"
                   value={companyAddress}
                   onChange={(e) => setCompanyAddress(e.target.value)}
-                  className="rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                  className="h-11 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="phone" className="text-zinc-200">Phone</Label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -715,7 +789,7 @@ export default function Signup() {
                     placeholder="+27 123 456 7890"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
+                    className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                   />
                 </div>
               </div>
@@ -736,13 +810,13 @@ export default function Signup() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-zinc-600 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
+                  className="h-11 w-full border-zinc-600 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
                   onClick={() => setStep(1)}
                   disabled={loading}
                 >
                   Back
                 </Button>
-                <Button type="submit" className="w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700]" disabled={loading}>
+                <Button type="submit" className="h-11 w-full rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700]" disabled={loading}>
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />

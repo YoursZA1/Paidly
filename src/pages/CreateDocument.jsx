@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
-import { Client, Invoice, Quote, QuoteTemplate, BankingDetail } from "@/api/entities";
+import { Client, Invoice, Quote, QuoteTemplate, BankingDetail, Service } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { sendInvoiceToClient } from "@/services/InvoiceSendService";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Save, Loader2, Send, Download, ImageIcon, RotateCcw } from "lucide-react";
 import LineItemsEditor from "@/components/LineItemsEditor";
 import DocumentPreview from "@/components/DocumentPreview";
@@ -139,6 +140,14 @@ export default function CreateDocument() {
   const [showPreview, setShowPreview] = useState(true);
   const [loadedQuote, setLoadedQuote] = useState(null);
   const [prefillLoading, setPrefillLoading] = useState(false);
+  const [showAddClientDialog, setShowAddClientDialog] = useState(false);
+  const [showAddServiceDialog, setShowAddServiceDialog] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [creatingService, setCreatingService] = useState(false);
+  const [clientDraft, setClientDraft] = useState({ name: "", email: "", address: "" });
+  const [serviceDraft, setServiceDraft] = useState({ name: "", description: "", rate: "" });
+  const [clientHighlight, setClientHighlight] = useState(false);
+  const [lineItemHighlightIndex, setLineItemHighlightIndex] = useState(null);
 
   const [form, setForm] = useState({
     number: "",
@@ -542,6 +551,123 @@ export default function CreateDocument() {
     },
     [clients]
   );
+
+  const handleCreateClientInline = useCallback(async () => {
+    const name = (clientDraft.name || "").trim();
+    if (!name) {
+      toast({
+        title: "Client name required",
+        description: "Enter a client name to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCreatingClient(true);
+    try {
+      const created = await Client.create({
+        name,
+        email: (clientDraft.email || "").trim() || null,
+        address: (clientDraft.address || "").trim() || null,
+      });
+      if (!created?.id) throw new Error("Client could not be created.");
+      setClients((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+      setForm((f) => ({
+        ...f,
+        client_id: created.id,
+        client_name: created.name || name,
+        client_email: created.email || (clientDraft.email || "").trim(),
+        client_address: created.address || (clientDraft.address || "").trim(),
+        number: generateNumber(docType, created.name || name),
+      }));
+      setClientHighlight(true);
+      window.setTimeout(() => setClientHighlight(false), 1400);
+      setClientDraft({ name: "", email: "", address: "" });
+      setShowAddClientDialog(false);
+      toast({
+        title: "Client added",
+        description: "New client created and selected for this document.",
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not create client",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingClient(false);
+    }
+  }, [clientDraft, docType, toast]);
+
+  const handleCreateServiceInline = useCallback(async () => {
+    const name = (serviceDraft.name || "").trim();
+    if (!name) {
+      toast({
+        title: "Service name required",
+        description: "Enter a service or product name to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCreatingService(true);
+    try {
+      const rate = Number(serviceDraft.rate) || 0;
+      const created = await Service.create({
+        name,
+        description: (serviceDraft.description || "").trim(),
+        item_type: "service",
+        default_rate: rate,
+        rate,
+        is_active: true,
+      });
+      const newRow = {
+        description: [created?.name || name, created?.description || serviceDraft.description || ""]
+          .filter(Boolean)
+          .join("\n"),
+        quantity: 1,
+        unit_price: rate,
+        total: Math.round(rate * 100) / 100,
+      };
+      setForm((f) => {
+        const rows = Array.isArray(f.line_items) ? f.line_items : [];
+        const hasOnlyBlank =
+          rows.length === 1 &&
+          !lineItemHasContent(rows[0]) &&
+          !(Number(rows[0]?.unit_price) > 0) &&
+          !(Number(rows[0]?.quantity) > 1);
+        return {
+          ...f,
+          line_items: hasOnlyBlank ? [newRow] : [...rows, newRow],
+        };
+      });
+      const nextIndex = (() => {
+        const rows = Array.isArray(form.line_items) ? form.line_items : [];
+        const hasOnlyBlank =
+          rows.length === 1 &&
+          !lineItemHasContent(rows[0]) &&
+          !(Number(rows[0]?.unit_price) > 0) &&
+          !(Number(rows[0]?.quantity) > 1);
+        return hasOnlyBlank ? 0 : rows.length;
+      })();
+      setLineItemHighlightIndex(nextIndex);
+      window.setTimeout(() => setLineItemHighlightIndex(null), 1400);
+      setServiceDraft({ name: "", description: "", rate: "" });
+      setShowAddServiceDialog(false);
+      toast({
+        title: "Service added",
+        description: "Saved to catalog and added to this document.",
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not create service",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingService(false);
+    }
+  }, [serviceDraft, toast]);
 
   const handleDocumentLogoChange = useCallback(
     async (e) => {
@@ -1078,9 +1204,18 @@ export default function CreateDocument() {
                 <CardTitle className="text-base">Client</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {clients.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Select existing client</Label>
+                <div
+                  className={`space-y-2 rounded-md transition-all duration-300 ${
+                    clientHighlight ? "bg-primary/10 ring-2 ring-primary/25 p-2" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Select client</Label>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setShowAddClientDialog(true)}>
+                      + Add Client
+                    </Button>
+                  </div>
+                  {clients.length > 0 ? (
                     <Select
                       value={form.client_id ? form.client_id : CLIENT_SELECT_NONE}
                       onValueChange={(v) => {
@@ -1103,8 +1238,12 @@ export default function CreateDocument() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                )}
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                      No clients yet.
+                    </div>
+                  )}
+                </div>
                 <Separator />
                 <p className="text-xs text-muted-foreground">
                   New clients are saved to your Paidly client list when you save this document.
@@ -1148,6 +1287,8 @@ export default function CreateDocument() {
                   items={form.line_items}
                   onChange={(items) => update("line_items", items)}
                   currencyCode={form.currency}
+                  onCreateService={() => setShowAddServiceDialog(true)}
+                  highlightedRowIndex={lineItemHighlightIndex}
                 />
               </CardContent>
             </Card>
@@ -1296,6 +1437,104 @@ export default function CreateDocument() {
           </div>
         </div>
       )}
+
+      <Dialog open={showAddClientDialog} onOpenChange={setShowAddClientDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add client</DialogTitle>
+            <DialogDescription>Create a client without leaving this invoice flow.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="inline-client-name">Client name</Label>
+              <Input
+                id="inline-client-name"
+                value={clientDraft.name}
+                onChange={(e) => setClientDraft((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Client name"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="inline-client-email">Email</Label>
+              <Input
+                id="inline-client-email"
+                type="email"
+                value={clientDraft.email}
+                onChange={(e) => setClientDraft((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="client@example.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="inline-client-address">Address</Label>
+              <Textarea
+                id="inline-client-address"
+                value={clientDraft.address}
+                onChange={(e) => setClientDraft((prev) => ({ ...prev, address: e.target.value }))}
+                placeholder="Client address"
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowAddClientDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateClientInline} disabled={creatingClient}>
+              {creatingClient ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAddServiceDialog} onOpenChange={setShowAddServiceDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add product or service</DialogTitle>
+            <DialogDescription>Create it inline and add it directly to this invoice.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="inline-service-name">Name</Label>
+              <Input
+                id="inline-service-name"
+                value={serviceDraft.name}
+                onChange={(e) => setServiceDraft((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Service name"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="inline-service-description">Description</Label>
+              <Textarea
+                id="inline-service-description"
+                value={serviceDraft.description}
+                onChange={(e) => setServiceDraft((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Optional details"
+                rows={2}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="inline-service-rate">Unit price ({currencyCode})</Label>
+              <Input
+                id="inline-service-rate"
+                type="number"
+                min={0}
+                step="0.01"
+                value={serviceDraft.rate}
+                onChange={(e) => setServiceDraft((prev) => ({ ...prev, rate: e.target.value }))}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowAddServiceDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateServiceInline} disabled={creatingService}>
+              {creatingService ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create and add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

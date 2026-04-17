@@ -15,7 +15,9 @@ export function useUserProfileQuery() {
     select: "*",
     match: userId ? { id: userId } : undefined,
     enabled: Boolean(userId),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   return {

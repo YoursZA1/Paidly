@@ -604,10 +604,26 @@ export function AuthProvider({ children }) {
 
       if (!nextSession) {
         if (event === "INITIAL_SESSION") {
-          setSession(null);
-          setUser(null);
-          setError("");
-          redirectToLoginIfProtectedPath();
+          // INITIAL_SESSION can momentarily be null during startup races; recover once before clearing user state.
+          try {
+            const recovered = await readSessionSafe(true);
+            if (recovered?.user && isSessionValid(recovered)) {
+              setSession(recovered);
+              scheduleRefreshUser();
+              return;
+            }
+          } catch {
+            // ignore and evaluate existing auth state below
+          }
+          // Only hard-clear when we truly have no session and no hydrated user to avoid route flicker.
+          if (!userIdRef.current && !sessionUserIdRef.current) {
+            setSession(null);
+            setUser(null);
+            setError("");
+            redirectToLoginIfProtectedPath();
+          } else {
+            scheduleRefreshUser();
+          }
           return;
         }
         try {
@@ -846,6 +862,7 @@ export function AuthProvider({ children }) {
     const userPermissions = user?.permissions || session?.user?.app_metadata?.permissions || [];
     return {
       user,
+      profile: user,
       loading,
       isAuthenticated: !!user,
       login,
@@ -925,6 +942,7 @@ export function AuthProvider({ children }) {
 
 const AUTH_FALLBACK = {
   user: null,
+  profile: null,
   loading: false,
   isAuthenticated: false,
   session: null,

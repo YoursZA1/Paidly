@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useId } from "react";
+import { useState, useCallback, useMemo, useId, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronsUpDown, Plus, Trash2, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,13 +63,20 @@ function catalogItemToLineRow(rawItem, user, quantity = 1) {
   });
 }
 
-export default function LineItemsEditor({ items, onChange, currencyCode }) {
+export default function LineItemsEditor({
+  items,
+  onChange,
+  currencyCode,
+  onCreateService,
+  highlightedRowIndex = null,
+}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const lineItemsBaseId = useId();
   const list = Array.isArray(items) && items.length > 0 ? items : [emptyRow()];
   const [catalogOpenRow, setCatalogOpenRow] = useState(null);
   const [topCatalogOpen, setTopCatalogOpen] = useState(false);
+  const [activeHighlightRow, setActiveHighlightRow] = useState(null);
 
   const { data: catalogRows = [], isLoading: catalogLoading, refetch: refetchCatalog } = useServicesCatalogQuery();
   const catalog = useMemo(
@@ -78,6 +85,13 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
   );
 
   const currency = currencyCode || user?.currency || "ZAR";
+
+  useEffect(() => {
+    if (typeof highlightedRowIndex !== "number" || highlightedRowIndex < 0) return;
+    setActiveHighlightRow(highlightedRowIndex);
+    const t = window.setTimeout(() => setActiveHighlightRow(null), 1400);
+    return () => window.clearTimeout(t);
+  }, [highlightedRowIndex]);
 
   const loadCatalog = useCallback(() => {
     void refetchCatalog();
@@ -120,6 +134,10 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
   const openServicesPage = () => {
     setTopCatalogOpen(false);
     setCatalogOpenRow(null);
+    if (typeof onCreateService === "function") {
+      onCreateService();
+      return;
+    }
     navigate(createPageUrl("Services"));
   };
 
@@ -171,17 +189,29 @@ export default function LineItemsEditor({ items, onChange, currencyCode }) {
               emptyHint={
                 catalogLoading
                   ? "Loading catalog…"
-                  : "No saved products or services yet. Add them under Products & Services."
+                  : "No services yet"
               }
             />
           </PopoverContent>
         </Popover>
+        {!catalogLoading && catalog.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+            No services yet.
+            <Button type="button" variant="link" className="h-auto px-1 py-0 text-sm" onClick={openServicesPage}>
+              + Add Service
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {list.map((row, index) => (
         <div
           key={index}
-          className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid sm:grid-cols-[1fr_80px_100px_100px_auto] sm:items-end sm:gap-3 sm:rounded-lg sm:p-3 sm:shadow-none"
+          className={`flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all duration-300 sm:grid sm:grid-cols-[1fr_80px_100px_100px_auto] sm:items-end sm:gap-3 sm:rounded-lg sm:p-3 sm:shadow-none ${
+            activeHighlightRow === index
+              ? "border-primary bg-primary/10 ring-2 ring-primary/25"
+              : "border-border"
+          }`}
         >
           <div className="flex flex-col gap-2 col-span-full sm:col-span-1">
             <div className="flex flex-wrap items-center justify-between gap-2">

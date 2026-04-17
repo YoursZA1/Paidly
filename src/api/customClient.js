@@ -104,6 +104,15 @@ function isSupabaseAuthUuid(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+function normalizePaidlyPlan(rawPlan) {
+  const value = String(rawPlan || "").trim().toLowerCase();
+  if (!value) return null;
+  if (["individual", "starter", "free", "basic", "trial", "none"].includes(value)) return "individual";
+  if (["sme", "professional", "business"].includes(value)) return "sme";
+  if (["corporate", "enterprise", "pro"].includes(value)) return "corporate";
+  return value;
+}
+
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
 const SUPABASE_SELECT_COLUMNS = {
   invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
@@ -1895,7 +1904,7 @@ class AuthManager {
       phone: companyProfile.phone ?? "",
       company_website: companyProfile.company_website ?? null,
       business: companyProfile.business || null,
-      plan: credentials.plan || 'free' // Default to free plan
+      plan: normalizePaidlyPlan(credentials.plan) // Keep null unless explicitly set
     };
     this.saveUserToStorage();
     return this.user;
@@ -2036,10 +2045,24 @@ class AuthManager {
         warnProfileSlowOnce(getSupabaseErrorMessage(error, "Load profile failed"));
       }
       if (!error && profile) {
+        const normalizedProfilePlan = normalizePaidlyPlan(profile.plan);
+        const normalizedProfileSubscriptionPlan = normalizePaidlyPlan(profile.subscription_plan);
+        if (
+          normalizedProfilePlan &&
+          normalizedProfileSubscriptionPlan &&
+          normalizedProfilePlan !== normalizedProfileSubscriptionPlan
+        ) {
+          console.error("[profile-plan-mismatch] profiles.plan and profiles.subscription_plan differ", {
+            userId: effectiveId,
+            plan: profile.plan,
+            subscription_plan: profile.subscription_plan,
+          });
+        }
         // Merge Supabase profile (one row per user, id = auth.users.id) into local user
         const fullName = profile.full_name || this.user.full_name;
-        const planMerged =
-          profile.plan || profile.subscription_plan || this.user.plan || "free";
+        const planMerged = normalizePaidlyPlan(
+          profile.plan || profile.subscription_plan || this.user.plan || null
+        );
         this.user = {
           ...this.user,
           id: effectiveId,
@@ -2060,7 +2083,7 @@ class AuthManager {
           phone: profile.phone ?? this.user.phone ?? "",
           company_website: profile.company_website ?? this.user.company_website ?? null,
           plan: planMerged,
-          subscription_plan: profile.subscription_plan || profile.plan || planMerged,
+          subscription_plan: normalizePaidlyPlan(profile.subscription_plan || profile.plan || planMerged),
           subscription_status: profile.subscription_status ?? this.user.subscription_status ?? null,
           trial_ends_at: profile.trial_ends_at ?? this.user.trial_ends_at ?? null,
           business:
@@ -2132,8 +2155,22 @@ class AuthManager {
       }
 
       const fullName = profileData.full_name || su.user_metadata?.full_name || (su.email || "").split("@")[0] || "User";
-      const plan =
-        profileData.plan || profileData.subscription_plan || su.app_metadata?.plan || "free";
+      const normalizedProfilePlan = normalizePaidlyPlan(profileData.plan);
+      const normalizedProfileSubscriptionPlan = normalizePaidlyPlan(profileData.subscription_plan);
+      if (
+        normalizedProfilePlan &&
+        normalizedProfileSubscriptionPlan &&
+        normalizedProfilePlan !== normalizedProfileSubscriptionPlan
+      ) {
+        console.error("[profile-plan-mismatch] profiles.plan and profiles.subscription_plan differ", {
+          userId: su.id,
+          plan: profileData.plan,
+          subscription_plan: profileData.subscription_plan,
+        });
+      }
+      const plan = normalizePaidlyPlan(
+        profileData.plan || profileData.subscription_plan || su.app_metadata?.plan || null
+      );
       this.user = {
         id: su.id,
         supabase_id: su.id,
@@ -2158,7 +2195,7 @@ class AuthManager {
             ? profileData.business
             : null,
         plan,
-        subscription_plan: profileData.subscription_plan || profileData.plan || plan,
+        subscription_plan: normalizePaidlyPlan(profileData.subscription_plan || profileData.plan || plan),
         subscription_status: profileData.subscription_status ?? null,
         trial_ends_at: profileData.trial_ends_at ?? null,
       };
@@ -2228,7 +2265,15 @@ class AuthManager {
       supabase_id: authUserId ?? this.user.supabase_id,
     };
     if (safeData.business !== undefined) {
-      updatedUser.business = safeData.business;
+      if (safeData.business === null) {
+        updatedUser.business = null;
+      } else if (safeData.business && typeof safeData.business === "object") {
+        const currentBusiness =
+          this.user?.business && typeof this.user.business === "object" ? this.user.business : {};
+        updatedUser.business = { ...currentBusiness, ...safeData.business };
+      } else {
+        updatedUser.business = safeData.business;
+      }
     }
     this.user = updatedUser;
     this.saveUserToStorage();
@@ -2261,7 +2306,7 @@ class AuthManager {
       timezone: safeData.timezone ?? updatedUser.timezone ?? "UTC",
       invoice_template: safeData.invoice_template ?? updatedUser.invoice_template ?? DEFAULT_INVOICE_TEMPLATE,
       invoice_header: safeData.invoice_header !== undefined ? safeData.invoice_header : updatedUser.invoice_header,
-      ...(safeData.business !== undefined ? { business: safeData.business } : {}),
+      ...(safeData.business !== undefined ? { business: updatedUser.business } : {}),
       ...(safeData.document_brand_primary !== undefined
         ? { document_brand_primary: safeData.document_brand_primary }
         : {}),
