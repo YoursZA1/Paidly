@@ -359,13 +359,13 @@ export default function InvoicesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background w-full min-w-0 mobile-page px-4 sm:px-6">
-            <div className="max-w-7xl mx-auto w-full min-w-0">
+        <div className="min-h-screen bg-background w-full min-w-0 mobile-page">
+            <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8"
+                    className="responsive-page-header mb-4 sm:mb-6 md:mb-8"
                 >
                     <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
                         <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">
@@ -375,7 +375,7 @@ export default function InvoicesPage() {
                             Track, manage, and download all your invoices.
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
+                    <div className="responsive-page-header-actions gap-2.5">
                         <input
                             type="file"
                             name="invoices_import_csv"
@@ -393,19 +393,19 @@ export default function InvoicesPage() {
                             onChange={handleImportInvoiceViewsFile}
                         />
                         {/* Primary action first on mobile */}
-                        <Link to={createPageUrl("CreateInvoice")} className="order-first sm:order-none w-full sm:w-auto">
-                            <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">
+                        <Link to={createPageUrl("CreateInvoice")} className="order-first sm:order-none w-full md:w-auto">
+                            <Button className="responsive-btn h-10 w-full gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-[1px] hover:bg-primary/90 hover:shadow-md md:w-auto touch-manipulation">
                                 <Plus className="w-4 h-4 shrink-0" />
                                 Create Invoice
                             </Button>
                         </Link>
                         {/* View toggle: always visible */}
-                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10 shrink-0">
+                        <div className="hidden h-10 shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm sm:flex">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                 aria-label="Grid view"
                             >
                                 <LayoutGrid className="w-4 h-4" />
@@ -414,7 +414,7 @@ export default function InvoicesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                 aria-label="List view"
                             >
                                 <List className="w-4 h-4" />
@@ -424,7 +424,7 @@ export default function InvoicesPage() {
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-10 w-10 rounded-xl shrink-0 touch-manipulation"
+                            className="h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm transition-colors hover:bg-muted touch-manipulation"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                             aria-label="Refresh invoices"
@@ -435,11 +435,11 @@ export default function InvoicesPage() {
                         {/* Mobile: Import/Export in dropdown; Desktop: all visible */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="sm:hidden h-10 min-w-[44px] rounded-xl touch-manipulation" aria-label="More actions">
+                                <Button variant="outline" size="sm" className="h-10 min-w-[44px] rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm sm:hidden touch-manipulation" aria-label="More actions">
                                     <MoreVertical className="w-5 h-5" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl border-border">
                                 <DropdownMenuItem
                                     onClick={handleRefresh}
                                     disabled={isRefreshing}
@@ -466,20 +466,20 @@ export default function InvoicesPage() {
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <div className="hidden sm:flex flex-wrap gap-2 items-center">
-                            <Button variant="outline" size="sm" onClick={handleImportInvoices} disabled={isImporting} className="rounded-xl">
+                        <div className="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 p-1.5 shadow-sm sm:flex">
+                            <Button variant="outline" size="sm" onClick={handleImportInvoices} disabled={isImporting} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none">
                                 <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
                                 {isImporting ? "Importing…" : "Import CSV"}
                             </Button>
-                            <Button variant="outline" size="sm" onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="rounded-xl">
+                            <Button variant="outline" size="sm" onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none">
                                 <Download className="w-4 h-4 mr-2" />
                                 {isExporting ? "Exporting…" : "Export CSV"}
                             </Button>
-                            <Button variant="outline" size="sm" onClick={handleImportInvoiceViews} disabled={isImportingViews} className="rounded-xl" title="Import invoice view activity (InvoiceView_export.csv)">
+                            <Button variant="outline" size="sm" onClick={handleImportInvoiceViews} disabled={isImportingViews} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none" title="Import invoice view activity (InvoiceView_export.csv)">
                                 <Upload className={`w-4 h-4 mr-2 ${isImportingViews ? "animate-pulse" : ""}`} />
                                 {isImportingViews ? "Importing…" : "Import views CSV"}
                             </Button>
-                            <Button variant="outline" size="sm" onClick={handleExportInvoiceViews} disabled={invoiceViews.length === 0} className="rounded-xl" title="Export invoice view activity">
+                            <Button variant="outline" size="sm" onClick={handleExportInvoiceViews} disabled={invoiceViews.length === 0} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none" title="Export invoice view activity">
                                 <Download className="w-4 h-4 mr-2" />
                                 Export views CSV
                             </Button>

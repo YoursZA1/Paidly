@@ -46,8 +46,8 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Total Outstanding</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-red-600">
+          <CardContent className="min-w-0">
+            <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-red-600 sm:text-base">
               {formatCurrency(analysis.totals.totalOutstanding, currency)}
             </p>
             <p className="text-xs text-gray-500 mt-1">
@@ -60,8 +60,8 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Collection Rate</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-600">
+          <CardContent className="min-w-0">
+            <p className="tabular-nums text-sm font-semibold leading-snug text-green-600 sm:text-base">
               {analysis.totals.percentPaid.toFixed(1)}%
             </p>
             <p className="text-xs text-gray-500 mt-1">
@@ -74,8 +74,8 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Avg Days to Pay</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-primary">
+          <CardContent className="min-w-0">
+            <p className="tabular-nums text-sm font-semibold leading-snug text-primary sm:text-base">
               {(analysis.metrics?.averageDaysToPayment ?? 0).toFixed(0)}
             </p>
             <p className="text-xs text-gray-500 mt-1">days from creation</p>
@@ -86,8 +86,8 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Payment Trend</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-purple-600">
+          <CardContent className="min-w-0">
+            <p className="tabular-nums text-sm font-semibold leading-snug text-purple-600 sm:text-base">
               {(analysis.metrics?.paymentVelocity ?? 0).toFixed(1)}%
             </p>
             <p className={`text-xs mt-1 font-semibold ${
@@ -125,7 +125,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className={`font-semibold ${colors.text}`}>{status.label}</p>
-                      <p className={`text-2xl font-bold ${colors.text}`}>
+                      <p className={`currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug sm:text-base ${colors.text}`}>
                         {formatCurrency(status.amount, currency)}
                       </p>
                     </div>
@@ -264,7 +264,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
                 <p className="text-sm font-medium text-foreground mb-2">Estimated Time to Clear</p>
-                <p className="text-3xl font-bold text-primary">
+                <p className="tabular-nums text-sm font-semibold leading-snug text-primary sm:text-base">
                   {analysis.forecast.estimatedMonthsToClear.toFixed(1)}
                 </p>
                 <p className="text-xs text-primary mt-2">months at current payment rate</p>
@@ -272,7 +272,7 @@ const OutstandingBalanceDashboard = ({ invoices = [], payments = [], currency = 
 
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-sm font-medium text-green-900 mb-2">Average Monthly Payment</p>
-                <p className="text-3xl font-bold text-green-600">
+                <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-green-600 sm:text-base">
                   {formatCurrency(analysis.forecast.averageMonthlyPayment, currency)}
                 </p>
                 <p className="text-xs text-green-700 mt-2">based on payment history</p>

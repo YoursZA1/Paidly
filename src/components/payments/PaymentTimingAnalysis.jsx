@@ -120,8 +120,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">Total Payments</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold text-gray-900">{metrics.totalPayments}</p>
+                    <CardContent className="min-w-0">
+                        <p className="tabular-nums text-sm font-semibold leading-snug text-gray-900 sm:text-base">{metrics.totalPayments}</p>
                         <p className="text-xs text-gray-500">payments recorded</p>
                     </CardContent>
                 </Card>
@@ -130,8 +130,10 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">Total Paid</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold text-green-600">{formatCurrency(metrics.totalAmountPaid, currency)}</p>
+                    <CardContent className="min-w-0">
+                        <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-green-600 sm:text-base">
+                            {formatCurrency(metrics.totalAmountPaid, currency)}
+                        </p>
                         <p className="text-xs text-gray-500">avg: {formatCurrency(metrics.averagePaymentAmount, currency)}</p>
                     </CardContent>
                 </Card>
@@ -140,8 +142,8 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">On-Time Rate</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold text-primary">{onTimePercentage}%</p>
+                    <CardContent className="min-w-0">
+                        <p className="tabular-nums text-sm font-semibold leading-snug text-primary sm:text-base">{onTimePercentage}%</p>
                         <p className="text-xs text-gray-500">{metrics.onTimeCount} of {metrics.totalPayments}</p>
                     </CardContent>
                 </Card>
@@ -150,8 +152,10 @@ export default function PaymentTimingAnalysis({ payments = [], invoices = [], cu
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">Avg Days to Pay</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold text-orange-600">{metrics.daysToPayAverage.toFixed(0)}</p>
+                    <CardContent className="min-w-0">
+                        <p className="tabular-nums text-sm font-semibold leading-snug text-orange-600 sm:text-base">
+                            {metrics.daysToPayAverage.toFixed(0)}
+                        </p>
                         <p className="text-xs text-gray-500">
                             {metrics.daysToPayAverage > 0 ? 'late' : 'early'}
                         </p>

@@ -18,6 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
 import { motion } from "framer-motion";
+import { LayoutGrid, List } from "lucide-react";
 import { getIndustries, getTemplateItems, generateDefaultItems } from "@/services/IndustryPresetsService";
 import { checkItemsDeletionSafety } from "@/services/ItemUsageService";
 
@@ -25,6 +26,7 @@ import ServiceForm from "@/components/services/ServiceForm";
 import ConfirmationDialog from "@/components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
+import { cn } from "@/lib/utils";
 
 const Inventory = lazy(() => import("./Inventory"));
 
@@ -47,6 +49,7 @@ export default function Services() {
     const [isImporting, setIsImporting] = useState(false);
     const [createType, setCreateType] = useState("service"); // 'product' | 'service'
     const [activeView, setActiveView] = useState("catalog"); // 'catalog' | 'inventory'
+    const [catalogLayout, setCatalogLayout] = useState("grid"); // 'grid' | 'list'
     const serviceFileInputRef = useRef(null);
 
     useEffect(() => {
@@ -278,10 +281,10 @@ export default function Services() {
         ["service", "labor"].includes(itemType || "service");
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-6 md:p-8">
-            <div className="max-w-7xl mx-auto space-y-8">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50">
+            <div className="responsive-page-shell space-y-6 py-4 sm:py-6 md:py-8">
                 {/* 1. HEADER & SEARCH */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="responsive-page-header">
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">
                             Services
@@ -291,91 +294,125 @@ export default function Services() {
                         </p>
                     </div>
 
-                    <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-2">
-                        <div className="grid w-full grid-cols-2 gap-2 touch-manipulation md:flex md:w-auto md:grid-cols-none">
-                            <Button
-                                type="button"
-                                onClick={() => setActiveView("catalog")}
-                                className={`min-h-12 rounded-2xl px-3 text-sm font-bold sm:px-4 ${
-                                    activeView === "catalog"
-                                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                }`}
-                            >
-                                Catalog
-                            </Button>
-                            <Button
-                                type="button"
-                                onClick={() => setActiveView("inventory")}
-                                className={`min-h-12 rounded-2xl px-3 text-sm font-bold sm:px-4 ${
-                                    activeView === "inventory"
-                                        ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
-                                        : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                }`}
-                            >
-                                Inventory
-                            </Button>
-                        </div>
-
-                        {activeView === "inventory" ? null : (
-                            <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch md:w-auto md:flex-row md:items-center md:gap-3">
-                                <div className="relative w-full min-w-0 sm:min-w-0 sm:flex-1 md:w-72 md:flex-none">
-                                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
-                                    <Input
-                                        placeholder="Search items..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="min-h-12 w-full rounded-2xl border border-slate-200 bg-white py-0 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-orange-500"
-                                    />
-                                </div>
-                                <div className="grid w-full grid-cols-1 gap-2 touch-manipulation min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:shrink-0 sm:gap-2">
-                                    <Button
-                                        type="button"
-                                        data-testid="services-add-product"
-                                        onClick={() => {
-                                            setCreateType("product");
-                                            setEditingService(null);
-                                            setShowForm(true);
-                                        }}
-                                        className={`flex min-h-12 flex-row items-center justify-center gap-2 rounded-2xl px-3 text-sm font-bold leading-none shadow-sm min-[360px]:flex-col min-[360px]:gap-0.5 min-[360px]:px-2 min-[360px]:py-2 min-[360px]:text-xs min-[360px]:leading-tight sm:flex-row sm:gap-2 sm:px-4 sm:py-0 sm:text-sm sm:leading-none md:whitespace-nowrap ${
-                                            createType === "product"
-                                                ? "bg-orange-600 text-white shadow-orange-100 dark:shadow-orange-900/30"
-                                                : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                        }`}
-                                    >
-                                        <CubeIcon className="size-5 shrink-0 sm:size-4" />
-                                        <span className="text-center min-[360px]:max-w-[7.5rem] sm:max-w-none">
-                                            <span className="min-[360px]:hidden">Product</span>
-                                            <span className="hidden min-[360px]:inline">
-                                                Create Product
-                                            </span>
-                                        </span>
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        data-testid="services-add"
-                                        onClick={() => {
-                                            setCreateType("service");
-                                            setEditingService(null);
-                                            setShowForm(true);
-                                        }}
-                                        className={`flex min-h-12 flex-row items-center justify-center gap-2 rounded-2xl px-3 text-sm font-bold leading-none shadow-sm min-[360px]:flex-col min-[360px]:gap-0.5 min-[360px]:px-2 min-[360px]:py-2 min-[360px]:text-xs min-[360px]:leading-tight sm:flex-row sm:gap-2 sm:px-4 sm:py-0 sm:text-sm sm:leading-none md:whitespace-nowrap ${
-                                            createType === "service"
-                                                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                                                : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                        }`}
-                                    >
-                                        <TagIcon className="size-5 shrink-0 sm:size-4" />
-                                        <span className="text-center min-[360px]:max-w-[7.5rem] sm:max-w-none">
-                                            <span className="min-[360px]:hidden">Service</span>
-                                            <span className="hidden min-[360px]:inline">
-                                                Create Service
-                                            </span>
-                                        </span>
-                                    </Button>
-                                </div>
+                    <div className="responsive-page-header-actions gap-2.5">
+                        <div className="flex w-full min-w-0 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                            <div className="flex h-10 w-full shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm sm:w-auto">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setActiveView("catalog")}
+                                    className={cn(
+                                        "h-8 flex-1 rounded-lg px-3 text-sm font-semibold transition-colors sm:flex-none",
+                                        activeView === "catalog"
+                                            ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    )}
+                                >
+                                    Catalog
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setActiveView("inventory")}
+                                    className={cn(
+                                        "h-8 flex-1 rounded-lg px-3 text-sm font-semibold transition-colors sm:flex-none",
+                                        activeView === "inventory"
+                                            ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    )}
+                                >
+                                    Inventory
+                                </Button>
                             </div>
-                        )}
+
+                            {activeView === "inventory" ? null : (
+                                <>
+                                    <div className="flex h-10 shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setCatalogLayout("grid")}
+                                            className={cn(
+                                                "h-8 w-8 min-h-8 min-w-8 max-h-8 max-w-8 shrink-0 rounded-lg p-0 transition-colors",
+                                                catalogLayout === "grid"
+                                                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                            aria-label="Grid layout"
+                                        >
+                                            <LayoutGrid className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setCatalogLayout("list")}
+                                            className={cn(
+                                                "h-8 w-8 min-h-8 min-w-8 max-h-8 max-w-8 shrink-0 rounded-lg p-0 transition-colors",
+                                                catalogLayout === "list"
+                                                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                            aria-label="List layout"
+                                        >
+                                            <List className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div className="relative min-w-0 flex-1 basis-full sm:basis-[min(100%,18rem)] md:max-w-md">
+                                        <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search items..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="h-9 w-full rounded-xl border border-input bg-background py-0 pl-10 pr-3 text-sm shadow-sm md:h-10"
+                                        />
+                                    </div>
+
+                                    <div className="flex w-full min-w-0 shrink-0 flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            data-testid="services-add-product"
+                                            onClick={() => {
+                                                setCreateType("product");
+                                                setEditingService(null);
+                                                setShowForm(true);
+                                            }}
+                                            className={cn(
+                                                "responsive-btn inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border-border bg-background/80 px-3.5 font-medium shadow-sm backdrop-blur-sm transition-all hover:-translate-y-[1px] hover:shadow-md sm:flex-none",
+                                                createType === "product" &&
+                                                    "border-primary bg-primary/10 text-primary hover:bg-primary/15"
+                                            )}
+                                        >
+                                            <CubeIcon className="size-4 shrink-0" />
+                                            <span className="sm:hidden">Product</span>
+                                            <span className="hidden sm:inline">Create product</span>
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            data-testid="services-add"
+                                            onClick={() => {
+                                                setCreateType("service");
+                                                setEditingService(null);
+                                                setShowForm(true);
+                                            }}
+                                            className={cn(
+                                                "responsive-btn inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border-border bg-background/80 px-3.5 font-medium shadow-sm backdrop-blur-sm transition-all hover:-translate-y-[1px] hover:shadow-md sm:flex-none",
+                                                createType === "service" &&
+                                                    "border-primary bg-primary/10 text-primary hover:bg-primary/15"
+                                            )}
+                                        >
+                                            <TagIcon className="size-4 shrink-0" />
+                                            <span className="sm:hidden">Service</span>
+                                            <span className="hidden sm:inline">Create service</span>
+                                        </Button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -392,7 +429,8 @@ export default function Services() {
                 ) : (
                     <>
                         {/* 2. INVENTORY GRID */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {catalogLayout === "grid" ? (
+                        <div className="responsive-grid">
                             {isLoading ? (
                                 Array.from({ length: 6 }).map((_, i) => (
                                     <Card key={i} className="rounded-[32px] overflow-hidden bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700">
@@ -517,6 +555,65 @@ export default function Services() {
                         </>
                     )}
                 </div>
+                        ) : (
+                            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                                <div className="hidden grid-cols-[minmax(0,2.2fr)_120px_140px_140px] items-center gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400 md:grid">
+                                    <span>Item</span>
+                                    <span className="text-right">Rate</span>
+                                    <span className="text-center">Type</span>
+                                    <span className="text-right">Actions</span>
+                                </div>
+                                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {isLoading
+                                        ? Array.from({ length: 6 }).map((_, i) => (
+                                              <div key={i} className="grid grid-cols-1 gap-2 px-4 py-4 md:grid-cols-[minmax(0,2.2fr)_120px_140px_140px] md:items-center md:gap-3">
+                                                  <div className="h-4 w-44 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                                                  <div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700 md:ml-auto" />
+                                                  <div className="h-6 w-20 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700 md:mx-auto" />
+                                                  <div className="h-8 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700 md:ml-auto" />
+                                              </div>
+                                          ))
+                                        : filteredServices.map((service) => {
+                                              const price = service.default_rate ?? service.unit_price ?? 0;
+                                              const isProduct = service.item_type === "product";
+                                              return (
+                                                  <div key={service.id} className="grid grid-cols-1 gap-2 px-4 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80 md:grid-cols-[minmax(0,2.2fr)_120px_140px_140px] md:items-center md:gap-3">
+                                                      <div className="min-w-0">
+                                                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{service.name}</p>
+                                                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{service.description || service.category || "No description"}</p>
+                                                      </div>
+                                                      <div className="text-left text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100 md:text-right">
+                                                          {formatCurrency(price, userCurrency)}
+                                                      </div>
+                                                      <div className="md:text-center">
+                                                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                                              isProduct
+                                                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                                                                  : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                                                          }`}>
+                                                              {isProduct ? "Product" : "Service"}
+                                                          </span>
+                                                      </div>
+                                                      <div className="md:text-right">
+                                                          <Button
+                                                              type="button"
+                                                              variant="outline"
+                                                              className="responsive-btn rounded-lg"
+                                                              onClick={() => {
+                                                                  setEditingService(service);
+                                                                  setCreateType(service?.item_type === "product" ? "product" : "service");
+                                                                  setShowForm(true);
+                                                              }}
+                                                          >
+                                                              Edit
+                                                          </Button>
+                                                      </div>
+                                                  </div>
+                                              );
+                                          })}
+                                </div>
+                            </div>
+                        )}
 
                 {!isLoading && filteredServices.length === 0 && (
                     <Card className="rounded-[32px] border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">

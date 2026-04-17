@@ -256,20 +256,20 @@ export default function QuotesPage() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-7xl mx-auto">
+            <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
+                    className="responsive-page-header mb-4 sm:mb-6 md:mb-8"
                 >
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">Quotes</h1>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="min-w-0">
+                        <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">Quotes</h1>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                             Create, manage, and track your project quotations.
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full sm:w-auto items-center">
+                    <div className="responsive-page-header-actions gap-2.5">
                         <input
                             type="file"
                             name="quotes_import_csv"
@@ -279,20 +279,20 @@ export default function QuotesPage() {
                             onChange={handleImportQuotesFile}
                         />
                         {/* Primary action first on mobile */}
-                        <Link to={createPageUrl("CreateQuote")} className="order-first sm:order-none w-full sm:w-auto">
-                            <Button className="w-full sm:w-auto rounded-xl gap-2 h-11 sm:h-9 px-4 touch-manipulation">
+                        <Link to={createPageUrl("CreateQuote")} className="order-first sm:order-none w-full md:w-auto">
+                            <Button className="responsive-btn h-10 w-full gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-[1px] hover:bg-primary/90 hover:shadow-md md:w-auto touch-manipulation">
                                 <Plus className="w-4 h-4" />
                                 Create Quote
                             </Button>
                         </Link>
 
                         {/* View toggle */}
-                        <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-10 shrink-0">
+                        <div className="hidden h-10 shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm sm:flex">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 transition-colors ${viewMode === 'grid' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </Button>
@@ -300,7 +300,7 @@ export default function QuotesPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 rounded-lg shrink-0 ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 rounded-lg shrink-0 transition-colors ${viewMode === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 <List className="w-4 h-4" />
                             </Button>
@@ -310,7 +310,7 @@ export default function QuotesPage() {
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-10 w-10 rounded-xl shrink-0 touch-manipulation"
+                            className="h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm transition-colors hover:bg-muted touch-manipulation"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                             aria-label="Refresh quotes"
@@ -325,13 +325,13 @@ export default function QuotesPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="sm:hidden h-10 min-w-[44px] rounded-xl touch-manipulation"
+                                    className="h-10 min-w-[44px] rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm sm:hidden touch-manipulation"
                                     aria-label="More actions"
                                 >
                                     <MoreVertical className="w-5 h-5" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl border-border">
                                 <DropdownMenuItem
                                     onClick={handleRefresh}
                                     disabled={isRefreshing}
@@ -352,13 +352,13 @@ export default function QuotesPage() {
                         </DropdownMenu>
 
                         {/* Desktop: buttons */}
-                        <div className="hidden sm:flex flex-wrap gap-2 items-center">
+                        <div className="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 p-1.5 shadow-sm sm:flex">
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={handleImportQuotes}
                                 disabled={isImporting}
-                                className="rounded-xl"
+                                className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none"
                             >
                                 <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
                                 {isImporting ? "Importing…" : "Import CSV"}
@@ -368,14 +368,14 @@ export default function QuotesPage() {
                                 size="sm"
                                 onClick={handleExportQuotes}
                                 disabled={sortedQuotes.length === 0}
-                                className="rounded-xl"
+                                className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none"
                             >
                                 <Download className="w-4 h-4 mr-2" />
                                 Export CSV
                             </Button>
                         </div>
                         <Link to={createPageUrl("QuoteTemplates")} className="flex-1 sm:flex-none">
-                            <Button variant="outline" className="w-full sm:w-auto rounded-xl">
+                            <Button variant="outline" className="h-10 w-full rounded-xl border-border bg-background/80 px-3.5 font-medium shadow-sm backdrop-blur-sm sm:w-auto">
                                 <FileText className="w-4 h-4 mr-2" />
                                 Templates
                             </Button>

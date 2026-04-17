@@ -187,8 +187,10 @@ export default function AccountingDashboard({ user }) {
                 Total Revenue
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{formatCurrency(financialData.revenue, userCurrency)}</div>
+            <CardContent className="min-w-0">
+              <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
+                {formatCurrency(financialData.revenue, userCurrency)}
+              </div>
               <p className="text-xs text-emerald-600 mt-1">+12% from last month</p>
             </CardContent>
           </Card>
@@ -200,8 +202,10 @@ export default function AccountingDashboard({ user }) {
                 Total Expenses
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{formatCurrency(financialData.expenses, userCurrency)}</div>
+            <CardContent className="min-w-0">
+              <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
+                {formatCurrency(financialData.expenses, userCurrency)}
+              </div>
               <p className="text-xs text-red-600 mt-1">+5% from last month</p>
             </CardContent>
           </Card>
@@ -213,8 +217,10 @@ export default function AccountingDashboard({ user }) {
                 Net Profit
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{formatCurrency(financialData.profit, userCurrency)}</div>
+            <CardContent className="min-w-0">
+              <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
+                {formatCurrency(financialData.profit, userCurrency)}
+              </div>
               <p className="text-xs text-emerald-600 mt-1">{financialData.profitMargin.toFixed(1)}% profit margin</p>
             </CardContent>
           </Card>
@@ -226,8 +232,10 @@ export default function AccountingDashboard({ user }) {
                 Outstanding Receivables
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{formatCurrency(financialData.outstandingInvoices, userCurrency)}</div>
+            <CardContent className="min-w-0">
+              <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
+                {formatCurrency(financialData.outstandingInvoices, userCurrency)}
+              </div>
               <p className="text-xs text-amber-600 mt-1">Awaiting payment</p>
             </CardContent>
           </Card>

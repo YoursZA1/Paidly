@@ -12,8 +12,10 @@ const PaymentCard = ({ label, amount, dueDate, iconBg }) => (
                 <FileText className="w-7 h-7 text-white" />
             </div>
         </div>
-        <p className="text-sm text-muted-foreground mb-1 truncate">{label}</p>
-        <p className="text-xl font-bold text-foreground currency-nums truncate">{amount}</p>
+        <p className="mb-1 min-w-0 break-words text-sm text-muted-foreground">{label}</p>
+        <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
+            {amount}
+        </p>
         {dueDate && <p className="text-xs text-muted-foreground mt-1">Due: {dueDate}</p>}
     </div>
 );

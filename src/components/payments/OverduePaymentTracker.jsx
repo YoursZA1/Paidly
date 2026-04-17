@@ -161,7 +161,7 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
             <span className="text-gray-600 text-sm font-medium">Overdue Count</span>
             <AlertCircle className="w-4 h-4 text-red-500" />
           </div>
-          <p className="text-2xl font-bold text-red-600">
+          <p className="tabular-nums text-sm font-semibold leading-snug text-red-600 sm:text-base">
             {overdueData.overdueCount}
           </p>
           <p className="text-xs text-gray-500 mt-1">invoices overdue</p>
@@ -172,7 +172,7 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
             <span className="text-gray-600 text-sm font-medium">Total Overdue</span>
             <TrendingUp className="w-4 h-4 text-red-500" />
           </div>
-          <p className="text-2xl font-bold text-red-600">
+          <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-red-600 sm:text-base">
             ${overdueData.totalOverdue.toFixed(2)}
           </p>
           <p className="text-xs text-gray-500 mt-1">amount outstanding</p>
@@ -183,7 +183,7 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
             <span className="text-gray-600 text-sm font-medium">Critical (90+)</span>
             <Clock className="w-4 h-4 text-red-600" />
           </div>
-          <p className="text-2xl font-bold text-red-600">
+          <p className="tabular-nums text-sm font-semibold leading-snug text-red-600 sm:text-base">
             {overdueData.urgencyBreakdown.over90}
           </p>
           <p className="text-xs text-gray-500 mt-1">overdue 90+ days</p>
@@ -194,7 +194,7 @@ const OverduePaymentTracker = ({ invoices, payments }) => {
             <span className="text-gray-600 text-sm font-medium">At Risk</span>
             <AlertCircle className="w-4 h-4 text-orange-500" />
           </div>
-          <p className="text-2xl font-bold text-orange-600">
+          <p className="tabular-nums text-sm font-semibold leading-snug text-orange-600 sm:text-base">
             {overdueData.urgencyBreakdown.thirtyDays +
               overdueData.urgencyBreakdown.sixtyDays +
               overdueData.urgencyBreakdown.ninetyDays}

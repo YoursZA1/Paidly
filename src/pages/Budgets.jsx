@@ -98,7 +98,9 @@ export default function BudgetsPage() {
                 <CardContent>
                     <div className="flex justify-between items-end mb-2">
                         <div>
-                            <span className="text-2xl font-bold">{formatCurrency(spent)}</span>
+                            <span className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold text-slate-900 sm:text-base">
+                                {formatCurrency(spent)}
+                            </span>
                             <span className="text-sm text-slate-500 ml-1">of {formatCurrency(budget.amount)}</span>
                         </div>
                         {isOverBudget && <AlertCircle className="w-5 h-5 text-red-500" />}

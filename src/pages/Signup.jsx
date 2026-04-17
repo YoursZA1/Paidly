@@ -24,6 +24,7 @@ import {
   getAppDashboardUrl,
   shouldRedirectToAppAfterAuth,
   setWelcomeTourEligibleAfterSignup,
+  setQuickSetupEligibleAfterSignup,
 } from "@/utils";
 import { validatePasswordForSignup } from "@/utils/authPasswordPolicy";
 import {
@@ -525,6 +526,7 @@ export default function Signup() {
       setSuccess(true);
       clearSignupOnboardingDraft();
       setWelcomeTourEligibleAfterSignup(createdUserId);
+      setQuickSetupEligibleAfterSignup(createdUserId);
       setTimeout(async () => {
         if (shouldRedirectToAppAfterAuth()) {
           window.location.href = getAppDashboardUrl();

@@ -37,7 +37,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
-import { createPageUrl, isWelcomeTourEligible } from "@/utils";
+import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
 import { ROLES, STAFF_ROLES } from "@/lib/permissions";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
@@ -622,11 +622,16 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
     if (currentPageName !== "Dashboard") return;
+    if (!isQuickSetupEligible(user.id)) {
+      setShowActivationOnboarding(false);
+      return;
+    }
     const business =
       layoutProfile?.business && typeof layoutProfile.business === "object" ? layoutProfile.business : {};
     const onboarding =
       business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
     if (onboarding?.status === "completed") {
+      clearQuickSetupEligible(user.id);
       setShowActivationOnboarding(false);
       return;
     }
@@ -1193,8 +1198,11 @@ export default function Layout({ children, currentPageName }) {
           isOpen={showActivationOnboarding}
           profile={layoutProfile || user}
           onClose={() => {
-            if (user?.id && typeof window !== "undefined") {
-              window.sessionStorage.setItem(`paidly_onboarding_v2_dismissed_${user.id}`, "1");
+            if (user?.id) {
+              clearQuickSetupEligible(user.id);
+              if (typeof window !== "undefined") {
+                window.sessionStorage.setItem(`paidly_onboarding_v2_dismissed_${user.id}`, "1");
+              }
             }
             setShowActivationOnboarding(false);
           }}

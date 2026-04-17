@@ -44,6 +44,7 @@ import TaskNotificationService from '../components/calendar/TaskNotificationServ
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { supabase } from '@/lib/supabaseClient';
+import { cn } from '@/lib/utils';
 
 const DAYS_HEADER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -68,9 +69,11 @@ function getEventPillVariant(event) {
 function EventPill({ event, variant, index = 0 }) {
     const v = variant || getEventPillVariant(event);
     const styles = {
-        orange: 'bg-orange-50 dark:bg-orange-950/50 border-l-4 border-orange-500 dark:border-orange-600 text-orange-800 dark:text-orange-200',
-        blue: 'bg-blue-50 dark:bg-blue-950/50 border-l-4 border-blue-500 dark:border-blue-600 text-blue-800 dark:text-blue-200',
-        emerald: 'bg-emerald-50 dark:bg-emerald-950/50 border-l-4 border-emerald-500 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200',
+        orange:
+            'border border-border bg-muted/40 border-l-[3px] border-l-orange-500 text-foreground shadow-none dark:border-l-orange-500',
+        blue: 'border border-border bg-muted/40 border-l-[3px] border-l-blue-500 text-foreground shadow-none dark:border-l-blue-500',
+        emerald:
+            'border border-border bg-muted/40 border-l-[3px] border-l-emerald-500 text-foreground shadow-none dark:border-l-emerald-500',
     };
     const label =
         event.type === 'invoice'
@@ -89,7 +92,7 @@ function EventPill({ event, variant, index = 0 }) {
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, delay: index * 0.03 }}
-            className={`mt-1.5 p-1.5 rounded-lg text-[10px] font-semibold truncate shadow-sm ${styles[v]}`}
+            className={`mt-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium leading-tight truncate ${styles[v]}`}
             title={label}
         >
             <p className="truncate">{label}</p>
@@ -98,16 +101,16 @@ function EventPill({ event, variant, index = 0 }) {
     );
 }
 
-function AgendaItem({ day, month, title, time, type, color = 'text-slate-900' }) {
+function AgendaItem({ day, month, title, time, type, color = 'text-foreground' }) {
     return (
-        <div className="flex gap-3 items-center">
-            <div className="flex flex-col items-center justify-center w-11 h-11 bg-white rounded-xl shadow-sm border border-slate-100 shrink-0">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{month}</span>
-                <span className="text-sm font-bold text-slate-900 leading-tight">{day}</span>
+        <div className="flex gap-3 items-center rounded-xl border border-transparent px-1 py-1 transition-colors hover:border-border hover:bg-muted/30">
+            <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-border bg-background shadow-sm">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{month}</span>
+                <span className="text-sm font-bold leading-tight text-foreground">{day}</span>
             </div>
             <div className="min-w-0 flex-1">
-                <p className={`text-sm font-semibold truncate ${color}`}>{title}</p>
-                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                <p className={cn('truncate text-sm font-semibold', color)}>{title}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     {time} • {type}
                 </p>
             </div>
@@ -481,12 +484,12 @@ export default function CalendarPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-6">
-                <div className="max-w-7xl mx-auto">
-                    <Skeleton className="h-12 w-64 mb-8" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <Skeleton className="h-96 lg:col-span-2" />
-                        <Skeleton className="h-96" />
+            <div className="min-h-screen bg-background">
+                <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
+                    <Skeleton className="mb-8 h-12 w-64 rounded-xl" />
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                        <Skeleton className="h-96 rounded-2xl lg:col-span-2" />
+                        <Skeleton className="h-96 rounded-2xl" />
                     </div>
                 </div>
             </div>
@@ -494,84 +497,132 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-background">
+            <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
+                    className="responsive-page-header mb-4 sm:mb-6 md:mb-8"
                 >
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Calendar & Tasks</h1>
-                        <p className="text-slate-600 dark:text-slate-400">Track due dates and manage team tasks</p>
+                    <div className="min-w-0">
+                        <h1 className="truncate font-display text-lg font-semibold text-foreground sm:text-xl md:text-2xl lg:text-3xl">
+                            Calendar & Tasks
+                        </h1>
+                        <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">Track due dates and manage team tasks</p>
                     </div>
-                    <div className="flex gap-2">
-                        <Button
-                            variant={viewMode === 'tasks' ? 'default' : 'outline'}
-                            onClick={() => setViewMode('tasks')}
-                            size="sm"
-                        >
-                            <ListTodo className="w-4 h-4 mr-2" />
-                            Tasks
-                        </Button>
-                        <Button
-                            variant={viewMode === 'analytics' ? 'default' : 'outline'}
-                            onClick={() => setViewMode('analytics')}
-                            size="sm"
-                        >
-                            <BarChart2 className="w-4 h-4 mr-2" />
-                            Analytics
-                        </Button>
-                        <Link to={createPageUrl('TaskSettings')}>
-                            <Button variant="outline" size="sm">
-                                <Settings className="w-4 h-4" />
+                    <div className="responsive-page-header-actions gap-2.5">
+                        <div className="flex h-10 w-full shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm sm:w-auto">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setViewMode('tasks')}
+                                className={cn(
+                                    'h-8 flex-1 gap-2 rounded-lg px-3 text-sm font-semibold transition-colors sm:flex-none',
+                                    viewMode === 'tasks'
+                                        ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                )}
+                            >
+                                <ListTodo className="h-4 w-4 shrink-0" />
+                                Tasks
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setViewMode('analytics')}
+                                className={cn(
+                                    'h-8 flex-1 gap-2 rounded-lg px-3 text-sm font-semibold transition-colors sm:flex-none',
+                                    viewMode === 'analytics'
+                                        ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                )}
+                            >
+                                <BarChart2 className="h-4 w-4 shrink-0" />
+                                Analytics
+                            </Button>
+                        </div>
+                        <Link to={createPageUrl('TaskSettings')} className="shrink-0">
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm"
+                                aria-label="Task settings"
+                                title="Task settings"
+                            >
+                                <Settings className="h-4 w-4" />
                             </Button>
                         </Link>
-                        <Button 
-                            onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
-                            className="bg-primary hover:bg-primary/90"
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                setEditingTask(null);
+                                setShowTaskForm(true);
+                            }}
+                            className="inline-flex h-9 w-full min-h-9 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-[1px] hover:bg-primary/90 hover:shadow-md sm:w-auto md:h-10 md:min-h-10 md:text-base touch-manipulation"
                         >
-                            <Plus className="w-4 h-4 mr-2" />
+                            <Plus className="h-4 w-4 shrink-0" />
                             Add Task
                         </Button>
                     </div>
                 </motion.div>
 
-                <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex flex-col gap-6 lg:flex-row">
                     {/* Calendar + Side Agenda */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="flex-1 flex flex-col lg:flex-row bg-white dark:bg-slate-800 rounded-2xl lg:rounded-3xl shadow-2xl shadow-slate-200/80 dark:shadow-slate-900/80 overflow-hidden border border-slate-100 dark:border-slate-700 min-w-0"
+                        className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:flex-row"
                     >
-                        <div className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 lg:mb-8">
-                                <div>
-                                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
+                        <div className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+                            <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between lg:mb-8">
+                                <div className="min-w-0">
+                                    <h2 className="font-display text-xl font-semibold tracking-tight text-foreground sm:text-2xl md:text-3xl">
                                         {format(viewMonth, 'MMMM yyyy')}
                                     </h2>
-                                    <p className="text-sm text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+                                    <p className="mt-0.5 text-sm font-medium text-muted-foreground">
                                         {invoiceCountThisMonth} invoices due this month
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2 sm:gap-4">
-                                    <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
-                                        <button type="button" onClick={() => setViewMonth(m => subMonths(m, 1))} className="p-2 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm rounded-lg transition-all text-slate-600 dark:text-slate-300" aria-label="Previous month">
-                                            <ChevronLeft className="w-5 h-5" />
-                                        </button>
-                                        <button type="button" onClick={() => setViewMonth(m => addMonths(m, 1))} className="p-2 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm rounded-lg transition-all text-slate-600 dark:text-slate-300" aria-label="Next month">
-                                            <ChevronRight className="w-5 h-5" />
-                                        </button>
+                                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-2.5">
+                                    <div className="flex h-10 shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setViewMonth((m) => subMonths(m, 1))}
+                                            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                            aria-label="Previous month"
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setViewMonth((m) => addMonths(m, 1))}
+                                            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                            aria-label="Next month"
+                                        >
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Button>
                                     </div>
-                                    <Button onClick={() => { setEditingTask(null); setShowTaskForm(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 sm:px-6 py-2.5 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-orange-200 dark:shadow-orange-900/30">
-                                        <Plus className="w-5 h-5" /> Add Event
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingTask(null);
+                                            setShowTaskForm(true);
+                                        }}
+                                        className="inline-flex h-9 min-h-9 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-[1px] hover:bg-primary/90 hover:shadow-md sm:h-10 sm:min-h-10 sm:flex-none md:text-base touch-manipulation"
+                                    >
+                                        <Plus className="h-4 w-4 shrink-0" />
+                                        Add Event
                                     </Button>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden">
+                            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-border bg-border">
                                 {DAYS_HEADER.map(day => (
-                                    <div key={day} className="bg-slate-50 dark:bg-slate-800 py-2 sm:py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                    <div key={day} className="bg-muted/50 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:py-3">
                                         {day}
                                     </div>
                                 ))}
@@ -589,7 +640,7 @@ export default function CalendarPage() {
                                     for (let i = 0; i < remainder; i++) cells.push(null);
                                     return cells.map((date, idx) => {
                                         if (!date) {
-                                            return <div key={`e-${idx}`} className="bg-slate-50/50 dark:bg-slate-800/50 min-h-[80px] sm:min-h-[100px]" />;
+                                            return <div key={`e-${idx}`} className="min-h-[80px] bg-muted/20 sm:min-h-[100px]" />;
                                         }
                                         const dayEvents = getCellEventsForDate(date);
                                         const today = isToday(date);
@@ -599,9 +650,19 @@ export default function CalendarPage() {
                                                 key={date.toISOString()}
                                                 type="button"
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`bg-white dark:bg-slate-800 min-h-[80px] sm:min-h-[120px] p-2 sm:p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/80 active:scale-95 transition-all rounded-sm ${isSelected ? 'ring-2 ring-inset ring-primary' : ''}`}
+                                                className={cn(
+                                                    'min-h-[80px] bg-card p-2 text-left transition-colors hover:bg-muted/40 active:scale-[0.99] sm:min-h-[120px] sm:p-3',
+                                                    isSelected && 'bg-primary/5 ring-2 ring-inset ring-primary',
+                                                    !isSelected && today && 'bg-muted/30'
+                                                )}
                                             >
-                                                <span className={`inline-flex items-center justify-center text-sm font-bold w-7 h-7 rounded-full shrink-0 ${today ? 'bg-orange-600 text-white ring-2 ring-orange-400 dark:ring-orange-500 ring-offset-2 dark:ring-offset-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                <span
+                                                    className={cn(
+                                                        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
+                                                        today && 'bg-primary text-primary-foreground shadow-sm',
+                                                        !today && 'text-muted-foreground'
+                                                    )}
+                                                >
                                                     {format(date, 'd')}
                                                 </span>
                                                 <div className="mt-1 space-y-0.5">
@@ -612,17 +673,26 @@ export default function CalendarPage() {
                                     });
                                 })()}
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs text-slate-600 dark:text-slate-400">
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-200 dark:bg-orange-800 border-l-4 border-orange-500" /> Finance</span>
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border-l-4 border-blue-500" /> Meeting</span>
-                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-200 dark:bg-emerald-800 border-l-4 border-emerald-500" /> Done</span>
+                            <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1.5">
+                                    <span className="h-2.5 w-2.5 rounded-sm border border-orange-500/40 bg-orange-500/20" aria-hidden />
+                                    Finance
+                                </span>
+                                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1.5">
+                                    <span className="h-2.5 w-2.5 rounded-sm border border-blue-500/40 bg-blue-500/20" aria-hidden />
+                                    Meeting
+                                </span>
+                                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1.5">
+                                    <span className="h-2.5 w-2.5 rounded-sm border border-emerald-500/40 bg-emerald-500/20" aria-hidden />
+                                    Done
+                                </span>
                             </div>
                         </div>
-                        <div className="w-full lg:w-80 shrink-0 bg-slate-50/80 dark:bg-slate-800/80 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-700 p-4 sm:p-6 lg:p-8">
-                            <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 mb-4">Upcoming</h3>
-                            <div className="space-y-4">
+                        <div className="w-full shrink-0 border-t border-border bg-muted/20 p-4 sm:p-6 lg:w-80 lg:border-l lg:border-t-0 lg:p-8">
+                            <h3 className="mb-4 text-base font-semibold tracking-tight text-foreground">Upcoming</h3>
+                            <div className="space-y-3">
                                 {getUpcomingAgendaItems().length === 0 ? (
-                                    <p className="text-sm text-slate-400 dark:text-slate-500">No upcoming events this week.</p>
+                                    <p className="text-sm text-muted-foreground">No upcoming events this week.</p>
                                 ) : (
                                     getUpcomingAgendaItems().map((item, i) => (
                                         <AgendaItem key={i} day={format(item.date, 'd')} month={format(item.date, 'MMM')} title={item.title} time={item.time} type={item.type} color={item.color} />
@@ -639,16 +709,16 @@ export default function CalendarPage() {
                         transition={{ delay: 0.2 }}
                         className="w-full lg:w-96 shrink-0"
                     >
-                        <Card className="bg-white dark:bg-slate-800 shadow-xl border-0 dark:border dark:border-slate-700">
-                            <CardHeader className="border-b border-slate-100 dark:border-slate-700">
-                                <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                        <Card className="rounded-2xl border border-border bg-card shadow-sm">
+                            <CardHeader className="border-b border-border">
+                                <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
                                     <CalendarIcon className="w-5 h-5" />
                                     {format(selectedDate, 'MMMM d, yyyy')}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-6">
                                 {selectedEvents.length === 0 && selectedTasks.length === 0 ? (
-                                    <div className="text-center text-slate-500 dark:text-slate-400 py-8">
+                                    <div className="py-8 text-center text-muted-foreground">
                                         <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
                                         <p>No events on this date</p>
                                     </div>
@@ -670,7 +740,7 @@ export default function CalendarPage() {
                                         {selectedEvents.map((event, index) => (
                                             <div
                                                 key={index}
-                                                className="border border-slate-200 dark:border-slate-600 rounded-lg p-4 hover:shadow-md dark:bg-slate-700/30 transition-shadow"
+                                                className="rounded-xl border border-border bg-muted/20 p-4 transition-shadow hover:shadow-sm"
                                             >
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2">
@@ -679,7 +749,7 @@ export default function CalendarPage() {
                                                         ) : (
                                                             <FileText className="w-5 h-5 text-yellow-600 dark:text-yellow-500" />
                                                         )}
-                                                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                                        <span className="font-semibold text-foreground">
                                                             {event.title}
                                                         </span>
                                                     </div>
@@ -693,13 +763,13 @@ export default function CalendarPage() {
                                                         {event.status}
                                                     </Badge>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                                <div className="flex items-center gap-2 text-muted-foreground">
                                                     <DollarSign className="w-4 h-4" />
                                                     <span className="font-medium">
                                                         {formatCurrency(event.amount, 'ZAR')}
                                                     </span>
                                                 </div>
-                                                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                                <div className="mt-2 text-xs text-muted-foreground">
                                                     {event.type === 'invoice' ? 'Payment Due' : 'Quote Expires'}
                                                 </div>
                                             </div>
@@ -719,10 +789,10 @@ export default function CalendarPage() {
                         transition={{ delay: 0.3 }}
                         className="mt-8"
                     >
-                        <Card className="bg-white dark:bg-slate-800 shadow-xl border-0 dark:border dark:border-slate-700">
-                            <CardHeader className="border-b border-slate-100 dark:border-slate-700">
-                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                    <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                        <Card className="rounded-2xl border border-border bg-card shadow-sm">
+                            <CardHeader className="border-b border-border">
+                                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
                                         <ListTodo className="w-5 h-5" />
                                         Task Management
                                     </CardTitle>
@@ -735,14 +805,28 @@ export default function CalendarPage() {
                                             className="hidden"
                                             onChange={handleImportTaskCsv}
                                         />
-                                        <Button variant="outline" size="sm" disabled={isImportingTasks} onClick={() => taskFileInputRef.current?.click()}>
-                                            <Upload className="w-4 h-4 mr-2" />
-                                            {isImportingTasks ? 'Importing…' : 'Import CSV'}
-                                        </Button>
-                                        <Button variant="outline" size="sm" disabled={isExportingTasks} onClick={handleExportTaskCsv}>
-                                            <Download className="w-4 h-4 mr-2" />
-                                            {isExportingTasks ? 'Exporting…' : 'Export CSV'}
-                                        </Button>
+                                        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 p-1.5 shadow-sm">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={isImportingTasks}
+                                                onClick={() => taskFileInputRef.current?.click()}
+                                                className="h-9 rounded-lg border-border bg-background px-3 text-xs font-medium shadow-none sm:h-10 sm:text-sm"
+                                            >
+                                                <Upload className={`mr-2 h-4 w-4 ${isImportingTasks ? 'animate-pulse' : ''}`} />
+                                                {isImportingTasks ? 'Importing…' : 'Import CSV'}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={isExportingTasks}
+                                                onClick={handleExportTaskCsv}
+                                                className="h-9 rounded-lg border-border bg-background px-3 text-xs font-medium shadow-none sm:h-10 sm:text-sm"
+                                            >
+                                                <Download className="h-4 w-4 mr-2" />
+                                                {isExportingTasks ? 'Exporting…' : 'Export CSV'}
+                                            </Button>
+                                        </div>
                                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
                                             <TabsList>
                                                 <TabsTrigger value="all">All</TabsTrigger>
@@ -756,7 +840,7 @@ export default function CalendarPage() {
                             </CardHeader>
                             <CardContent className="p-6">
                                 {filteredTasks.length === 0 ? (
-                                    <div className="text-center text-slate-500 dark:text-slate-400 py-12">
+                                    <div className="py-12 text-center text-muted-foreground">
                                         <CheckSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
                                         <p className="mb-4">No tasks found</p>
                                         <Button 

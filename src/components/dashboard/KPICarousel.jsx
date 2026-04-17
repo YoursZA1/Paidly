@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 
-const CARD_WIDTH = 276; // 260px + 16px gap
+/** Slide width (px) + gap-4 (16px) — wide enough for full ZAR amounts without clipping */
+const CARD_WIDTH = 316; // 300px + 16px gap
 const DRAG_THRESHOLD = 50;
 
 /**
@@ -38,7 +39,7 @@ export default function KPICarousel({ children, className = "" }) {
         >
           {Array.isArray(children)
             ? children.map((child, i) => (
-                <div key={i} className="shrink-0 w-[260px] snap-center">
+                <div key={i} className="w-[300px] shrink-0 snap-center">
                   {child}
                 </div>
               ))

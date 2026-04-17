@@ -55,13 +55,20 @@ import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
 
 const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
 const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || 'anon'}`;
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes - still refresh in background
+
+/** Recent Invoices table: ~6 rows visible, then scroll (`max-h-[min(24rem,50vh)]`). */
+const RECENT_INVOICES_SCROLL_POOL = 50;
+/** Transactions lists (mobile + desktop): ~3 rows visible, then scroll. */
+const TRANSACTION_PREVIEW_ROWS = 3;
+const TRANSACTIONS_SOURCE_EACH = 30;
+const TRANSACTIONS_MERGED_MAX = 60;
 
 function getCachedDashboard(userId) {
   if (!userId) return null;
@@ -104,87 +111,118 @@ const itemVariants = {
   },
 };
 
-const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, sparklineData, sparklineColor = "hsl(var(--foreground))", animateFromZero, numericValue, currencyForAnimation }) => {
-  const sparkId = `spark-${String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, animateFromZero, numericValue, currencyForAnimation }) => {
   const useTicker = animateFromZero && currencyForAnimation != null && !isLoading && typeof numericValue === 'number';
   const displayValue = useTicker ? null : value;
+  const accentTone =
+    accent === "purple"
+      ? "from-violet-500/18 via-violet-500/6 to-transparent"
+      : accent === "amber"
+        ? "from-amber-500/18 via-amber-500/6 to-transparent"
+        : "from-cyan-500/18 via-cyan-500/6 to-transparent";
+  const accentShadow =
+    accent === "purple"
+      ? "shadow-[0_6px_24px_rgba(124,58,237,0.14)] hover:shadow-[0_10px_30px_rgba(124,58,237,0.2)]"
+      : accent === "amber"
+        ? "shadow-[0_6px_24px_rgba(245,158,11,0.14)] hover:shadow-[0_10px_30px_rgba(245,158,11,0.2)]"
+        : "shadow-[0_6px_24px_rgba(6,182,212,0.14)] hover:shadow-[0_10px_30px_rgba(6,182,212,0.2)]";
+
   return (
-  <Card className={`transition-all duration-300 overflow-hidden relative ${
+  <Card className={`group relative overflow-hidden transition-all duration-300 ${
     fintech
-      ? "glass-card rounded-fintech border border-border"
+      ? `glass-card rounded-fintech border border-border/80 hover:-translate-y-[1px] ${accentShadow}`
       : "bg-card rounded-xl border border-border shadow-sm"
   }`}>
-    <CardContent className={`p-4 sm:p-6 relative ${fintech ? "pb-5" : ""}`}>
-      <div className="flex justify-between items-start gap-3 sm:gap-4">
-        <div className="flex-1 min-w-0">
-          <p className={`text-xs font-medium mb-1.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{title}</p>
+    {fintech && (
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b ${accentTone}`} aria-hidden />
+    )}
+    <CardContent className="relative p-4 sm:p-6">
+      {fintech ? (
+        <>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <p className="min-w-0 flex-1 text-xs font-semibold tracking-wide text-muted-foreground/95">{title}</p>
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border sm:h-11 sm:w-11 ${
+                accent === "purple"
+                  ? "border-violet-500/25 bg-violet-500/12"
+                  : accent === "amber"
+                    ? "border-amber-500/30 bg-amber-500/15"
+                    : "border-cyan-500/25 bg-cyan-500/12"
+              }`}
+            >
+              {iconImageSrc ? (
+                <img
+                  src={iconImageSrc}
+                  alt={iconImageAlt || String(title || "Icon")}
+                  width={48}
+                  height={48}
+                  className="h-5 w-5 object-contain contrast-110 saturate-110 drop-shadow-[0_2px_2px_rgba(0,0,0,0.26)] dark:contrast-110 dark:saturate-110 dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.12)] sm:h-6 sm:w-6"
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <Icon
+                  className={`h-5 w-5 sm:h-6 sm:w-6 ${accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground"}`}
+                />
+              )}
+            </div>
+          </div>
           {isLoading ? (
-            <Skeleton className={`h-8 sm:h-10 w-3/4 rounded ${fintech ? "bg-muted" : ""}`} />
+            <Skeleton className="h-6 w-3/4 rounded bg-muted sm:h-7" />
           ) : (
             <>
-              <p className={`currency-nums tabular-nums font-bold truncate min-w-0 ${fintech ? "text-2xl sm:text-3xl text-foreground drop-shadow-subtle" : "text-xl sm:text-2xl font-semibold text-foreground"}`}>
+              <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug tracking-tight text-foreground sm:text-base">
                 {useTicker ? <NumberTicker value={numericValue} currency={currencyForAnimation} enabled /> : displayValue}
               </p>
               {subtitle && (
-                <div className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${fintech ? "text-muted-foreground" : "text-muted-foreground"}`}>{subtitle}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">{subtitle}</div>
               )}
-              {fintech && typeof growth === "number" && (
-                <p className={`text-xs font-medium mt-1 ${growth >= 0 ? "text-status-paid" : "text-status-overdue"}`}>
-                  {growth >= 0 ? "+" : ""}{growth}% vs last month
+              {typeof growth === "number" && (
+                <p className={`mt-1 text-xs font-medium ${growth >= 0 ? "text-status-paid" : "text-status-overdue"}`}>
+                  {growth >= 0 ? "+" : ""}
+                  {growth}% vs last month
                 </p>
               )}
             </>
           )}
-        </div>
-        <div className={`rounded-xl flex items-center justify-center shrink-0 ${
-          fintech
-            ? `w-10 h-10 sm:w-12 sm:h-12 ${accent === "purple" ? "bg-violet-500/20" : accent === "amber" ? "bg-amber-500/20" : "bg-muted"}`
-            : "w-12 h-12 sm:w-14 sm:h-14 bg-muted"
-        }`}>
-          {iconImageSrc ? (
-            <img
-              src={iconImageSrc}
-              alt={iconImageAlt || String(title || "Icon")}
-              width={48}
-              height={48}
-              className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6" : "w-6 h-6 sm:w-7 sm:h-7"} object-contain contrast-110 saturate-110 drop-shadow-[0_2px_2px_rgba(0,0,0,0.26)] dark:contrast-110 dark:saturate-110 dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.12)]`}
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <Icon className={`${fintech ? "w-5 h-5 sm:w-6 sm:h-6 " + (accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground") : "w-6 h-6 sm:w-7 sm:h-7 text-muted-foreground"}`} />
-          )}
-        </div>
-      </div>
-      {fintech && Array.isArray(sparklineData) && sparklineData.length > 1 && (
-        <div className="mt-3 h-10 min-h-[40px] w-full">
-          <ResponsiveContainer width="100%" height={40}>
-            <AreaChart data={sparklineData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={sparklineColor} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={sparklineColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={sparklineColor}
-                strokeWidth={1.5}
-                fill={`url(#${sparkId})`}
-                dot={false}
-                activeDot={false}
-                isAnimationActive
-                animationDuration={700}
+        </>
+      ) : (
+        <div className="flex justify-between items-start gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground">{title}</p>
+            {isLoading ? (
+              <Skeleton className="h-6 w-3/4 rounded sm:h-7" />
+            ) : (
+              <>
+                <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
+                  {useTicker ? <NumberTicker value={numericValue} currency={currencyForAnimation} enabled /> : displayValue}
+                </p>
+                {subtitle && <div className="mt-0.5 text-xs text-muted-foreground">{subtitle}</div>}
+              </>
+            )}
+          </div>
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted sm:h-14 sm:w-14">
+            {iconImageSrc ? (
+              <img
+                src={iconImageSrc}
+                alt={iconImageAlt || String(title || "Icon")}
+                width={48}
+                height={48}
+                className="h-6 w-6 object-contain contrast-110 saturate-110 drop-shadow-[0_2px_2px_rgba(0,0,0,0.26)] dark:contrast-110 dark:saturate-110 dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.12)] sm:h-7 sm:w-7"
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
               />
-            </AreaChart>
-          </ResponsiveContainer>
+            ) : (
+              <Icon className="h-6 w-6 text-muted-foreground sm:h-7 sm:w-7" />
+            )}
+          </div>
         </div>
       )}
       {fintech && (
         <div
-          className="absolute bottom-0 left-4 right-4 h-px rounded-full bg-border"
+          className="absolute bottom-0 left-4 right-4 h-px rounded-full bg-gradient-to-r from-transparent via-border to-transparent"
         />
       )}
     </CardContent>
@@ -210,8 +248,6 @@ StatCard.propTypes = {
   accent: PropTypes.oneOf(['blue', 'purple', 'amber']),
   growth: PropTypes.number,
   subtitle: PropTypes.node,
-  sparklineData: PropTypes.array,
-  sparklineColor: PropTypes.string,
   animateFromZero: PropTypes.bool,
   numericValue: PropTypes.number,
   currencyForAnimation: PropTypes.string,
@@ -942,123 +978,6 @@ export default function Dashboard() {
     }));
   }, [invoices, revenueRange]);
 
-  // Sparkline source for KPI cards (lightweight + consistent)
-  const kpiSparkline = useMemo(() => {
-    return Array.isArray(revenueTrendData) ? revenueTrendData.slice(-14) : [];
-  }, [revenueTrendData]);
-
-  const kpiSparklines = useMemo(() => {
-    const now = new Date();
-    const days = 14;
-    const start = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
-
-    const toLabel = (d) => formatDate(d, 'MMM d');
-    const series = {
-      revenue: [],
-      outstanding: [],
-      vat: [],
-      cashFlow: [],
-    };
-
-    for (let i = 0; i < days; i += 1) {
-      const day = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-      const label = toLabel(day);
-      series.revenue.push({ label, value: 0 });
-      series.outstanding.push({ label, value: 0 });
-      series.vat.push({ label, value: 0 });
-      series.cashFlow.push({ label, value: 0 });
-    }
-
-    const idxByLabel = new Map(series.revenue.map((p, idx) => [p.label, idx]));
-
-    // Revenue & VAT: based on invoices created on each day that are paid/partial_paid
-    invoices.forEach((inv) => {
-      const createdAt = new Date(inv.created_date || inv.created_at || 0);
-      if (createdAt < start || createdAt > now) return;
-      const label = toLabel(createdAt);
-      const idx = idxByLabel.get(label);
-      if (idx == null) return;
-
-      const isPaidLike = inv.status === 'paid' || inv.status === 'partial_paid';
-      if (isPaidLike) {
-        series.revenue[idx].value += Number(inv.total_amount || inv.total || 0);
-        series.vat[idx].value += Number(inv.tax_amount || 0);
-      }
-    });
-
-    // Outstanding: exact snapshot each day (accounts for partial payments)
-    const paymentDateMs = (p) => {
-      const d = p?.payment_date || p?.date || p?.created_date || p?.created_at;
-      const ms = d ? new Date(d).getTime() : NaN;
-      return Number.isFinite(ms) ? ms : 0;
-    };
-    const paymentsByInvoice = new Map();
-    (Array.isArray(payments) ? payments : []).forEach((p) => {
-      const invoiceId = p?.invoice_id;
-      if (!invoiceId) return;
-      const arr = paymentsByInvoice.get(invoiceId) || [];
-      arr.push({ ms: paymentDateMs(p), amount: Number(p?.amount || 0) });
-      paymentsByInvoice.set(invoiceId, arr);
-    });
-    for (const [invoiceId, arr] of paymentsByInvoice.entries()) {
-      arr.sort((a, b) => a.ms - b.ms);
-      paymentsByInvoice.set(invoiceId, arr);
-    }
-
-    const outstandingStatuses = new Set(['sent', 'viewed', 'overdue', 'partial_paid', 'unpaid']);
-    const dayEnds = Array.from({ length: days }, (_, i) => {
-      const day = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-      return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999).getTime();
-    });
-
-    const invoicesInWindow = invoices
-      .map((inv) => ({
-        inv,
-        createdMs: new Date(inv.created_date || inv.created_at || 0).getTime(),
-        total: Number(inv.total_amount || inv.total || 0),
-        status: (inv.status || '').toLowerCase(),
-      }))
-      .filter(({ createdMs }) => Number.isFinite(createdMs));
-
-    // For each invoice, walk forward through days and payments once (O(invoices * days + payments))
-    for (const { inv, createdMs, total, status } of invoicesInWindow) {
-      if (!outstandingStatuses.has(status)) continue;
-      const payArr = paymentsByInvoice.get(inv.id) || [];
-      let paidSum = 0;
-      let payIdx = 0;
-
-      for (let di = 0; di < days; di += 1) {
-        const dayEndMs = dayEnds[di];
-        if (createdMs > dayEndMs) continue;
-
-        while (payIdx < payArr.length && payArr[payIdx].ms <= dayEndMs) {
-          paidSum += payArr[payIdx].amount;
-          payIdx += 1;
-        }
-
-        const balance = OutstandingBalanceService.calculateInvoiceBalance(inv, [{ amount: paidSum }]);
-        if (balance?.outstanding > 0) {
-          series.outstanding[di].value += Number(balance.outstanding || 0);
-        }
-      }
-    }
-
-    // Cash flow: daily revenue - daily expenses (expense date if present)
-    expenses.forEach((exp) => {
-      const d = new Date(exp.date || exp.created_date || exp.created_at || 0);
-      if (d < start || d > now) return;
-      const label = toLabel(d);
-      const idx = idxByLabel.get(label);
-      if (idx == null) return;
-      series.cashFlow[idx].value -= Number(exp.amount || 0);
-    });
-    for (let i = 0; i < days; i += 1) {
-      series.cashFlow[i].value += series.revenue[i].value;
-    }
-
-    return series;
-  }, [invoices, expenses, payments]);
-
   // Fintech KPIs: Revenue, Awaiting payment (consolidated), VAT/Tax liability (SARS), Cash Flow + growth %
   const fintechKpis = useMemo(() => {
     const now = new Date();
@@ -1107,10 +1026,14 @@ export default function Dashboard() {
     };
   }, [invoices, expenses]);
 
-  const recentTransactions = invoices
-    .filter(inv => inv.status === 'paid' || inv.status === 'partial_paid')
-    .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
-    .slice(0, 5);
+  const recentTransactions = useMemo(
+    () =>
+      invoices
+        .filter((inv) => inv.status === 'paid' || inv.status === 'partial_paid')
+        .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
+        .slice(0, TRANSACTIONS_SOURCE_EACH),
+    [invoices]
+  );
 
   const mergedTransactions = useMemo(() => {
     const income = recentTransactions.map((inv) => ({
@@ -1120,7 +1043,7 @@ export default function Dashboard() {
       label: clients.find((c) => c.id === inv.client_id)?.name || 'Invoice',
       amount: Number(inv.total_amount) || 0,
     }));
-    const expense = expenses.slice(0, 5).map((exp) => ({
+    const expense = expenses.slice(0, TRANSACTIONS_SOURCE_EACH).map((exp) => ({
       id: `exp-${exp.id}`,
       type: 'expense',
       date: exp.date || exp.created_date,
@@ -1129,8 +1052,19 @@ export default function Dashboard() {
     }));
     return [...income, ...expense]
       .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 10);
+      .slice(0, TRANSACTIONS_MERGED_MAX);
   }, [recentTransactions, expenses, clients]);
+
+  const sortedRecentInvoices = useMemo(
+    () =>
+      [...invoices]
+        .sort(
+          (a, b) =>
+            new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0)
+        )
+        .slice(0, RECENT_INVOICES_SCROLL_POOL),
+    [invoices]
+  );
 
   // ADMIN DASHBOARD
   if (isAdmin) {
@@ -1147,7 +1081,9 @@ export default function Dashboard() {
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Total Revenue</p>
-                <p className="text-2xl font-semibold text-foreground">{formatCurrency(adminStats.revenue, 'ZAR')}</p>
+                <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
+                  {formatCurrency(adminStats.revenue, 'ZAR')}
+                </p>
                 <div className="flex flex-wrap gap-2 mt-2 text-xs">
                   <span className="text-muted-foreground">Today: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
@@ -1171,21 +1107,21 @@ export default function Dashboard() {
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Active Businesses</p>
-                <p className="text-2xl font-semibold text-foreground">{adminStats.activeUsers}</p>
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{adminStats.activeUsers}</p>
               </CardContent>
             </Card>
             {/* Active Subscriptions */}
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Active Subscriptions</p>
-                <p className="text-2xl font-semibold text-foreground">{adminStats.activeSubscribers}</p>
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{adminStats.activeSubscribers}</p>
               </CardContent>
             </Card>
             {/* Total Transactions (24h) */}
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Total Transactions (24h)</p>
-                <p className="text-2xl font-semibold text-foreground">{
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{
                   invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
@@ -1199,7 +1135,7 @@ export default function Dashboard() {
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Failed Payments</p>
-                <p className="text-2xl font-semibold text-foreground">{
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{
                   invoices.filter(inv => inv.status === 'failed' || inv.status === 'overdue').length
                 }</p>
               </CardContent>
@@ -1208,7 +1144,7 @@ export default function Dashboard() {
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Pending Payouts</p>
-                <p className="text-2xl font-semibold text-foreground">{
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{
                   invoices.filter(inv => inv.status === 'pending_payout' || inv.status === 'awaiting_payout').length
                 }</p>
               </CardContent>
@@ -1217,16 +1153,16 @@ export default function Dashboard() {
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">Platform Balance</p>
-                <p className="text-2xl font-semibold text-foreground">{
-                  formatCurrency(OutstandingBalanceService.calculateTotalOutstanding(invoices).totalOutstanding, 'ZAR')
-                }</p>
+                <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
+                  {formatCurrency(OutstandingBalanceService.calculateTotalOutstanding(invoices).totalOutstanding, 'ZAR')}
+                </p>
               </CardContent>
             </Card>
             {/* System Alerts */}
             <Card className="border-0 shadow-sm">
               <CardContent>
                 <p className="text-xs text-muted-foreground">System Alerts</p>
-                <p className="text-2xl font-semibold text-foreground">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
+                <p className="tabular-nums min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">{alerts.planLimits.length + alerts.failedSubscriptions.length + alerts.highVolumeLowPlan.length}</p>
               </CardContent>
             </Card>
           </div>
@@ -1620,6 +1556,26 @@ export default function Dashboard() {
     const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
     return due && due >= today && due <= endOfThisWeek;
   }).length;
+  const chipClassName =
+    "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold tracking-tight shadow-sm";
+  const outstandingSubtitle = fintechKpis.outstandingCount === 0
+    ? 'No unpaid invoices'
+    : dueThisWeekCount > 0 || overdueCount > 0
+      ? (
+        <span className="flex flex-wrap items-center gap-2">
+          {dueThisWeekCount > 0 && (
+            <span className={`${chipClassName} border-status-pending/35 bg-status-pending/15 text-status-pending`}>
+              Due this week: {dueThisWeekCount}
+            </span>
+          )}
+          {overdueCount > 0 && (
+            <span className={`${chipClassName} border-status-overdue/35 bg-status-overdue/15 text-status-overdue`}>
+              Overdue: {overdueCount}
+            </span>
+          )}
+        </span>
+      )
+      : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`;
 
   const subscriptionBanner = useMemo(() => {
     if (isAdmin) return null;
@@ -1635,7 +1591,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
-      <div className="max-w-7xl mx-auto w-full min-w-0 py-2 sm:py-6 md:py-8">
+      <div className="responsive-page-shell w-full min-w-0 py-2 sm:py-6 md:py-8">
         {/* Welcome Header — subtle fade, leads into staggered content */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -1685,18 +1641,18 @@ export default function Dashboard() {
             {/* Mobile: Framer Motion carousel */}
             <div className="md:hidden">
               <KPICarousel>
-                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
-                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" />
-                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" />
-                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" />
+                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
+                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" />
+                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" />
+                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} />
               </KPICarousel>
             </div>
             {/* Desktop: grid */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} sparklineData={kpiSparklines.revenue} sparklineColor="#475569" animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={fintechKpis.outstandingCount === 0 ? 'No unpaid invoices' : dueThisWeekCount > 0 || overdueCount > 0 ? (<span className="flex flex-wrap items-center gap-2">{dueThisWeekCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-pending/20 px-1.5 py-0.5 text-[11px] font-medium text-status-pending border border-status-pending/40">Due this week: {dueThisWeekCount}</span>)}{overdueCount > 0 && (<span className="inline-flex items-center rounded-md bg-status-overdue/20 px-1.5 py-0.5 text-[11px] font-medium text-status-overdue border border-status-overdue/40">Overdue: {overdueCount}</span>)}</span>) : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" sparklineData={kpiSparklines.outstanding} sparklineColor="#6366f1" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" sparklineData={kpiSparklines.vat} sparklineColor="#f59e0b" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} sparklineData={kpiSparklines.cashFlow} sparklineColor="#10b981" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} /></motion.div>
             </motion.div>
           </div>
         </div>
@@ -1732,29 +1688,36 @@ export default function Dashboard() {
           {/* Recent Transactions — compact mobile list */}
           <div className="glass-card rounded-2xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground font-display">Recent Transactions</h3>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-base font-semibold text-foreground font-display">Recent Transactions</h3>
+                {mergedTransactions.length > TRANSACTION_PREVIEW_ROWS ? (
+                  <span className="text-xs text-muted-foreground">Scroll for more</span>
+                ) : null}
+              </div>
             </div>
-            <div className="divide-y divide-border">
-              {mergedTransactions.length === 0 ? (
-                <div className="py-8 px-4 text-center">
-                  <p className="text-muted-foreground text-sm">No transactions yet.</p>
-                  <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
-                </div>
-              ) : (
-                mergedTransactions.slice(0, 5).map((tx) => {
+            {mergedTransactions.length === 0 ? (
+              <div className="py-8 px-4 text-center">
+                <p className="text-muted-foreground text-sm">No transactions yet.</p>
+                <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
+              </div>
+            ) : (
+              <div
+                className="max-h-[min(13.5rem,42vh)] overflow-y-auto overscroll-y-contain divide-y divide-border"
+                role="region"
+                aria-label="Recent transactions, scroll for more"
+              >
+                {mergedTransactions.map((tx) => {
                   const isIncome = tx.type === 'income';
                   const statusColor = isIncome ? 'bg-status-paid/15 text-status-paid border-status-paid/30' : 'bg-status-pending/15 text-status-pending border-status-pending/30';
                   const displayAmount = isIncome ? tx.amount : Math.abs(tx.amount);
                   return (
                     <div key={tx.id} className="py-4 px-4 min-h-[56px]">
-                      {/* Name + Amount on one line */}
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-sm text-foreground truncate flex-1">{tx.label}</p>
                         <p className="font-bold text-sm text-foreground currency-nums shrink-0">
                           {isIncome ? '+' : '-'}{formatCurrency(displayAmount, userCurrency)}
                         </p>
                       </div>
-                      {/* Status badge underneath */}
                       <div className="mt-1.5">
                         <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-md border ${statusColor}`}>
                           {isIncome ? 'Paid' : 'Expense'}
@@ -1762,10 +1725,10 @@ export default function Dashboard() {
                       </div>
                     </div>
                   );
-                })
-              )}
-            </div>
-            {mergedTransactions.length > 5 && (
+                })}
+              </div>
+            )}
+            {mergedTransactions.length > 0 && (
               <Link to={createPageUrl("Invoices")} className="block p-4 border-t border-border text-center">
                 <span className="text-sm font-medium text-primary">View all transactions</span>
               </Link>
@@ -1991,9 +1954,14 @@ export default function Dashboard() {
             {/* Recent Invoices — same width as Revenue trend, directly below */}
             <div className="glass-card rounded-fintech border border-border overflow-hidden">
               <div className="p-6 pb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-6 bg-orange-500 rounded-full shrink-0" />
-                  <h3 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h3>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-6 bg-orange-500 rounded-full shrink-0" />
+                    <h3 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h3>
+                  </div>
+                  {sortedRecentInvoices.length > 6 ? (
+                    <span className="text-xs text-muted-foreground">Scroll for more</span>
+                  ) : null}
                 </div>
                 <Link
                   to={createPageUrl("Invoices")}
@@ -2002,33 +1970,35 @@ export default function Dashboard() {
                   View All →
                 </Link>
               </div>
-              <div className="px-6 pb-6 overflow-x-auto">
+              <div className="px-6 pb-6">
                 {isLoading ? (
-                  <table className="w-full min-w-[320px] text-left">
-                    <thead>
-                      <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                        <th className="py-3 pr-4">Client</th>
-                        <th className="py-3 pr-4">Status</th>
-                        <th className="py-3 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <tr key={i} className="py-3">
-                          <td className="py-3 pr-4">
-                            <Skeleton className="h-4 w-28 mb-1 animate-pulse" />
-                            <Skeleton className="h-3 w-20 animate-pulse" />
-                          </td>
-                          <td className="py-3 pr-4">
-                            <Skeleton className="h-5 w-16 rounded-full animate-pulse" />
-                          </td>
-                          <td className="py-3 text-right">
-                            <Skeleton className="h-4 w-20 ml-auto animate-pulse" />
-                          </td>
+                  <div className="max-h-[min(24rem,50vh)] overflow-y-auto overflow-x-auto rounded-lg border border-border/50">
+                    <table className="w-full min-w-[320px] text-left">
+                      <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
+                        <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                          <th className="py-3 pr-4">Client</th>
+                          <th className="py-3 pr-4">Status</th>
+                          <th className="py-3 text-right">Amount</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
+                          <tr key={i} className="py-3">
+                            <td className="py-3 pr-4">
+                              <Skeleton className="h-4 w-28 mb-1 animate-pulse" />
+                              <Skeleton className="h-3 w-20 animate-pulse" />
+                            </td>
+                            <td className="py-3 pr-4">
+                              <Skeleton className="h-5 w-16 rounded-full animate-pulse" />
+                            </td>
+                            <td className="py-3 text-right">
+                              <Skeleton className="h-4 w-20 ml-auto animate-pulse" />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : invoices.length === 0 ? (
                   <div className="text-center py-8 px-4">
                     <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
@@ -2043,44 +2013,50 @@ export default function Dashboard() {
                     </Button>
                   </div>
                 ) : (
-                  <table className="w-full min-w-[320px] text-left">
-                    <thead>
-                      <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                        <th className="py-3 pr-4">Client</th>
-                        <th className="py-3 pr-4">Status</th>
-                        <th className="py-3 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {invoices.slice(0, 6).map((invoice) => {
-                        const client = clients.find((c) => c.id === invoice.client_id);
-                        const statusClass = statusColors[invoice.status] || "bg-muted text-muted-foreground";
-                        return (
-                          <tr
-                            key={invoice.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedInvoiceId(invoice.id)}
-                            onKeyDown={(e) => e.key === "Enter" && setSelectedInvoiceId(invoice.id)}
-                            className="group hover:bg-muted/50 transition-colors cursor-pointer"
-                          >
-                            <td className="py-3 pr-4">
-                              <p className="font-semibold text-foreground text-sm">{client?.name || "Unknown"}</p>
-                              <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusClass} border-0`}>
-                                {getStatusLabel(invoice.status)}
-                              </span>
-                            </td>
-                            <td className="py-3 text-right font-bold text-foreground tabular-nums text-sm">
-                              {formatCurrency(invoice.total_amount, userCurrency)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div
+                    className="max-h-[min(24rem,50vh)] overflow-y-auto overflow-x-auto overscroll-y-contain rounded-lg border border-border/50"
+                    role="region"
+                    aria-label="Recent invoices, scroll for more"
+                  >
+                    <table className="w-full min-w-[320px] text-left">
+                      <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
+                        <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                          <th className="py-3 pr-4">Client</th>
+                          <th className="py-3 pr-4">Status</th>
+                          <th className="py-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {sortedRecentInvoices.map((invoice) => {
+                          const client = clients.find((c) => c.id === invoice.client_id);
+                          const statusClass = statusColors[invoice.status] || "bg-muted text-muted-foreground";
+                          return (
+                            <tr
+                              key={invoice.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedInvoiceId(invoice.id)}
+                              onKeyDown={(e) => e.key === "Enter" && setSelectedInvoiceId(invoice.id)}
+                              className="group hover:bg-muted/50 transition-colors cursor-pointer"
+                            >
+                              <td className="py-3 pr-4">
+                                <p className="font-semibold text-foreground text-sm">{client?.name || "Unknown"}</p>
+                                <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusClass} border-0`}>
+                                  {getStatusLabel(invoice.status)}
+                                </span>
+                              </td>
+                              <td className="py-3 text-right font-bold text-foreground tabular-nums text-sm">
+                                {formatCurrency(invoice.total_amount, userCurrency)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -2166,7 +2142,12 @@ export default function Dashboard() {
             {/* Transaction List — hidden on mobile (shown in mobile block above) */}
             <div className="glass-card rounded-fintech border border-border overflow-hidden hidden md:block">
               <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
+                  {mergedTransactions.length > TRANSACTION_PREVIEW_ROWS ? (
+                    <span className="text-xs text-muted-foreground">Scroll for more</span>
+                  ) : null}
+                </div>
                 <div className="flex gap-2">
                   <Link to={createPageUrl("Invoices")}>
                     <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
@@ -2180,26 +2161,30 @@ export default function Dashboard() {
                   </Link>
                 </div>
               </div>
-              <div className="divide-y divide-border">
-                {mergedTransactions.length === 0 ? (
-                  <div className="text-center py-10 px-4">
-                    <p className="text-muted-foreground text-sm">No transactions yet.</p>
-                    <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
-                    <div className="flex flex-wrap justify-center gap-2 mt-4">
-                      <Link to={createPageUrl("CreateInvoice")}>
-                        <Button size="sm" className="bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg">
-                          Create invoice
-                        </Button>
-                      </Link>
-                      <Link to={createPageUrl("CashFlow")}>
-                        <Button size="sm" className="rounded-lg bg-primary/10 text-primary border-2 border-primary/40 hover:bg-primary/20 hover:border-primary/60 font-semibold">
-                          Add Expense
-                        </Button>
-                      </Link>
-                    </div>
+              {mergedTransactions.length === 0 ? (
+                <div className="text-center py-10 px-4">
+                  <p className="text-muted-foreground text-sm">No transactions yet.</p>
+                  <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
+                  <div className="flex flex-wrap justify-center gap-2 mt-4">
+                    <Link to={createPageUrl("CreateInvoice")}>
+                      <Button size="sm" className="bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg">
+                        Create invoice
+                      </Button>
+                    </Link>
+                    <Link to={createPageUrl("CashFlow")}>
+                      <Button size="sm" className="rounded-lg bg-primary/10 text-primary border-2 border-primary/40 hover:bg-primary/20 hover:border-primary/60 font-semibold">
+                        Add Expense
+                      </Button>
+                    </Link>
                   </div>
-                ) : (
-                  mergedTransactions.map((tx) => {
+                </div>
+              ) : (
+                <div
+                  className="max-h-[min(13.5rem,42vh)] overflow-y-auto overscroll-y-contain divide-y divide-border"
+                  role="region"
+                  aria-label="Transactions, scroll for more"
+                >
+                  {mergedTransactions.map((tx) => {
                     const isIncome = tx.type === 'income';
                     const Icon = isIncome ? FileText : Receipt;
                     return (
@@ -2235,9 +2220,9 @@ export default function Dashboard() {
                         </p>
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

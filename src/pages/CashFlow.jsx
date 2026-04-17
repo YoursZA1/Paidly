@@ -288,7 +288,9 @@ export default function CashFlowPage() {
                     </div>
                 </CardHeader>
                 <CardContent className="min-w-0">
-                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 break-words">{formatCurrency(value, userCurrency)}</div>
+                    <div className="currency-nums tabular-nums break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100 sm:text-base">
+                        {formatCurrency(value, userCurrency)}
+                    </div>
                     {trend && (
                         <div className={`text-xs flex items-center gap-1 mt-2 ${trendValue >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {trendValue >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}

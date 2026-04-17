@@ -18,8 +18,9 @@ export default function QuoteStatusTracker({ status }) {
     const currentStepIndex = getCurrentStepIndex();
 
     return (
-        <div className="flex items-center w-full max-w-xs">
-            {steps.map((step, index) => {
+        <div className="w-full">
+            <div className="flex items-start">
+                {steps.map((step, index) => {
                 const isCompleted = index < currentStepIndex;
                 const isCurrent = index === currentStepIndex;
                 const isLast = index === steps.length - 1;
@@ -60,24 +61,31 @@ export default function QuoteStatusTracker({ status }) {
                     }
                 }
 
-                return (
+                    return (
                     <React.Fragment key={step.id}>
-                        <div className="flex flex-col items-center relative">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${bgClass} transition-colors duration-300`}>
-                                <StatusIcon className={`w-4 h-4 ${colorClass}`} />
+                            <div className="flex flex-col items-center gap-2">
+                            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${bgClass} transition-colors duration-300`}>
+                                <StatusIcon className={`h-4 w-4 ${colorClass}`} />
                             </div>
-                            <span className={`text-[10px] absolute -bottom-5 whitespace-nowrap ${textClass}`}>
+                            <span className={`text-[11px] leading-none whitespace-nowrap ${textClass}`}>
                                 {index === 2 && ['accepted', 'rejected', 'expired'].includes(status) 
                                     ? status.charAt(0).toUpperCase() + status.slice(1) 
                                     : step.label}
                             </span>
                         </div>
                         {!isLast && (
-                            <div className={`flex-1 h-0.5 mx-2 min-w-[20px] ${index < currentStepIndex ? 'bg-primary' : 'bg-muted'}`} />
+                                <div className="flex-1 px-3 pt-5">
+                                    <div
+                                        className={`h-0.5 w-full rounded-full transition-colors ${
+                                            index < currentStepIndex ? 'bg-primary' : 'bg-border'
+                                        }`}
+                                    />
+                                </div>
                         )}
                     </React.Fragment>
                 );
-            })}
+                })}
+            </div>
         </div>
     );
 }

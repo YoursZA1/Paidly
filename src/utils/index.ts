@@ -167,6 +167,36 @@ export function clearWelcomeTourEligible(userId: string | null | undefined) {
     }
 }
 
+const QUICK_SETUP_ELIGIBLE_PREFIX = 'paidly_quick_setup_eligible_';
+
+/** One-time quick setup modal (Fast Activation) after email/password signup — not for returning logins. */
+export function setQuickSetupEligibleAfterSignup(userId: string | null | undefined) {
+    if (!userId || typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(QUICK_SETUP_ELIGIBLE_PREFIX + userId, '1');
+    } catch {
+        /* ignore */
+    }
+}
+
+export function isQuickSetupEligible(userId: string | null | undefined): boolean {
+    if (!userId || typeof window === 'undefined') return false;
+    try {
+        return window.localStorage.getItem(QUICK_SETUP_ELIGIBLE_PREFIX + userId) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function clearQuickSetupEligible(userId: string | null | undefined) {
+    if (!userId || typeof window === 'undefined') return;
+    try {
+        window.localStorage.removeItem(QUICK_SETUP_ELIGIBLE_PREFIX + userId);
+    } catch {
+        /* ignore */
+    }
+}
+
 export function createAdminPageUrl(pageName: string) {
     return '/admin/' + pageName.toLowerCase().replace(/ /g, '-');
 }

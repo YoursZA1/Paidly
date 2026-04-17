@@ -25,7 +25,7 @@ export default function PageHeader({
   const showActions = onRefresh || children;
 
   return (
-    <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+    <div className="responsive-page-header mb-6">
       <div className={icon ? 'flex gap-4' : ''}>
         {icon ? (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/40">
@@ -40,12 +40,13 @@ export default function PageHeader({
         </div>
       </div>
       {showActions ? (
-        <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+        <div className="responsive-page-header-actions">
           {onRefresh ? (
             <Button
               type="button"
               variant="outline"
               size="icon"
+              className="h-9 w-9 min-h-9 min-w-9 md:h-10 md:w-10 md:min-h-10 md:min-w-10"
               onClick={onRefresh}
               disabled={isRefreshing}
               title="Refresh"

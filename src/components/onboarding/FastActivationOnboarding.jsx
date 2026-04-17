@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import CurrencySelector from "@/components/CurrencySelector";
 import { User } from "@/api/entities";
-import { createPageUrl } from "@/utils";
+import { createPageUrl, clearQuickSetupEligible } from "@/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 function normalizeOnboardingBusiness(profile = {}) {
   const business = profile?.business && typeof profile.business === "object" ? profile.business : {};
@@ -28,6 +29,7 @@ const GOAL_OPTIONS = [
 
 export default function FastActivationOnboarding({ isOpen, profile, onClose, onProfileRefresh }) {
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
   const [step, setStep] = useState("welcome");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => normalizeOnboardingBusiness(profile));
@@ -98,6 +100,7 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
   const launchGuidedAction = async () => {
     if (!selectedGoal) return;
     await persistDraft({ status: "success" });
+    clearQuickSetupEligible(authUser?.id);
     navigate(selectedGoal.route);
     setStep("success");
   };
@@ -113,6 +116,7 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
         },
       },
     });
+    clearQuickSetupEligible(authUser?.id);
     onProfileRefresh?.();
     onClose?.();
     navigate(createPageUrl("Dashboard"));

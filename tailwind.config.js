@@ -3,6 +3,13 @@ module.exports = {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
+    screens: {
+      sm: "640px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+    },
   	extend: {
   		/** 8pt mobile system: page 16px, section 24px (Layout Rule 3 — mb-section / vertical rhythm), card 18px (16–20), element gaps 8–12px, buttons 14px (12–16 rhythm between adjacent buttons) */
   		spacing: {
