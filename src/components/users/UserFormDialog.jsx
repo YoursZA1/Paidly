@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { adminRowPrimaryId } from '@/utils/stableListKey';
 
 function emptyForm() {
   return {
@@ -32,11 +33,12 @@ function emptyForm() {
 export default function UserFormDialog({ open, onClose, user }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
-  const isEdit = Boolean(user?.id);
+  const editId = adminRowPrimaryId(user);
+  const isEdit = Boolean(editId);
 
   useEffect(() => {
     if (!open) return;
-    if (user?.id) {
+    if (adminRowPrimaryId(user)) {
       setForm({
         full_name: user.full_name || '',
         email: user.email || '',
@@ -106,8 +108,8 @@ export default function UserFormDialog({ open, onClose, user }) {
       return;
     }
     const data = buildPayload();
-    if (isEdit) {
-      updateMutation.mutate({ id: user.id, data });
+    if (isEdit && editId) {
+      updateMutation.mutate({ id: editId, data });
     } else {
       createMutation.mutate(data);
     }

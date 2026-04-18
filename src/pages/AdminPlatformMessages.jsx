@@ -47,6 +47,7 @@ import {
 } from '@/lib/adminPlatformMessagePresets';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { cn } from '@/lib/utils';
+import { stableDirectoryRowKey } from '@/utils/stableListKey';
 
 function platformUserLabel(u) {
   if (!u) return 'Unknown user';
@@ -958,19 +959,19 @@ export default function AdminPlatformMessages() {
                 {usersLoading ? (
                   <Skeleton className="h-10 w-full" />
                 ) : (
-                  pickerUsers.map((u) => (
+                  pickerUsers.map((u, pickIdx) => (
                     <button
-                      key={u.id}
+                      key={stableDirectoryRowKey(u, pickIdx)}
                       type="button"
-                      onClick={() => setNewRecipientId(u.id)}
+                      onClick={() => setNewRecipientId(u?.id ?? '')}
                       className={cn(
                         'w-full text-left rounded-md px-3 py-2 text-sm transition-colors',
-                        newRecipientId === u.id ? 'bg-primary/15' : 'hover:bg-muted/80'
+                        newRecipientId === u?.id ? 'bg-primary/15' : 'hover:bg-muted/80'
                       )}
                     >
                       <span className="font-medium block truncate">{platformUserLabel(u)}</span>
                       <span className="text-xs text-muted-foreground truncate block">
-                        {platformUserEmail(u) || 'No email'} • {platformUserRole(u)} • ID: {u.id}
+                        {platformUserEmail(u) || 'No email'} • {platformUserRole(u)} • ID: {u?.id ?? '—'}
                       </span>
                     </button>
                   ))

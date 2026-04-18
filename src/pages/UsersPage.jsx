@@ -35,6 +35,7 @@ import UserFormDialog from '@/components/users/UserFormDialog';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
+import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS } from '@shared/plans.js';
 
 const EMPTY_PLAN = '__empty__';
@@ -207,7 +208,10 @@ export default function UsersPage() {
   ]);
 
   const filteredSelectableIds = useMemo(
-    () => filtered.filter((u) => !isExcludedFromBulk(u.id, adminSelfId)).map((u) => u.id),
+    () =>
+      filtered
+        .map((u) => adminRowPrimaryId(u))
+        .filter((id) => id && !isExcludedFromBulk(id, adminSelfId)),
     [filtered, adminSelfId]
   );
   const allFilteredSelected =
@@ -241,12 +245,20 @@ export default function UsersPage() {
   }, []);
 
   const selectedUsers = useMemo(
-    () => usersWithInvoiceCounts.filter((u) => selectedIds.has(u.id)),
+    () =>
+      usersWithInvoiceCounts.filter((u) => {
+        const id = adminRowPrimaryId(u);
+        return id && selectedIds.has(id);
+      }),
     [usersWithInvoiceCounts, selectedIds]
   );
 
   const bulkEligibleUsers = useMemo(
-    () => selectedUsers.filter((u) => !isExcludedFromBulk(u.id, adminSelfId)),
+    () =>
+      selectedUsers.filter((u) => {
+        const id = adminRowPrimaryId(u);
+        return id && !isExcludedFromBulk(id, adminSelfId);
+      }),
     [selectedUsers, adminSelfId]
   );
 
@@ -286,9 +298,14 @@ export default function UsersPage() {
   });
 
   const handleStatusChange = (user, newStatus) => {
+    const rowId = adminRowPrimaryId(user);
+    if (!rowId) {
+      toast.error('This row has no user id — cannot update status.');
+      return;
+    }
     const prevStatus = user.status;
     updateMutation.mutate(
-      { id: user.id, data: { status: newStatus } },
+      { id: rowId, data: { status: newStatus } },
       {
         onSuccess: () => {
           logAction({
@@ -296,7 +313,7 @@ export default function UsersPage() {
             action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
             category: 'users',
             description: `Changed status of ${user.full_name || user.email} from "${prevStatus}" to "${newStatus}"`,
-            targetId: user.id,
+            targetId: rowId,
             targetLabel: user.email,
             before: { status: prevStatus },
             after: { status: newStatus },
@@ -307,7 +324,7 @@ export default function UsersPage() {
   };
 
   const runBulkAccountStatus = (newStatus) => {
-    const ids = bulkEligibleUsers.map((u) => u.id);
+    const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
     if (!ids.length) {
       toast.error(
         adminSelfId && selectedUsers.length > 0
@@ -356,7 +373,7 @@ export default function UsersPage() {
   };
 
   const runBulkPlan = (planValue) => {
-    const ids = bulkEligibleUsers.map((u) => u.id);
+    const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
     if (!ids.length) {
       toast.error(
         adminSelfId && selectedUsers.length > 0
@@ -380,7 +397,7 @@ export default function UsersPage() {
   };
 
   const runBulkProfileSubscriptionStatus = (subscriptionStatus) => {
-    const ids = bulkEligibleUsers.map((u) => u.id);
+    const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
     if (!ids.length) {
       toast.error(
         adminSelfId && selectedUsers.length > 0
@@ -613,7 +630,8 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => {
+              {filtered.map((u, rowIdx) => {
+                const rowId = adminRowPrimaryId(u);
                 const { primary, secondary } = adminUserNameEmailLines(u.full_name, u.email);
                 const slug = rawPlanSlug(u);
                 const slugDisplay = slug === EMPTY_PLAN ? '—' : slug;
@@ -624,15 +642,21 @@ export default function UsersPage() {
                     : pKey === 'unset'
                       ? '—'
                       : pKey.replace(/_/g, ' ');
-                const rowIsSelf = isExcludedFromBulk(u.id, adminSelfId);
+                const rowIsSelf = rowId ? isExcludedFromBulk(rowId, adminSelfId) : false;
                 return (
-                  <tr key={u.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                  <tr key={stableDirectoryRowKey(u, rowIdx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
                     <td className="px-3 py-4">
                       <Checkbox
-                        checked={selectedIds.has(u.id)}
-                        onCheckedChange={() => toggleRow(u.id)}
-                        disabled={bulkMutation.isPending || rowIsSelf}
-                        title={rowIsSelf ? 'Your account is excluded from bulk actions' : undefined}
+                        checked={rowId ? selectedIds.has(rowId) : false}
+                        onCheckedChange={() => rowId && toggleRow(rowId)}
+                        disabled={bulkMutation.isPending || rowIsSelf || !rowId}
+                        title={
+                          !rowId
+                            ? 'This row has no user id — cannot select for bulk actions'
+                            : rowIsSelf
+                              ? 'Your account is excluded from bulk actions'
+                              : undefined
+                        }
                         aria-label={`Select ${u.email || u.full_name || 'user'}`}
                       />
                     </td>
@@ -708,6 +732,7 @@ export default function UsersPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
+                            disabled={!rowId}
                             onClick={() => {
                               setShowAddUser(false);
                               setEditingUser(u);
@@ -716,18 +741,19 @@ export default function UsersPage() {
                             Edit User
                           </DropdownMenuItem>
                           {u.status === 'active' ? (
-                            <DropdownMenuItem onClick={() => handleStatusChange(u, 'paused')}>
+                            <DropdownMenuItem disabled={!rowId} onClick={() => handleStatusChange(u, 'paused')}>
                               Pause User
                             </DropdownMenuItem>
                           ) : null}
                           {u.status === 'paused' ? (
-                            <DropdownMenuItem onClick={() => handleStatusChange(u, 'active')}>
+                            <DropdownMenuItem disabled={!rowId} onClick={() => handleStatusChange(u, 'active')}>
                               Activate User
                             </DropdownMenuItem>
                           ) : null}
                           {u.status !== 'suspended' ? (
                             <DropdownMenuItem
                               className="text-destructive"
+                              disabled={!rowId}
                               onClick={() => handleStatusChange(u, 'suspended')}
                             >
                               Suspend User

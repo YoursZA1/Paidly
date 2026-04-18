@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey';
 import { UserPlus, UserCheck, AlertCircle, Loader2, Mail, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/dashboard/StatusBadge';
@@ -57,8 +58,8 @@ export default function RecentActivity({
       <p className="mb-5 text-xs text-muted-foreground">{pendingCount} pending affiliate reviews</p>
 
       <div className="space-y-4">
-        {recentUsers.map((user) => (
-          <div key={user.id} className="flex items-center gap-3">
+        {recentUsers.map((user, idx) => (
+          <div key={stableDirectoryRowKey(user, idx)} className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10">
               <UserPlus className="h-4 w-4 text-emerald-500" />
             </div>
@@ -72,11 +73,11 @@ export default function RecentActivity({
         {showAffiliateActions && (pendingAffiliates.length > 0 || approvedRecent.length > 0) ? (
           <div className="space-y-3 border-t border-border pt-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Affiliates</p>
-            {pendingAffiliates.map((aff) => {
+            {pendingAffiliates.map((aff, idx) => {
               const busy = busyAffiliateId === aff.id;
               return (
                 <div
-                  key={aff.id}
+                  key={stableEntityRowKey(aff, idx)}
                   className="flex flex-col gap-2 rounded-lg border border-border/80 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -125,11 +126,11 @@ export default function RecentActivity({
             {onResendAffiliateLink && approvedRecent.length > 0 ? (
               <div className="space-y-2 pt-1">
                 <p className="text-[11px] font-medium text-muted-foreground">Approved — resend link</p>
-                {approvedRecent.map((aff) => {
+                {approvedRecent.map((aff, idx) => {
                   const busy = busyAffiliateId === aff.id;
                   return (
                     <div
-                      key={aff.id}
+                      key={stableEntityRowKey(aff, idx)}
                       className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card p-2.5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
@@ -160,8 +161,8 @@ export default function RecentActivity({
             ) : null}
           </div>
         ) : (
-          pendingAffiliates.map((aff) => (
-            <div key={aff.id} className="flex items-center gap-3">
+          pendingAffiliates.map((aff, idx) => (
+            <div key={stableEntityRowKey(aff, idx)} className="flex items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/10">
                 <UserCheck className="h-4 w-4 text-amber-500" />
               </div>

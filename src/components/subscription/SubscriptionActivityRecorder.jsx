@@ -19,6 +19,7 @@ import {
   getActivityLabel,
   formatCurrency
 } from '@/utils/subscriptionUtils';
+import { getAuthUserId } from '@/lib/authUserId';
 
 export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, onActivityRecorded }) {
   const [open, setOpen] = useState(false);
@@ -37,6 +38,8 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
 
   const handleRecord = async () => {
     if (!activityType || !user) return;
+    const uid = getAuthUserId(user);
+    if (!uid) return;
 
     setIsRecording(true);
     try {
@@ -44,7 +47,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
       switch (activityType) {
         case 'upgrade':
           result = recordUpgrade(
-            user.id,
+            uid,
             user.full_name,
             user.email,
             oldPlan,
@@ -53,7 +56,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
           break;
         case 'downgrade':
           result = recordDowngrade(
-            user.id,
+            uid,
             user.full_name,
             user.email,
             oldPlan,
@@ -63,7 +66,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
           break;
         case 'cancel':
           result = recordCancellation(
-            user.id,
+            uid,
             user.full_name,
             user.email,
             oldPlan,
@@ -72,7 +75,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
           break;
         case 'reactivate':
           result = recordReactivation(
-            user.id,
+            uid,
             user.full_name,
             user.email,
             newPlan
@@ -80,7 +83,7 @@ export default function SubscriptionActivityRecorder({ user, oldPlan, newPlan, o
           break;
         case 'extend':
           result = recordExtension(
-            user.id,
+            uid,
             user.full_name,
             user.email,
             newPlan,

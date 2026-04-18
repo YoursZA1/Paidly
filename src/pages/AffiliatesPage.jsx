@@ -28,6 +28,7 @@ import {
   normalizeAffiliateAdminQueryResult,
 } from '@/utils/affiliateApplicationCounts';
 import { formatQueryError } from '@/utils/apiErrorText';
+import { stableEntityRowKey } from '@/utils/stableListKey';
 import { SystemSettingsService } from '@/services/SystemSettingsService';
 import { createAffiliateSignupShareUrl } from '@/utils';
 
@@ -358,12 +359,13 @@ export default function AffiliatesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((aff) => {
+                  {filtered.map((aff, affIdx) => {
+                    const rowKey = stableEntityRowKey(aff, affIdx);
                     const payoutKey = String(aff.affiliate_partner_id || '');
                     const affPayouts = (payoutKey && payoutsByAffiliateId.get(payoutKey)) || [];
                     const totalEarnings = affPayouts.reduce((s, p) => s + Number(p.commission_amount ?? p.amount ?? 0), 0);
                     return (
-                      <tr key={aff.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <tr key={rowKey} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="px-6 py-4">
                           <p className="text-sm font-medium">{aff.applicant_name}</p>
                           <p className="text-xs text-muted-foreground">{aff.applicant_email}</p>
@@ -392,7 +394,7 @@ export default function AffiliatesPage() {
                                 : 'Updates the partner rate used for new subscription commissions'
                             }
                             defaultValue={Number(aff.commission_rate ?? defaultCommissionPct)}
-                            key={`${aff.id}-${aff.commission_rate}`}
+                            key={`${rowKey}-${aff.commission_rate}`}
                             onBlur={(e) => handleCommissionUpdate(aff, e.target.value)}
                           />
                         </td>

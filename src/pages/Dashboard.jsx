@@ -2,6 +2,7 @@ import { OutstandingBalanceService } from "@/services/OutstandingBalanceService"
 import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
 import { formatQueryError } from "@/utils/apiErrorText";
+import { adminRowPrimaryId, stableDirectoryRowKey } from "@/utils/stableListKey";
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
@@ -1424,8 +1425,8 @@ export default function Dashboard() {
                   {alerts.planLimits.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No plan limits reached.</p>
                   ) : (
-                    alerts.planLimits.slice(0, 4).map(user => (
-                      <div key={user.id} className="flex items-center justify-between">
+                    alerts.planLimits.slice(0, 4).map((user, idx) => (
+                      <div key={stableDirectoryRowKey(user, idx)} className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
@@ -1449,8 +1450,8 @@ export default function Dashboard() {
                   {alerts.failedSubscriptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No failed subscriptions.</p>
                   ) : (
-                    alerts.failedSubscriptions.slice(0, 4).map(user => (
-                      <div key={user.id} className="flex items-center justify-between">
+                    alerts.failedSubscriptions.slice(0, 4).map((user, idx) => (
+                      <div key={stableDirectoryRowKey(user, idx)} className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
@@ -1474,8 +1475,8 @@ export default function Dashboard() {
                   {alerts.highVolumeLowPlan.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No upgrade candidates.</p>
                   ) : (
-                    alerts.highVolumeLowPlan.slice(0, 4).map(user => (
-                      <div key={user.id} className="flex items-center justify-between">
+                    alerts.highVolumeLowPlan.slice(0, 4).map((user, idx) => (
+                      <div key={stableDirectoryRowKey(user, idx)} className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-foreground">
                             {user.full_name || user.display_name || user.email}
@@ -1852,11 +1853,11 @@ export default function Dashboard() {
               <p className="text-muted-foreground">No users found.</p>
             ) : (
               <ul className="divide-y">
-                {supabaseUsers.map(user => (
-                  <li key={user.id} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                {supabaseUsers.map((user, idx) => (
+                  <li key={stableDirectoryRowKey(user, idx)} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between">
                     <div>
                       <span className="font-medium text-foreground">{user.email}</span>
-                      <span className="text-xs text-muted-foreground ml-2">ID: {user.id}</span>
+                      <span className="text-xs text-muted-foreground ml-2">ID: {user?.id ?? user?.supabase_id ?? "—"}</span>
                       {user.profile && (
                         <span className="text-xs text-muted-foreground ml-2">Name: {user.profile.full_name}</span>
                       )}
@@ -1865,8 +1866,10 @@ export default function Dashboard() {
                       <select
                         value={user.memberships?.[0]?.role || ''}
                         onChange={async e => {
+                          const uid = adminRowPrimaryId(user);
+                          if (!uid) return;
                           setLoadingAdmin(true);
-                          await updateUserRole(user.id, e.target.value);
+                          await updateUserRole(uid, e.target.value);
                           const users = await fetchSupabaseUsers();
                           setSupabaseUsers(users);
                           setLoadingAdmin(false);
@@ -1880,8 +1883,10 @@ export default function Dashboard() {
                       <button
                         className="bg-red-500 text-white px-3 py-1 rounded"
                         onClick={async () => {
+                          const uid = adminRowPrimaryId(user);
+                          if (!uid) return;
                           setLoadingAdmin(true);
-                          await deleteUser(user.id);
+                          await deleteUser(uid);
                           const users = await fetchSupabaseUsers();
                           setSupabaseUsers(users);
                           setLoadingAdmin(false);

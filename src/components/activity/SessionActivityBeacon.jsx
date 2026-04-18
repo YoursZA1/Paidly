@@ -10,15 +10,15 @@ const MIN_WRITE_GAP_MS = 25_000;
  * for admin-side user behavior visibility.
  */
 export default function SessionActivityBeacon() {
-  const { session, isAuthenticated } = useAuth();
+  const { session, isAuthenticated, authUserId, authReady } = useAuth();
   const lastWriteAtRef = useRef(0);
   const inFlightRef = useRef(false);
 
   const writeHeartbeat = useCallback(
     async (force = false) => {
       if (!isSupabaseConfigured) return;
-      const userId = session?.user?.id;
-      if (!isAuthenticated || !userId) return;
+      const userId = authUserId || session?.user?.id || null;
+      if (!authReady || !isAuthenticated || !userId) return;
       if (typeof window !== "undefined" && document.visibilityState === "hidden" && !force) return;
       if (inFlightRef.current) return;
 
@@ -41,11 +41,13 @@ export default function SessionActivityBeacon() {
         inFlightRef.current = false;
       }
     },
-    [isAuthenticated, session?.user?.id]
+    [isAuthenticated, authReady, authUserId, session?.user?.id]
   );
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !isAuthenticated || !session?.user?.id) return undefined;
+    if (!isSupabaseConfigured || !authReady || !isAuthenticated || !(authUserId || session?.user?.id)) {
+      return undefined;
+    }
 
     void writeHeartbeat(true);
     const intervalId = window.setInterval(() => void writeHeartbeat(false), HEARTBEAT_MS);
@@ -70,7 +72,7 @@ export default function SessionActivityBeacon() {
       window.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("keydown", onPointer);
     };
-  }, [isAuthenticated, session?.user?.id, writeHeartbeat]);
+  }, [isAuthenticated, authReady, authUserId, session?.user?.id, writeHeartbeat]);
 
   return null;
 }

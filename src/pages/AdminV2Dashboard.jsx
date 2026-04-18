@@ -41,6 +41,7 @@ import {
   normalizeAffiliateAdminQueryResult,
 } from '@/utils/affiliateApplicationCounts';
 import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
+import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -624,8 +625,8 @@ export default function AdminV2Dashboard() {
           </h2>
         </div>
         <div className="space-y-3 p-4 sm:hidden">
-          {subscriptions.slice(0, 5).map((sub) => (
-            <article key={sub.id} className="rounded-lg border border-border bg-card p-3">
+          {subscriptions.slice(0, 5).map((sub, idx) => (
+            <article key={stableEntityRowKey(sub, idx)} className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{sub.user_name || 'Unknown'}</p>
@@ -667,8 +668,8 @@ export default function AdminV2Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {subscriptions.slice(0, 5).map((sub) => (
-                <tr key={sub.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+              {subscriptions.slice(0, 5).map((sub, idx) => (
+                <tr key={stableEntityRowKey(sub, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
                   <td className="px-6 py-4">
                     <div>
                       <p className="text-sm font-medium">{sub.user_name || 'Unknown'}</p>
@@ -710,10 +711,10 @@ export default function AdminV2Dashboard() {
           </p>
         </div>
         <div className="space-y-3 p-4 sm:hidden">
-          {userBehaviorRows.slice(0, 20).map((row) => {
+          {userBehaviorRows.slice(0, 20).map((row, idx) => {
             const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
             return (
-              <article key={row.id} className="rounded-lg border border-border bg-card p-3">
+              <article key={stableDirectoryRowKey(row, idx)} className="rounded-lg border border-border bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{primary}</p>
@@ -792,10 +793,10 @@ export default function AdminV2Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {userBehaviorRows.map((row) => {
+              {userBehaviorRows.map((row, idx) => {
                 const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
                 return (
-                <tr key={row.id} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                <tr key={stableDirectoryRowKey(row, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium">{primary}</p>
                     {secondary ? (

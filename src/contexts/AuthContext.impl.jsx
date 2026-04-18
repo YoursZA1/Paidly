@@ -25,6 +25,7 @@ import { resetApp } from "@/utils/resetApp";
 import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
 import { setUnauthorizedSessionHandler } from "@/lib/unauthorizedSessionHandler";
+import { getAuthUserId } from "@/lib/authUserId";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -884,13 +885,18 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(() => {
+    const authUserId = getAuthUserId(user);
     const userRole = user?.role || session?.user?.app_metadata?.role || null;
     const userPermissions = user?.permissions || session?.user?.app_metadata?.permissions || [];
     return {
       user,
       profile: user,
       loading,
-      isAuthenticated: !!user,
+      /** True once initial getSession + profile bootstrap has finished (success or guest). */
+      authReady: !loading,
+      /** Canonical id for RLS-scoped reads/writes; null when signed out or not yet hydrated. */
+      authUserId,
+      isAuthenticated: Boolean(authUserId),
       login,
       logout,
       hardResetApp,
@@ -974,6 +980,8 @@ const AUTH_FALLBACK = {
   user: null,
   profile: null,
   loading: false,
+  authReady: false,
+  authUserId: null,
   isAuthenticated: false,
   session: null,
   error: "",

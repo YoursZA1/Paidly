@@ -85,6 +85,9 @@ const NotFoundPage = lazy(() =>
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
+import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAuthUserId } from "@/lib/authUserId";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 
@@ -363,6 +366,15 @@ function shouldBypassAppLayout(pathname) {
 
 function PagesContent() {
     const location = useLocation();
+    const { loading, user } = useAuth();
+    const authUserId = getAuthUserId(user);
+    const needsAppShell = !shouldBypassAppLayout(location.pathname);
+
+    // Avoid mounting the main shell (nav, store hydration) until session bootstrap knows if there is a user.
+    if (needsAppShell && loading && !authUserId) {
+        return <AuthBootstrapShell />;
+    }
+
     const currentPageName = getPageName(location.pathname);
     const routes = (
         <Suspense fallback={<RouteFallback />}>

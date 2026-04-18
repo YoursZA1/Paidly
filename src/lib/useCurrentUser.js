@@ -3,17 +3,17 @@ import { paidly } from '@/api/paidlyClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function useCurrentUser() {
-  const { user: authUser, loading: authLoading } = useAuth();
+  const { user: authUser, loading: authLoading, authReady } = useAuth();
   const { data: queriedUser, isLoading: queryLoading } = useQuery({
     queryKey: ['current-user'],
     queryFn: () => paidly.auth.me(),
-    enabled: !authUser && !authLoading,
+    enabled: authReady && !authUser && !authLoading,
     retry: false,
     staleTime: 60_000,
   });
 
   return {
     user: authUser || queriedUser || null,
-    isLoading: authLoading || (!authUser && queryLoading),
+    isLoading: authLoading || !authReady || (!authUser && queryLoading),
   };
 }
