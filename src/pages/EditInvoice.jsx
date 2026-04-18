@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Invoice, Client, BankingDetail, User } from "@/api/entities";
 import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle, ExternalLink, Send, Save, Loader2 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { appendHistory, createHistoryEntry, diffInvoiceFields } from "@/utils/invoiceHistory";
 import { logInvoiceUpdated, logStatusChanged } from "@/utils/auditLogger";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
@@ -15,20 +14,18 @@ import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
-import PaymentBreakdown from "../components/invoice/PaymentBreakdown";
-import InvoicePreview from "../components/invoice/InvoicePreview";
-import DraftInvoiceInfo from "../components/invoice/DraftInvoiceInfo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sendInvoiceToClient } from "@/services/InvoiceSendService";
 import InvoiceStatusBadge from "../components/invoice/InvoiceStatusBadge";
 import { canEditInvoice } from "@/logic";
+import { formatCurrency } from "@/utils/currencyCalculations";
+import { Separator } from "@/components/ui/separator";
 
 export default function EditInvoice() {
     const navigate = useNavigate();
     const location = useLocation();
     const { toast } = useToast();
     const [invoiceId, setInvoiceId] = useState(null);
-    const [currentStep, setCurrentStep] = useState(1);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
     const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
@@ -36,7 +33,6 @@ export default function EditInvoice() {
     const [invoiceData, setInvoiceData] = useState(null);
     const [originalStatus, setOriginalStatus] = useState(null);
     const [originalInvoiceData, setOriginalInvoiceData] = useState(null);
-    const [user, setUser] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const mountedRef = useRef(true);
 
@@ -56,12 +52,16 @@ export default function EditInvoice() {
     const loadInitialData = async (id) => {
         setIsLoading(true);
         try {
-            const [invoice, clientsData, bankingData, userData] = await withTimeoutRetry(() => Promise.all([
-                Invoice.get(id),
-                Client.list("-created_date"),
-                BankingDetail.list("-created_date"),
-                User.me().catch(() => null)
-            ]), 15000, 2);
+            const [invoice, clientsData, bankingData] = await withTimeoutRetry(
+                () =>
+                    Promise.all([
+                        Invoice.get(id),
+                        Client.list("-created_date"),
+                        BankingDetail.list("-created_date"),
+                    ]),
+                15000,
+                2
+            );
             if (!mountedRef.current) return;
 
             // Ensure invoice_date is set from created_date if not present
@@ -76,8 +76,8 @@ export default function EditInvoice() {
             // Restrict editing for paid, partially paid, or cancelled invoices
             if (!canEditInvoice(invoice)) {
                 toast({
-                    title: "⚠️ Cannot Edit Invoice",
-                    description: `This invoice is ${invoice.status?.replace('_', ' ')} and cannot be edited. View the invoice instead.`,
+                    title: "Cannot edit this invoice",
+                    description: `This invoice is ${invoice.status?.replace('_', ' ')} and cannot be edited. Open the read-only view instead.`,
                     variant: "destructive",
                     duration: 5000
                 });
@@ -90,7 +90,6 @@ export default function EditInvoice() {
             setOriginalInvoiceData(invoiceWithDate);
             setClients(clientsData);
             setBankingDetails(bankingData);
-            setUser(userData || null);
         } catch (error) {
             if (!mountedRef.current) return;
             console.error("Error loading data:", error);
@@ -107,14 +106,6 @@ export default function EditInvoice() {
         const final = remaining * 0.5;
         
         return { upfront, milestone, final };
-    };
-
-    const handleNext = () => {
-        if (currentStep < 3) setCurrentStep(currentStep + 1);
-    };
-
-    const handlePrevious = () => {
-        if (currentStep > 1) setCurrentStep(currentStep - 1);
     };
 
     const handleUpdateInvoice = async (saveAsDraft = null) => {
@@ -211,21 +202,37 @@ export default function EditInvoice() {
               );
             }
 
-            // Send email if converting from draft to sent
+            let emailSendFailed = false;
             if (originalStatus === 'draft' && newStatus === 'sent') {
                 try {
                     await sendInvoiceToClient(invoiceId);
                 } catch (sendError) {
                     console.error('Error sending invoice:', sendError);
+                    emailSendFailed = true;
                 }
             }
 
+            if (emailSendFailed) {
+                toast({
+                    title: 'Invoice saved and marked sent',
+                    description: `Invoice ${invoiceData.invoice_number} was updated, but the client email could not be sent. Use Open preview to resend from the invoice view, or try again.`,
+                    variant: 'destructive',
+                    duration: 10000,
+                });
+                const merged = { ...invoiceData, ...updatedInvoiceData };
+                setInvoiceData(merged);
+                setOriginalInvoiceData(merged);
+                setOriginalStatus(newStatus);
+                return;
+            }
+
             toast({
-                title: newStatus === 'draft' ? "✓ Draft Updated" : "✓ Invoice Updated",
-                description: newStatus === 'sent' && originalStatus === 'draft'
-                    ? `Invoice ${invoiceData.invoice_number} has been sent to client.`
-                    : `Invoice ${invoiceData.invoice_number} has been updated successfully.`,
-                variant: "success"
+                title: newStatus === 'draft' ? 'Draft saved' : 'Invoice updated',
+                description:
+                    newStatus === 'sent' && originalStatus === 'draft'
+                        ? `Invoice ${invoiceData.invoice_number} was sent to the client.`
+                        : `Invoice ${invoiceData.invoice_number} was updated successfully.`,
+                variant: 'success',
             });
 
             setTimeout(() => {
@@ -234,97 +241,235 @@ export default function EditInvoice() {
         } catch (error) {
             console.error("Error updating invoice:", error);
             toast({
-                title: "✗ Error",
-                description: "Failed to update invoice. Please try again.",
-                variant: "destructive"
+                title: 'Could not save invoice',
+                description: error?.message || 'Something went wrong. Please try again.',
+                variant: 'destructive',
             });
         } finally {
             setIsSaving(false);
         }
     };
 
-    const steps = [
-        { number: 1, title: "Project Details", description: "Services, items, and project information" },
-        { number: 2, title: "Payment Breakdown", description: "Review payment schedule" },
-        { number: 3, title: "Preview & Save", description: "Final review before saving changes" }
-    ];
-    
+    const client = useMemo(
+        () => (invoiceData ? clients.find((c) => c.id === invoiceData.client_id) : null),
+        [clients, invoiceData]
+    );
+
+    const ownerCurrency = String(invoiceData?.owner_currency || invoiceData?.currency || "ZAR").trim() || "ZAR";
+
+    const formIsComplete = useMemo(() => {
+        if (!invoiceData) return false;
+        const items = invoiceData.items || [];
+        return (
+            Boolean(invoiceData.client_id) &&
+            Boolean(String(invoiceData.project_title || "").trim()) &&
+            items.length > 0 &&
+            items.every(
+                (item) =>
+                    String(item.service_name || "").trim() &&
+                    Number(item.quantity) > 0 &&
+                    Number(item.unit_price) >= 0
+            ) &&
+            Boolean(invoiceData.invoice_date) &&
+            Boolean(invoiceData.delivery_date)
+        );
+    }, [invoiceData]);
+
     if (isLoading || !invoiceData) {
         return (
-            <div className="min-h-screen bg-slate-100 p-6">
-                <div className="max-w-4xl mx-auto space-y-6">
-                    <Skeleton className="h-12 w-1/2" />
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-96 w-full" />
+            <div className="min-h-screen bg-background p-4 sm:p-6">
+                <div className="mx-auto max-w-6xl space-y-6">
+                    <Skeleton className="h-10 w-48 bg-muted" />
+                    <Skeleton className="h-4 w-full max-w-xl bg-muted" />
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        <Skeleton className="h-96 bg-muted lg:col-span-2" />
+                        <Skeleton className="h-72 bg-muted" />
+                    </div>
                 </div>
             </div>
         );
     }
 
+    const isDraft = String(invoiceData.status || "").toLowerCase() === "draft";
+
     return (
-        <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-            <div className="max-w-4xl mx-auto">
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-4 mb-8"
+                    className="mb-6 flex flex-wrap items-start gap-4"
                 >
                     <Button
-                        variant="outline"
+                        type="button"
+                        variant="ghost"
                         size="icon"
                         onClick={() => navigate(createPageUrl("Invoices"))}
-                        className="rounded-lg border-gray-200 hover:bg-gray-50"
+                        className="shrink-0 rounded-lg border border-border/60 text-muted-foreground hover:bg-muted/50"
+                        aria-label="Back to invoices"
                     >
-                        <ArrowLeft className="w-4 h-4" />
+                        <ArrowLeft className="h-4 w-4" />
                     </Button>
-                    <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Edit Invoice #{invoiceData.invoice_number}</h1>
-                            <InvoiceStatusBadge status={invoiceData.status || 'draft'} />
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <h1 className="font-display text-xl font-semibold tracking-tight sm:text-2xl">
+                                Edit invoice
+                                <span className="text-muted-foreground font-normal"> #{invoiceData.invoice_number}</span>
+                            </h1>
+                            <InvoiceStatusBadge status={invoiceData.status || "draft"} />
                         </div>
-                        <p className="text-sm sm:text-base text-gray-600 mt-1">Update details for this invoice.</p>
+                        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                            {client?.name ? (
+                                <span className="font-medium text-foreground/90">{client.name}</span>
+                            ) : (
+                                <span>No client selected</span>
+                            )}
+                            <span className="hidden text-border sm:inline" aria-hidden>
+                                ·
+                            </span>
+                            <span>
+                                Due{" "}
+                                {invoiceData.delivery_date
+                                    ? new Date(invoiceData.delivery_date).toLocaleDateString(undefined, {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                      })
+                                    : "—"}
+                            </span>
+                            <span className="hidden text-border sm:inline" aria-hidden>
+                                ·
+                            </span>
+                            <span>{(invoiceData.items || []).length} line items</span>
+                            <span className="hidden text-border sm:inline" aria-hidden>
+                                ·
+                            </span>
+                            <span className="tabular-nums">{formatCurrency(invoiceData.total_amount || 0, ownerCurrency)}</span>
+                        </p>
                     </div>
                 </motion.div>
 
-                {/* Draft Warning Banner */}
-                {invoiceData.status === 'draft' && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        <Alert className="mb-6 border-primary/20 bg-primary/10">
-                            <AlertCircle className="h-4 w-4 text-primary" />
-                            <AlertTitle className="text-foreground">Draft Invoice</AlertTitle>
-                            <AlertDescription className="text-primary">
-                                This invoice is still a draft and hasn't been sent to the client yet. 
-                                You can continue editing and send it when ready.
-                            </AlertDescription>
-                        </Alert>
-                    </motion.div>
-                )}
+                {isDraft ? (
+                    <div className="mb-6 flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-muted-foreground">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        <span>Draft — not sent yet. Save anytime, or send when the invoice is ready.</span>
+                    </div>
+                ) : null}
 
-                {/* Invoice Info Card */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 }}
-                    className="mb-6"
-                >
-                    <DraftInvoiceInfo 
-                        invoice={invoiceData} 
-                        client={clients.find(c => c.id === invoiceData.client_id)} 
-                    />
-                </motion.div>
-                
-                {/* Step Content */}
-                <motion.div
-                    key={currentStep}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                >
-                    {currentStep === 1 && (
+                <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-start">
+                    <aside className="order-1 space-y-4 lg:order-2 lg:col-span-1">
+                        <div className="lg:sticky lg:top-6 space-y-4 rounded-xl border border-border/60 bg-card/40 p-4 shadow-sm backdrop-blur-sm sm:p-5">
+                            <div>
+                                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Summary</h2>
+                                <Separator className="my-3 bg-border/60" decorative />
+                                <dl className="space-y-2.5 text-sm">
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-muted-foreground">Subtotal</dt>
+                                        <dd className="tabular-nums font-medium">{formatCurrency(invoiceData.subtotal || 0, ownerCurrency)}</dd>
+                                    </div>
+                                    {(invoiceData.discount_value || 0) > 0 ? (
+                                        <div className="flex justify-between gap-3">
+                                            <dt className="text-muted-foreground">
+                                                Discount
+                                                {invoiceData.discount_type === "percentage"
+                                                    ? ` (${invoiceData.discount_value}%)`
+                                                    : ""}
+                                            </dt>
+                                            <dd className="tabular-nums font-medium text-amber-600 dark:text-amber-400">
+                                                −{formatCurrency(invoiceData.discount_amount || 0, ownerCurrency)}
+                                            </dd>
+                                        </div>
+                                    ) : null}
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-muted-foreground">Tax</dt>
+                                        <dd className="tabular-nums font-medium">{formatCurrency(invoiceData.tax_amount || 0, ownerCurrency)}</dd>
+                                    </div>
+                                </dl>
+                                <Separator className="my-4 bg-border/60" decorative />
+                                <div className="flex items-end justify-between gap-3">
+                                    <span className="text-sm font-medium text-muted-foreground">Total</span>
+                                    <span
+                                        className="text-right text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-3xl"
+                                        style={{ fontFeatureSettings: '"tnum"' }}
+                                    >
+                                        {formatCurrency(invoiceData.total_amount || 0, ownerCurrency)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2 pt-1">
+                                {isDraft ? (
+                                    <>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="w-full justify-center gap-2"
+                                            disabled={isSaving || !formIsComplete}
+                                            onClick={() => handleUpdateInvoice(true)}
+                                        >
+                                            {isSaving ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                            ) : (
+                                                <Save className="h-4 w-4" aria-hidden />
+                                            )}
+                                            Save draft
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            className="w-full justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                                            disabled={isSaving || !formIsComplete}
+                                            onClick={() => handleUpdateInvoice(false)}
+                                        >
+                                            {isSaving ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                            ) : (
+                                                <Send className="h-4 w-4" aria-hidden />
+                                            )}
+                                            Send invoice
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        className="w-full justify-center gap-2"
+                                        disabled={isSaving || !formIsComplete}
+                                        onClick={() => handleUpdateInvoice()}
+                                    >
+                                        {isSaving ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                        ) : (
+                                            <Save className="h-4 w-4" aria-hidden />
+                                        )}
+                                        Save changes
+                                    </Button>
+                                )}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full justify-center gap-2 border-border/80"
+                                    disabled={isSaving}
+                                    onClick={() =>
+                                        navigate(
+                                            `${createPageUrl("ViewInvoice")}?id=${encodeURIComponent(invoiceId)}`
+                                        )
+                                    }
+                                >
+                                    <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+                                    Open preview
+                                </Button>
+                            </div>
+                            {!formIsComplete ? (
+                                <p className="text-center text-[11px] text-muted-foreground">Complete client, dates, and line items to save.</p>
+                            ) : null}
+                        </div>
+                    </aside>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="order-2 min-w-0 lg:order-1 lg:col-span-2"
+                    >
                         <ProjectDetails
                             invoiceData={invoiceData}
                             setInvoiceData={setInvoiceData}
@@ -333,32 +478,13 @@ export default function EditInvoice() {
                             bankingDetails={bankingDetails}
                             setBankingDetails={setBankingDetails}
                             services={services}
-                            onNext={handleNext}
+                            onNext={() => {}}
                             onRefreshCatalog={refetchCatalog}
+                            showNextButton={false}
+                            isEditorLayout
                         />
-                    )}
-                    
-                    {currentStep === 2 && (
-                        <PaymentBreakdown
-                            invoiceData={invoiceData}
-                            setInvoiceData={setInvoiceData}
-                            onNext={handleNext}
-                            onPrevious={handlePrevious}
-                        />
-                    )}
-                    
-                    {currentStep === 3 && (
-                        <InvoicePreview
-                            invoiceData={invoiceData}
-                            clients={clients}
-                            user={user}
-                            bankingDetail={bankingDetails?.find(b => b.id === invoiceData?.banking_detail_id) ?? null}
-                            onPrevious={handlePrevious}
-                            onCreate={handleUpdateInvoice}
-                            loading={isSaving}
-                        />
-                    )}
-                </motion.div>
+                    </motion.div>
+                </div>
             </div>
         </div>
     );

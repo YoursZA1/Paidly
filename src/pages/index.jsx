@@ -52,6 +52,8 @@ const CashFlowPDF = lazy(() => import("./CashFlowPDF"));
 const Calendar = lazy(() => import("./Calendar"));
 const Messages = lazy(() => import("./Messages"));
 const ClientDetail = lazy(() => import("./ClientDetail"));
+const EditClient = lazy(() => import("./EditClient"));
+const EditCatalogItem = lazy(() => import("./EditCatalogItem"));
 const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
 const Budgets = lazy(() => import("./Budgets"));
@@ -146,6 +148,10 @@ const MAIN_ROUTES = [
     { path: "/Budgets", element: <RequireAuth><Budgets /></RequireAuth> },
     { path: "/Accounting", element: <RequireAuth><Accounting /></RequireAuth> },
     { path: "/ClientDetail", element: <RequireAuth><ClientDetail /></RequireAuth> },
+    { path: "/EditClient", element: <RequireAuth><EditClient /></RequireAuth> },
+    { path: "/editclient", element: <RequireAuth><EditClient /></RequireAuth> },
+    { path: "/EditCatalogItem", element: <RequireAuth><EditCatalogItem /></RequireAuth> },
+    { path: "/editcatalogitem", element: <RequireAuth><EditCatalogItem /></RequireAuth> },
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },

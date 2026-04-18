@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,54 @@ import { Badge } from "@/components/ui/badge";
 import { X, Save, Headset, DollarSign, Plus, Trash2, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
-import { getPriceLockStatus } from "@/services/ItemPermissionsService";
 import { renderIcon } from "@/utils/renderIcon";
+
+function normalizeTags(raw) {
+    if (Array.isArray(raw)) return raw;
+    if (raw == null || raw === "") return [];
+    if (typeof raw === "string") {
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+function buildFormStateFromService(service, defaultType) {
+    return {
+        name: service?.name || "",
+        item_type: service?.item_type || defaultType || "service",
+        default_unit: service?.default_unit || service?.unit_of_measure || "unit",
+        default_rate: service?.default_rate ?? service?.unit_price ?? 0,
+        tax_category: service?.tax_category || "standard",
+        is_active: service?.is_active !== undefined ? service.is_active : true,
+        price_locked: service?.price_locked || false,
+        sku: service?.sku || "",
+        stock_quantity: service?.stock_quantity ?? null,
+        cost_price: service?.cost_price ?? null,
+        low_stock_threshold: service?.low_stock_threshold ?? 5,
+        unit: service?.unit || "",
+        price: service?.price ?? 0,
+        billing_unit: service?.billing_unit || "hour",
+        rate: service?.rate ?? 0,
+        role: service?.role || "",
+        hourly_rate: service?.hourly_rate ?? 0,
+        unit_type: service?.unit_type || "",
+        cost_rate: service?.cost_rate ?? 0,
+        cost_type: service?.cost_type || "fixed",
+        default_cost: service?.default_cost ?? 0,
+        description: service?.description || "",
+        category: service?.category || "",
+        pricing_type: service?.pricing_type || service?.service_type || "fixed",
+        min_quantity: service?.min_quantity || 1,
+        tags: normalizeTags(service?.tags),
+        estimated_duration: service?.estimated_duration || "",
+        requirements: service?.requirements || "",
+    };
+}
 
 const predefinedCategories = [
     "Design & Creative",
@@ -86,52 +132,25 @@ const typeSpecificConfig = {
     }
 };
 
-export default function ServiceForm({ service, onSave, onCancel, isSaving = false, defaultType = 'service', variant = "default" }) {
+export default function ServiceForm({
+    service,
+    /** Bumps when the parent replaces placeholder catalog data with a fresh `Service.get` row (or id changes). */
+    serviceDataKey = "",
+    onSave,
+    onCancel,
+    isSaving = false,
+    defaultType = 'service',
+    variant = "default",
+    surface = "default",
+    formId,
+    hideActions = false,
+    onValidityChange,
+}) {
     const isDialog = variant === "dialog";
+    const isPageShell = Boolean(formId) && hideActions;
+    const isEditorSurface = surface === "editor";
     // BASE FIELDS (Shared by all catalog items - Mandatory)
-    const [formData, setFormData] = useState({
-        // Base Fields
-        name: service?.name || "",
-        item_type: service?.item_type || defaultType || "service",
-        default_unit: service?.default_unit || service?.unit_of_measure || "unit",
-        default_rate: service?.default_rate || service?.unit_price || 0,
-        tax_category: service?.tax_category || "standard",
-        is_active: service?.is_active !== undefined ? service.is_active : true,
-        price_locked: service?.price_locked || false,
-        
-        // Type-Specific Fields (Product + Inventory)
-        sku: service?.sku || "",
-        stock_quantity: service?.stock_quantity ?? null,
-        cost_price: service?.cost_price ?? null,
-        low_stock_threshold: service?.low_stock_threshold ?? 5,
-        unit: service?.unit || "",
-        price: service?.price || 0,
-        
-        // Type-Specific Fields (Service)
-        billing_unit: service?.billing_unit || "hour",
-        rate: service?.rate || 0,
-        
-        // Type-Specific Fields (Labor)
-        role: service?.role || "",
-        hourly_rate: service?.hourly_rate || 0,
-        
-        // Type-Specific Fields (Material)
-        unit_type: service?.unit_type || "",
-        cost_rate: service?.cost_rate || 0,
-        
-        // Type-Specific Fields (Expense)
-        cost_type: service?.cost_type || "fixed",
-        default_cost: service?.default_cost || 0,
-        
-        // Optional/Other Fields
-        description: service?.description || "",
-        category: service?.category || "",
-        pricing_type: service?.pricing_type || service?.service_type || "fixed",
-        min_quantity: service?.min_quantity || 1,
-        tags: service?.tags || [],
-        estimated_duration: service?.estimated_duration || "",
-        requirements: service?.requirements || ""
-    });
+    const [formData, setFormData] = useState(() => buildFormStateFromService(service, defaultType));
 
     const [newTag, setNewTag] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -251,7 +270,6 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
             }
         });
         
-        console.log('Submitting service data:', finalData);
         onSave(finalData);
     };
 
@@ -266,7 +284,21 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                         formData.default_rate >= 0;
     
     const isValid = hasName && hasItemType && hasDefaultUnit && hasValidRate;
-    
+
+    useEffect(() => {
+        if (!service?.id) return;
+        setFormData(buildFormStateFromService(service, defaultType));
+        const customCat = Boolean(service.category && !predefinedCategories.includes(service.category));
+        setShowCustomCategory(customCat);
+        setCustomCategory(customCat ? service.category : "");
+        setNewTag("");
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `service` is read when `serviceDataKey` bumps from the parent (cache → fetch, or id change).
+    }, [serviceDataKey, defaultType]);
+
+    useEffect(() => {
+        onValidityChange?.(isValid);
+    }, [isValid, onValidityChange]);
+
     // Get validation errors for tooltip
     const validationErrors = [];
     if (!hasName) validationErrors.push("Name is required");
@@ -284,20 +316,20 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={isEditorSurface ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className={isDialog ? "mb-0" : "mb-8"}
+            exit={isEditorSurface ? undefined : { opacity: 0, y: -20 }}
+            transition={{ duration: isEditorSurface ? 0 : 0.3 }}
+            className={isDialog || isPageShell ? "mb-0" : "mb-8"}
         >
             <Card
                 className={
-                    isDialog
+                    isDialog || isPageShell
                         ? "border-0 shadow-none bg-transparent dark:bg-transparent"
                         : "bg-white/80 dark:bg-slate-800/90 backdrop-blur-sm border-0 dark:border dark:border-slate-700 shadow-xl"
                 }
             >
-                {!isDialog && (
+                {!isDialog && !isPageShell && (
                     <CardHeader className="border-b border-slate-100 dark:border-slate-700 pb-6">
                         <div className="flex items-center justify-between">
                             <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -311,12 +343,18 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                     </CardHeader>
                 )}
 
-                <CardContent className={isDialog ? "p-0" : "p-8"}>
-                    <form onSubmit={handleSubmit} className="space-y-8">
+                <CardContent className={isDialog || isPageShell ? "p-0" : "p-8"}>
+                    <form id={formId || undefined} onSubmit={handleSubmit} className={isPageShell ? "space-y-5" : "space-y-8"}>
                         {/* ====== BASE FIELDS SECTION (Required for all catalog items) ====== */}
-                        <div className="border-l-4 border-primary pl-6 py-4">
-                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wide mb-6">
-                                Required Base Fields
+                        <div
+                            className={
+                                isEditorSurface
+                                    ? "rounded-xl border border-border/50 bg-card/25 p-4 sm:p-5"
+                                    : "border-l-4 border-primary py-4 pl-6"
+                            }
+                        >
+                            <h3 className="mb-6 text-sm font-bold uppercase tracking-wide text-foreground">
+                                Required base fields
                             </h3>
 
                             {/* 1. Catalog Item Type - MANDATORY */}
@@ -325,7 +363,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                     Catalog Item Type <span className="text-red-500 font-bold">*</span>
                                 </Label>
                                 <Select value={formData.item_type} onValueChange={(value) => handleInputChange('item_type', value)}>
-                                    <SelectTrigger className={`h-12 rounded-xl ${!formData.item_type ? 'border-red-300 border-2' : ''}`}>
+                                    <SelectTrigger id="item_type" className={`h-12 rounded-xl ${!formData.item_type ? 'border-red-300 border-2' : ''}`}>
                                         <SelectValue placeholder="Select catalog item type..." />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -417,7 +455,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                             <div className="space-y-2 mb-6">
                                 <Label htmlFor="tax_category" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tax Category</Label>
                                 <Select value={formData.tax_category} onValueChange={(value) => handleInputChange('tax_category', value)}>
-                                    <SelectTrigger className="h-12 rounded-xl">
+                                    <SelectTrigger id="tax_category" className="h-12 rounded-xl">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -444,9 +482,15 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                         {/* ====== TYPE-SPECIFIC FIELDS SECTION ====== */}
                         {formData.item_type && typeSpecificConfig[formData.item_type] && (
-                            <div className="border-l-4 border-primary pl-6 py-4 bg-primary/10 rounded">
-                                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide mb-6">
-                                    {typeSpecificConfig[formData.item_type].label} • Type-Specific Fields
+                            <div
+                                className={
+                                    isEditorSurface
+                                        ? "rounded-xl border border-border/50 bg-muted/15 p-4 sm:p-5"
+                                        : "rounded border-l-4 border-primary bg-primary/10 py-4 pl-6"
+                                }
+                            >
+                                <h3 className="mb-6 text-sm font-bold uppercase tracking-wide text-foreground">
+                                    {typeSpecificConfig[formData.item_type].label} · Type-specific fields
                                 </h3>
 
                                 {/* PRODUCT FIELDS (including inventory) */}
@@ -534,7 +578,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         <div className="space-y-2">
                                             <Label htmlFor="unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unit</Label>
                                             <Select value={formData.unit} onValueChange={(value) => handleInputChange('unit', value)}>
-                                                <SelectTrigger className="h-12 rounded-xl">
+                                                <SelectTrigger id="unit" className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select unit" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -569,7 +613,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         <div className="space-y-2">
                                             <Label htmlFor="billing_unit" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Billing Unit</Label>
                                             <Select value={formData.billing_unit} onValueChange={(value) => handleInputChange('billing_unit', value)}>
-                                                <SelectTrigger className="h-12 rounded-xl">
+                                                <SelectTrigger id="billing_unit" className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select billing unit" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -636,7 +680,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         <div className="space-y-2">
                                             <Label htmlFor="unit_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unit Type</Label>
                                             <Select value={formData.unit_type} onValueChange={(value) => handleInputChange('unit_type', value)}>
-                                                <SelectTrigger className="h-12 rounded-xl">
+                                                <SelectTrigger id="unit_type" className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select unit type" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -671,7 +715,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         <div className="space-y-2">
                                             <Label htmlFor="cost_type" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Cost Type</Label>
                                             <Select value={formData.cost_type} onValueChange={(value) => handleInputChange('cost_type', value)}>
-                                                <SelectTrigger className="h-12 rounded-xl">
+                                                <SelectTrigger id="cost_type" className="h-12 rounded-xl">
                                                     <SelectValue placeholder="Select cost type" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -702,9 +746,21 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                         )}
 
                         {/* ====== OPTIONAL/ADVANCED FIELDS SECTION ====== */}
-                        <div className="border-l-4 border-purple-300 pl-6 py-4 bg-purple-50 rounded">
-                            <h3 className="text-sm font-bold text-purple-900 uppercase tracking-wide mb-6">
-                                Optional / Advanced Fields
+                        <div
+                            className={
+                                isEditorSurface
+                                    ? "rounded-xl border border-border/50 bg-card/20 p-4 sm:p-5"
+                                    : "rounded border-l-4 border-purple-300 bg-purple-50 py-4 pl-6"
+                            }
+                        >
+                            <h3
+                                className={
+                                    isEditorSurface
+                                        ? "mb-6 text-sm font-bold uppercase tracking-wide text-foreground"
+                                        : "mb-6 text-sm font-bold uppercase tracking-wide text-purple-900"
+                                }
+                            >
+                                Optional & advanced
                             </h3>
 
                             {/* Pricing Type - Optional */}
@@ -714,7 +770,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                         Pricing Type (Optional)
                                     </Label>
                                     <Select value={formData.pricing_type} onValueChange={(value) => handleInputChange('pricing_type', value)}>
-                                        <SelectTrigger className="h-12 rounded-xl">
+                                        <SelectTrigger id="pricing_type" className="h-12 rounded-xl">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -747,7 +803,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 <Label htmlFor="category" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Category (Optional)</Label>
                                 {!showCustomCategory ? (
                                     <Select value={formData.category} onValueChange={handleCategoryChange}>
-                                        <SelectTrigger className="h-12 rounded-xl">
+                                        <SelectTrigger id="category" className="h-12 rounded-xl">
                                             <SelectValue placeholder="Select or add category" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -760,6 +816,7 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                                 ) : (
                                     <div className="flex gap-2">
                                         <Input
+                                            id="category"
                                             value={customCategory}
                                             onChange={(e) => setCustomCategory(e.target.value)}
                                             placeholder="Enter custom category"
@@ -804,9 +861,12 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
 
                             {/* Tags - Optional */}
                             <div className="space-y-2 mb-6">
-                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tags</Label>
+                                <Label htmlFor="catalog_item_new_tag" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    Tags
+                                </Label>
                                 <div className="flex gap-2 mb-2">
                                     <Input
+                                        id="catalog_item_new_tag"
                                         value={newTag}
                                         onChange={(e) => setNewTag(e.target.value)}
                                         placeholder="Add a tag"
@@ -862,20 +922,22 @@ export default function ServiceForm({ service, onSave, onCancel, isSaving = fals
                         </div>
 
                         {/* Submit Buttons */}
-                        <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                            <Button type="button" variant="outline" onClick={onCancel} className="px-6 py-3 rounded-xl">
-                                Cancel
-                            </Button>
-                            <Button 
-                                type="submit" 
-                                disabled={!isValid || isSaving} 
-                                className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all" 
-                                title={!isValid ? validationErrors.join(", ") : isSaving ? "Saving..." : ""}
-                            >
-                                <Save className={`w-4 h-4 mr-2 ${isSaving ? 'animate-spin' : ''}`} />
-                                {isSaving ? "Saving..." : service ? "Update Item" : "Create Item"}
-                            </Button>
-                        </div>
+                        {!hideActions && (
+                            <div className="flex justify-end space-x-4 border-t border-slate-200 pt-6 dark:border-slate-700">
+                                <Button type="button" variant="outline" onClick={onCancel} className="rounded-xl px-6 py-3">
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={!isValid || isSaving}
+                                    className="rounded-xl bg-primary px-6 py-3 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+                                    title={!isValid ? validationErrors.join(", ") : isSaving ? "Saving..." : ""}
+                                >
+                                    <Save className={`mr-2 h-4 w-4 ${isSaving ? "animate-spin" : ""}`} />
+                                    {isSaving ? "Saving..." : service ? "Update item" : "Create item"}
+                                </Button>
+                            </div>
+                        )}
                     </form>
                 </CardContent>
             </Card>

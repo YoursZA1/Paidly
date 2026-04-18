@@ -119,11 +119,18 @@ function normalizePaidlyPlan(rawPlan) {
 const SUPABASE_SELECT_COLUMNS = {
   invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
-  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency",
+  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, sent_date",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
   quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
   clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
-  services: "id, org_id, name, description, item_type, default_unit, default_rate, rate, unit_price, is_active, created_at, updated_at",
+  // Keep in sync with ServiceForm — previously omitted columns meant list/get rows were incomplete for the editor.
+  services:
+    "id, org_id, name, description, item_type, default_unit, default_rate, tax_category, is_active, " +
+    "rate, unit, unit_price, unit_of_measure, service_type, sku, price, billing_unit, " +
+    "stock_quantity, cost_price, low_stock_threshold, " +
+    "role, hourly_rate, unit_type, cost_rate, cost_type, default_cost, " +
+    "category, pricing_type, min_quantity, tags, estimated_duration, requirements, price_locked, " +
+    "created_at, updated_at",
   payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
     "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",

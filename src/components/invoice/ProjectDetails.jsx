@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Package } from "lucide-react";
+import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Package, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -34,6 +34,132 @@ import { useAuth } from "@/contexts/AuthContext";
 import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
 import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+function NotesLegalFields({ invoiceData, bankingDetails, onFieldChange, onRequestAddBanking, omitPaymentDetails = false }) {
+    return (
+        <div
+            className={cn(
+                "grid grid-cols-1 gap-6",
+                omitPaymentDetails ? "md:grid-cols-2" : "md:grid-cols-3"
+            )}
+        >
+            <div className="space-y-2 md:col-span-1">
+                <Label htmlFor="notes" className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-foreground">
+                    <span aria-hidden>💬</span> Customer notes
+                </Label>
+                <Textarea
+                    id="notes"
+                    value={invoiceData.notes || ""}
+                    onChange={(e) => onFieldChange("notes", e.target.value)}
+                    placeholder="e.g., Thank you for your business! Please review the items above and contact us with any questions."
+                    className="min-h-28 resize-none rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                />
+                <p className="text-xs text-slate-600 dark:text-muted-foreground">
+                    Friendly message or instructions for your customer
+                </p>
+            </div>
+            <div className="space-y-2 md:col-span-1">
+                <Label htmlFor="terms_conditions" className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-foreground">
+                    <span aria-hidden>📋</span> Terms &amp; conditions
+                </Label>
+                <Textarea
+                    id="terms_conditions"
+                    value={invoiceData.terms_conditions || ""}
+                    onChange={(e) => onFieldChange("terms_conditions", e.target.value)}
+                    placeholder="e.g., By accepting this invoice, customer agrees to all terms..."
+                    className="min-h-32 resize-none rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                />
+                <p className="text-xs text-slate-600 dark:text-muted-foreground">
+                    General legal terms, liability limitations, dispute resolution
+                </p>
+            </div>
+            {!omitPaymentDetails ? (
+            <>
+            <div className="space-y-2 md:col-span-1">
+                <Label htmlFor="banking_detail" className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-foreground">
+                    <span aria-hidden>🏦</span> Payment details
+                </Label>
+                <div className="flex items-center gap-2">
+                    {(() => {
+                        const safeBankingDetails = (bankingDetails || []).filter(
+                            (detail) => typeof detail?.id === "string" && detail.id.trim().length > 0
+                        );
+                        const currentValue = String(invoiceData.banking_detail_id || "");
+                        const hasCurrent = safeBankingDetails.some((d) => d.id === currentValue);
+                        const selectValue = hasCurrent ? currentValue : "none";
+                        return (
+                            <Select
+                                value={selectValue}
+                                onValueChange={(value) =>
+                                    onFieldChange("banking_detail_id", value === "none" ? "" : value)
+                                }
+                                className="flex-grow"
+                            >
+                                <SelectTrigger className="h-12 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 dark:border-border/60">
+                                    <SelectValue placeholder="Select payment details (optional)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Use profile default</SelectItem>
+                                    {safeBankingDetails.map((detail) => (
+                                        <SelectItem key={detail.id} value={detail.id}>
+                                            {(detail.bank_name || "Bank")} -{" "}
+                                            {String(detail.payment_method || "bank_transfer").replace("_", " ")}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        );
+                    })()}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={onRequestAddBanking}
+                        aria-label="Add new payment details"
+                    >
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-muted-foreground">
+                    Defaults to your profile payment details unless you choose another
+                </p>
+            </div>
+            <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="payment_terms" className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-foreground">
+                    <span aria-hidden>💳</span> Payment terms
+                </Label>
+                <Textarea
+                    id="payment_terms"
+                    value={invoiceData.payment_terms || ""}
+                    onChange={(e) => onFieldChange("payment_terms", e.target.value)}
+                    placeholder="e.g., Net 30 days. Payment due within 30 days of invoice date. Late payments subject to 1.5% monthly interest."
+                    className="min-h-28 resize-none rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                />
+                <p className="text-xs text-slate-600 dark:text-muted-foreground">
+                    Due dates, late fees, accepted payment methods
+                </p>
+            </div>
+            <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="warranty_notes" className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-foreground">
+                    <span aria-hidden>🛡️</span> Warranty / service notes
+                </Label>
+                <Textarea
+                    id="warranty_notes"
+                    value={invoiceData.warranty_notes || ""}
+                    onChange={(e) => onFieldChange("warranty_notes", e.target.value)}
+                    placeholder="e.g., All parts covered by 1-year manufacturer warranty. Labor warranty: 90 days from service date. Does not cover misuse or neglect."
+                    className="min-h-28 resize-none rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                />
+                <p className="text-xs text-slate-600 dark:text-muted-foreground">
+                    Warranty coverage, service guarantees, limitations
+                </p>
+            </div>
+            </>
+            ) : null}
+        </div>
+    );
+}
 
 export default function ProjectDetails({ 
     invoiceData, 
@@ -47,7 +173,10 @@ export default function ProjectDetails({
     onNext,
     isRecurring = false,
     showNextButton = true,
-    onRefreshCatalog
+    onRefreshCatalog,
+    isEditorLayout = false,
+    documentKind = "invoice",
+    omitPaymentDetails = false,
 }) {
     const queryClient = useQueryClient();
     const { user: authUser } = useAuth();
@@ -118,21 +247,23 @@ export default function ProjectDetails({
     };
 
     useEffect(() => {
+        if (documentKind === "quote") return;
         if (authUser?.default_tax_rate && !invoiceData.tax_rate) {
             setInvoiceData((prev) => ({
                 ...prev,
                 tax_rate: authUser.default_tax_rate,
             }));
         }
-    }, [authUser?.default_tax_rate, authUser?.id, invoiceData.tax_rate, setInvoiceData]);
+    }, [authUser?.default_tax_rate, authUser?.id, documentKind, invoiceData.tax_rate, setInvoiceData]);
 
     useEffect(() => {
+        if (omitPaymentDetails) return;
         if (invoiceData?.banking_detail_id) return;
         const def = Array.isArray(bankingDetails) ? bankingDetails.find((d) => d?.is_default) : null;
         if (def?.id) {
             handleInputChange('banking_detail_id', def.id);
         }
-    }, [bankingDetails, handleInputChange, invoiceData?.banking_detail_id]);
+    }, [bankingDetails, handleInputChange, invoiceData?.banking_detail_id, omitPaymentDetails]);
 
     useEffect(() => {
         if (quickItemInputRef.current) {
@@ -198,10 +329,10 @@ export default function ProjectDetails({
     const updateTotals = (items) => {
         const subtotal = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
         
-        // Calculate discount
+        // Calculate discount (quotes do not use invoice-style discounts in this editor)
         let discountAmount = 0;
-        const discountType = invoiceData.discount_type || 'fixed';
-        const discountValue = invoiceData.discount_value || 0;
+        const discountType = documentKind === "quote" ? "fixed" : invoiceData.discount_type || "fixed";
+        const discountValue = documentKind === "quote" ? 0 : invoiceData.discount_value || 0;
         
         if (discountValue > 0) {
             if (discountType === 'percentage') {
@@ -525,10 +656,35 @@ export default function ProjectDetails({
     };
 
     const items = invoiceData.items || [];
-    // Modify validation based on whether it's a recurring profile or a regular invoice
+    // Modify validation based on whether it's a recurring profile, quote, or a regular invoice
     const isValid = isRecurring
         ? invoiceData.project_title && items.length > 0 && items.every(item => item.service_name && item.quantity > 0 && item.unit_price >= 0)
-        : invoiceData.client_id && invoiceData.project_title && items.length > 0 && items.every(item => item.service_name && item.quantity > 0 && item.unit_price >= 0) && invoiceData.invoice_date && invoiceData.delivery_date;
+        : documentKind === "quote"
+            ? Boolean(
+                invoiceData.client_id &&
+                    invoiceData.project_title &&
+                    items.length > 0 &&
+                    items.every(
+                        (item) =>
+                            item.service_name &&
+                            Number(item.quantity) > 0 &&
+                            Number(item.unit_price) >= 0
+                    ) &&
+                    invoiceData.delivery_date
+            )
+            : Boolean(
+                invoiceData.client_id &&
+                    invoiceData.project_title &&
+                    items.length > 0 &&
+                    items.every(
+                        (item) =>
+                            item.service_name &&
+                            Number(item.quantity) > 0 &&
+                            Number(item.unit_price) >= 0
+                    ) &&
+                    invoiceData.invoice_date &&
+                    invoiceData.delivery_date
+            );
     
     const userCurrency = invoiceData?.currency || authUser?.currency || "USD";
 
@@ -579,25 +735,205 @@ export default function ProjectDetails({
         if (typeof onRefreshCatalog === "function") void onRefreshCatalog();
     };
 
+    const itemCardShell = isEditorLayout
+        ? "rounded-lg border border-border/50 bg-card/30 p-3 sm:p-4 space-y-3"
+        : "bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4";
+    const itemCardShellGrouped = isEditorLayout
+        ? "rounded-lg border border-border/50 bg-card/30 p-3 sm:p-4 space-y-3 ml-4"
+        : "bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4 ml-4";
+
+    const industryPresetSection = (
+        <div
+            className={cn(
+                "rounded-xl border p-6",
+                isEditorLayout ? "mb-3 border-border/50 bg-muted/10" : "mb-6 border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50"
+            )}
+        >
+            <div className="mb-3 flex items-center gap-2">
+                <span className="text-2xl" aria-hidden>
+                    ⚡
+                </span>
+                <Label
+                    className={cn(
+                        "text-lg font-semibold",
+                        isEditorLayout ? "text-foreground" : "text-purple-900"
+                    )}
+                >
+                    {documentKind === "quote" ? "Quote setup" : "Invoice preset"}
+                </Label>
+            </div>
+            <Select value={selectedPreset} onValueChange={applyPreset}>
+                <SelectTrigger
+                    className={cn(
+                        "h-12",
+                        isEditorLayout
+                            ? "border-border/60 bg-background/80"
+                            : "border-purple-200 bg-white focus:border-purple-500 focus:ring-purple-500/20"
+                    )}
+                >
+                    <SelectValue placeholder="Choose an industry preset to auto-configure your invoice" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">
+                        <div className="flex flex-col">
+                            <span className="font-medium">None (Default)</span>
+                            <span className="text-xs text-slate-500">Standard invoice form without presets</span>
+                        </div>
+                    </SelectItem>
+                    <SelectItem value="automotive">
+                        <div className="flex flex-col">
+                            <span className="font-medium">🚗 Automotive</span>
+                            <span className="text-xs text-slate-500">Optimized for auto repair shops and mechanics</span>
+                        </div>
+                    </SelectItem>
+                    <SelectItem value="construction">
+                        <div className="flex flex-col">
+                            <span className="font-medium">🏗️ Construction</span>
+                            <span className="text-xs text-slate-500">Built for contractors and construction projects</span>
+                        </div>
+                    </SelectItem>
+                    <SelectItem value="retail">
+                        <div className="flex flex-col">
+                            <span className="font-medium">🛍️ Retail</span>
+                            <span className="text-xs text-slate-500">Perfect for retail stores and product sales</span>
+                        </div>
+                    </SelectItem>
+                    <SelectItem value="professional_services">
+                        <div className="flex flex-col">
+                            <span className="font-medium">💼 Professional Services</span>
+                            <span className="text-xs text-slate-500">Ideal for consultants and hourly billing</span>
+                        </div>
+                    </SelectItem>
+                    <SelectItem value="manufacturing">
+                        <div className="flex flex-col">
+                            <span className="font-medium">🏭 Manufacturing</span>
+                            <span className="text-xs text-slate-500">Designed for material-based production</span>
+                        </div>
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            {selectedPreset !== "none" && INDUSTRY_PRESETS[selectedPreset] && (
+                <div
+                    className={cn(
+                        "mt-4 rounded-lg border p-4",
+                        isEditorLayout ? "border-border/50 bg-muted/20" : "border-purple-100 bg-white"
+                    )}
+                >
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                            <div className="h-2 w-2 rounded-full bg-purple-500" />
+                        </div>
+                        <div className="flex-1">
+                            <p
+                                className={cn(
+                                    "mb-2 text-sm font-medium",
+                                    isEditorLayout ? "text-foreground" : "text-purple-900"
+                                )}
+                            >
+                                Active configuration
+                            </p>
+                            <ul className="space-y-1 text-xs text-slate-600">
+                                <li>
+                                    • Default item type:{" "}
+                                    <span className="font-semibold text-slate-900">
+                                        {INDUSTRY_PRESETS[selectedPreset].defaultItemType}
+                                    </span>
+                                </li>
+                                <li>
+                                    • Default unit:{" "}
+                                    <span className="font-semibold text-slate-900">
+                                        {INDUSTRY_PRESETS[selectedPreset].defaultUnitType}
+                                    </span>
+                                </li>
+                                {INDUSTRY_PRESETS[selectedPreset].suggestedGroups.length > 0 && (
+                                    <li>
+                                        • Suggested groups:{" "}
+                                        <span className="font-semibold text-slate-900">
+                                            {INDUSTRY_PRESETS[selectedPreset].suggestedGroups.join(", ")}
+                                        </span>
+                                    </li>
+                                )}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const projectSecondaryFields = (
+        <div className="grid gap-6 md:grid-cols-1">
+            <div className="space-y-2">
+                <Label htmlFor="project_description" className="text-sm font-semibold text-slate-700 dark:text-muted-foreground">
+                    Project description
+                </Label>
+                <Textarea
+                    id="project_description"
+                    value={invoiceData.project_description}
+                    onChange={(e) => handleInputChange("project_description", e.target.value)}
+                    placeholder="Describe the project in detail..."
+                    className="min-h-24 resize-none rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                />
+            </div>
+            {!isRecurring && (
+                <div className="space-y-2">
+                    <Label htmlFor="delivery_address" className="text-sm font-semibold text-slate-700 dark:text-muted-foreground">
+                        Delivery / shipping address (optional)
+                    </Label>
+                    <Textarea
+                        id="delivery_address"
+                        value={invoiceData.delivery_address || ""}
+                        onChange={(e) => handleInputChange("delivery_address", e.target.value)}
+                        placeholder="Enter a delivery or shipping address if applicable"
+                        className="min-h-24 resize-none rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-border/60 dark:bg-background/50"
+                    />
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
         >
-            <Card className="gap-0 border-0 bg-white/80 p-0 shadow-xl backdrop-blur-sm">
-                <CardHeader className="border-b border-slate-100 px-4 pb-6 pt-4">
-                    <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
-                        {isRecurring ? 'Invoice Template Details' : 'Project Details'}
-                    </CardTitle>
-                </CardHeader>
-                
-                <CardContent className="px-4 pb-6 pt-4 sm:px-8 sm:pb-8">
+            <Card
+                className={cn(
+                    "gap-0 border-0 p-0",
+                    isEditorLayout
+                        ? "border border-border/50 bg-transparent shadow-none backdrop-blur-none"
+                        : "bg-white/80 shadow-xl backdrop-blur-sm"
+                )}
+            >
+                {!isEditorLayout && (
+                    <CardHeader className="border-b border-slate-100 px-4 pb-6 pt-4">
+                        <CardTitle className="flex items-center gap-2 text-xl font-bold text-slate-900">
+                            <FileText className="h-5 w-5" />
+                            {isRecurring ? "Invoice Template Details" : "Project Details"}
+                        </CardTitle>
+                    </CardHeader>
+                )}
+
+                <CardContent className={cn("px-4 pb-6 pt-4 sm:px-8 sm:pb-8", isEditorLayout && "px-0 pt-0 sm:px-0")}>
                     <div className="space-y-6">
                         {/* Invoice Header - Core Fields */}
-                        <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-4 sm:p-6 rounded-xl border border-primary/20">
-                            <h3 className="text-sm font-semibold text-slate-900 mb-4">Invoice Information</h3>
+                        <div
+                            className={cn(
+                                "rounded-xl border p-4 sm:p-6",
+                                isEditorLayout
+                                    ? "border-border/60 bg-muted/10"
+                                    : "border-primary/20 bg-gradient-to-r from-primary/10 to-primary/5"
+                            )}
+                        >
+                            <h3
+                                className={cn(
+                                    "mb-4 text-sm font-semibold",
+                                    isEditorLayout ? "text-foreground" : "text-slate-900"
+                                )}
+                            >
+                                {documentKind === "quote" ? "Quote details" : "Invoice details"}
+                            </h3>
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* Client Selection */}
                                 {!isRecurring && (
@@ -660,7 +996,9 @@ export default function ProjectDetails({
                                 {/* Issue Date */}
                                 {!isRecurring && (
                                     <div className="space-y-2">
-                                        <Label className="text-sm font-semibold text-slate-700">Issue Date *</Label>
+                                        <Label className="text-sm font-semibold text-slate-700">
+                                            {documentKind === "quote" ? "Quote date *" : "Issue Date *"}
+                                        </Label>
                                         <div className="relative">
                                             <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                                             <Input
@@ -673,10 +1011,12 @@ export default function ProjectDetails({
                                     </div>
                                 )}
 
-                                {/* Due Date */}
+                                {/* Due Date / valid until */}
                                 {!isRecurring && (
                                     <div className="space-y-2">
-                                        <Label className="text-sm font-semibold text-slate-700">Due Date *</Label>
+                                        <Label className="text-sm font-semibold text-slate-700">
+                                            {documentKind === "quote" ? "Valid until *" : "Due Date *"}
+                                        </Label>
                                         <div className="relative">
                                             <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                                             <Input
@@ -691,80 +1031,38 @@ export default function ProjectDetails({
                             </div>
                         </div>
 
-                        {/* Industry Preset Selector */}
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-6 mb-6">
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-2xl">⚡</span>
-                                <Label className="text-lg font-semibold text-purple-900">Invoice Preset (Power Feature)</Label>
-                            </div>
-                            <Select value={selectedPreset} onValueChange={applyPreset}>
-                                <SelectTrigger className="h-12 bg-white border-purple-200 focus:border-purple-500 focus:ring-purple-500/20">
-                                    <SelectValue placeholder="Choose an industry preset to auto-configure your invoice" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">None (Default)</span>
-                                            <span className="text-xs text-slate-500">Standard invoice form without presets</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="automotive">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">🚗 Automotive</span>
-                                            <span className="text-xs text-slate-500">Optimized for auto repair shops and mechanics</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="construction">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">🏗️ Construction</span>
-                                            <span className="text-xs text-slate-500">Built for contractors and construction projects</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="retail">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">🛍️ Retail</span>
-                                            <span className="text-xs text-slate-500">Perfect for retail stores and product sales</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="professional_services">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">💼 Professional Services</span>
-                                            <span className="text-xs text-slate-500">Ideal for consultants and hourly billing</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="manufacturing">
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">🏭 Manufacturing</span>
-                                            <span className="text-xs text-slate-500">Designed for material-based production</span>
-                                        </div>
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            {selectedPreset !== 'none' && INDUSTRY_PRESETS[selectedPreset] && (
-                                <div className="mt-4 bg-white rounded-lg p-4 border border-purple-100">
-                                    <div className="flex items-start gap-3">
-                                        <div className="mt-0.5">
-                                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-purple-900 mb-2">Active Configuration:</p>
-                                            <ul className="space-y-1 text-xs text-slate-600">
-                                                <li>• Default item type: <span className="font-semibold text-slate-900">{INDUSTRY_PRESETS[selectedPreset].defaultItemType}</span></li>
-                                                <li>• Default unit: <span className="font-semibold text-slate-900">{INDUSTRY_PRESETS[selectedPreset].defaultUnitType}</span></li>
-                                                {INDUSTRY_PRESETS[selectedPreset].suggestedGroups.length > 0 && (
-                                                    <li>• Suggested groups: <span className="font-semibold text-slate-900">{INDUSTRY_PRESETS[selectedPreset].suggestedGroups.join(', ')}</span></li>
-                                                )}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        {isEditorLayout ? (
+                            <Collapsible
+                                defaultOpen={false}
+                                className="overflow-hidden rounded-xl border border-border/50 bg-card/25"
+                            >
+                                <CollapsibleTrigger
+                                    type="button"
+                                    className="group flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
+                                >
+                                    <span>{documentKind === "quote" ? "Description & address" : "Project details"}</span>
+                                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="border-t border-border/40 px-4 pb-4 pt-3">
+                                    {documentKind !== "quote" ? industryPresetSection : null}
+                                    {projectSecondaryFields}
+                                </CollapsibleContent>
+                            </Collapsible>
+                        ) : (
+                            industryPresetSection
+                        )}
 
                         {/* Services/Items Section */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-lg font-semibold text-slate-900">Services & Items</Label>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <Label
+                                    className={cn(
+                                        "text-lg font-semibold",
+                                        isEditorLayout ? "text-foreground" : "text-slate-900"
+                                    )}
+                                >
+                                    Line items
+                                </Label>
                                 <div className="flex gap-2">
                                     <Button
                                         type="button"
@@ -785,7 +1083,14 @@ export default function ProjectDetails({
                                 </div>
                             </div>
 
-                            <div className="bg-white border border-slate-200 rounded-xl p-4">
+                            <div
+                                className={cn(
+                                    "rounded-xl border p-4",
+                                    isEditorLayout
+                                        ? "border-border/50 bg-muted/10"
+                                        : "border-slate-200 bg-white"
+                                )}
+                            >
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                                     <div>
                                         <p className="text-sm font-semibold text-slate-800">Quick Add</p>
@@ -927,9 +1232,24 @@ export default function ProjectDetails({
                                 </div>
                             )}
 
+                            {isEditorLayout && items.length > 0 && (
+                                <div className="mb-2 hidden gap-2 border-b border-border/50 px-1 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:grid-cols-12">
+                                    <div className="md:col-span-4">Item</div>
+                                    <div className="md:col-span-2">Type</div>
+                                    <div className="md:col-span-2 text-center">Qty</div>
+                                    <div className="md:col-span-2 text-right">Rate</div>
+                                    <div className="md:col-span-2 text-right">Line</div>
+                                </div>
+                            )}
+
                             {items.length === 0 && (
-                                <div className="text-center py-8 bg-slate-50 rounded-xl">
-                                    <p className="text-slate-600">No items added yet. Add an item to get started.</p>
+                                <div
+                                    className={cn(
+                                        "rounded-xl py-8 text-center",
+                                        isEditorLayout ? "bg-muted/15 text-muted-foreground" : "bg-slate-50 text-slate-600"
+                                    )}
+                                >
+                                    <p>No items yet. Add a line or use Quick Add.</p>
                                 </div>
                             )}
 
@@ -945,9 +1265,16 @@ export default function ProjectDetails({
                                 const isExpense = itemType === 'expense';
                                 
                                 return (
-                                <div key={index} className="bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4">
+                                <div key={index} className={itemCardShell}>
                                     <div className="flex justify-between items-center mb-4">
-                                        <h4 className="font-semibold text-slate-900">Item #{index + 1}</h4>
+                                        <h4
+                                            className={cn(
+                                                "font-semibold",
+                                                isEditorLayout ? "text-foreground" : "text-slate-900"
+                                            )}
+                                        >
+                                            Item #{index + 1}
+                                        </h4>
                                         {items.length > 0 && (
                                             <Button
                                                 type="button"
@@ -1010,10 +1337,27 @@ export default function ProjectDetails({
 
                                     {/* Service Specific Layout */}
                                     {isService && (
-                                        <div className="bg-primary/15 border border-primary/20 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
-                                            <div className="grid md:grid-cols-2 gap-4">
+                                        <div
+                                            className={cn(
+                                                "mx-2 my-2 -mx-4 -my-2 rounded-lg border p-4",
+                                                isEditorLayout
+                                                    ? "border-border/50 bg-muted/15"
+                                                    : "border-primary/20 bg-primary/15"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
                                                 {/* Service Name */}
-                                                <div className="space-y-2 md:col-span-2">
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
                                                     <Label className="text-sm font-semibold text-slate-700">Service Name *</Label>
                                                     <CatalogCombobox
                                                         catalog={services}
@@ -1031,7 +1375,12 @@ export default function ProjectDetails({
 
                                                 {/* Show Details Toggle */}
                                                 {!expandedItems.includes(index) && (
-                                                    <div className="md:col-span-2">
+                                                    <div
+                                                        className={cn(
+                                                            "flex items-end",
+                                                            isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                        )}
+                                                    >
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
@@ -1045,7 +1394,12 @@ export default function ProjectDetails({
 
                                                 {/* Description - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2 md:col-span-2">
+                                                    <div
+                                                        className={cn(
+                                                            "space-y-2",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
                                                         <Label className="text-sm font-semibold text-slate-700">Description (Optional)</Label>
                                                         <Textarea
                                                             value={item.description}
@@ -1057,7 +1411,7 @@ export default function ProjectDetails({
                                                 )}
 
                                                 {/* Unit Type - Service Hours/Days/Sessions */}
-                                                <div className="space-y-2">
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                     <Label className="text-sm font-semibold text-slate-700">Billing Unit</Label>
                                                     <UnitTypeSelector 
                                                         itemType="service"
@@ -1068,7 +1422,7 @@ export default function ProjectDetails({
                                                 </div>
 
                                                 {/* Quantity (Hours/Days/Sessions) */}
-                                                <div className="space-y-2">
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                     <Label className="text-sm font-semibold text-slate-700">Quantity ({getUnitLabel('service', item.unit_type || 'hour')}) *</Label>
                                                     <Input
                                                         type="number"
@@ -1082,7 +1436,7 @@ export default function ProjectDetails({
                                                 </div>
 
                                                 {/* Service Rate */}
-                                                <div className="space-y-2">
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                     <Label className="text-sm font-semibold text-slate-700">Service Rate ({getUnitLabel('service', item.unit_type || 'hour')}) *</Label>
                                                     <div className="relative">
                                                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1100,7 +1454,7 @@ export default function ProjectDetails({
 
                                                 {/* Tax Rate - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2">
+                                                    <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                         <Label className="text-sm font-semibold text-slate-700">Tax Rate (%) (Optional)</Label>
                                                         <Input
                                                             type="number"
@@ -1120,132 +1474,181 @@ export default function ProjectDetails({
 
                                     {/* Product Specific Layout */}
                                     {isProduct && (
-                                        <div className="grid md:grid-cols-2 gap-4">
-                                            {/* Product Name */}
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Product Name *</Label>
-                                                <CatalogCombobox
-                                                    catalog={services}
-                                                    value={item.service_name}
-                                                    onSelect={(svc) => handleServiceSelect(index, svc)}
-                                                    onAddNew={() => {
-                                                        setCurrentServiceItemIndex(index);
-                                                        setIsAddingService(true);
-                                                    }}
-                                                    currencyCode={userCurrency}
-                                                    onRefreshCatalog={onRefreshCatalog}
-                                                    placeholder="Choose saved product or service…"
-                                                />
-                                            </div>
-
-                                            {/* SKU / Part Number - Prominent for Products */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">SKU / Product Code</Label>
-                                                <Input
-                                                    value={item.part_number || ''}
-                                                    onChange={(e) => handleItemChange(index, 'part_number', e.target.value)}
-                                                    placeholder="e.g., SKU-001 or PROD-ABC"
-                                                    className="h-10 rounded-lg"
-                                                />
-                                            </div>
-
-                                            {/* Show Details Toggle */}
-                                            {!expandedItems.includes(index) && (
-                                                <div className="md:col-span-2">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        onClick={() => setExpandedItems([...expandedItems, index])}
-                                                        className="text-primary hover:text-primary/80 text-sm font-medium"
-                                                    >
-                                                        + Add Description & Tax Rate
-                                                    </Button>
-                                                </div>
+                                        <div
+                                            className={cn(
+                                                isEditorLayout &&
+                                                    "mx-2 my-2 -mx-4 -my-2 rounded-lg border border-border/50 bg-muted/15 p-4"
                                             )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
+                                                {/* Product Name */}
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
+                                                    <Label className="text-sm font-semibold text-slate-700">Product Name *</Label>
+                                                    <CatalogCombobox
+                                                        catalog={services}
+                                                        value={item.service_name}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
+                                                        onAddNew={() => {
+                                                            setCurrentServiceItemIndex(index);
+                                                            setIsAddingService(true);
+                                                        }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
+                                                    />
+                                                </div>
 
-                                            {/* Description - Optional */}
-                                            {expandedItems.includes(index) && (
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm font-semibold text-slate-700">Description (Optional)</Label>
+                                                {/* SKU / Part Number - Prominent for Products */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-6")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">SKU / Product Code</Label>
                                                     <Input
-                                                        value={item.description}
-                                                        onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                                                        placeholder="e.g., Software License, Premium"
+                                                        value={item.part_number || ''}
+                                                        onChange={(e) => handleItemChange(index, 'part_number', e.target.value)}
+                                                        placeholder="e.g., SKU-001 or PROD-ABC"
                                                         className="h-10 rounded-lg"
                                                     />
                                                 </div>
-                                            )}
 
-                                            {/* Unit Type Selector */}
-                                            <div className="space-y-2">
-                                                <UnitTypeSelector 
-                                                    itemType={itemType}
-                                                    value={item.unit_type || 'unit'} 
-                                                    onChange={(value) => handleItemChange(index, 'unit_type', value)}
-                                                />
-                                            </div>
+                                                {/* Show Details Toggle */}
+                                                {!expandedItems.includes(index) && (
+                                                    <div
+                                                        className={cn(
+                                                            isEditorLayout && "flex items-end",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            onClick={() => setExpandedItems([...expandedItems, index])}
+                                                            className="text-primary hover:text-primary/80 text-sm font-medium"
+                                                        >
+                                                            + Add Description & Tax Rate
+                                                        </Button>
+                                                    </div>
+                                                )}
 
-                                            {/* Quantity */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={item.quantity}
-                                                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                                                        placeholder="0.00"
-                                                        className="h-10 rounded-lg flex-1"
+                                                {/* Description - Optional */}
+                                                {expandedItems.includes(index) && (
+                                                    <div
+                                                        className={cn(
+                                                            "space-y-2",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
+                                                        <Label className="text-sm font-semibold text-slate-700">Description (Optional)</Label>
+                                                        <Input
+                                                            value={item.description}
+                                                            onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                                                            placeholder="e.g., Software License, Premium"
+                                                            className="h-10 rounded-lg"
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* Unit Type Selector */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <UnitTypeSelector 
+                                                        itemType={itemType}
+                                                        value={item.unit_type || 'unit'} 
+                                                        onChange={(value) => handleItemChange(index, 'unit_type', value)}
                                                     />
-                                                    <div className="flex items-center px-3 bg-slate-100 rounded-lg text-xs text-slate-700 font-medium whitespace-nowrap">
-                                                        {getUnitLabel(itemType, item.unit_type || 'unit')}
+                                                </div>
+
+                                                {/* Quantity */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-4")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={item.quantity}
+                                                            onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className="h-10 rounded-lg flex-1"
+                                                        />
+                                                        <div
+                                                            className={cn(
+                                                                "flex items-center rounded-lg px-3 text-xs font-medium text-slate-700 whitespace-nowrap",
+                                                                isEditorLayout ? "bg-muted" : "bg-slate-100"
+                                                            )}
+                                                        >
+                                                            {getUnitLabel(itemType, item.unit_type || 'unit')}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Unit Price */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Unit Price *</Label>
-                                                <div className="relative">
-                                                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={item.unit_price}
-                                                        onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
-                                                        placeholder="0.00"
-                                                        className="h-10 pl-10 rounded-lg"
-                                                    />
+                                                {/* Unit Price */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Unit Price *</Label>
+                                                    <div className="relative">
+                                                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={item.unit_price}
+                                                            onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className="h-10 pl-10 rounded-lg"
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Tax Rate - Optional */}
-                                            {expandedItems.includes(index) && (
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm font-semibold text-slate-700">Tax Rate (%) (Optional)</Label>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        max="100"
-                                                        step="0.01"
-                                                        value={item.item_tax_rate || 0}
-                                                        onChange={(e) => handleItemChange(index, 'item_tax_rate', e.target.value)}
-                                                        placeholder="0"
-                                                        className="h-10 rounded-lg"
-                                                    />
-                                                </div>
-                                            )}
+                                                {/* Tax Rate - Optional */}
+                                                {expandedItems.includes(index) && (
+                                                    <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                        <Label className="text-sm font-semibold text-slate-700">Tax Rate (%) (Optional)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.01"
+                                                            value={item.item_tax_rate || 0}
+                                                            onChange={(e) => handleItemChange(index, 'item_tax_rate', e.target.value)}
+                                                            placeholder="0"
+                                                            className="h-10 rounded-lg"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
 
                                     {/* Labor Specific Layout (Automotive, Construction, Repairs) */}
                                     {isLabor && (
-                                        <div className="bg-orange-100/30 border border-orange-200 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
-                                            <div className="grid md:grid-cols-2 gap-4">
+                                        <div
+                                            className={cn(
+                                                "mx-2 my-2 -mx-4 -my-2 rounded-lg border p-4",
+                                                isEditorLayout
+                                                    ? "border-border/50 bg-muted/15"
+                                                    : "border-orange-200 bg-orange-100/30"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
                                                 {/* Role / Labor Type */}
-                                                <div className="space-y-2 md:col-span-2">
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
                                                     <Label className="text-sm font-semibold text-slate-700">Role / Labor Type *</Label>
                                                     <CatalogCombobox
                                                         catalog={services}
@@ -1264,12 +1667,17 @@ export default function ProjectDetails({
 
                                                 {/* Show Details Toggle */}
                                                 {!expandedItems.includes(index) && (
-                                                    <div className="md:col-span-2">
+                                                    <div className={cn("flex items-end", isEditorLayout ? "md:col-span-6" : "md:col-span-2")}>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
                                                             onClick={() => setExpandedItems([...expandedItems, index])}
-                                                            className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                                            className={cn(
+                                                                "text-sm font-medium",
+                                                                isEditorLayout
+                                                                    ? "text-primary hover:text-primary/80"
+                                                                    : "text-orange-600 hover:text-orange-700"
+                                                            )}
                                                         >
                                                             + Add Job Description & Tax Rate
                                                         </Button>
@@ -1278,7 +1686,12 @@ export default function ProjectDetails({
 
                                                 {/* Description / Job Details - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2 md:col-span-2">
+                                                    <div
+                                                        className={cn(
+                                                            "space-y-2",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
                                                         <Label className="text-sm font-semibold text-slate-700">Job Description (Optional)</Label>
                                                         <Textarea
                                                             value={item.description}
@@ -1290,7 +1703,7 @@ export default function ProjectDetails({
                                                 )}
 
                                                 {/* Hours Worked */}
-                                                <div className="space-y-2">
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                     <Label className="text-sm font-semibold text-slate-700">Hours Worked *</Label>
                                                     <Input
                                                         type="number"
@@ -1305,7 +1718,7 @@ export default function ProjectDetails({
                                                 </div>
 
                                                 {/* Hourly Rate */}
-                                                <div className="space-y-2">
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                     <Label className="text-sm font-semibold text-slate-700">Hourly Rate *</Label>
                                                     <div className="relative">
                                                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1324,7 +1737,7 @@ export default function ProjectDetails({
 
                                                 {/* Tax Rate - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2">
+                                                    <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
                                                         <Label className="text-sm font-semibold text-slate-700">Tax Rate (%) (Optional)</Label>
                                                         <Input
                                                             type="number"
@@ -1344,11 +1757,28 @@ export default function ProjectDetails({
 
                                     {/* Material Specific Layout (Construction, Manufacturing, Industrial) */}
                                     {isMaterial && (
-                                        <div className="bg-green-100/30 border border-green-200 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
-                                            <div className="grid md:grid-cols-2 gap-4">
+                                        <div
+                                            className={cn(
+                                                "mx-2 my-2 -mx-4 -my-2 rounded-lg border p-4",
+                                                isEditorLayout
+                                                    ? "border-border/50 bg-muted/15"
+                                                    : "border-green-200 bg-green-100/30"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
                                                 {/* Material Name */}
-                                                <div className="space-y-2 md:col-span-2">
-                                                    <Label>Material Name *</Label>
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
+                                                    <Label className="text-sm font-semibold text-slate-700">Material Name *</Label>
                                                     <CatalogCombobox
                                                         catalog={services}
                                                         value={item.service_name}
@@ -1366,12 +1796,17 @@ export default function ProjectDetails({
 
                                                 {/* Show Details Toggle */}
                                                 {!expandedItems.includes(index) && (
-                                                    <div className="md:col-span-2">
+                                                    <div className={cn("flex items-end", isEditorLayout ? "md:col-span-6" : "md:col-span-2")}>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
                                                             onClick={() => setExpandedItems([...expandedItems, index])}
-                                                            className="text-green-600 hover:text-green-700 text-sm font-medium"
+                                                            className={cn(
+                                                                "text-sm font-medium",
+                                                                isEditorLayout
+                                                                    ? "text-primary hover:text-primary/80"
+                                                                    : "text-green-600 hover:text-green-700"
+                                                            )}
                                                         >
                                                             + Add Specification & Tax Rate
                                                         </Button>
@@ -1380,8 +1815,13 @@ export default function ProjectDetails({
 
                                                 {/* Description - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2 md:col-span-2">
-                                                        <Label>Specification / Description (Optional)</Label>
+                                                    <div
+                                                        className={cn(
+                                                            "space-y-2",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
+                                                        <Label className="text-sm font-semibold text-slate-700">Specification / Description (Optional)</Label>
                                                         <Input
                                                             value={item.description}
                                                             onChange={(e) => handleItemChange(index, 'description', e.target.value)}
@@ -1393,8 +1833,8 @@ export default function ProjectDetails({
                                                 )}
 
                                                 {/* Unit Type Selector */}
-                                                <div className="space-y-2">
-                                                    <Label>Unit of Measure *</Label>
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Unit of Measure *</Label>
                                                     <UnitTypeSelector 
                                                         itemType={itemType}
                                                         value={item.unit_type || 'unit'} 
@@ -1404,8 +1844,8 @@ export default function ProjectDetails({
                                                 </div>
 
                                                 {/* Quantity */}
-                                                <div className="space-y-2">
-                                                    <Label>Quantity *</Label>
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-4")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
                                                     <div className="flex gap-2">
                                                         <Input
                                                             type="number"
@@ -1416,7 +1856,12 @@ export default function ProjectDetails({
                                                             placeholder="0.00"
                                                             className="h-10 rounded-lg flex-1"
                                                         />
-                                                        <div className="flex items-center px-3 bg-green-100 rounded-lg text-xs text-slate-700 font-medium whitespace-nowrap">
+                                                        <div
+                                                            className={cn(
+                                                                "flex items-center px-3 rounded-lg text-xs text-slate-700 font-medium whitespace-nowrap",
+                                                                isEditorLayout ? "bg-muted" : "bg-green-100"
+                                                            )}
+                                                        >
                                                             {getUnitLabel(itemType, item.unit_type || 'unit')}
                                                         </div>
                                                     </div>
@@ -1424,8 +1869,8 @@ export default function ProjectDetails({
                                                 </div>
 
                                                 {/* Unit Cost */}
-                                                <div className="space-y-2">
-                                                    <Label>Unit Cost *</Label>
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Unit Cost *</Label>
                                                     <div className="relative">
                                                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                                                         <Input
@@ -1443,8 +1888,8 @@ export default function ProjectDetails({
 
                                                 {/* Tax Rate - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2">
-                                                        <Label>Tax Rate (%) (Optional)</Label>
+                                                    <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                        <Label className="text-sm font-semibold text-slate-700">Tax Rate (%) (Optional)</Label>
                                                         <Input
                                                             type="number"
                                                             min="0"
@@ -1463,11 +1908,28 @@ export default function ProjectDetails({
 
                                     {/* Expense Specific Layout (Travel, Equipment Hire, Pass-Through Costs) */}
                                     {isExpense && (
-                                        <div className="bg-purple-100/30 border border-purple-200 rounded-lg p-4 -mx-4 -my-2 mx-2 my-2">
-                                            <div className="grid md:grid-cols-2 gap-4">
+                                        <div
+                                            className={cn(
+                                                "mx-2 my-2 -mx-4 -my-2 rounded-lg border p-4",
+                                                isEditorLayout
+                                                    ? "border-border/50 bg-muted/15"
+                                                    : "border-purple-200 bg-purple-100/30"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
                                                 {/* Expense Name */}
-                                                <div className="space-y-2 md:col-span-2">
-                                                    <Label>Expense Name *</Label>
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
+                                                    <Label className="text-sm font-semibold text-slate-700">Expense Name *</Label>
                                                     <CatalogCombobox
                                                         catalog={services}
                                                         value={item.service_name}
@@ -1485,12 +1947,17 @@ export default function ProjectDetails({
 
                                                 {/* Show Details Toggle */}
                                                 {!expandedItems.includes(index) && (
-                                                    <div className="md:col-span-2">
+                                                    <div className={cn("flex items-end", isEditorLayout ? "md:col-span-6" : "md:col-span-2")}>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
                                                             onClick={() => setExpandedItems([...expandedItems, index])}
-                                                            className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                                            className={cn(
+                                                                "text-sm font-medium",
+                                                                isEditorLayout
+                                                                    ? "text-primary hover:text-primary/80"
+                                                                    : "text-purple-600 hover:text-purple-700"
+                                                            )}
                                                         >
                                                             + Add Description & Tax
                                                         </Button>
@@ -1499,8 +1966,13 @@ export default function ProjectDetails({
 
                                                 {/* Description - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2 md:col-span-2">
-                                                        <Label>Description / Details (Optional)</Label>
+                                                    <div
+                                                        className={cn(
+                                                            "space-y-2",
+                                                            isEditorLayout ? "md:col-span-12" : "md:col-span-2"
+                                                        )}
+                                                    >
+                                                        <Label className="text-sm font-semibold text-slate-700">Description / Details (Optional)</Label>
                                                         <Input
                                                             value={item.description}
                                                             onChange={(e) => handleItemChange(index, 'description', e.target.value)}
@@ -1511,9 +1983,9 @@ export default function ProjectDetails({
                                                     </div>
                                                 )}
 
-                                                {/* Cost */}
-                                                <div className="space-y-2">
-                                                    <Label>Cost *</Label>
+                                                {/* Cost — aligned with service rate columns (5–6) on md+ */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2 md:col-start-5")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Cost *</Label>
                                                     <div className="relative">
                                                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                                                         <Input
@@ -1531,8 +2003,8 @@ export default function ProjectDetails({
 
                                                 {/* Tax Rate - Optional */}
                                                 {expandedItems.includes(index) && (
-                                                    <div className="space-y-2">
-                                                        <Label>Tax (if applicable) (%) (Optional)</Label>
+                                                    <div className={cn("space-y-2", isEditorLayout && "md:col-span-2 md:col-start-7")}>
+                                                        <Label className="text-sm font-semibold text-slate-700">Tax (if applicable) (%) (Optional)</Label>
                                                         <Input
                                                             type="number"
                                                             min="0"
@@ -1552,116 +2024,155 @@ export default function ProjectDetails({
 
                                     {/* Other Types (Part, Equipment, etc.) */}
                                     {!isProduct && !isService && !isLabor && !isMaterial && !isExpense && (
-                                        <div className="grid md:grid-cols-2 gap-4">
-                                            {/* Item Name */}
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Item Name *</Label>
-                                                <CatalogCombobox
-                                                    catalog={services}
-                                                    value={item.service_name}
-                                                    onSelect={(svc) => handleServiceSelect(index, svc)}
-                                                    onAddNew={() => {
-                                                        setCurrentServiceItemIndex(index);
-                                                        setIsAddingService(true);
-                                                    }}
-                                                    currencyCode={userCurrency}
-                                                    onRefreshCatalog={onRefreshCatalog}
-                                                    placeholder="Choose saved product or service…"
-                                                />
-                                            </div>
-
-                                            {/* Description */}
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Description</Label>
-                                                <Input
-                                                    value={item.description}
-                                                    onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                                                    placeholder="Brief description"
-                                                    className="h-10 rounded-lg"
-                                                />
-                                            </div>
-
-                                            {/* Unit Type Selector */}
-                                            <div className="space-y-2">
-                                                <UnitTypeSelector 
-                                                    itemType={itemType}
-                                                    value={item.unit_type || 'unit'} 
-                                                    onChange={(value) => handleItemChange(index, 'unit_type', value)}
-                                                />
-                                            </div>
-
-                                            {/* Quantity */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={item.quantity}
-                                                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                                                        placeholder="0.00"
-                                                        className="h-10 rounded-lg flex-1"
+                                        <div
+                                            className={cn(
+                                                isEditorLayout &&
+                                                    "mx-2 my-2 -mx-4 -my-2 rounded-lg border border-border/50 bg-muted/15 p-4"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid gap-4",
+                                                    isEditorLayout ? "md:grid-cols-12" : "md:grid-cols-2"
+                                                )}
+                                            >
+                                                {/* Item Name */}
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
+                                                    <Label className="text-sm font-semibold text-slate-700">Item Name *</Label>
+                                                    <CatalogCombobox
+                                                        catalog={services}
+                                                        value={item.service_name}
+                                                        onSelect={(svc) => handleServiceSelect(index, svc)}
+                                                        onAddNew={() => {
+                                                            setCurrentServiceItemIndex(index);
+                                                            setIsAddingService(true);
+                                                        }}
+                                                        currencyCode={userCurrency}
+                                                        onRefreshCatalog={onRefreshCatalog}
+                                                        placeholder="Choose saved product or service…"
                                                     />
-                                                    <div className="flex items-center px-3 bg-slate-100 rounded-lg text-xs text-slate-700 font-medium whitespace-nowrap">
-                                                        {getUnitLabel(itemType, item.unit_type || 'unit')}
+                                                </div>
+
+                                                {/* Description */}
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2",
+                                                        isEditorLayout ? "md:col-span-6" : "md:col-span-2"
+                                                    )}
+                                                >
+                                                    <Label className="text-sm font-semibold text-slate-700">Description</Label>
+                                                    <Input
+                                                        value={item.description}
+                                                        onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                                                        placeholder="Brief description"
+                                                        className="h-10 rounded-lg"
+                                                    />
+                                                </div>
+
+                                                {/* Unit Type Selector */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <UnitTypeSelector 
+                                                        itemType={itemType}
+                                                        value={item.unit_type || 'unit'} 
+                                                        onChange={(value) => handleItemChange(index, 'unit_type', value)}
+                                                    />
+                                                </div>
+
+                                                {/* Quantity */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-4")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Quantity *</Label>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={item.quantity}
+                                                            onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className="h-10 rounded-lg flex-1"
+                                                        />
+                                                        <div
+                                                            className={cn(
+                                                                "flex items-center rounded-lg px-3 text-xs font-medium text-slate-700 whitespace-nowrap",
+                                                                isEditorLayout ? "bg-muted" : "bg-slate-100"
+                                                            )}
+                                                        >
+                                                            {getUnitLabel(itemType, item.unit_type || 'unit')}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Unit Price */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Unit Price *</Label>
-                                                <div className="relative">
-                                                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                {/* Unit Price */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Unit Price *</Label>
+                                                    <div className="relative">
+                                                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={item.unit_price}
+                                                            onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className="h-10 pl-10 rounded-lg"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Tax Rate */}
+                                                <div className={cn("space-y-2", isEditorLayout && "md:col-span-2")}>
+                                                    <Label className="text-sm font-semibold text-slate-700">Tax Rate (%)</Label>
                                                     <Input
                                                         type="number"
                                                         min="0"
+                                                        max="100"
                                                         step="0.01"
-                                                        value={item.unit_price}
-                                                        onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
-                                                        placeholder="0.00"
-                                                        className="h-10 pl-10 rounded-lg"
+                                                        value={item.item_tax_rate || 0}
+                                                        onChange={(e) => handleItemChange(index, 'item_tax_rate', e.target.value)}
+                                                        placeholder="0"
+                                                        className="h-10 rounded-lg"
                                                     />
                                                 </div>
-                                            </div>
-
-                                            {/* Tax Rate */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-slate-700">Tax Rate (%)</Label>
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    step="0.01"
-                                                    value={item.item_tax_rate || 0}
-                                                    onChange={(e) => handleItemChange(index, 'item_tax_rate', e.target.value)}
-                                                    placeholder="0"
-                                                    className="h-10 rounded-lg"
-                                                />
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="flex justify-between items-end gap-4">
+                                    <div
+                                        className={cn(
+                                            "flex justify-between items-end gap-4 border-t pt-4",
+                                            isEditorLayout ? "border-border/50" : "border-slate-200"
+                                        )}
+                                    >
                                         <div>
-                                            <p className="text-sm text-slate-600 mb-2">Line Item Summary</p>
+                                            <p
+                                                className={cn(
+                                                    "mb-2 text-sm",
+                                                    isEditorLayout ? "text-muted-foreground" : "text-slate-600"
+                                                )}
+                                            >
+                                                Line Item Summary
+                                            </p>
                                             <div className="space-y-1">
                                                 <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-600">Subtotal:</span>
-                                                    <span className="font-medium tabular-nums">{formatCurrency(item.total_price || 0, userCurrency)}</span>
+                                                    <span className={isEditorLayout ? "text-muted-foreground" : "text-slate-600"}>Subtotal:</span>
+                                                    <span className="font-medium tabular-nums text-foreground">{formatCurrency(item.total_price || 0, userCurrency)}</span>
                                                 </div>
                                                 {item.item_tax_rate > 0 && (
                                                     <div className="flex justify-between text-sm">
-                                                        <span className="text-slate-600">Tax ({item.item_tax_rate}%):</span>
-                                                        <span className="font-medium text-orange-600 tabular-nums">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</span>
+                                                        <span className={isEditorLayout ? "text-muted-foreground" : "text-slate-600"}>Tax ({item.item_tax_rate}%):</span>
+                                                        <span className="font-medium tabular-nums text-orange-600">{formatCurrency(item.item_tax_amount || 0, userCurrency)}</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-sm text-slate-600">Line Total</p>
-                                            <p className="text-xl font-bold text-slate-900 tabular-nums">
+                                            <p className={cn("text-sm", isEditorLayout ? "text-muted-foreground" : "text-slate-600")}>Line Total</p>
+                                            <p className={cn("text-xl font-bold tabular-nums", isEditorLayout ? "text-foreground" : "text-slate-900")}>
                                                 {formatCurrency((item.total_price || 0) + (item.item_tax_amount || 0), userCurrency)}
                                             </p>
                                         </div>
@@ -1700,9 +2211,16 @@ export default function ProjectDetails({
                                             const isExpense = itemType === 'expense';
                                             
                                             result.push(
-                                                <div key={`item-${group.id}-${index}`} className="bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4 ml-4">
+                                                <div key={`item-${group.id}-${index}`} className={itemCardShellGrouped}>
                                                     <div className="flex justify-between items-center mb-4">
-                                                        <h4 className="font-semibold text-slate-900">Item #{index + 1}</h4>
+                                                        <h4
+                                                            className={cn(
+                                                                "font-semibold",
+                                                                isEditorLayout ? "text-foreground" : "text-slate-900"
+                                                            )}
+                                                        >
+                                                            Item #{index + 1}
+                                                        </h4>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
@@ -1755,9 +2273,16 @@ export default function ProjectDetails({
                                             const itemType = item.item_type || 'service';
                                             
                                             result.push(
-                                                <div key={`item-ungrouped-${index}`} className="bg-slate-50 p-4 sm:p-6 rounded-xl space-y-4">
+                                                <div key={`item-ungrouped-${index}`} className={itemCardShell}>
                                                     <div className="flex justify-between items-center mb-4">
-                                                        <h4 className="font-semibold text-slate-900">Item #{index + 1}</h4>
+                                                        <h4
+                                                            className={cn(
+                                                                "font-semibold",
+                                                                isEditorLayout ? "text-foreground" : "text-slate-900"
+                                                            )}
+                                                        >
+                                                            Item #{index + 1}
+                                                        </h4>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
@@ -1789,14 +2314,49 @@ export default function ProjectDetails({
 
                         {/* Totals & Summary Section - Always Visible */}
                         {(invoiceData.items || []).length > 0 && (
-                            <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/20 rounded-2xl p-6 shadow-lg space-y-6">
-                                <div className="flex items-center justify-between border-b border-primary/20 pb-3">
-                                    <h3 className="text-lg font-bold text-slate-900">Invoice Summary</h3>
-                                    <span className="text-sm text-slate-600 bg-white px-3 py-1 rounded-full">{(invoiceData.items || []).length} {(invoiceData.items || []).length === 1 ? 'item' : 'items'}</span>
+                            <div
+                                className={cn(
+                                    "rounded-2xl border p-6 space-y-6",
+                                    isEditorLayout
+                                        ? "border-border/50 bg-card/20 shadow-none"
+                                        : "border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 shadow-lg"
+                                )}
+                            >
+                                <div
+                                    className={cn(
+                                        "flex items-center justify-between border-b pb-3",
+                                        isEditorLayout ? "border-border/50" : "border-primary/20"
+                                    )}
+                                >
+                                    <h3
+                                        className={cn(
+                                            "text-lg font-bold",
+                                            isEditorLayout ? "text-foreground" : "text-slate-900"
+                                        )}
+                                    >
+                                        {documentKind === "quote" ? "Tax (optional)" : "Tax & discount"}
+                                    </h3>
+                                    <span
+                                        className={cn(
+                                            "rounded-full px-3 py-1 text-sm",
+                                            isEditorLayout
+                                                ? "bg-muted/50 text-muted-foreground"
+                                                : "bg-white text-slate-600"
+                                        )}
+                                    >
+                                        {(invoiceData.items || []).length}{" "}
+                                        {(invoiceData.items || []).length === 1 ? "item" : "items"}
+                                    </span>
                                 </div>
 
                                 {/* Tax & Discount Controls */}
-                                <div className="grid md:grid-cols-2 gap-4 bg-white/60 rounded-xl p-4">
+                                <div
+                                    className={cn(
+                                        "grid gap-4 rounded-xl p-4",
+                                        documentKind === "quote" ? "md:grid-cols-1" : "md:grid-cols-2",
+                                        isEditorLayout ? "border border-border/40 bg-muted/10" : "bg-white/60"
+                                    )}
+                                >
                                     <div className="space-y-2">
                                         <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                                             <span>💰</span> Global Tax Rate (%)
@@ -1810,246 +2370,287 @@ export default function ProjectDetails({
                                             placeholder="0"
                                             className="h-11 rounded-lg border-2 focus:border-primary"
                                         />
-                                        <p className="text-xs text-slate-500">Applied to subtotal after discounts</p>
+                                        <p className="text-xs text-slate-500">
+                                            {documentKind === "quote"
+                                                ? "Leave at 0 for no tax on this quote."
+                                                : "Applied to subtotal after discounts"}
+                                        </p>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                                            <span>🏷️</span> Discount Type
-                                        </Label>
-                                        <Select 
-                                            value={invoiceData.discount_type || 'fixed'}
-                                            onValueChange={(value) => handleDiscountChange(value, invoiceData.discount_value || 0)}
-                                        >
-                                            <SelectTrigger className="h-11 rounded-lg border-2 focus:border-primary">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="fixed">Fixed Amount</SelectItem>
-                                                <SelectItem value="percentage">Percentage (%)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                    {documentKind !== "quote" ? (
+                                        <>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                    <span>🏷️</span> Discount Type
+                                                </Label>
+                                                <Select 
+                                                    value={invoiceData.discount_type || 'fixed'}
+                                                    onValueChange={(value) => handleDiscountChange(value, invoiceData.discount_value || 0)}
+                                                >
+                                                    <SelectTrigger className="h-11 rounded-lg border-2 focus:border-primary">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="fixed">Fixed Amount</SelectItem>
+                                                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
 
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label className="text-sm font-semibold text-slate-700">
-                                            {invoiceData.discount_type === 'percentage' ? 'Discount (%)' : 'Discount Amount'}
-                                        </Label>
-                                        <Input
-                                            type="number"
-                                            min="0"
-                                            step={invoiceData.discount_type === 'percentage' ? '0.1' : '0.01'}
-                                            value={invoiceData.discount_value || 0}
-                                            onChange={(e) => handleDiscountChange(invoiceData.discount_type || 'fixed', e.target.value)}
-                                            placeholder="0"
-                                            className="h-11 rounded-lg border-2 focus:border-primary"
-                                        />
-                                    </div>
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label className="text-sm font-semibold text-slate-700">
+                                                    {invoiceData.discount_type === 'percentage' ? 'Discount (%)' : 'Discount Amount'}
+                                                </Label>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step={invoiceData.discount_type === 'percentage' ? '0.1' : '0.01'}
+                                                    value={invoiceData.discount_value || 0}
+                                                    onChange={(e) => handleDiscountChange(invoiceData.discount_type || 'fixed', e.target.value)}
+                                                    placeholder="0"
+                                                    className="h-11 rounded-lg border-2 focus:border-primary"
+                                                />
+                                            </div>
+                                        </>
+                                    ) : null}
                                 </div>
 
                                 {/* Calculation Breakdown */}
-                                <div className="bg-white rounded-xl p-5 space-y-3 shadow-sm">
-                                    <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Calculation Breakdown</h4>
+                                <div
+                                    className={cn(
+                                        "space-y-3 rounded-xl p-5",
+                                        isEditorLayout
+                                            ? "border border-border/40 bg-background/30"
+                                            : "bg-white shadow-sm"
+                                    )}
+                                >
+                                    <h4
+                                        className={cn(
+                                            "mb-3 text-sm font-bold uppercase tracking-wide",
+                                            isEditorLayout ? "text-muted-foreground" : "text-slate-700"
+                                        )}
+                                    >
+                                        Calculation breakdown
+                                    </h4>
                                     
                                     {/* Subtotal */}
                                     <div className="flex justify-between items-center py-2">
-                                        <span className="text-slate-700 font-medium">Subtotal</span>
-                                        <span className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(invoiceData.subtotal || 0, userCurrency)}</span>
+                                        <span
+                                            className={cn(
+                                                "font-medium",
+                                                isEditorLayout ? "text-muted-foreground" : "text-slate-700"
+                                            )}
+                                        >
+                                            Subtotal
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                "text-lg font-bold tabular-nums",
+                                                isEditorLayout ? "text-foreground" : "text-slate-900"
+                                            )}
+                                        >
+                                            {formatCurrency(invoiceData.subtotal || 0, userCurrency)}
+                                        </span>
                                     </div>
 
                                     {/* Discount */}
                                     {(invoiceData.discount_value || 0) > 0 && (
-                                        <div className="flex justify-between items-center py-2 bg-red-50 -mx-2 px-2 rounded-lg">
-                                            <span className="text-red-700 font-medium flex items-center gap-2">
-                                                <span>🏷️</span>
-                                                Discount {invoiceData.discount_type === 'percentage' ? `(${invoiceData.discount_value}%)` : ''}
+                                        <div
+                                            className={cn(
+                                                "flex justify-between items-center rounded-lg px-2 py-2 -mx-2",
+                                                isEditorLayout
+                                                    ? "bg-destructive/10"
+                                                    : "bg-red-50"
+                                            )}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "flex items-center gap-2 font-medium",
+                                                    isEditorLayout ? "text-destructive" : "text-red-700"
+                                                )}
+                                            >
+                                                <span aria-hidden>🏷️</span>
+                                                Discount{" "}
+                                                {invoiceData.discount_type === "percentage"
+                                                    ? `(${invoiceData.discount_value}%)`
+                                                    : ""}
                                             </span>
-                                            <span className="text-lg font-bold text-red-600 tabular-nums">-{formatCurrency(invoiceData.discount_amount || 0, userCurrency)}</span>
+                                            <span
+                                                className={cn(
+                                                    "text-lg font-bold tabular-nums",
+                                                    isEditorLayout ? "text-destructive" : "text-red-600"
+                                                )}
+                                            >
+                                                -{formatCurrency(invoiceData.discount_amount || 0, userCurrency)}
+                                            </span>
                                         </div>
                                     )}
 
                                     {/* Tax Breakdown */}
                                     {((invoiceData.item_taxes || 0) > 0 || (invoiceData.tax_rate || 0) > 0) && (
-                                        <div className="border-t border-slate-200 pt-3 space-y-2">
+                                        <div
+                                            className={cn(
+                                                "space-y-2 border-t pt-3",
+                                                isEditorLayout ? "border-border/50" : "border-slate-200"
+                                            )}
+                                        >
                                             {(invoiceData.item_taxes || 0) > 0 && (
                                                 <div className="flex justify-between items-center py-1">
-                                                    <span className="text-sm text-orange-700 flex items-center gap-2">
-                                                        <span>📊</span> Item-Level Taxes
+                                                    <span
+                                                        className={cn(
+                                                            "flex items-center gap-2 text-sm",
+                                                            isEditorLayout ? "text-muted-foreground" : "text-orange-700"
+                                                        )}
+                                                    >
+                                                        <span aria-hidden>📊</span> Item-level taxes
                                                     </span>
-                                                    <span className="font-semibold text-orange-600 tabular-nums">{formatCurrency(invoiceData.item_taxes || 0, userCurrency)}</span>
+                                                    <span
+                                                        className={cn(
+                                                            "font-semibold tabular-nums",
+                                                            isEditorLayout ? "text-foreground" : "text-orange-600"
+                                                        )}
+                                                    >
+                                                        {formatCurrency(invoiceData.item_taxes || 0, userCurrency)}
+                                                    </span>
                                                 </div>
                                             )}
                                             {(invoiceData.tax_rate || 0) > 0 && (
                                                 <div className="flex justify-between items-center py-1">
-                                                    <span className="text-sm text-orange-700 flex items-center gap-2">
-                                                        <span>💰</span> Global Tax ({invoiceData.tax_rate}%)
+                                                    <span
+                                                        className={cn(
+                                                            "flex items-center gap-2 text-sm",
+                                                            isEditorLayout ? "text-muted-foreground" : "text-orange-700"
+                                                        )}
+                                                    >
+                                                        <span aria-hidden>💰</span> Global tax ({invoiceData.tax_rate}%)
                                                     </span>
-                                                    <span className="font-semibold text-orange-600 tabular-nums">{formatCurrency((invoiceData.tax_amount || 0) - (invoiceData.item_taxes || 0), userCurrency)}</span>
+                                                    <span
+                                                        className={cn(
+                                                            "font-semibold tabular-nums",
+                                                            isEditorLayout ? "text-foreground" : "text-orange-600"
+                                                        )}
+                                                    >
+                                                        {formatCurrency(
+                                                            (invoiceData.tax_amount || 0) - (invoiceData.item_taxes || 0),
+                                                            userCurrency
+                                                        )}
+                                                    </span>
                                                 </div>
                                             )}
-                                            <div className="flex justify-between items-center py-2 bg-orange-50 -mx-2 px-2 rounded-lg">
-                                                <span className="font-bold text-orange-800">Total Tax</span>
-                                                <span className="text-lg font-bold text-orange-700 tabular-nums">{formatCurrency(invoiceData.tax_amount || 0, userCurrency)}</span>
+                                            <div
+                                                className={cn(
+                                                    "flex justify-between items-center rounded-lg px-2 py-2 -mx-2",
+                                                    isEditorLayout ? "bg-muted/40" : "bg-orange-50"
+                                                )}
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        "font-bold",
+                                                        isEditorLayout ? "text-foreground" : "text-orange-800"
+                                                    )}
+                                                >
+                                                    Total tax
+                                                </span>
+                                                <span
+                                                    className={cn(
+                                                        "text-lg font-bold tabular-nums",
+                                                        isEditorLayout ? "text-foreground" : "text-orange-700"
+                                                    )}
+                                                >
+                                                    {formatCurrency(invoiceData.tax_amount || 0, userCurrency)}
+                                                </span>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Grand Total: tabular-nums, fluid scale, symbol + amount on one line */}
-                                    <div className="border-t-2 border-slate-300 pt-4 mt-3">
-                                        <div className="flex justify-between items-center bg-gradient-to-r from-primary to-[#ff7c00] text-white rounded-xl py-4 px-5 shadow-md">
-                                            <span className="text-xl font-bold">Grand Total</span>
-                                            <span
-                                                className="font-black tabular-nums tracking-tighter whitespace-nowrap min-w-0"
-                                                style={{ fontSize: 'clamp(1.25rem, 4vw + 1rem, 2.25rem)' }}
-                                            >
-                                                {formatCurrency(invoiceData.total_amount || 0, userCurrency)}
-                                            </span>
+                                    {!isEditorLayout && (
+                                        <div className="mt-3 border-t-2 border-slate-300 pt-4">
+                                            <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-primary to-[#ff7c00] px-5 py-4 text-white shadow-md">
+                                                <span className="text-xl font-bold">Grand Total</span>
+                                                <span
+                                                    className="min-w-0 whitespace-nowrap font-black tabular-nums tracking-tighter"
+                                                    style={{ fontSize: "clamp(1.25rem, 4vw + 1rem, 2.25rem)" }}
+                                                >
+                                                    {formatCurrency(invoiceData.total_amount || 0, userCurrency)}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Rest of form */}
-                        <div className="grid md:grid-cols-1 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="project_description" className="text-sm font-semibold text-slate-700">
-                                    Project Description
-                                </Label>
-                                <Textarea
-                                    id="project_description"
-                                    value={invoiceData.project_description}
-                                    onChange={(e) => handleInputChange('project_description', e.target.value)}
-                                    placeholder="Describe the project in detail..."
-                                    className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
+                        {!isEditorLayout && (
+                            <div className="grid gap-6 md:grid-cols-1">
+                                <div className="space-y-2">
+                                    <Label htmlFor="project_description_legacy" className="text-sm font-semibold text-slate-700">
+                                        Project Description
+                                    </Label>
+                                    <Textarea
+                                        id="project_description_legacy"
+                                        value={invoiceData.project_description}
+                                        onChange={(e) => handleInputChange("project_description", e.target.value)}
+                                        placeholder="Describe the project in detail..."
+                                        className="min-h-24 resize-none rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                    />
+                                </div>
+                                {!isRecurring && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="delivery_address_legacy" className="text-sm font-semibold text-slate-700">
+                                            Delivery/Shipping Address (Optional)
+                                        </Label>
+                                        <Textarea
+                                            id="delivery_address_legacy"
+                                            value={invoiceData.delivery_address || ""}
+                                            onChange={(e) => handleInputChange("delivery_address", e.target.value)}
+                                            placeholder="Enter a delivery or shipping address if applicable"
+                                            className="min-h-24 resize-none rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {isEditorLayout ? (
+                            <Collapsible
+                                defaultOpen={false}
+                                className="overflow-hidden rounded-xl border border-border/50 bg-card/25"
+                            >
+                                <CollapsibleTrigger
+                                    type="button"
+                                    className="group flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <FileText className="h-4 w-4 opacity-70" aria-hidden />
+                                        {documentKind === "quote" ? "Notes & terms (optional)" : "Notes & legal"}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="border-t border-border/40 px-4 pb-4 pt-3">
+                                    <NotesLegalFields
+                                        invoiceData={invoiceData}
+                                        bankingDetails={bankingDetails}
+                                        onFieldChange={handleInputChange}
+                                        onRequestAddBanking={() => setIsAddingBankingDetail(true)}
+                                        omitPaymentDetails={omitPaymentDetails}
+                                    />
+                                </CollapsibleContent>
+                            </Collapsible>
+                        ) : (
+                            <div className="space-y-6 rounded-2xl border-2 border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+                                <div className="flex items-center gap-2 border-b border-slate-300 pb-3">
+                                    <FileText className="h-5 w-5 text-slate-700" />
+                                    <h3 className="text-lg font-bold text-slate-900">Notes & Legal Text</h3>
+                                </div>
+                                <NotesLegalFields
+                                    invoiceData={invoiceData}
+                                    bankingDetails={bankingDetails}
+                                    onFieldChange={handleInputChange}
+                                    onRequestAddBanking={() => setIsAddingBankingDetail(true)}
+                                    omitPaymentDetails={omitPaymentDetails}
                                 />
                             </div>
-
-                            {!isRecurring && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="delivery_address" className="text-sm font-semibold text-slate-700">
-                                        Delivery/Shipping Address (Optional)
-                                    </Label>
-                                    <Textarea
-                                        id="delivery_address"
-                                        value={invoiceData.delivery_address || ""}
-                                        onChange={(e) => handleInputChange('delivery_address', e.target.value)}
-                                        placeholder="Enter a delivery or shipping address if applicable"
-                                        className="min-h-24 rounded-xl border-slate-200 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Notes & Legal Text Section */}
-                        <div className="bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-slate-200 rounded-2xl p-6 space-y-6">
-                            <div className="flex items-center gap-2 border-b border-slate-300 pb-3">
-                                <FileText className="w-5 h-5 text-slate-700" />
-                                <h3 className="text-lg font-bold text-slate-900">Notes & Legal Text</h3>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {/* Customer-Facing Notes */}
-                                <div className="space-y-2 md:col-span-1">
-                                    <Label htmlFor="notes" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>💬</span> Customer Notes
-                                    </Label>
-                                    <Textarea
-                                        id="notes"
-                                        value={invoiceData.notes || ""}
-                                        onChange={(e) => handleInputChange('notes', e.target.value)}
-                                        placeholder="e.g., Thank you for your business! Please review the items above and contact us with any questions."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                    <p className="text-xs text-slate-600">Friendly message or instructions for your customer</p>
-                                </div>
-
-                                {/* Terms & Conditions */}
-                                <div className="space-y-2 md:col-span-1">
-                                    <Label htmlFor="terms_conditions" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>📋</span> Terms &amp; Conditions
-                                    </Label>
-                                    <Textarea
-                                        id="terms_conditions"
-                                        value={invoiceData.terms_conditions || ""}
-                                        onChange={(e) => handleInputChange('terms_conditions', e.target.value)}
-                                        placeholder="e.g., By accepting this invoice, customer agrees to all terms..."
-                                        className="min-h-32 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                    <p className="text-xs text-slate-600">General legal terms, liability limitations, dispute resolution</p>
-                                </div>
-
-                                {/* Payment Details (uses profile default when set) */}
-                                <div className="space-y-2 md:col-span-1">
-                                    <Label htmlFor="banking_detail" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>🏦</span> Payment Details
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        {(() => {
-                                            const safeBankingDetails = (bankingDetails || []).filter(
-                                                (detail) => typeof detail?.id === "string" && detail.id.trim().length > 0
-                                            );
-                                            const currentValue = String(invoiceData.banking_detail_id || "");
-                                            const hasCurrent = safeBankingDetails.some((d) => d.id === currentValue);
-                                            const selectValue = hasCurrent ? currentValue : "none";
-                                            return (
-                                        <Select
-                                            value={selectValue}
-                                            onValueChange={(value) => handleInputChange('banking_detail_id', value === "none" ? "" : value)}
-                                            className="flex-grow"
-                                        >
-                                            <SelectTrigger className="h-12 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20">
-                                                <SelectValue placeholder="Select payment details (optional)" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">Use profile default</SelectItem>
-                                                {safeBankingDetails.map(detail => (
-                                                    <SelectItem key={detail.id} value={detail.id}>
-                                                        {(detail.bank_name || "Bank")} - {String(detail.payment_method || "bank_transfer").replace('_', ' ')}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                            );
-                                        })()}
-                                        <Button type="button" variant="outline" size="icon" onClick={() => setIsAddingBankingDetail(true)} aria-label="Add new payment details">
-                                            <Plus className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                    <p className="text-xs text-slate-600">Defaults to your profile payment details unless you choose another</p>
-                                </div>
-
-                                {/* Payment Terms */}
-                                <div className="space-y-2 md:col-span-3">
-                                    <Label htmlFor="payment_terms" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>💳</span> Payment Terms
-                                    </Label>
-                                    <Textarea
-                                        id="payment_terms"
-                                        value={invoiceData.payment_terms || ""}
-                                        onChange={(e) => handleInputChange('payment_terms', e.target.value)}
-                                        placeholder="e.g., Net 30 days. Payment due within 30 days of invoice date. Late payments subject to 1.5% monthly interest."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                    <p className="text-xs text-slate-600">Due dates, late fees, accepted payment methods</p>
-                                </div>
-
-                                {/* Warranty/Service Notes */}
-                                <div className="space-y-2 md:col-span-3">
-                                    <Label htmlFor="warranty_notes" className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <span>🛡️</span> Warranty / Service Notes
-                                    </Label>
-                                    <Textarea
-                                        id="warranty_notes"
-                                        value={invoiceData.warranty_notes || ""}
-                                        onChange={(e) => handleInputChange('warranty_notes', e.target.value)}
-                                        placeholder="e.g., All parts covered by 1-year manufacturer warranty. Labor warranty: 90 days from service date. Does not cover misuse or neglect."
-                                        className="min-h-28 rounded-xl border-slate-300 focus:border-primary focus:ring-primary/20 resize-none"
-                                    />
-                                    <p className="text-xs text-slate-600">Warranty coverage, service guarantees, limitations</p>
-                                </div>
-                            </div>
-                        </div>
+                        )}
 
                         {!isRecurring && showNextButton && (
                             <div className="flex justify-end">
@@ -2157,5 +2758,8 @@ ProjectDetails.propTypes = {
     onNext: PropTypes.func,
     onRefreshCatalog: PropTypes.func,
     isRecurring: PropTypes.bool,
-    showNextButton: PropTypes.bool
+    showNextButton: PropTypes.bool,
+    isEditorLayout: PropTypes.bool,
+    documentKind: PropTypes.oneOf(["invoice", "quote"]),
+    omitPaymentDetails: PropTypes.bool,
 };

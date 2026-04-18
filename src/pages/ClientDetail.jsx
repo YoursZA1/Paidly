@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Client, Invoice, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,6 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatCurrency } from "../components/CurrencySelector";
 import { format, parseISO, isValid } from "date-fns";
-import ClientForm from "../components/clients/ClientForm";
 import ClientSegmentBadge from "../components/clients/ClientSegmentBadge";
 import IndustryBadge from "../components/clients/IndustryBadge";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
@@ -55,7 +55,7 @@ export default function ClientDetail() {
     const [invoices, setInvoices] = useState([]);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [showEditForm, setShowEditForm] = useState(false);
+    const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -97,30 +97,6 @@ export default function ClientDetail() {
             setInvoices([]);
         } finally {
             if (mountedRef.current) setIsLoading(false);
-        }
-    };
-
-    const handleSaveClient = async (clientData) => {
-        if (clientId && !isClientIdUuid(clientId)) {
-            toast({
-                title: "Cannot save",
-                description: "This client link is invalid. Please open the client from the Clients list.",
-                variant: "destructive"
-            });
-            return;
-        }
-        try {
-            await Client.update(clientId, clientData);
-            setShowEditForm(false);
-            loadData();
-        } catch (error) {
-            console.error("Error saving client:", error);
-            const msg = error?.message || "";
-            toast({
-                title: "Could not save client",
-                description: msg.includes("older version") ? "Please open this client from the Clients list and try again." : msg,
-                variant: "destructive"
-            });
         }
     };
 
@@ -273,7 +249,10 @@ export default function ClientDetail() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" onClick={() => setShowEditForm(true)}>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => navigate(`${createPageUrl("EditClient")}?id=${encodeURIComponent(clientId)}`)}
+                                    >
                                         <Edit className="w-4 h-4 mr-2" />
                                         Edit
                                     </Button>
@@ -532,15 +511,6 @@ export default function ClientDetail() {
                         </CardContent>
                     </Card>
                 </motion.div>
-
-                {/* Edit Form Modal */}
-                {showEditForm && (
-                    <ClientForm
-                        client={client}
-                        onSave={handleSaveClient}
-                        onCancel={() => setShowEditForm(false)}
-                    />
-                )}
 
                 <ConfirmationDialog
                     isOpen={showDeleteConfirm}

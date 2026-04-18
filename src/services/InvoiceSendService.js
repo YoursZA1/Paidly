@@ -3,7 +3,10 @@
  * Handles sending invoices to clients via email and notifications
  */
 
-import { Invoice, DocumentSend, MessageLog, User } from '@/api/entities';
+import { Invoice, Quote, Client, BankingDetail, DocumentSend, MessageLog, User } from '@/api/entities';
+import { supabase } from '@/lib/supabaseClient';
+import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
+import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
@@ -122,6 +125,138 @@ export const recordDocumentSend = async (documentType, documentId, clientId, cha
     });
   } catch (e) {
     console.warn('Failed to record document send:', e);
+  }
+};
+
+async function ensureQuotePublicShareToken(quote) {
+  if (quote?.public_share_token) return quote;
+  const token = crypto.randomUUID();
+  await retryOnAbort(() => Quote.update(quote.id, { public_share_token: token }));
+  return { ...quote, public_share_token: token };
+}
+
+function pdfBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Failed to read PDF blob.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Send quote PDF to the client via the same `send-invoice-email` edge function as QuoteActions.
+ * Builds branded HTML (with trackable CTA + pixel) when `options.html` is omitted.
+ * Records a document send on success. Does not change quote status — caller persists that.
+ *
+ * @param {object} quote - Quote row including `items`
+ * @param {object} client - Client row with `email`
+ * @param {{ html?: string }} [options] - Pass `html` when using QuoteEmailPreviewModal’s final HTML
+ * @returns {Promise<{ success: boolean, sentAt: string }>}
+ */
+export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
+  const { html: htmlOverride } = options || {};
+  if (!client?.email?.trim()) {
+    throw new Error('Client has no email address.');
+  }
+
+  const userData = await retryOnAbort(() => User.me());
+  let html = htmlOverride;
+  let quoteForSend = quote;
+
+  if (!html) {
+    quoteForSend = await ensureQuotePublicShareToken(quote);
+    const recipient = client.email.trim();
+    const { url, trackingToken } = await createTrackableQuoteLink(quoteForSend, 'email', recipient);
+    const pixelUrl = trackingToken ? getEmailOpenTrackingPixelUrl(trackingToken) : '';
+    const ctaHref = trackingToken && url ? getTrackedLinkUrl(trackingToken, url) : url;
+    html = generateQuoteEmailHtml(quoteForSend, client, userData, ctaHref, pixelUrl);
+  }
+
+  const quoteForPdf = {
+    ...quoteForSend,
+    items: Array.isArray(quoteForSend.items) ? quoteForSend.items : [],
+  };
+  const bid = quoteForPdf.banking_detail_id && String(quoteForPdf.banking_detail_id).trim();
+  let bankingRow = null;
+  if (bid) {
+    try {
+      bankingRow = await BankingDetail.get(bid);
+    } catch {
+      bankingRow = null;
+    }
+  }
+
+  const pdfBlob = await generateQuotePDF({
+    quote: quoteForPdf,
+    client,
+    user: userData,
+    bankingDetail: bankingRow,
+  });
+  const pdfBase64 = await pdfBlobToBase64(pdfBlob);
+
+  const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
+  if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) throw new Error('You must be logged in to send emails.');
+
+  const subject = `Quote #${quoteForSend.quote_number} from ${quoteForSend.owner_company_name || userData?.company_name || 'Us'}`;
+  const filename = `quote-${quoteForSend.quote_number || quoteForSend.id || 'quote'}.pdf`;
+
+  const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      pdfBase64,
+      email: client.email.trim(),
+      subject,
+      html,
+      filename,
+    }),
+  });
+  if (!sendRes.ok) {
+    let details = '';
+    try {
+      details = await sendRes.text();
+    } catch {
+      details = '';
+    }
+    throw new Error(details || 'Failed to send quote email.');
+  }
+
+  await recordDocumentSend('quote', quoteForSend.id, client.id, 'email');
+
+  return { success: true, sentAt: new Date().toISOString() };
+}
+
+/**
+ * Load quote + client and send PDF email (used by EditQuote after persisting “sent”).
+ * @param {string} quoteId
+ */
+export const sendQuoteToClient = async (quoteId, options = {}) => {
+  void options;
+  try {
+    const quote = await retryOnAbort(() => Quote.get(quoteId));
+    if (!quote?.client_id) throw new Error('Quote has no client.');
+    const client = await retryOnAbort(() => Client.get(quote.client_id));
+    return await sendQuotePdfEmailToClient(quote, client, {});
+  } catch (error) {
+    console.error('Error sending quote:', error);
+    if (isAbortError(error)) {
+      throw new Error('Request was interrupted. Please try again.');
+    }
+    throw error;
   }
 };
 

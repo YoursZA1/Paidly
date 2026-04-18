@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
-import { useQueryClient } from "@tanstack/react-query";
 import { Client, Invoice } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   UserPlusIcon,
   PlusIcon,
@@ -17,7 +15,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import ClientForm from "../components/clients/ClientForm";
 import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
@@ -139,7 +136,6 @@ function QuickBillCard({ client, balance, userCurrency, onSelectClient, onCreate
 export default function Clients() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
   const clientsFromStore = useAppStore((s) => s.clients);
   const invoicesFromStore = useAppStore((s) => s.invoices);
@@ -177,8 +173,6 @@ export default function Clients() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeClient, setActiveClient] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingClient, setEditingClient] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingClient, setDeletingClient] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -278,70 +272,8 @@ export default function Clients() {
   }, [searchFilteredClients, activeClient]);
 
 
-  const handleSaveClient = async (clientData) => {
-    if (!clientData.name?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Client name is required.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!clientData.email?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Email address is required.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(clientData.email.trim())) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      if (editingClient) {
-        await Client.update(editingClient.id, clientData);
-        toast({
-          title: "Client Updated",
-          description: "Client information has been updated.",
-          variant: "success",
-        });
-        await refetch();
-        if (activeClient?.id === editingClient.id) {
-          setActiveClient((prev) => (prev ? { ...prev, ...clientData } : null));
-        }
-      } else {
-        const newClient = await Client.create(clientData);
-        toast({
-          title: "Client Added",
-          description: `${clientData.name} has been added.`,
-          variant: "success",
-        });
-        queryClient.invalidateQueries({ queryKey: ["clients", "list"], exact: false });
-        await refetch();
-        setActiveClient(newClient);
-      }
-      setShowForm(false);
-      setEditingClient(null);
-    } catch (error) {
-      console.error("Error saving client:", error);
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to save client.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleEditClient = (client) => {
-    setEditingClient(client);
-    setShowForm(true);
+  const goEditClient = (c) => {
+    navigate(`${createPageUrl("EditClient")}?id=${encodeURIComponent(c.id)}`);
   };
 
   const handleDeleteRequest = (client) => {
@@ -448,7 +380,7 @@ export default function Clients() {
               </button>
               <button
                 type="button"
-                onClick={() => { setEditingClient(null); setShowForm(true); }}
+                onClick={() => navigate(createPageUrl("EditClient"))}
                 className="p-2 bg-orange-500 rounded-xl active:scale-95 shadow-lg shadow-orange-100 dark:shadow-orange-900/30 transition-all text-white"
                 aria-label="Add client"
                 data-testid="clients-add"
@@ -545,10 +477,7 @@ export default function Clients() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setEditingClient(null);
-                  setShowForm(true);
-                }}
+                onClick={() => navigate(createPageUrl("EditClient"))}
                 className="p-2 bg-orange-500 rounded-xl text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 hover:bg-orange-600 transition-colors"
                 aria-label="Add client"
                 data-testid="clients-add"
@@ -713,7 +642,7 @@ export default function Clients() {
                 <Button
                   variant="outline"
                   className="rounded-2xl font-bold border-slate-200 dark:border-slate-600 dark:hover:bg-slate-800"
-                  onClick={() => handleEditClient(activeClient)}
+                  onClick={() => goEditClient(activeClient)}
                   data-testid="client-edit"
                 >
                   <PencilSquareIcon className="w-4 h-4 mr-2" />
@@ -932,32 +861,6 @@ export default function Clients() {
           </>
         )}
       </main>
-
-      {/* Add/Edit Client Dialog */}
-      <Dialog
-        open={showForm}
-        onOpenChange={(open) => {
-          setShowForm(open);
-          if (!open) setEditingClient(null);
-        }}
-      >
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="client-form-dialog">
-          <DialogTitle className="sr-only">
-            {editingClient ? "Edit Client" : "Add New Client"}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            {editingClient ? "Edit client details and save changes." : "Fill in client name and email to add a new client. Optional fields include phone, address, and payment terms."}
-          </DialogDescription>
-          <ClientForm
-            client={editingClient}
-            onSave={handleSaveClient}
-            onCancel={() => {
-              setShowForm(false);
-              setEditingClient(null);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
 
       <ConfirmationDialog
         isOpen={showDeleteConfirm}

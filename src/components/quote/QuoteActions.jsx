@@ -14,15 +14,13 @@ import {
 import { MoreHorizontal, Eye, Mail, Download, Edit, Trash2, CheckCircle, XCircle, ArrowRightSquare, Copy } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Quote, BankingDetail, Client, User } from '@/api/entities';
+import { Quote, Client } from '@/api/entities';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import ManualShareModal from '../shared/ManualShareModal';
 import QuoteEmailPreviewModal from './QuoteEmailPreviewModal';
-import { supabase } from '@/lib/supabaseClient';
-import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import { useToast } from '@/components/ui/use-toast';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
-import { createTrackableQuoteLink, recordDocumentSend } from '@/services/InvoiceSendService';
+import { createTrackableQuoteLink, sendQuotePdfEmailToClient } from '@/services/InvoiceSendService';
 
 function QuoteActions({ quote, onActionSuccess }) {
     const { toast } = useToast();
@@ -72,80 +70,16 @@ function QuoteActions({ quote, onActionSuccess }) {
         if (!clientData) return;
         setIsProcessing(true);
         try {
-            const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-            const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
-            if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
+            await sendQuotePdfEmailToClient(quote, clientData, { html: htmlContent });
 
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw sessionError;
-            const accessToken = sessionData?.session?.access_token;
-            if (!accessToken) throw new Error('You must be logged in to send emails.');
-
-            const userData = await User.me();
-            const quoteForPdf = {
-                ...quote,
-                items: Array.isArray(quote.items) ? quote.items : [],
-            };
-            const bid = quoteForPdf.banking_detail_id && String(quoteForPdf.banking_detail_id).trim();
-            let bankingRow = null;
-            if (bid) {
-                try {
-                    bankingRow = await BankingDetail.get(bid);
-                } catch {
-                    bankingRow = null;
-                }
-            }
-            const pdfBlob = await generateQuotePDF({
-                quote: quoteForPdf,
-                client: clientData,
-                user: userData,
-                bankingDetail: bankingRow,
-            });
-            const blobToBase64 = async (blob) =>
-                new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const result = String(reader.result || '');
-                        const base64 = result.includes(',') ? result.split(',')[1] : result;
-                        resolve(base64);
-                    };
-                    reader.onerror = () => reject(new Error('Failed to read PDF blob.'));
-                    reader.readAsDataURL(blob);
-                });
-            const pdfBase64 = await blobToBase64(pdfBlob);
-            const subject = `Quote #${quote.quote_number} from ${quote.owner_company_name || 'Us'}`;
-            const filename = `quote-${quote.quote_number || quote.id || 'quote'}.pdf`;
-
-            const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                    pdfBase64,
-                    email: clientData.email,
-                    subject,
-                    html: htmlContent,
-                    filename,
-                }),
-            });
-            if (!sendRes.ok) {
-                let details = '';
-                try {
-                    details = await sendRes.text();
-                } catch {
-                    details = '';
-                }
-                throw new Error(details || 'Failed to send quote email.');
-            }
-            
             if (quote.status === 'draft') {
-                await Quote.update(quote.id, { status: 'sent' });
+                await Quote.update(quote.id, {
+                    status: 'sent',
+                    sent_date: new Date().toISOString(),
+                });
                 onActionSuccess();
             }
-            recordDocumentSend('quote', quote.id, clientData.id, 'email');
-            
+
             setShowEmailPreview(false);
             toast({
                 title: 'Quote sent successfully',

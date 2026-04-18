@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Service } from "@/api/entities";
 import { User } from "@/api/entities";
@@ -15,23 +15,23 @@ import {
   CubeIcon,
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
 import { motion } from "framer-motion";
 import { LayoutGrid, List } from "lucide-react";
 import { getIndustries, getTemplateItems, generateDefaultItems } from "@/services/IndustryPresetsService";
 import { checkItemsDeletionSafety } from "@/services/ItemUsageService";
 
-import ServiceForm from "@/components/services/ServiceForm";
 import ConfirmationDialog from "@/components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { cn } from "@/lib/utils";
+import { createPageUrl } from "@/utils";
 
 const Inventory = lazy(() => import("./Inventory"));
 
 export default function Services() {
     const { toast } = useToast();
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
     const userProfileFromStore = useAppStore((s) => s.userProfile);
@@ -39,13 +39,10 @@ export default function Services() {
     const [user, setUser] = useState(userProfileFromStore ?? null);
     const qFromUrl = searchParams.get("q") ?? "";
     const [searchTerm, setSearchTerm] = useState(qFromUrl);
-    const [showForm, setShowForm] = useState(false);
-    const [editingService, setEditingService] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [selectedIndustry, setSelectedIndustry] = useState("custom");
     const [industries, setIndustries] = useState([]);
     const [isCreatingTemplates, setIsCreatingTemplates] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [createType, setCreateType] = useState("service"); // 'product' | 'service'
     const [activeView, setActiveView] = useState("catalog"); // 'catalog' | 'inventory'
@@ -82,88 +79,13 @@ export default function Services() {
         }
     };
 
-    const handleSaveService = async (serviceData) => {
-        // Validation
-        if (!serviceData.name || !serviceData.name.trim()) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Item name is required.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        if (!serviceData.item_type || !serviceData.item_type.trim()) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Item type is required.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        if (!serviceData.default_unit || !serviceData.default_unit.trim()) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Default unit is required.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        if (serviceData.default_rate === undefined || serviceData.default_rate === null || isNaN(serviceData.default_rate) || serviceData.default_rate < 0) {
-            toast({
-                title: "✗ Validation Error",
-                description: "Default rate must be a number greater than or equal to 0.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        setIsSaving(true);
-        try {
-            if (editingService) {
-                await Service.update(editingService.id, serviceData);
-                toast({
-                    title: "✓ Item Updated",
-                    description: `${serviceData.name} has been updated successfully.`,
-                    variant: "success"
-                });
-            } else {
-                await Service.create(serviceData);
-                toast({
-                    title: "✓ Item Created",
-                    description: `${serviceData.name} has been added to your catalog.`,
-                    variant: "success"
-                });
-            }
-            setShowForm(false);
-            setEditingService(null);
-            await invalidateServicesCatalog(queryClient);
-        } catch (error) {
-            console.error("Error saving service:", error);
-            const errorMessage = error.message || error.toString();
-            toast({
-                title: "✗ Error",
-                description: errorMessage.includes('organization') 
-                    ? "No organization found. Please contact support or try logging out and back in."
-                    : errorMessage.includes('permission') || errorMessage.includes('RLS')
-                    ? "Permission denied. Please check your account permissions."
-                    : errorMessage.includes('column') || errorMessage.includes('does not exist')
-                    ? "Database schema mismatch. In Supabase go to SQL Editor and run: scripts/ensure-services-schema.sql (or supabase/schema.postgres.sql if the services table is missing)."
-                    : errorMessage.includes('duplicate') || errorMessage.includes('unique')
-                    ? "An item with this name already exists."
-                    : `Failed to save item: ${errorMessage}`,
-                variant: "destructive"
-            });
-        } finally {
-            setIsSaving(false);
-        }
+    const goEditCatalogItem = (service) => {
+        navigate(`${createPageUrl("EditCatalogItem")}?id=${encodeURIComponent(service.id)}`);
     };
 
-    const handleEditService = (service) => {
-        setEditingService(service);
-        setShowForm(true);
+    const goNewCatalogItem = (type) => {
+        const t = type === "product" ? "product" : "service";
+        navigate(`${createPageUrl("EditCatalogItem")}?new=1&type=${t}`);
     };
 
     const handleCreateTemplateItems = async () => {
@@ -281,16 +203,16 @@ export default function Services() {
         ["service", "labor"].includes(itemType || "service");
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50">
-            <div className="responsive-page-shell space-y-6 py-4 sm:py-6 md:py-8">
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
                 {/* 1. HEADER & SEARCH */}
                 <div className="responsive-page-header">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">
-                            Services
+                        <h1 className="font-display text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                            Products & services
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                            Manage your offerings and pricing strategy.
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Catalog items feed invoices and quotes — open an item to edit details on a full page.
                         </p>
                     </div>
 
@@ -377,8 +299,7 @@ export default function Services() {
                                             data-testid="services-add-product"
                                             onClick={() => {
                                                 setCreateType("product");
-                                                setEditingService(null);
-                                                setShowForm(true);
+                                                goNewCatalogItem("product");
                                             }}
                                             className={cn(
                                                 "responsive-btn inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border-border bg-background/80 px-3.5 font-medium shadow-sm backdrop-blur-sm transition-all hover:-translate-y-[1px] hover:shadow-md sm:flex-none",
@@ -396,8 +317,7 @@ export default function Services() {
                                             data-testid="services-add"
                                             onClick={() => {
                                                 setCreateType("service");
-                                                setEditingService(null);
-                                                setShowForm(true);
+                                                goNewCatalogItem("service");
                                             }}
                                             className={cn(
                                                 "responsive-btn inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border-border bg-background/80 px-3.5 font-medium shadow-sm backdrop-blur-sm transition-all hover:-translate-y-[1px] hover:shadow-md sm:flex-none",
@@ -420,7 +340,7 @@ export default function Services() {
                     <Suspense
                         fallback={
                             <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading inventory">
-                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                             </div>
                         }
                     >
@@ -433,12 +353,12 @@ export default function Services() {
                         <div className="responsive-grid">
                             {isLoading ? (
                                 Array.from({ length: 6 }).map((_, i) => (
-                                    <Card key={i} className="rounded-[32px] overflow-hidden bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700">
+                                    <Card key={i} className="overflow-hidden rounded-2xl border border-border/60 bg-card/40 shadow-sm">
                                         <CardContent className="p-6">
                                             <div className="animate-pulse space-y-4">
-                                                <div className="h-6 bg-slate-200 dark:bg-slate-600 rounded w-2/3" />
-                                                <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-1/2" />
-                                                <div className="h-16 bg-slate-100 dark:bg-slate-700 rounded" />
+                                                <div className="h-6 w-2/3 rounded-md bg-muted" />
+                                                <div className="h-4 w-1/2 rounded-md bg-muted/80" />
+                                                <div className="h-16 rounded-md bg-muted/80" />
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -457,80 +377,74 @@ export default function Services() {
                                                 initial={{ opacity: 0, y: 12 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 transition={{ duration: 0.25 }}
-                                                className="group bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[32px] p-6 hover:shadow-xl hover:border-orange-100 dark:hover:border-orange-900/50 transition-all duration-300 relative overflow-hidden cursor-pointer"
-                                                onClick={() => {
-                                                    setEditingService(service);
-                                                    setCreateType(service?.item_type === "product" ? "product" : "service");
-                                                    setShowForm(true);
-                                                }}
+                                                className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card/40 p-6 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                                onClick={() => goEditCatalogItem(service)}
                                                 role="button"
                                                 tabIndex={0}
                                                 onKeyDown={(e) => {
                                                     if (e.key === "Enter" || e.key === " ") {
                                                         e.preventDefault();
-                                                        setEditingService(service);
-                                                        setCreateType(service?.item_type === "product" ? "product" : "service");
-                                                        setShowForm(true);
+                                                        goEditCatalogItem(service);
                                                     }
                                                 }}
                                             >
                                                 <div className="flex justify-between items-start mb-6">
                                                     <div className="flex items-center gap-2">
                                                         <div
-                                                            className={`p-3 rounded-2xl shrink-0 ${
-                                                                isService ? "bg-blue-50 dark:bg-blue-950/50" : "bg-orange-50 dark:bg-orange-950/50"
+                                                            className={`shrink-0 rounded-2xl p-3 ${
+                                                                isService ? "bg-muted/80 text-primary" : "bg-primary/10 text-primary"
                                                             }`}
                                                         >
                                                             {isService ? (
-                                                                <TagIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                                                <TagIcon className="h-6 w-6" />
                                                             ) : (
-                                                                <CubeIcon className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                                                                <CubeIcon className="h-6 w-6" />
                                                             )}
                                                         </div>
                                                         <span
-                                                            className={`text-[10px] font-black tracking-widest uppercase px-2 py-1 rounded-full ${
+                                                            className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-widest ${
                                                                 isProduct
-                                                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                                                    : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                                                                    : "border-border bg-muted/50 text-muted-foreground"
                                                             }`}
                                                         >
                                                             {isProduct ? "Product" : "Service"}
                                                         </span>
                                                     </div>
-                                                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums">
+                                                    <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
                                                         {formatCurrency(price, userCurrency)}
                                                     </span>
                                                 </div>
 
                                         <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors line-clamp-2">
+                                            <h3 className="mb-1 line-clamp-2 text-lg font-semibold text-foreground transition-colors group-hover:text-primary">
                                                 {service.name}
                                             </h3>
-                                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                                 {service.category || (service.item_type || "Service")}
                                             </p>
                                             {isProduct ? (
-                                                <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                                <p className="mt-2 text-xs font-medium text-muted-foreground">
                                                     {Number.isFinite(stock)
                                                         ? `Stock: ${stock} left`
                                                         : "Stock: not yet tracked"}
                                                 </p>
                                             ) : (
-                                                <p className="mt-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                                                <p className="mt-2 text-xs font-medium text-muted-foreground">
                                                     No inventory tracking
                                                 </p>
                                             )}
                                         </div>
 
-                                        <div className="pt-6 border-t border-slate-50 dark:border-slate-700 flex justify-between items-center">
-                                            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-                                                <ChartBarIcon className="w-4 h-4 shrink-0" />
-                                                <span className="text-[10px] font-bold uppercase tracking-widest">
+                                        <div className="flex items-center justify-between border-t border-border/50 pt-6">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <ChartBarIcon className="h-4 w-4 shrink-0" />
+                                                <span className="text-[10px] font-semibold uppercase tracking-widest">
                                                     Billed {billed}x
                                                 </span>
                                             </div>
-                                            <span className="text-xs font-black text-orange-500 dark:text-orange-400 group-hover:text-orange-700 dark:group-hover:text-orange-300">
-                                                EDIT DETAILS →
+                                            <span className="text-xs font-semibold text-primary opacity-90 transition-opacity group-hover:opacity-100">
+                                                Edit details →
                                             </span>
                                         </div>
                                     </motion.div>
@@ -541,11 +455,10 @@ export default function Services() {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setEditingService(null);
                                     setCreateType("service");
-                                    setShowForm(true);
+                                    goNewCatalogItem("service");
                                 }}
-                                className="flex min-h-[200px] touch-manipulation flex-col items-center justify-center rounded-[32px] border-2 border-dashed border-slate-200 p-8 text-slate-400 transition-all hover:border-orange-300 hover:bg-orange-50/30 hover:text-orange-500 dark:border-slate-600 dark:text-slate-500 dark:hover:border-orange-600 dark:hover:bg-orange-950/30 dark:hover:text-orange-400 sm:min-h-[240px] sm:p-12"
+                                className="flex min-h-[200px] touch-manipulation flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-muted/10 p-8 text-muted-foreground transition-all hover:border-primary/35 hover:bg-muted/25 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:min-h-[240px] sm:p-12"
                             >
                                 <PlusIcon className="mb-2 size-9 sm:size-10" />
                                 <span className="text-center text-sm font-bold sm:text-base">
@@ -556,40 +469,40 @@ export default function Services() {
                     )}
                 </div>
                         ) : (
-                            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-                                <div className="hidden grid-cols-[minmax(0,2.2fr)_120px_140px_140px] items-center gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400 md:grid">
+                            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/40 shadow-sm">
+                                <div className="hidden grid-cols-[minmax(0,2.2fr)_120px_140px_140px] items-center gap-3 border-b border-border/50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                                     <span>Item</span>
                                     <span className="text-right">Rate</span>
                                     <span className="text-center">Type</span>
                                     <span className="text-right">Actions</span>
                                 </div>
-                                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                                <div className="divide-y divide-border/50">
                                     {isLoading
                                         ? Array.from({ length: 6 }).map((_, i) => (
                                               <div key={i} className="grid grid-cols-1 gap-2 px-4 py-4 md:grid-cols-[minmax(0,2.2fr)_120px_140px_140px] md:items-center md:gap-3">
-                                                  <div className="h-4 w-44 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-                                                  <div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700 md:ml-auto" />
-                                                  <div className="h-6 w-20 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700 md:mx-auto" />
-                                                  <div className="h-8 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700 md:ml-auto" />
+                                                  <div className="h-4 w-44 animate-pulse rounded-md bg-muted" />
+                                                  <div className="h-4 w-20 animate-pulse rounded-md bg-muted md:ml-auto" />
+                                                  <div className="h-6 w-20 animate-pulse rounded-full bg-muted md:mx-auto" />
+                                                  <div className="h-8 w-24 animate-pulse rounded-md bg-muted md:ml-auto" />
                                               </div>
                                           ))
                                         : filteredServices.map((service) => {
                                               const price = service.default_rate ?? service.unit_price ?? 0;
                                               const isProduct = service.item_type === "product";
                                               return (
-                                                  <div key={service.id} className="grid grid-cols-1 gap-2 px-4 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80 md:grid-cols-[minmax(0,2.2fr)_120px_140px_140px] md:items-center md:gap-3">
+                                                  <div key={service.id} className="grid grid-cols-1 gap-2 px-4 py-4 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.2fr)_120px_140px_140px] md:items-center md:gap-3">
                                                       <div className="min-w-0">
-                                                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{service.name}</p>
-                                                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{service.description || service.category || "No description"}</p>
+                                                          <p className="truncate text-sm font-semibold text-foreground">{service.name}</p>
+                                                          <p className="truncate text-xs text-muted-foreground">{service.description || service.category || "No description"}</p>
                                                       </div>
-                                                      <div className="text-left text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100 md:text-right">
+                                                      <div className="text-left text-sm font-semibold tabular-nums text-foreground md:text-right">
                                                           {formatCurrency(price, userCurrency)}
                                                       </div>
                                                       <div className="md:text-center">
                                                           <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                                                               isProduct
-                                                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                                                  : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                                                                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                                                                  : "border-border bg-muted/50 text-muted-foreground"
                                                           }`}>
                                                               {isProduct ? "Product" : "Service"}
                                                           </span>
@@ -599,11 +512,7 @@ export default function Services() {
                                                               type="button"
                                                               variant="outline"
                                                               className="responsive-btn rounded-lg"
-                                                              onClick={() => {
-                                                                  setEditingService(service);
-                                                                  setCreateType(service?.item_type === "product" ? "product" : "service");
-                                                                  setShowForm(true);
-                                                              }}
+                                                              onClick={() => goEditCatalogItem(service)}
                                                           >
                                                               Edit
                                                           </Button>
@@ -616,25 +525,22 @@ export default function Services() {
                         )}
 
                 {!isLoading && filteredServices.length === 0 && (
-                    <Card className="rounded-[32px] border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+                    <Card className="overflow-hidden rounded-2xl border border-border/60 bg-card/40 shadow-sm">
                         <CardContent className="p-12 text-center">
-                            <p className="text-slate-500 dark:text-slate-400 font-medium">
+                            <p className="font-medium text-muted-foreground">
                                 {searchTerm
                                     ? "No items match your search."
                                     : "No products or services yet."}
                             </p>
-                            <p className="text-sm text-slate-400 dark:text-slate-500 mt-1 mb-6">
+                            <p className="mt-1 mb-6 text-sm text-muted-foreground/90">
                                 {searchTerm
                                     ? "Try a different search term."
                                     : "Add your first item to get started."}
                             </p>
                             {!searchTerm && (
                                 <Button
-                                    onClick={() => {
-                                        setEditingService(null);
-                                        setShowForm(true);
-                                    }}
-                                    className="mx-auto min-h-12 w-full max-w-xs rounded-2xl bg-orange-600 font-bold text-white hover:bg-orange-700 sm:w-auto sm:max-w-none"
+                                    onClick={() => goNewCatalogItem("service")}
+                                    className="mx-auto min-h-12 w-full max-w-xs rounded-2xl bg-primary font-semibold text-primary-foreground hover:bg-primary/90 sm:w-auto sm:max-w-none"
                                 >
                                     <PlusIcon className="mr-2 size-5" />
                                     Add New
@@ -646,44 +552,6 @@ export default function Services() {
                     </>
                 )}
             </div>
-
-            {/* Centered modal for create/edit */}
-            <Dialog
-                open={showForm}
-                onOpenChange={(open) => {
-                    setShowForm(open);
-                    if (!open) setEditingService(null);
-                }}
-            >
-                <DialogContent className="flex max-h-[min(92vh,880px)] w-[calc(100vw-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-                    <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4 text-left dark:border-slate-700">
-                        <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                            {editingService
-                                ? "Edit item"
-                                : createType === "product"
-                                  ? "New product"
-                                  : "New service"}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-                        <ServiceForm
-                            variant="dialog"
-                            service={editingService}
-                            defaultType={editingService?.item_type || createType}
-                            onSave={async (data) => {
-                                await handleSaveService(data);
-                                setShowForm(false);
-                                setEditingService(null);
-                            }}
-                            onCancel={() => {
-                                setShowForm(false);
-                                setEditingService(null);
-                            }}
-                            isSaving={isSaving}
-                        />
-                    </div>
-                </DialogContent>
-            </Dialog>
 
         </div>
     );
