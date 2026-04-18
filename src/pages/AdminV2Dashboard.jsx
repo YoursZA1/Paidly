@@ -487,8 +487,8 @@ export default function AdminV2Dashboard() {
         />
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 lg:col-span-2">
           <RevenueChart
             subscriptions={subscriptions}
             totalUsers={users.length}
@@ -497,8 +497,12 @@ export default function AdminV2Dashboard() {
           />
         </div>
         <RecentActivity
+          className="w-full min-w-0"
           users={users}
           affiliates={affiliates}
+          invoices={invoices}
+          quotes={quotes}
+          payslips={payslips}
           pendingAffiliateCount={pendingAffiliateReviewCount}
           busyAffiliateId={busyAffiliateId}
           onApproveAffiliate={

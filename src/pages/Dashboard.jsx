@@ -64,8 +64,8 @@ const DashboardRevenueChart = lazy(() => import('@/components/dashboard/Dashboar
 const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || 'anon'}`;
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes - still refresh in background
 
-/** Recent Invoices table: ~6 rows visible, then scroll (`max-h-[min(24rem,50vh)]`). */
-const RECENT_INVOICES_SCROLL_POOL = 50;
+/** Recent Invoices preview on the user dashboard; full list is on Invoices. */
+const RECENT_INVOICES_PREVIEW_ROWS = 3;
 /** Transactions lists (mobile + desktop): ~3 rows visible, then scroll. */
 const TRANSACTION_PREVIEW_ROWS = 3;
 const TRANSACTIONS_SOURCE_EACH = 30;
@@ -1073,7 +1073,7 @@ export default function Dashboard() {
           (a, b) =>
             new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0)
         )
-        .slice(0, RECENT_INVOICES_SCROLL_POOL),
+        .slice(0, RECENT_INVOICES_PREVIEW_ROWS),
     [invoices]
   );
 
@@ -1974,8 +1974,10 @@ export default function Dashboard() {
                     <div className="w-2 h-6 bg-orange-500 rounded-full shrink-0" />
                     <h3 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h3>
                   </div>
-                  {sortedRecentInvoices.length > 6 ? (
-                    <span className="text-xs text-muted-foreground">Scroll for more</span>
+                  {invoices.length > RECENT_INVOICES_PREVIEW_ROWS ? (
+                    <span className="text-xs text-muted-foreground">
+                      Showing {RECENT_INVOICES_PREVIEW_ROWS} of {invoices.length}
+                    </span>
                   ) : null}
                 </div>
                 <Link
@@ -1987,7 +1989,7 @@ export default function Dashboard() {
               </div>
               <div className="px-6 pb-6">
                 {isLoading ? (
-                  <div className="max-h-[min(24rem,50vh)] overflow-y-auto overflow-x-auto rounded-lg border border-border/50">
+                  <div className="overflow-x-auto rounded-lg border border-border/50">
                     <table className="w-full min-w-[320px] text-left">
                       <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
                         <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
@@ -1997,7 +1999,7 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {[1, 2, 3, 4, 5, 6].map((i) => (
+                        {[1, 2, 3].map((i) => (
                           <tr key={i} className="py-3">
                             <td className="py-3 pr-4">
                               <Skeleton className="h-4 w-28 mb-1 animate-pulse" />
@@ -2029,9 +2031,9 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div
-                    className="max-h-[min(24rem,50vh)] overflow-y-auto overflow-x-auto overscroll-y-contain rounded-lg border border-border/50"
+                    className="overflow-x-auto rounded-lg border border-border/50"
                     role="region"
-                    aria-label="Recent invoices, scroll for more"
+                    aria-label={`${RECENT_INVOICES_PREVIEW_ROWS} most recent invoices`}
                   >
                     <table className="w-full min-w-[320px] text-left">
                       <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
