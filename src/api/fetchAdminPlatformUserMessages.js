@@ -3,6 +3,7 @@ import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiRequest } from "@/utils/apiRequest";
 
 /** Must match server/src/adminPlatformUserMessages.js */
 const ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT = 300;
@@ -89,7 +90,7 @@ export async function fetchAdminPlatformUserMessages(opts = {}) {
   for (const url of candidates) {
     let res;
     try {
-      res = await fetch(url, {
+      res = await apiRequest(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -180,7 +181,7 @@ export async function postAdminPlatformUserMessage(body) {
   for (const url of candidates) {
     let res;
     try {
-      res = await fetch(url, {
+      res = await apiRequest(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

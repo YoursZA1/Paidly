@@ -7,6 +7,8 @@ import '@/index.css'
 import ErrorBoundary from '@/components/ErrorBoundary.jsx'
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
+import ConnectionMonitor from "@/components/connection/ConnectionMonitor.jsx";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
     installGlobalAsyncErrorHandlers,
 } from '@/utils/globalAsyncErrorHandlers'
@@ -48,13 +50,16 @@ const queryClient = createAppQueryClient()
 ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
-        <ErrorBoundary>
-          <AuthProvider>
-            <AppProvider>
-              <App />
-            </AppProvider>
-          </AuthProvider>
-        </ErrorBoundary>
+        <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+          <ErrorBoundary>
+            <AuthProvider>
+              <AppProvider>
+                <ConnectionMonitor />
+                <App />
+              </AppProvider>
+            </AuthProvider>
+          </ErrorBoundary>
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
 )

@@ -3,6 +3,7 @@ import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiRequest } from "@/utils/apiRequest";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -37,7 +38,7 @@ async function fetchPlatformUsersPayloadFromApi(token, lim) {
   for (const url of candidates) {
     let res;
     try {
-      res = await fetch(url, {
+      res = await apiRequest(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,

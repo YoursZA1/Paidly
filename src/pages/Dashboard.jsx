@@ -396,10 +396,20 @@ export default function Dashboard() {
     const business = user?.business && typeof user.business === "object" ? user.business : {};
     const onboarding = business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
     const industry = String(onboarding?.industry || business?.industry || "").trim();
+    const onboardingFlowComplete =
+      onboarding?.status === "completed" || Boolean(onboarding?.completed_at);
+    const hasInvoice = Array.isArray(invoices) && invoices.length > 0;
+    const hasClient = Array.isArray(clients) && clients.length > 0;
+    // Match product reality: quick setup only requires business name; industry is optional.
+    // If the user already has invoices and clients plus a company name, treat business setup as done.
+    const setupBusiness =
+      Boolean(businessName && industry) ||
+      onboardingFlowComplete ||
+      (Boolean(businessName) && hasInvoice && hasClient);
     return {
-      setup_business: Boolean(businessName && industry),
-      create_first_invoice: Array.isArray(invoices) && invoices.length > 0,
-      add_first_client: Array.isArray(clients) && clients.length > 0,
+      setup_business: setupBusiness,
+      create_first_invoice: hasInvoice,
+      add_first_client: hasClient,
     };
   }, [user?.company_name, user?.business, invoices, clients]);
 

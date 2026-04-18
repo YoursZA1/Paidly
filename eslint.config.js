@@ -50,6 +50,26 @@ export default [
     },
   },
   {
+    // Prefer apiRequest/safeFetch for Same-origin / Paidly API modules so 401 is handled consistently.
+    files: ['src/api/**/*.js'],
+    ignores: [
+      'src/api/publicInvoiceApiClient.js',
+      'src/api/publicPayslipApiClient.js',
+      // Portal magic-link JWT — not Supabase session; 401 must not run app sign-out.
+      'src/api/clientPortalClient.js',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'CallExpression[callee.name="fetch"]',
+          message:
+            'Use apiRequest() or safeFetch from @/utils/apiRequest for session-backed API calls (401 handling). See docs/AUTHENTICATED_FETCH.md. For public or third-party URLs, use eslint-disable-next-line with a short reason.',
+        },
+      ],
+    },
+  },
+  {
     // Backend (Node) files.
     files: ['server/**/*.{js,jsx}'],
     languageOptions: {

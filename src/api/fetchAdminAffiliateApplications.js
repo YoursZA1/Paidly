@@ -11,6 +11,7 @@ import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { countAffiliateApplicationsByStatus } from "@/utils/affiliateApplicationCounts";
 import { finalizeAffiliateApplicationsForAdmin } from "@/api/paidlyDataClient";
 import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiRequest } from "@/utils/apiRequest";
 
 /**
  * URL for admin affiliate POST routes. Prefer {@link getAdminDataApiBase} (apex/www-safe); otherwise same-origin
@@ -40,7 +41,7 @@ function buildAffiliateAdminFetchUrls(limit) {
   const base = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
 
   // Same-origin (or Vite dev proxy) first — production often serves /api/* via Vercel serverless while
-  // VITE_SERVER_URL still points at a legacy Node host; hitting that first makes fetch() throw (Failed to fetch)
+  // VITE_SERVER_URL still points at a legacy Node host; hitting that first makes the request throw (Failed to fetch)
   // before we ever try the working route.
   push(`/api/admin/affiliates${q}`);
   push(`/api/affiliates${q}`);
@@ -67,7 +68,7 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
   for (const url of candidates) {
     let res;
     try {
-      res = await fetch(url, {
+      res = await apiRequest(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,

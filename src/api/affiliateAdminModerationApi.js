@@ -8,6 +8,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import { resolveAffiliateAdminMutationUrl } from '@/api/fetchAdminAffiliateApplications';
 import { apiErrorFieldToString } from '@/utils/apiErrorText';
+import { apiRequest } from '@/utils/apiRequest';
 
 export const AFFILIATE_ADMIN = {
   APPROVE: '/api/admin/approve',
@@ -43,7 +44,7 @@ export async function postAffiliateAdminAuthed(path, body = {}) {
       ? { ...body, id: body.applicationId }
       : body;
 
-  const res = await fetch(url, {
+  const res = await apiRequest(url, {
     method: AFFILIATE_ADMIN_MUTATION_METHOD,
     cache: 'no-store',
     credentials: 'include',

@@ -21,6 +21,7 @@ import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
 import { expireTrialIfDueViaRpc } from "@/lib/trialExpiry";
 import { hasFeature } from "@shared/plans.js";
+import { apiRequest } from "@/utils/apiRequest";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -2674,7 +2675,7 @@ class IntegrationManager {
             throw new Error("Not signed in");
           }
           const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
-          const res = await fetch(`${apiBase}/api/send-email`, {
+          const res = await apiRequest(`${apiBase}/api/send-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ to, subject, body: body || "" }),

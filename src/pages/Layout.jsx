@@ -9,7 +9,6 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  TooltipProvider,
 } from "@/components/ui/tooltip";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import {
@@ -26,6 +25,7 @@ import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
+import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
 import {
@@ -671,17 +671,9 @@ export default function Layout({ children, currentPageName }) {
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
+    // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
     fetchAll(user);
-  }, [
-    user?.id,
-    user?.role,
-    user?.full_name,
-    user?.company_name,
-    fetchAll,
-    isAdminV2Route,
-    lastFetchedAt,
-    userProfile,
-  ]);
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
 
   // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
   useEffect(() => {
@@ -840,18 +832,19 @@ export default function Layout({ children, currentPageName }) {
   }
 
   return (
-    <div className={`overflow-x-hidden h-[100dvh] lg:h-screen w-full grid grid-cols-1 min-w-0 transition-[grid-template-columns] duration-300 ease-in-out ${isSidebarCollapsed ? "lg:grid-cols-[5rem_1fr]" : "lg:grid-cols-[16rem_1fr]"}`}>
+    <div
+      className={`grid h-[100dvh] min-h-0 w-full grid-cols-1 overflow-hidden transition-[grid-template-columns] duration-300 ease-in-out lg:h-screen ${isSidebarCollapsed ? "lg:grid-cols-[5rem_1fr]" : "lg:grid-cols-[16rem_1fr]"}`}
+    >
       {/* Sidebar: hidden below lg (1024px); visible from lg up */}
       <motion.div
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-        className={`sidebar sidebar-panel hidden lg:block text-sidebar-foreground sticky top-0 h-screen py-6 ${
+        className={`sidebar sidebar-panel hidden h-full min-h-0 lg:block text-sidebar-foreground py-6 ${
           isSidebarCollapsed ? "pl-4 pr-1" : "px-4"
         }`}
       >
         <div className="relative flex h-full flex-col">
-          <TooltipProvider delayDuration={0} skipDelayDuration={0}>
           {/* Collapse button — right edge of sidebar, tied to minimize function */}
           <div className="absolute top-6 right-0 z-20 flex flex-col items-center">
             <Tooltip delayDuration={0}>
@@ -968,7 +961,6 @@ export default function Layout({ children, currentPageName }) {
               {!isSidebarCollapsed && "Log out"}
             </button>
           </div>
-          </TooltipProvider>
         </div>
       </motion.div>
 
@@ -993,7 +985,9 @@ export default function Layout({ children, currentPageName }) {
       </Sheet>
 
       {/* Main Content — ultra-light neutral gradient (or navy when Dashboard) */}
-      <div className={`flex flex-col h-[100dvh] lg:h-screen min-h-0 overflow-hidden pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 bg-background ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}>
+      <div
+        className={`flex h-full min-h-0 flex-col overflow-hidden bg-background pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}
+      >
         {/* Top bar (Rule 7): logo + menu entry + account — no extra nav rows on mobile; rest in drawer + bottom nav */}
         <motion.header
           initial={{ y: -100 }}
@@ -1027,6 +1021,7 @@ export default function Layout({ children, currentPageName }) {
                 <Search className="size-5" aria-hidden />
               </Button>
             )}
+            <ConnectionStatusIndicator className="shrink-0 max-w-[min(40vw,9rem)] sm:max-w-none" />
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1107,6 +1102,7 @@ export default function Layout({ children, currentPageName }) {
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
+            <ConnectionStatusIndicator className="mr-0.5 max-w-[min(28vw,10rem)] md:max-w-[14rem]" />
             <NotificationBell />
             
             {user && (

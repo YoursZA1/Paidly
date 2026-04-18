@@ -1,6 +1,10 @@
 /**
+ * Auth bootstrap: after this, RequireAuth shows retry instead of an infinite spinner (8–10s band).
+ */
+export const AUTH_BOOTSTRAP_FAILSAFE_MS = 9000;
+
+/**
  * Default ceiling for “stuck loading” UI when an async chain never settles (hung fetch, deadlock).
- * Auth bootstrap uses the same value in AuthProvider.
  */
 export const DEFAULT_LOADING_FAILSAFE_MS = 5000;
 

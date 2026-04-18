@@ -42,16 +42,28 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
     setStep(initial.status === "completed" ? "success" : "welcome");
   }, [isOpen, profile]);
 
+  const getBaseOnboarding = () => {
+    const business =
+      profile?.business && typeof profile.business === "object" ? profile.business : {};
+    const ob =
+      business?.onboarding_v2 && typeof business.onboarding_v2 === "object"
+        ? business.onboarding_v2
+        : {};
+    return ob;
+  };
+
   const persistDraft = async (patch = {}) => {
     const next = { ...form, ...patch };
     setSaving(true);
     try {
+      const baseOnboarding = getBaseOnboarding();
       await User.updateMyUserData({
         company_name: next.business_name?.trim(),
         currency: next.currency || "ZAR",
         business: {
           industry: next.industry || "",
           onboarding_v2: {
+            ...baseOnboarding,
             status: next.status || step,
             goal: next.goal || "",
             industry: next.industry || "",
@@ -106,13 +118,24 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
   };
 
   const completeAndGoDashboard = async () => {
+    const baseOnboarding = getBaseOnboarding();
+    const prevChecklist =
+      baseOnboarding?.checklist && typeof baseOnboarding.checklist === "object"
+        ? baseOnboarding.checklist
+        : {};
     await User.updateMyUserData({
       business: {
         onboarding_v2: {
+          ...baseOnboarding,
           status: "completed",
           completed_at: new Date().toISOString(),
           goal: form.goal || "",
           industry: form.industry || "",
+          checklist: {
+            ...prevChecklist,
+            setup_business: true,
+          },
+          updated_at: new Date().toISOString(),
         },
       },
     });

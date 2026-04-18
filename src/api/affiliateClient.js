@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
+import { apiRequest } from "@/utils/apiRequest";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -107,7 +108,7 @@ export async function processPendingAffiliateReferral() {
   if (!uid || !accessToken) return { ok: false, error: "no_session" };
 
   try {
-    const res = await fetch("/api/referrals/create", {
+    const res = await apiRequest("/api/referrals/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -374,7 +375,7 @@ export async function fetchAffiliateDashboardData() {
   affiliateDevLog("Fetching affiliate data from API...", url);
 
   try {
-    const res = await fetch(url, {
+    const res = await apiRequest(url, {
       method: "GET",
       credentials: "include",
       headers: {

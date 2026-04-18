@@ -6,6 +6,7 @@
 import axios from "axios";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { installBackendApiResilience } from "@/api/installBackendApiResilience";
+import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -114,6 +115,18 @@ export const backendApi = axios.create({
  * (e.g. team invite, account delete, Node auth sign-in/sign-up/forgot-password, optional currency API).
  */
 installBackendApiResilience(backendApi);
+
+backendApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error.response?.status;
+    const cfg = error.config;
+    if (status === 401 && cfg && !cfg.__paidlySkipAuthRedirect) {
+      await triggerUnauthorizedSession("axios-401");
+    }
+    return Promise.reject(error);
+  }
+);
 
 export function getBackendBaseUrl() {
   if (rawServerUrl) return serverUrl;

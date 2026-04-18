@@ -22,7 +22,9 @@ import {
   refreshSupabaseSessionWithRecovery,
 } from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
-import { DEFAULT_LOADING_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
+import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
+import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
+import { setUnauthorizedSessionHandler } from "@/lib/unauthorizedSessionHandler";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -126,15 +128,16 @@ async function consumeAuthCallbackFromUrl() {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const user = useAuthSessionStore((s) => s.user);
+  const session = useAuthSessionStore((s) => s.session);
+  const loading = useAuthSessionStore((s) => s.loading);
+  const authLoadingTimedOut = useAuthSessionStore((s) => s.authLoadingTimedOut);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   /** Email for resend when login blocked verification before `user` is hydrated. */
   const [verifyGateEmail, setVerifyGateEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState("");
   const [error, setError] = useState("");
-  const [session, setSession] = useState(null);
   const refreshUserDebounceRef = useRef(null);
   const sessionResyncTimerRef = useRef(null);
   const userIdRef = useRef(null);
@@ -162,12 +165,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Fail-safe timer cleared when bootstrap finishes (same pattern as fetch + finally).
+  // Fail-safe: never spin forever on protected routes; RequireAuth shows retry after this.
   useEffect(() => {
     authLoadingFailSafeRef.current = setTimeout(() => {
-      setLoading(false);
+      patchAuthSession({
+        loading: false,
+        authLoadingTimedOut: true,
+      });
       authLoadingFailSafeRef.current = null;
-    }, DEFAULT_LOADING_FAILSAFE_MS);
+    }, AUTH_BOOTSTRAP_FAILSAFE_MS);
     return () => {
       if (authLoadingFailSafeRef.current) {
         clearTimeout(authLoadingFailSafeRef.current);
@@ -209,10 +215,10 @@ export function AuthProvider({ children }) {
           }),
         ]);
         if (currentUser) {
-          setUser(currentUser);
+          patchAuthSession({ user: currentUser });
         } else {
           const min = minimalUserFromJwtUser(sessionNorm.user);
-          if (min) setUser(min);
+          if (min) patchAuthSession({ user: min });
         }
         setError("");
       } else {
@@ -224,16 +230,16 @@ export function AuthProvider({ children }) {
         }
         reportSupabaseGetSessionRecovered();
         if (!data?.session?.user) {
-          setUser(null);
+          patchAuthSession({ user: null });
           setError("");
         } else {
           const s = normalizeSessionFromClient(data.session);
           if (!isSessionValid(s)) {
-            setUser(null);
+            patchAuthSession({ user: null });
             setError("");
             return;
           }
-          setSession(s);
+          patchAuthSession({ session: s });
           const PROFILE_RESTORE_MS = 10000;
           const currentUser = await Promise.race([
             User.restoreFromSupabaseSession(s),
@@ -242,10 +248,10 @@ export function AuthProvider({ children }) {
             }),
           ]);
           if (currentUser) {
-            setUser(currentUser);
+            patchAuthSession({ user: currentUser });
           } else {
             const min = minimalUserFromJwtUser(s.user);
-            if (min) setUser(min);
+            if (min) patchAuthSession({ user: min });
           }
           setError("");
         }
@@ -261,17 +267,17 @@ export function AuthProvider({ children }) {
         const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
           const min = minimalUserFromJwtUser(su);
-          if (min) setUser(min);
+          if (min) patchAuthSession({ user: min });
         } else {
-          setUser(null);
+          patchAuthSession({ user: null });
         }
       } catch {
         reportSupabaseGetSessionFailure();
-        setUser(null);
+        patchAuthSession({ user: null });
       }
       setError("");
     } finally {
-      setLoading(false);
+      patchAuthSession({ loading: false });
     }
   }, []);
 
@@ -283,6 +289,12 @@ export function AuthProvider({ children }) {
       refreshUser();
     }, 450);
   }, [refreshUser]);
+
+  /** Always latest impl for Supabase listener (subscription is long-lived; avoids stale closures). */
+  const refreshUserRef = useRef(refreshUser);
+  const scheduleRefreshUserRef = useRef(scheduleRefreshUser);
+  refreshUserRef.current = refreshUser;
+  scheduleRefreshUserRef.current = scheduleRefreshUser;
 
   useEffect(
     () => () => {
@@ -312,8 +324,7 @@ export function AuthProvider({ children }) {
           } catch {
             /* ignore */
           }
-          setSession(null);
-          setUser(null);
+          patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
           setError("");
           redirectToLoginIfProtectedPath();
           return;
@@ -331,12 +342,23 @@ export function AuthProvider({ children }) {
     try {
       const newSession = await readSessionSafe(true);
       if (newSession?.user && isSessionValid(newSession)) {
-        setSession(newSession);
+        patchAuthSession({ session: newSession });
       }
     } catch {
       /* offline or race — keep current session + user */
     }
   }, []);
+
+  const retryAuthBootstrap = useCallback(async () => {
+    patchAuthSession({ authLoadingTimedOut: false, loading: true });
+    try {
+      await consumeAuthCallbackFromUrl();
+      await refreshSession();
+      await refreshUser();
+    } finally {
+      patchAuthSession({ loading: false });
+    }
+  }, [refreshSession, refreshUser]);
 
   // Initialize: one getSession, then restore user from profile (avoids duplicate getSession + User.me round trips)
   useEffect(() => {
@@ -376,12 +398,12 @@ export function AuthProvider({ children }) {
         }
         if (cancelled) return;
         const hasValidSession = isSessionValid(initialSession);
-        setSession(hasValidSession ? initialSession : null);
+        patchAuthSession({ session: hasValidSession ? initialSession : null });
         let currentUser = null;
 
         // 1) Check session, 2) Validate session
         if (!hasValidSession) {
-          setUser(null);
+          patchAuthSession({ user: null });
           setError("");
           redirectToLoginIfProtectedPath();
           return;
@@ -412,19 +434,19 @@ export function AuthProvider({ children }) {
         if (!currentUser) {
           const min = minimalUserFromJwtUser(initialSession.user);
           if (min) {
-            setUser(min);
+            patchAuthSession({ user: min });
             setError("");
             if (import.meta.env?.DEV) {
               console.info("[Auth] Profile restore deferred; using JWT user until API is reachable.");
             }
           } else {
-            setUser(null);
+            patchAuthSession({ user: null });
             setError("Failed to restore session");
             redirectToLoginIfProtectedPath();
           }
           return;
         }
-        setUser(currentUser);
+        patchAuthSession({ user: currentUser });
         setError("");
       } catch (err) {
         if (!isAbortError(err)) {
@@ -434,26 +456,22 @@ export function AuthProvider({ children }) {
           try {
             const recovered = await readSessionSafe(false);
             if (recovered?.user && isSessionValid(recovered)) {
-              setSession(recovered);
               const min = minimalUserFromJwtUser(recovered.user);
               if (min) {
-                setUser(min);
+                patchAuthSession({ session: recovered, user: min });
                 setError("");
               } else {
-                setSession(null);
-                setUser(null);
+                patchAuthSession({ session: null, user: null });
                 setError("");
                 redirectToLoginIfProtectedPath();
               }
             } else {
-              setSession(null);
-              setUser(null);
+              patchAuthSession({ session: null, user: null });
               setError("");
               redirectToLoginIfProtectedPath();
             }
           } catch {
-            setSession(null);
-            setUser(null);
+            patchAuthSession({ session: null, user: null });
             setError("");
             redirectToLoginIfProtectedPath();
           }
@@ -463,7 +481,9 @@ export function AuthProvider({ children }) {
           clearTimeout(authLoadingFailSafeRef.current);
           authLoadingFailSafeRef.current = null;
         }
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          patchAuthSession({ loading: false, authLoadingTimedOut: false });
+        }
       }
     })();
     return () => {
@@ -495,8 +515,7 @@ export function AuthProvider({ children }) {
             } catch {
               /* ignore */
             }
-            setSession(null);
-            setUser(null);
+            patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
             setError("");
             redirectToLoginIfProtectedPath();
             return;
@@ -594,8 +613,12 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (event === "SIGNED_OUT") {
-        setSession(null);
-        setUser(null);
+        patchAuthSession({
+          session: null,
+          user: null,
+          loading: false,
+          authLoadingTimedOut: false,
+        });
         setError("");
         // Hard navigation clears stale React/chunk state (layer 1 stability).
         redirectToLoginIfProtectedPath();
@@ -608,8 +631,8 @@ export function AuthProvider({ children }) {
           try {
             const recovered = await readSessionSafe(true);
             if (recovered?.user && isSessionValid(recovered)) {
-              setSession(recovered);
-              scheduleRefreshUser();
+              patchAuthSession({ session: recovered });
+              scheduleRefreshUserRef.current();
               return;
             }
           } catch {
@@ -617,20 +640,19 @@ export function AuthProvider({ children }) {
           }
           // Only hard-clear when we truly have no session and no hydrated user to avoid route flicker.
           if (!userIdRef.current && !sessionUserIdRef.current) {
-            setSession(null);
-            setUser(null);
+            patchAuthSession({ session: null, user: null, loading: false });
             setError("");
             redirectToLoginIfProtectedPath();
           } else {
-            scheduleRefreshUser();
+            scheduleRefreshUserRef.current();
           }
           return;
         }
         try {
           const recovered = await readSessionSafe(true);
           if (recovered?.user && isSessionValid(recovered)) {
-            setSession(recovered);
-            scheduleRefreshUser();
+            patchAuthSession({ session: recovered });
+            scheduleRefreshUserRef.current();
           }
         } catch {
           /* offline — do not clear */
@@ -638,37 +660,31 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      if (event === "SIGNED_IN" && nextSession) {
-        setSession({
-          accessToken: nextSession.access_token,
-          refreshToken: nextSession.refresh_token,
-          expiresAt: nextSession.expires_at,
-          user: nextSession.user,
-        });
-        await refreshUser();
-      } else if (event === "TOKEN_REFRESHED" && nextSession) {
-        if (import.meta.env.DEV) {
+      const norm = nextSession
+        ? {
+            accessToken: nextSession.access_token,
+            refreshToken: nextSession.refresh_token,
+            expiresAt: nextSession.expires_at,
+            user: nextSession.user,
+          }
+        : null;
+
+      if (event === "SIGNED_IN" && norm) {
+        patchAuthSession({ session: norm });
+        await refreshUserRef.current();
+      } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
+        if (import.meta.env.DEV && event === "TOKEN_REFRESHED") {
           console.info("[Auth] Session refreshed (TOKEN_REFRESHED)");
         }
-        setSession({
-          accessToken: nextSession.access_token,
-          refreshToken: nextSession.refresh_token,
-          expiresAt: nextSession.expires_at,
-          user: nextSession.user,
-        });
-        scheduleRefreshUser();
-      } else if (event === "INITIAL_SESSION" && nextSession?.user) {
-        setSession({
-          accessToken: nextSession.access_token,
-          refreshToken: nextSession.refresh_token,
-          expiresAt: nextSession.expires_at,
-          user: nextSession.user,
-        });
-        await refreshUser();
+        patchAuthSession({ session: norm });
+        scheduleRefreshUserRef.current();
+      } else if (event === "INITIAL_SESSION" && norm?.user) {
+        patchAuthSession({ session: norm });
+        await refreshUserRef.current();
       }
     });
     return () => subscription.unsubscribe();
-  }, [refreshUser, scheduleRefreshUser]);
+  }, []);
 
   // Attach pending ?ref= from localStorage once a session exists (OAuth, email link, or after refresh).
   useEffect(() => {
@@ -697,20 +713,19 @@ export function AuthProvider({ children }) {
       } catch {
         // ignore
       }
-      setSession(null);
-      setUser(null);
+      patchAuthSession({ session: null, user: null });
       setVerifyGateEmail(normalizedEmail);
       setShowVerifyDialog(true);
       throw new Error("Email not verified. Please verify your email before signing in.");
     }
-    setSession(session);
+    patchAuthSession({ session, authLoadingTimedOut: false });
 
     await User.login({ email: normalizedEmail, password, role: role || undefined });
 
     // At this point email is verified — surface the session in React state immediately.
     // Do not await profiles upsert: a stuck network/DB write must not freeze the sign-in button or RequireAuth.
     const currentUser = await User.getCurrentUser();
-    setUser(currentUser ?? null);
+    patchAuthSession({ user: currentUser ?? null });
 
     if (session?.user?.id) {
       const patch = {
@@ -765,8 +780,12 @@ export function AuthProvider({ children }) {
       } catch {
         // ignore
       }
-      setSession(null);
-      setUser(null);
+      patchAuthSession({
+        session: null,
+        user: null,
+        loading: false,
+        authLoadingTimedOut: false,
+      });
       setError("");
       setShowVerifyDialog(false);
       setVerifyGateEmail("");
@@ -797,6 +816,13 @@ export function AuthProvider({ children }) {
     },
     [purgeSupabaseAuthStorage]
   );
+
+  useEffect(() => {
+    setUnauthorizedSessionHandler(async () => {
+      await logout();
+    });
+    return () => setUnauthorizedSessionHandler(null);
+  }, [logout]);
 
   /** Supabase-only password reset (no client-side tokens; expiry handled by Supabase). */
   const sendPasswordReset = useCallback(async (email) => {
@@ -882,6 +908,8 @@ export function AuthProvider({ children }) {
       userRole,
       userPermissions,
       session,
+      authLoadingTimedOut,
+      retryAuthBootstrap,
     };
   }, [
     user,
@@ -899,6 +927,8 @@ export function AuthProvider({ children }) {
     resendSuccess,
     error,
     session,
+    authLoadingTimedOut,
+    retryAuthBootstrap,
   ]);
 
   return (
@@ -954,6 +984,7 @@ const AUTH_FALLBACK = {
   verifySessionOnProtectedRoute: () => {},
   refreshUser: async () => {},
   refreshSession: async () => {},
+  retryAuthBootstrap: async () => {},
   sendPasswordReset: async () => {},
   sendUserInvite: async () => {},
   setShowVerifyDialog: () => {},
@@ -963,6 +994,7 @@ const AUTH_FALLBACK = {
   handleResendConfirmation: async () => {},
   userRole: null,
   userPermissions: [],
+  authLoadingTimedOut: false,
 };
 
 let warnedAuthOutsideProvider = false;
