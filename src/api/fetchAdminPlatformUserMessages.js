@@ -57,6 +57,23 @@ function buildSendPlatformMessagePostUrls() {
   return out;
 }
 
+function buildBroadcastUpdatePostUrls() {
+  const out = [];
+  const seen = new Set();
+  const push = (u) => {
+    if (!u || seen.has(u)) return;
+    if (shouldSkipAdminFetchAbsoluteUrl(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
+  const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
+  push("/api/admin/broadcast-update");
+  if (vite) push(`${vite}/api/admin/broadcast-update`);
+  if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/broadcast-update`);
+  return out;
+}
+
 async function getSessionToken() {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
@@ -230,4 +247,68 @@ export async function postAdminPlatformUserMessage(body) {
   }
 
   throw new Error(lastError || "Send platform message failed");
+}
+
+/**
+ * @param {{ subject?: string, content: string }} body
+ * @returns {Promise<{ recipients: number, inserted: number }>}
+ */
+export async function postAdminBroadcastUpdate(body) {
+  if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
+    throw new Error("Admin broadcast API requires Node backend (VITE_SUPABASE_ONLY=1).");
+  }
+
+  const token = await getSessionToken();
+  const candidates = buildBroadcastUpdatePostUrls();
+  const subject = body.subject != null ? String(body.subject) : "";
+  const content = String(body.content || "").trim();
+
+  let lastError = null;
+  for (const url of candidates) {
+    let res;
+    try {
+      res = await apiRequest(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ subject, content }),
+      });
+    } catch (e) {
+      lastError = e?.message || "Network error (Failed to fetch)";
+      continue;
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    const looksJson = /json/i.test(contentType);
+    const payload = looksJson ? await res.json().catch(() => ({})) : {};
+
+    if (!res.ok) {
+      const raw = payload.error ?? payload.message;
+      const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
+      lastError =
+        fromJson ||
+        (res.status === 401
+          ? "Session expired or invalid. Please log in again."
+          : res.status === 403
+            ? "Admin access required."
+            : `HTTP ${res.status}`);
+      continue;
+    }
+
+    if (!payload.ok) {
+      lastError = "Invalid broadcast response.";
+      continue;
+    }
+
+    return {
+      recipients: Number(payload.recipients || 0),
+      inserted: Number(payload.inserted || 0),
+    };
+  }
+
+  throw new Error(lastError || "Broadcast update failed");
 }

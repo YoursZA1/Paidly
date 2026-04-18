@@ -24,6 +24,8 @@ let validateServiceRoleKey;
 let runAdminDeleteOrphanProfiles;
 let getAdminPlatformUserMessages;
 let isAdminPlatformMessageClientError;
+let broadcastAdminUpdateToAllUsers;
+let validateAdminBroadcastPayload;
 
 let corsPromise = null;
 let getDepsPromise = null;
@@ -111,6 +113,18 @@ async function ensureSendPlatformMessageDeps() {
     handleVercelSendPlatformMessagePost = m.handleVercelSendPlatformMessagePost;
   });
   return sendPlatformMessageDepsPromise;
+}
+
+let broadcastDepsPromise = null;
+async function ensureBroadcastDeps() {
+  await ensureGetDeps();
+  if (broadcastAdminUpdateToAllUsers && validateAdminBroadcastPayload) return;
+  if (broadcastDepsPromise) return broadcastDepsPromise;
+  broadcastDepsPromise = import("../../server/src/adminBroadcastUpdate.js").then((m) => {
+    broadcastAdminUpdateToAllUsers = m.broadcastAdminUpdateToAllUsers;
+    validateAdminBroadcastPayload = m.validateAdminBroadcastPayload;
+  });
+  return broadcastDepsPromise;
 }
 
 /** Vercel usually sets `query.resource`; fall back to path if missing (rewrites / some runtimes). */
@@ -242,6 +256,7 @@ export default async function handler(req, res) {
       "invite-user",
       "clean-orphaned-users",
       "send-platform-message",
+      "broadcast-update",
     ]);
 
     if (postResources.has(resource)) {
@@ -291,6 +306,50 @@ export default async function handler(req, res) {
         if (resource === "send-platform-message") {
           await ensureSendPlatformMessageDeps();
           return handleVercelSendPlatformMessagePost(req, res);
+        }
+        if (resource === "broadcast-update") {
+          await ensureBroadcastDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+
+          const authHeader = req.headers.authorization || "";
+          const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+          if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+          const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+          if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
+
+          const deny = await assertCallerForAdminRoute(supabase, authData.user, { allowInternalTeam: true });
+          if (deny) return res.status(deny.status).json(deny.body);
+
+          let body = req.body;
+          if (typeof body === "string") {
+            try {
+              body = JSON.parse(body);
+            } catch {
+              return res.status(400).json({ error: "Invalid JSON" });
+            }
+          }
+
+          try {
+            const payload = { subject: body?.subject, content: body?.content };
+            validateAdminBroadcastPayload(payload);
+            const { users } = await fetchMergedPlatformUsersForAdmin(supabase, 2000);
+            const result = await broadcastAdminUpdateToAllUsers(
+              supabase,
+              authData.user.id,
+              users,
+              payload
+            );
+            return res.status(200).json({ ok: true, ...result });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const status = /content is required|subject too long|content too long|Invalid sender_id/i.test(msg)
+              ? 400
+              : 500;
+            return res.status(status).json({ error: msg });
+          }
         }
       }
       return res.status(405).json({ error: "Method not allowed" });

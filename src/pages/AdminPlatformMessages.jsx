@@ -4,6 +4,7 @@ import { format, isToday } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   MessageCircle,
+  Megaphone,
   Plus,
   Search,
   Send,
@@ -19,6 +20,7 @@ import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import {
   fetchAdminPlatformUserMessages,
+  postAdminBroadcastUpdate,
   postAdminPlatformUserMessage,
 } from '@/api/fetchAdminPlatformUserMessages';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -351,6 +353,9 @@ export default function AdminPlatformMessages() {
   const [templatePickerTarget, setTemplatePickerTarget] = useState(
     /** @type {null | 'reply' | 'new'} */ (null)
   );
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastSubject, setBroadcastSubject] = useState('Paidly platform update');
+  const [broadcastBody, setBroadcastBody] = useState('');
   const threadEndRef = useRef(null);
 
   const {
@@ -445,6 +450,13 @@ export default function AdminPlatformMessages() {
     },
   });
 
+  const broadcastMutation = useMutation({
+    mutationFn: postAdminBroadcastUpdate,
+    onError: (e) => {
+      toast.error(e?.message || 'Failed to broadcast update');
+    },
+  });
+
   const handleSendNew = async () => {
     const rid = String(newRecipientId || '').trim();
     const sub = String(newSubject || '').trim() || DEFAULT_ADMIN_PLATFORM_SUBJECT;
@@ -494,6 +506,26 @@ export default function AdminPlatformMessages() {
       setReplyBody('');
     } catch {
       /* toast in mutation */
+    }
+  };
+
+  const handleBroadcastUpdate = async () => {
+    const subject = String(broadcastSubject || '').trim();
+    const content = String(broadcastBody || '').trim();
+    if (!content) {
+      toast.error('Enter an update message');
+      return;
+    }
+    try {
+      const result = await broadcastMutation.mutateAsync({ subject, content });
+      toast.success('Update sent', {
+        description: `Delivered to ${result.inserted} users.`,
+      });
+      setBroadcastOpen(false);
+      setBroadcastSubject('Paidly platform update');
+      setBroadcastBody('');
+    } catch {
+      /* toast from mutation */
     }
   };
 
@@ -603,6 +635,16 @@ export default function AdminPlatformMessages() {
                 >
                   <Plus className="h-4 w-4" />
                   Compose
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBroadcastOpen(true)}
+                  className="gap-1.5 shrink-0"
+                >
+                  <Megaphone className="h-4 w-4" />
+                  Broadcast update
                 </Button>
               </div>
               <div className="relative">
@@ -1003,6 +1045,53 @@ export default function AdminPlatformMessages() {
               disabled={sendMutation.isPending || !newRecipientId}
             >
               Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={broadcastOpen} onOpenChange={setBroadcastOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Broadcast platform update</DialogTitle>
+            <DialogDescription>
+              Sends one in-app notification to all users via the notification bell feed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="broadcast-subject">Subject</Label>
+              <Input
+                id="broadcast-subject"
+                value={broadcastSubject}
+                onChange={(e) => setBroadcastSubject(e.target.value)}
+                maxLength={300}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="broadcast-body">Update message</Label>
+              <Textarea
+                id="broadcast-body"
+                value={broadcastBody}
+                onChange={(e) => setBroadcastBody(e.target.value)}
+                rows={6}
+                maxLength={50000}
+                placeholder="Describe the release/update for all users…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBroadcastOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBroadcastUpdate}
+              disabled={broadcastMutation.isPending}
+              className="gap-2"
+            >
+              <Megaphone className="h-4 w-4" />
+              Send to all users
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -30,6 +30,8 @@ create table if not exists public.profiles (
   invoice_template text default 'classic',
   invoice_header text,
   business jsonb,
+  last_active_at timestamptz,
+  last_active_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

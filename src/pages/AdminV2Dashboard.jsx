@@ -375,6 +375,9 @@ export default function AdminV2Dashboard() {
           subscription_status: sub?.status || 'none',
           next_billing_date: sub?.next_billing_date || null,
           updated_at: u.updated_at || null,
+          last_active_at: u.last_active_at || null,
+          is_online: Boolean(u.is_online),
+          last_active_path: u.last_active_path || null,
           created_date: u.created_date || u.created_at || null,
         };
       })
@@ -828,8 +831,10 @@ export default function AdminV2Dashboard() {
                     {row.created_date ? format(new Date(row.created_date), 'dd MMM yyyy') : '—'}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {row.updated_at
-                      ? `Updated ${format(new Date(row.updated_at), 'dd MMM yyyy')}`
+                    {row.last_active_at
+                      ? `${row.is_online ? 'Online' : 'Last seen'} ${format(new Date(row.last_active_at), 'dd MMM yyyy HH:mm')}`
+                      : row.updated_at
+                        ? `Updated ${format(new Date(row.updated_at), 'dd MMM yyyy')}`
                       : row.created_date
                         ? `Joined ${format(new Date(row.created_date), 'dd MMM yyyy')}`
                         : '—'}

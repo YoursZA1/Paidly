@@ -32,6 +32,10 @@ import {
   isAdminPlatformMessageClientError,
   isAdminPlatformMessagesSchemaMissingError,
 } from "./adminPlatformUserMessages.js";
+import {
+  broadcastAdminUpdateToAllUsers,
+  validateAdminBroadcastPayload,
+} from "./adminBroadcastUpdate.js";
 import { sendAdminPlatformMessageToSignupEmail } from "./adminPlatformUserOutreachEmail.js";
 import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
@@ -422,6 +426,12 @@ function logAdminApi(method, path, statusCode, detail = null) {
   } else {
     console.log(msg);
   }
+}
+
+function isAdminBroadcastClientError(message) {
+  return /content is required|subject too long|content too long|Invalid sender_id/i.test(
+    String(message || "")
+  );
 }
 
 /**
@@ -2212,6 +2222,39 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
       : isAdminPlatformMessagesSchemaMissingError(msg)
         ? 503
         : 500;
+    logAdminApi(req.method, req.path, status, msg);
+    return res.status(status).json({ error: msg });
+  }
+});
+
+app.post("/api/admin/broadcast-update", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const payload = {
+      subject: req.body?.subject,
+      content: req.body?.content,
+    };
+    validateAdminBroadcastPayload(payload);
+
+    const { users } = await fetchMergedPlatformUsersForAdmin(supabaseAdmin, 2000);
+    const result = await broadcastAdminUpdateToAllUsers(
+      supabaseAdmin,
+      adminUser.id,
+      users,
+      payload
+    );
+    logAdminApi(req.method, req.path, 200, `broadcast recipients=${result.recipients}`);
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    const msg = err?.message || "Failed to broadcast update";
+    const status = isAdminBroadcastClientError(msg) ? 400 : 500;
     logAdminApi(req.method, req.path, status, msg);
     return res.status(status).json({ error: msg });
   }

@@ -402,7 +402,7 @@ export default function UsersPage() {
     });
   };
 
-  const colCount = 9;
+  const colCount = 10;
 
   return (
     <div>
@@ -608,6 +608,7 @@ export default function UsersPage() {
                 <th className="px-4 py-3 text-left font-medium">Profile billing</th>
                 <th className="px-4 py-3 text-left font-medium">Invoices</th>
                 <th className="px-4 py-3 text-left font-medium">Joined</th>
+                <th className="px-4 py-3 text-left font-medium">Presence</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -685,6 +686,18 @@ export default function UsersPage() {
                     <td className="px-4 py-4 text-sm">{u.invoices_sent ?? 0}</td>
                     <td className="px-4 py-4 text-sm text-muted-foreground">
                       {u.created_date ? format(new Date(u.created_date), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="px-4 py-4 text-xs text-muted-foreground">
+                      {u.last_active_at ? (
+                        <div className="space-y-0.5">
+                          <p className={u.is_online ? "font-medium text-emerald-600 dark:text-emerald-400" : ""}>
+                            {u.is_online ? "Online now" : "Offline"}
+                          </p>
+                          <p>{format(new Date(u.last_active_at), 'dd MMM yyyy HH:mm')}</p>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-4 py-4 text-right">
                       <DropdownMenu>

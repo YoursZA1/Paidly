@@ -8,6 +8,7 @@ import ErrorBoundary from '@/components/ErrorBoundary.jsx'
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
 import ConnectionMonitor from "@/components/connection/ConnectionMonitor.jsx";
+import SessionActivityBeacon from "@/components/activity/SessionActivityBeacon.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
     installGlobalAsyncErrorHandlers,
@@ -55,6 +56,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <AuthProvider>
               <AppProvider>
                 <ConnectionMonitor />
+                <SessionActivityBeacon />
                 <App />
               </AppProvider>
             </AuthProvider>

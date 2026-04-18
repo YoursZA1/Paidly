@@ -78,6 +78,8 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
   }
 
   const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+  const nowMs = Date.now();
+  const ONLINE_WINDOW_MS = 2 * 60 * 1000;
   const users = authUsers.map((authUser) => {
     const profile = profileMap.get(authUser.id) || null;
     const ev = authEmailVerificationFields(authUser);
@@ -104,6 +106,10 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       typeof invitedByRaw === "string" && invitedByRaw.trim()
         ? invitedByRaw.trim().toLowerCase()
         : null;
+    const lastActiveAt = profile?.last_active_at || null;
+    const lastActiveMs = lastActiveAt ? Date.parse(lastActiveAt) : NaN;
+    const isOnline =
+      Number.isFinite(lastActiveMs) && nowMs - lastActiveMs >= 0 && nowMs - lastActiveMs <= ONLINE_WINDOW_MS;
     return {
       id: authUser.id,
       email,
@@ -125,6 +131,9 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       subscription_plan: profile?.subscription_plan,
       invoices_sent: Number(profile?.invoices_sent ?? profile?.invoices_count ?? 0),
       updated_at: profile?.updated_at || null,
+      last_active_at: lastActiveAt,
+      last_active_path: profile?.last_active_path || null,
+      is_online: isOnline,
     };
   });
 
