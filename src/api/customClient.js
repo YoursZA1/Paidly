@@ -22,6 +22,7 @@ import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/
 import { expireTrialIfDueViaRpc } from "@/lib/trialExpiry";
 import { hasFeature } from "@shared/plans.js";
 import { apiRequest } from "@/utils/apiRequest";
+import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -1882,7 +1883,8 @@ class AuthManager {
     if (isSupabaseConfigured && !supabaseUserId) {
       this.isAuthenticated = false;
       this.user = null;
-      throw new Error("No Supabase session. Sign in before continuing.");
+      await triggerUnauthorizedSession("missing-supabase-session");
+      return null;
     }
 
     this.isAuthenticated = true;
