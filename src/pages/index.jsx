@@ -18,6 +18,8 @@ const Signup = lazy(() => import("./Signup"));
 const Home = lazy(() => import("./Home"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
 const CreateDocument = lazy(() => import("./CreateDocument"));
+const Documents = lazy(() => import("./Documents"));
+const DocumentDetail = lazy(() => import("./DocumentDetail"));
 const ViewDocument = lazy(() => import("./ViewDocument"));
 const Clients = lazy(() => import("./Clients"));
 const Invoices = lazy(() => import("./Invoices"));
@@ -178,6 +180,10 @@ const INVOICE_ROUTES = [
     { path: "/createdocument/:type", element: <RequireAuth><CreateDocument /></RequireAuth> },
     { path: "/ViewDocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
     { path: "/viewdocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
+    { path: "/Documents/:documentId", element: <RequireAuth><DocumentDetail /></RequireAuth> },
+    { path: "/documents/:documentId", element: <RequireAuth><DocumentDetail /></RequireAuth> },
+    { path: "/Documents", element: <RequireAuth><Documents /></RequireAuth> },
+    { path: "/documents", element: <RequireAuth><Documents /></RequireAuth> },
     { path: "/ViewInvoice", element: <RequireAuth><ViewInvoice /></RequireAuth> },
     { path: "/EditInvoice", element: <RequireAuth><EditInvoice /></RequireAuth> },
     { path: "/RecurringInvoices", element: <RequireAuth><RecurringInvoices /></RequireAuth> },

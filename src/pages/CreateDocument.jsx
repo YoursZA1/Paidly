@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation, Navigate } from "react-router-dom";
 import { Client, Invoice, Quote, QuoteTemplate, BankingDetail, Service } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
@@ -27,6 +27,7 @@ import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
 import { lineItemHasContent } from "@/utils/lineItemContent";
+import { normalizeDocumentType, DOCUMENT_TYPES } from "@/document-engine";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -57,12 +58,6 @@ function writeQuoteBankingPreference(quoteId, bankingDetailId) {
   } catch {
     // ignore storage errors
   }
-}
-
-function normalizeDocType(raw) {
-  const t = String(raw || "").toLowerCase();
-  if (t === "quote" || t === "quotes") return "quote";
-  return "invoice";
 }
 
 function getInitials(name) {
@@ -119,7 +114,14 @@ function buildPaidLineItems(lineItems, discount) {
 
 export default function CreateDocument() {
   const { type: typeParam } = useParams();
-  const docType = normalizeDocType(typeParam);
+  const docType = normalizeDocumentType(typeParam);
+  if (docType === DOCUMENT_TYPES.payslip) {
+    return <Navigate to={createPageUrl("CreatePayslip")} replace />;
+  }
+  return <CreateDocumentCore docType={docType} />;
+}
+
+function CreateDocumentCore({ docType }) {
   const initialTerms = docType === "invoice" ? DEFAULT_INVOICE_TERMS_BODY : "";
   const navigate = useNavigate();
   const location = useLocation();

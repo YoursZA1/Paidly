@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paidly — Product Architecture Strategy</title>
+  <style>
+    @page { margin: 14mm; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 9.5pt; line-height: 1.4; color: #111; margin: 0; padding: 10mm 12mm 14mm; }
+    h1 { font-size: 17pt; margin: 0 0 6px; color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+    h2 { font-size: 11pt; margin: 14px 0 6px; color: #1e3a5f; text-transform: uppercase; letter-spacing: 0.03em; }
+    h3 { font-size: 10pt; margin: 10px 0 4px; color: #334155; }
+    p { margin: 0 0 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 8.5pt; }
+    th, td { border: 1px solid #cbd5e1; padding: 4px 6px; vertical-align: top; }
+    th { background: #f1f5f9; text-align: left; }
+    ul, ol { margin: 4px 0 8px 16px; padding: 0; }
+    li { margin-bottom: 2px; }
+    code { font-family: ui-monospace, monospace; font-size: 8pt; background: #f1f5f9; padding: 0 3px; border-radius: 2px; }
+    .tag { font-size: 8pt; color: #64748b; margin-bottom: 10px; }
+    .box { background: #f8fafc; border-left: 3px solid #2563eb; padding: 8px 10px; margin: 8px 0; font-size: 8.5pt; }
+    .ascii { font-family: ui-monospace, monospace; font-size: 7.5pt; white-space: pre; background: #f1f5f9; padding: 8px; margin: 8px 0; overflow: hidden; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+    .part { font-size: 10pt; font-weight: 700; color: #2563eb; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Paidly — Product Architecture Strategy</h1>
+  <p class="tag">Systems + Document Engine + Experience layer · with technical appendix</p>
+
+  <h2>Paidly Architecture v2 (clean reference)</h2>
+  <p><em>One-page upgrade summary. The Part A outline below also names <strong>Relationship &amp; Offering</strong> separately—the client/catalog <strong>input graph</strong> that feeds the Document Engine.</em></p>
+  <p>Paidly is structured around <strong>four core engines</strong>:</p>
+  <ol>
+    <li><strong>Identity System</strong> — Auth, users, organizations, roles, RLS-backed tenancy.</li>
+    <li><strong>Document Engine</strong> — Invoices, quotes, payslips unified as <code>document(type=…)</code>; shared compose, send, and PDF paths.</li>
+    <li><strong>Financial Engine</strong> — Payments, cash flow, reports, subscriptions (reads and rails downstream of documents).</li>
+    <li><strong>Growth Engine</strong> — Affiliates, email, notifications, CRM-style behaviour (how Paidly scales).</li>
+  </ol>
+  <h3>Frontend layout system</h3>
+  <p>Same structure everywhere:</p>
+  <ul>
+    <li><strong>Header</strong> — title + primary actions</li>
+    <li><strong>Content</strong> — tables, grids, main forms</li>
+    <li><strong>Side panel</strong> — summary, filters, secondary controls (<code>PageTemplate</code> in code)</li>
+  </ul>
+  <p><strong>Data flow (client):</strong></p>
+  <div class="ascii">UI → Hooks → Services → Entity facades (EntityManager) → Supabase</div>
+  <p><strong>Serverless APIs (<code>/api/*</code>) handle:</strong></p>
+  <ul>
+    <li>Payments (<strong>Payfast</strong>)</li>
+    <li>Emails (<strong>Resend</strong> / SMTP)</li>
+    <li>Public document access (shares, tokens)</li>
+    <li><strong>Cron</strong> jobs (dunning, reminders, ops)</li>
+  </ul>
+  <div class="box"><strong>Goal:</strong> Evolve Paidly from an <strong>invoicing tool</strong> into a full <strong>business operating system</strong>.</div>
+
+  <hr />
+
+  <h2>Executive framing</h2>
+  <table>
+    <tr><th>Old lens</th><th>New lens</th></tr>
+    <tr><td>Separate Invoices / Quotes / Payslips</td><td><strong>One Document Engine</strong>, multiple <strong>document kinds</strong></td></tr>
+    <tr><td>Features as silos</td><td><strong>Four core systems</strong> + cross-cutting <strong>Experience System</strong></td></tr>
+    <tr><td>Routes drive thinking</td><td><strong>Capabilities</strong> drive architecture; routes are entry points</td></tr>
+  </table>
+
+  <p class="part">Part A — Core systems</p>
+
+  <h3>1. Identity &amp; Access</h3>
+  <p>Supabase Auth, profiles, orgs, memberships, roles, RLS. <strong>Strategy:</strong> stabilise—harden session, org bootstrap, <code>RequireAuth</code> so other systems trust it cheaply.</p>
+
+  <h3>2. Document Engine (commerce core)</h3>
+  <p><strong>Job:</strong> Issue documents to third parties → deliver → track → settle. <strong>Kinds today:</strong> Invoice, Quote, Payslip (each maps to existing entities/tables).</p>
+  <p><strong>Shared lifecycle:</strong> Author → Compose → Render (PDF) → Deliver (email/link) → Observe (opens, reminders) → Settle (pay / accept / archive).</p>
+  <div class="box"><strong>Product point:</strong> Invest once in send, PDF, public token, status, and line-item patterns—parity across kinds is <em>engine work</em>, not three copies.</div>
+
+  <h3>3. Relationship &amp; Offering</h3>
+  <p>Clients + catalog (<code>services</code>) + line intelligence—<strong>input graph</strong> into the Document Engine, not a disconnected “contacts app.”</p>
+
+  <h3>4. Revenue &amp; Operating</h3>
+  <p>Payfast, subscriptions, crons, affiliates, admin, reporting. <strong>Strategy:</strong> keep thin on rules that belong inside documents (e.g. overdue logic with invoices).</p>
+
+  <h3>5. Experience System (cross-cutting)</h3>
+  <table>
+    <tr><th>Pillar</th><th>Meaning</th></tr>
+    <tr><td>Shell</td><td>Editor pattern: work area + sticky summary/actions (EditQuote / EditClient / EditCatalogItem)</td></tr>
+    <tr><td>Tokens</td><td>Semantic colours—border-border, bg-card, muted-foreground</td></tr>
+    <tr><td>Data discipline</td><td>Query keys, invalidation, cache-first hydration where safe</td></tr>
+    <tr><td>A11y</td><td>Label/id parity, meaningful disabled states</td></tr>
+  </table>
+
+  <h2>System map</h2>
+  <div class="ascii">                 ┌─────────────────────┐
+                 │  Experience System  │
+                 └──────────┬──────────┘
+                            │
+ ┌─────────────┐   ┌────────▼────────┐   ┌──────────────────┐
+ │  Identity   │──►│ Document Engine │◄──│ Relationship &   │
+ │  & Access   │   │ (invoice/quote/ │   │ Offering         │
+ └─────────────┘   │  payslip kinds) │   └──────────────────┘
+         │          └────────┬────────┘
+         │                   │
+         └───────────────────┼──────────────┐
+                             ▼              │
+                  ┌──────────────────┐      │
+                  │ Revenue & Ops    │◄─────┘
+                  └──────────────────┘</div>
+
+  <hr />
+  <p class="part">Part B — Technical appendix</p>
+  <p><strong>Stack:</strong> Vite + React + React Router · Tailwind + Radix · TanStack Query · Supabase · Vercel <code>/api/*</code> · Payfast · Resend · Anvil · Turnstile.</p>
+  <p><strong>Repo:</strong> <code>src/pages/</code> (routes), <code>src/services/</code> (domain), <code>src/api/customClient.js</code> (EntityManager → Supabase), <code>api/</code> (serverless), <code>supabase/migrations/</code>.</p>
+  <p><strong>Flow:</strong> Auth → org scope → UI → Hooks → Services → EntityManager → Supabase + Query cache; <code>/api/*</code> for Payfast, email, public shares, crons.</p>
+
+  <h2>Foundation priorities &amp; next steps backlog</h2>
+  <p><strong>Foundation §4–5</strong> (see full <code>Paidly-Application-Blueprint.md</code>): <strong>4</strong> = stabilize Auth + Session; <strong>5</strong> = standardize UI layout. They are explicit in architecture <strong>A.1</strong> / <strong>A.2</strong> and in execution below. Backlog <strong>4–5</strong> map directly to Foundation §4–5. Item <strong>6</strong> (Experience checklist) <strong>closes</strong> Foundation §5. Item <strong>7</strong> (role matrix) <strong>supports</strong> Foundation §4. Former items 6–9 are renumbered <strong>8–11</strong> (same substance: <code>PageTemplate</code> rollout, hook→service pattern, Client Timeline, quote→invoice).</p>
+
+  <h3>Next steps (engineering backlog 1–11)</h3>
+  <ol>
+    <li>Grow <code>src/document-engine/</code> — status enums, send + PDF adapters, thin facades over Invoice / Quote / Payslip (supports High impact §1).</li>
+    <li>Line up quote / invoice / payslip on shared deliver + observe interfaces; compose converges on Create Document + type (High impact §1).</li>
+    <li>Make Financial Engine consumers explicit — cash flow / reports through document-shaped views (Client Timeline + money story).</li>
+    <li><strong>Stabilize Auth + Session</strong> — execute Foundation §4: session read/write matrix, invites, org bootstrap, runbook/ADR.</li>
+    <li><strong>Standardize UI layout</strong> — execute Foundation §5 + A.2: <code>PageTemplate</code>, editor shell, embedded admin.</li>
+    <li>Publish <strong>Experience checklist</strong> (1 page) — Page Template three-zone rule + layout grammar row picker (<strong>closes</strong> Foundation §5).</li>
+    <li><strong>Identity / role matrix doc</strong> — admin vs management vs support (complements Foundation §4).</li>
+    <li>Roll out <code>PageTemplate</code> on Invoices, Quotes, Clients, Services, Affiliates — filters/summary into <code>sidePanel</code>.</li>
+    <li>Extend <strong>hook → service → entity</strong> pattern — <code>*ListService</code> for Quotes, Clients, etc.; keep <code>api/InvoiceService</code>-style modules for delivery.</li>
+    <li><strong>Client Timeline</strong> — query + UI on Client detail (High impact §2); optional <code>ClientTimelineService</code>.</li>
+    <li><strong>Quote → invoice conversion</strong> — draft invoice from accepted quote (High impact §3); RLS + idempotency.</li>
+  </ol>
+  <p class="tag">Product-led priorities (document unification, client timeline, conversion flow) live in the blueprint section <strong>High impact next</strong>.</p>
+</body>
+</html>

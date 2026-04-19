@@ -72,7 +72,8 @@ import {
   Terminal,
   Receipt,
   Handshake,
-  MessageCircle
+  MessageCircle,
+  Layers
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -186,6 +187,14 @@ const allNavigationItems = [
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-quotes",
+  },
+  {
+    title: "Documents",
+    url: createPageUrl("Documents"),
+    icon: Layers,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-documents",
   },
   {
     title: "Prod & Services",

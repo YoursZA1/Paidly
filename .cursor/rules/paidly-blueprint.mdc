@@ -1,0 +1,20 @@
+---
+description: Consult the Paidly application blueprint before adding or changing features
+alwaysApply: true
+---
+
+# Paidly — Blueprint before features
+
+When **adding, updating, or refactoring** application behavior (new routes, APIs, DB migrations, subscription/billing, admin flows, integrations, or user-facing features):
+
+1. **Read the blueprint first** — Open and align with:
+   - `docs/Paidly-Application-Blueprint.md` (primary; searchable in-repo)
+   - `docs/Paidly-Application-Blueprint.pdf` (same document; use when the team treats PDF as canonical)
+
+2. **Match architecture** — Respect layers and services described there (e.g. SPA + Supabase + Vercel `/api`, what runs in `server/` vs serverless, RLS and auth boundaries).
+
+3. **After implementation** — If the change materially alters architecture, data flow, or product scope described in the blueprint, **update the blueprint** (`Paidly-Application-Blueprint.md` and regenerate PDF if your process requires it) in the same change set when practical.
+
+4. **If blueprint is silent** on a detail — Follow existing code patterns in this repo; note the gap briefly in PR/commit description or a short comment only when it prevents future drift.
+
+Do **not** skip the blueprint read for “small” changes when they touch product behavior, security, payments, or data model.

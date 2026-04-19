@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { recordToStyledPreviewDoc, profileForQuotePreview } from "@/utils/documentPreviewData";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Navigate } from "react-router-dom";
 import { Invoice, Quote, Client, User, BankingDetail } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,9 +11,11 @@ import StatusBadge from "@/components/StatusBadge";
 import SendEmailDialog from "@/components/SendEmailDialog";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from "@/utils/fetchWithTimeout";
 import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
+import { parseRouteDocumentTypeStrict, DOCUMENT_TYPES } from "@/document-engine";
 
 const INVOICE_STATUSES = [
   "draft",
@@ -30,16 +32,9 @@ const INVOICE_STATUSES = [
 
 const QUOTE_STATUSES = ["draft", "sent", "viewed", "accepted", "rejected", "expired"];
 
-function normalizeDocType(raw) {
-  const t = String(raw || "").toLowerCase();
-  if (t === "quote" || t === "quotes") return "quote";
-  if (t === "invoice" || t === "invoices") return "invoice";
-  return null;
-}
-
 export default function ViewDocument() {
   const { docType: docTypeParam, id } = useParams();
-  const docType = normalizeDocType(docTypeParam);
+  const docType = parseRouteDocumentTypeStrict(docTypeParam);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -53,7 +48,7 @@ export default function ViewDocument() {
   const previewPdfRef = useRef(null);
 
   const loadDocument = useCallback(async () => {
-    if (!id || !docType) {
+    if (!id || !docType || (docType !== "invoice" && docType !== "quote")) {
       setLoading(false);
       setRecord(null);
       setBankingDetail(null);
@@ -137,7 +132,26 @@ export default function ViewDocument() {
         await Quote.update(record.id, { status });
       }
       setRecord((prev) => (prev ? { ...prev, status } : prev));
-      toast({ title: "Status updated", description: status, variant: "success" });
+      if (docType === "quote" && status === "accepted") {
+        const draftUrl = `${createPageUrl("CreateDocument/invoice")}?quoteId=${encodeURIComponent(record.id)}`;
+        toast({
+          title: "Quote accepted",
+          description: "Create an invoice draft prefilled from this quote.",
+          variant: "success",
+          duration: 14000,
+          action: (
+            <ToastAction
+              altText="Open invoice draft"
+              className="border-white/40 bg-white/20 text-white hover:bg-white/30"
+              onClick={() => navigate(draftUrl)}
+            >
+              Create draft
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({ title: "Status updated", description: status, variant: "success" });
+      }
     } catch (e) {
       toast({
         title: "Update failed",
@@ -191,13 +205,18 @@ export default function ViewDocument() {
   }, [docType, record?.status]);
   const currentStatus = record?.status || "draft";
 
+  if (docType === DOCUMENT_TYPES.payslip && id) {
+    return <Navigate to={`${createPageUrl("ViewPayslip")}?id=${encodeURIComponent(id)}`} replace />;
+  }
+
   if (!docType) {
     return (
       <div className="text-center py-16 px-4">
         <h2 className="text-xl font-semibold mb-2">Invalid document type</h2>
         <p className="text-muted-foreground text-sm mb-4">
-          Use <code className="text-xs bg-muted px-1 rounded">/ViewDocument/invoice/…</code> or{" "}
-          <code className="text-xs bg-muted px-1 rounded">/ViewDocument/quote/…</code>.
+          Use <code className="text-xs bg-muted px-1 rounded">/ViewDocument/invoice/…</code>,{" "}
+          <code className="text-xs bg-muted px-1 rounded">/ViewDocument/quote/…</code>, or{" "}
+          <code className="text-xs bg-muted px-1 rounded">/ViewDocument/payslip/…</code> (redirects to payslip viewer).
         </p>
         <Button variant="outline" onClick={() => navigate(createPageUrl("Dashboard"))}>
           Go to dashboard

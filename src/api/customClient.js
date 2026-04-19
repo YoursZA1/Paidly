@@ -106,6 +106,21 @@ function isSupabaseAuthUuid(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+/**
+ * When `navigator.onLine` is false, skip Supabase entity reads in `EntityManager` so transient
+ * network errors do not look like "empty data" and localStorage mirrors do not mask real issues
+ * while the browser reports online.
+ * SSR / unknown: treat as online (attempt Supabase).
+ */
+function isBrowserOnline() {
+  if (typeof navigator === "undefined") return true;
+  try {
+    return navigator.onLine !== false;
+  } catch {
+    return true;
+  }
+}
+
 function normalizePaidlyPlan(rawPlan) {
   const value = String(rawPlan || "").trim().toLowerCase();
   if (!value) return null;
@@ -131,7 +146,7 @@ const SUPABASE_SELECT_COLUMNS = {
     "role, hourly_rate, unit_type, cost_rate, cost_type, default_cost, " +
     "category, pricing_type, min_quantity, tags, estimated_duration, requirements, price_locked, " +
     "created_at, updated_at",
-  payments: "id, org_id, invoice_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
+  payments: "id, org_id, invoice_id, document_id, client_id, amount, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
     "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
@@ -381,12 +396,24 @@ class EntityManager {
   async find() {
     // If local data is empty, try to pull from Supabase
     if (Object.keys(this.data).length === 0) {
+      if (!isBrowserOnline()) {
+        console.info(
+          `[Paidly][EntityManager] ${this.entityName}: offline — find() skipped Supabase pull (empty cache).`
+        );
+        return [];
+      }
       await this.pullFromSupabase();
     }
     return Object.values(this.data);
   }
 
   async pullFromSupabase() {
+    if (!isBrowserOnline()) {
+      console.info(
+        `[Paidly][EntityManager] ${this.entityName}: offline — skipped Supabase pull (using in-memory / local cache only).`
+      );
+      return;
+    }
     try {
       const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) return;
@@ -548,6 +575,11 @@ class EntityManager {
 
     const record = this.data[idStr];
     if (!record) {
+      if (!isBrowserOnline()) {
+        throw new Error(
+          `${this.entityName} with id ${id} is not available offline. Connect to the internet and try again, or open it from a list you already loaded while online.`
+        );
+      }
       // Try direct Supabase fetch as fallback
       try {
         const { data: sessionData } = await getSessionWithRetry();
@@ -663,30 +695,34 @@ class EntityManager {
     }
     // Ensure invoice/quote from cache has line items (pullFromSupabase does not load invoice_items/quote_items)
     if (record && (this.entityName === 'Invoice' || this.entityName === 'Quote') && !Array.isArray(record.items)) {
-      const itemsTable = this.entityName === 'Invoice' ? 'invoice_items' : 'quote_items';
-      const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
-      try {
-        const itemColumns = getSelectColumns(itemsTable);
-        const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
-          async () => supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
-          { kind: "read", silent: true, label: `lineItems.${this.entityName}` }
-        );
-        if (!itemsError && Array.isArray(itemsData)) {
-          record.items = itemsData.map(row => ({
-            service_name: row.service_name,
-            description: row.description || '',
-            quantity: Number(row.quantity ?? 1),
-            unit_price: Number(row.unit_price ?? 0),
-            total_price: Number(row.total_price ?? 0)
-          }));
-        } else {
+      if (!isBrowserOnline()) {
+        record.items = [];
+      } else {
+        const itemsTable = this.entityName === 'Invoice' ? 'invoice_items' : 'quote_items';
+        const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
+        try {
+          const itemColumns = getSelectColumns(itemsTable);
+          const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
+            async () => supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
+            { kind: "read", silent: true, label: `lineItems.${this.entityName}` }
+          );
+          if (!itemsError && Array.isArray(itemsData)) {
+            record.items = itemsData.map(row => ({
+              service_name: row.service_name,
+              description: row.description || '',
+              quantity: Number(row.quantity ?? 1),
+              unit_price: Number(row.unit_price ?? 0),
+              total_price: Number(row.total_price ?? 0)
+            }));
+          } else {
+            record.items = [];
+          }
+          this.data[idStr] = record;
+          this.saveToStorage();
+        } catch (e) {
+          console.warn(`Failed to fetch line items for ${this.entityName} ${id}:`, e);
           record.items = [];
         }
-        this.data[idStr] = record;
-        this.saveToStorage();
-      } catch (e) {
-        console.warn(`Failed to fetch line items for ${this.entityName} ${id}:`, e);
-        record.items = [];
       }
     }
     if (this.entityName === 'Invoice') await attachInvoiceCompany(record);
@@ -738,14 +774,29 @@ class EntityManager {
     this._listOptions = limit != null ? { limit, offset, orderBy: { column: orderColumn, ascending: orderAsc } } : {};
     try {
       const pull = this.pullFromSupabase();
-      // If maxWaitMs is set, do not block UI on slow Supabase; return cached records.
-      if (maxWaitMs != null && maxWaitMs > 0) {
+      const useRace = maxWaitMs != null && maxWaitMs > 0;
+      // Online: bounded wait for responsiveness, but log pull failures instead of swallowing them.
+      // Offline: pullFromSupabase no-ops immediately — await is cheap; no race needed.
+      if (useRace && isBrowserOnline()) {
         await Promise.race([
           pull,
           new Promise((resolve) => setTimeout(resolve, maxWaitMs)),
         ]);
-        // Ensure no unhandled rejections if pull continues after we stop waiting.
-        void pull.catch(() => {});
+        void pull.catch((err) => {
+          if (!isAbortError(err)) {
+            console.warn(
+              `[Paidly][EntityManager] list(${this.entityName}) Supabase pull finished after timeout:`,
+              getSupabaseErrorMessage(err, String(err))
+            );
+          }
+        });
+        if (this.skipLocalPersistence && Object.keys(this.data).length === 0) {
+          console.warn(
+            `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
+          );
+        }
+      } else if (useRace && !isBrowserOnline()) {
+        await pull;
       } else {
         await pull;
       }

@@ -19,6 +19,7 @@ import ConfirmationDialog from '../shared/ConfirmationDialog';
 import ManualShareModal from '../shared/ManualShareModal';
 import QuoteEmailPreviewModal from './QuoteEmailPreviewModal';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 import { createTrackableQuoteLink, sendQuotePdfEmailToClient } from '@/services/InvoiceSendService';
 
@@ -106,6 +107,24 @@ function QuoteActions({ quote, onActionSuccess }) {
         try {
             await Quote.update(quote.id, { status: newStatus });
             onActionSuccess();
+            if (newStatus === 'accepted') {
+                const draftUrl = `${createPageUrl('CreateDocument/invoice')}?quoteId=${encodeURIComponent(quote.id)}`;
+                toast({
+                    title: 'Quote accepted',
+                    description: 'Create an invoice draft prefilled from this quote.',
+                    variant: 'success',
+                    duration: 12000,
+                    action: (
+                        <ToastAction
+                            altText="Create invoice draft"
+                            className="border-primary/40 bg-primary/15 text-primary hover:bg-primary/25"
+                            onClick={() => navigate(draftUrl)}
+                        >
+                            Create draft
+                        </ToastAction>
+                    ),
+                });
+            }
         } catch (error) {
             console.error(`Failed to update status to ${newStatus}:`, error);
         }

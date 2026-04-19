@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Client, Invoice, User } from "@/api/entities";
+import { Client, Invoice, Quote, Payment, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,8 @@ import IndustryBadge from "../components/clients/IndustryBadge";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { buildClientTimelineEvents } from "@/services/ClientTimelineService";
+import ClientTimeline from "../components/clients/ClientTimeline";
 
 const INVOICES_PER_PAGE = 5;
 
@@ -53,6 +55,8 @@ export default function ClientDetail() {
 
     const [client, setClient] = useState(null);
     const [invoices, setInvoices] = useState([]);
+    const [quotes, setQuotes] = useState([]);
+    const [payments, setPayments] = useState([]);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const navigate = useNavigate();
@@ -76,25 +80,39 @@ export default function ClientDetail() {
         if (clientId && !isClientIdUuid(clientId)) {
             setClient(null);
             setInvoices([]);
+            setQuotes([]);
+            setPayments([]);
             try { setUser(await User.me()); } catch { /* ignore */ }
             if (mountedRef.current) setIsLoading(false);
             return;
         }
         try {
-            const [clientData, invoicesData, userData] = await withTimeoutRetry(() => Promise.all([
-                Client.filter({ id: clientId }),
-                Invoice.filter({ client_id: clientId }, '-created_date'),
-                User.me()
-            ]), 15000, 2);
+            const [clientData, invoicesData, userData, quotesData, paymentsRaw] = await withTimeoutRetry(
+                () =>
+                    Promise.all([
+                        Client.filter({ id: clientId }),
+                        Invoice.filter({ client_id: clientId }, "-created_date"),
+                        User.me(),
+                        Quote.filter({ client_id: clientId }, "-created_date"),
+                        Payment.list("-paid_at", { limit: 300, maxWaitMs: 12000 }).catch(() => []),
+                    ]),
+                20000,
+                2
+            );
             if (!mountedRef.current) return;
             setClient(clientData?.[0] || null);
             setInvoices(invoicesData || []);
+            setQuotes(Array.isArray(quotesData) ? quotesData : []);
+            const pr = Array.isArray(paymentsRaw) ? paymentsRaw : [];
+            setPayments(pr.filter((p) => String(p?.client_id || "") === String(clientId)));
             setUser(userData);
         } catch (error) {
             if (!mountedRef.current) return;
             console.error("Error loading client data:", error);
             setClient(null);
             setInvoices([]);
+            setQuotes([]);
+            setPayments([]);
         } finally {
             if (mountedRef.current) setIsLoading(false);
         }
@@ -168,6 +186,19 @@ export default function ClientDetail() {
         return sum + (inv.total_amount || 0);
     }, 0);
 
+    const userCurrency = user?.currency || client?.currency || "ZAR";
+
+    const timelineEvents = useMemo(
+        () =>
+            buildClientTimelineEvents({
+                invoices,
+                quotes,
+                payments,
+                currency: userCurrency,
+            }),
+        [invoices, quotes, payments, user?.currency, client?.currency]
+    );
+
     if (isLoading) {
         return (
             <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
@@ -195,8 +226,6 @@ export default function ClientDetail() {
             </div>
         );
     }
-
-    const userCurrency = user?.currency || client?.currency || 'ZAR';
 
     return (
         <div className="min-h-screen bg-background">
@@ -366,6 +395,15 @@ export default function ClientDetail() {
                             </div>
                         </CardContent>
                     </Card>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.06 }}
+                    className="mb-6"
+                >
+                    <ClientTimeline events={timelineEvents} />
                 </motion.div>
 
                 {/* Invoice History */}
