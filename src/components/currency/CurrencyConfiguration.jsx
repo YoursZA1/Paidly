@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { hasFeatureAccess } from '@/components/subscription/FeatureGate';
+import { useUserProfileQuery } from '@/hooks/useUserProfileQuery';
 import {
   getAllCurrencies,
   getCurrencyByCode,
@@ -19,16 +21,15 @@ import CurrencySelector from './CurrencySelector';
  * Manages currency settings and preferences
  */
 export default function CurrencyConfiguration() {
+  const { profile } = useUserProfileQuery();
   const [selectedCurrency, setSelectedCurrency] = useState('ZAR');
   const [allCurrencies, setAllCurrencies] = useState([]);
   const [exchangeRates, setExchangeRates] = useState({});
   const [loading, setLoading] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [viewMode, setViewMode] = useState('common'); // 'common' or 'all'
-
-  useEffect(() => {
-    loadCurrencyData();
-  }, []);
+  const userPlan = profile?.subscription_plan || profile?.plan || 'Individual';
+  const canUseMultiCurrency = hasFeatureAccess(userPlan, 'multicurrency');
 
   const loadCurrencyData = async () => {
     try {
@@ -40,9 +41,13 @@ export default function CurrencyConfiguration() {
         setSelectedCurrency(userPref.currency);
       }
 
-      // Load exchange rates
-      const rates = await getExchangeRates('ZAR');
-      setExchangeRates(rates);
+      // Only fetch rates when the feature is enabled for the current plan.
+      if (canUseMultiCurrency) {
+        const rates = await getExchangeRates('ZAR');
+        setExchangeRates(rates);
+      } else {
+        setExchangeRates({});
+      }
 
       // Load all currencies
       const currencies = getAllCurrencies();
@@ -53,6 +58,11 @@ export default function CurrencyConfiguration() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadCurrencyData();
+    // Re-evaluate when plan capability changes (profile loads/updates).
+  }, [canUseMultiCurrency]);
 
   const handleCurrencyChange = async (currencyCode) => {
     try {

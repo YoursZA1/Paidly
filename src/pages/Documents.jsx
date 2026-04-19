@@ -12,9 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DocumentService } from "@/services/DocumentService";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
+import { COMMON_CURRENCIES } from "@/data/currencies";
 import { ChevronDown, Loader2 } from "lucide-react";
 
 const CREATE_DEFAULTS = {
@@ -27,6 +29,7 @@ export default function DocumentsPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [currency, setCurrency] = useState("ZAR");
 
   const handleCreateUnified = async (type) => {
     const meta = CREATE_DEFAULTS[type] || CREATE_DEFAULTS.invoice;
@@ -35,6 +38,8 @@ export default function DocumentsPage() {
       const doc = await DocumentService.create({
         type,
         title: meta.title,
+        currency,
+        base_currency: "ZAR",
         items: [{ description: "Line item", quantity: 1, unit_price: 0 }],
       });
       if (doc?.id) {
@@ -61,6 +66,18 @@ export default function DocumentsPage() {
       </PageTemplate.Header>
       <PageTemplate.Body>
         <div className="mb-6 flex flex-wrap items-center gap-2">
+          <Select value={currency} onValueChange={setCurrency} disabled={creating}>
+            <SelectTrigger className="w-[180px]" aria-label="Currency for new documents">
+              <SelectValue placeholder="Currency" />
+            </SelectTrigger>
+            <SelectContent>
+              {COMMON_CURRENCIES.map((item) => (
+                <SelectItem key={item.code} value={item.code}>
+                  {item.code} — {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" disabled={creating} className="gap-2">

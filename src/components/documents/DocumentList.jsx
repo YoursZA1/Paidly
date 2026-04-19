@@ -217,6 +217,11 @@ export function DocumentList() {
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-foreground">
                           {formatCurrency(row.total_amount ?? 0, row.currency || "ZAR")}
+                          {row.base_currency && row.currency !== row.base_currency ? (
+                            <div className="text-xs text-muted-foreground">
+                              {formatCurrency(row.total_base_amount ?? 0, row.base_currency)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{updatedLabel}</td>
                         <td className="px-3 py-2 text-right">

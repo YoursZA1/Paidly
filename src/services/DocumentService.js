@@ -11,6 +11,8 @@ import { aggregateFromItems } from "@/document-engine/documentTotals";
 import { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "@/document-engine/documentEventTypes";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 
+const DEFAULT_BASE_CURRENCY = "ZAR";
+
 function throwWithCause(message, cause) {
   const err = new Error(message);
   if (cause != null) err.cause = cause;
@@ -35,6 +37,39 @@ function defaultStatusForType(type) {
   if (type === DOCUMENT_TYPES.quote) return QUOTE_STATUSES.draft;
   if (type === DOCUMENT_TYPES.payslip) return PAYSLIP_STATUSES.draft;
   return INVOICE_STATUSES.draft;
+}
+
+function normalizeCurrencyCode(raw, fallback = DEFAULT_BASE_CURRENCY) {
+  const c = String(raw || fallback)
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{3}$/.test(c) ? c : fallback;
+}
+
+function asPositiveNumber(raw, fallback = 1) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+async function fetchExchangeRate({ documentCurrency, baseCurrency }) {
+  const docCurrency = normalizeCurrencyCode(documentCurrency, DEFAULT_BASE_CURRENCY);
+  const base = normalizeCurrencyCode(baseCurrency, DEFAULT_BASE_CURRENCY);
+  if (docCurrency === base) return 1;
+
+  const response = await fetch(`/api/exchange-rates?base=${encodeURIComponent(docCurrency)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Exchange rate request failed (${response.status})`);
+  }
+  const payload = await response.json();
+  const rate = asPositiveNumber(payload?.rates?.[base], 0);
+  if (rate <= 0) {
+    throw new Error(`No exchange rate returned for ${docCurrency}->${base}`);
+  }
+  return rate;
 }
 
 function isSettledPayment(payment) {
@@ -159,7 +194,7 @@ export const DocumentService = {
     const { orgId } = await getActorContext();
     const { data, error } = await supabase
       .from("payments")
-      .select("id, org_id, document_id, amount, status, paid_at, method, reference, notes, created_at")
+      .select("id, org_id, document_id, amount, currency, exchange_rate, status, paid_at, method, reference, notes, created_at")
       .eq("document_id", documentId)
       .eq("org_id", orgId)
       .order("paid_at", { ascending: false, nullsFirst: false });
@@ -197,7 +232,7 @@ export const DocumentService = {
     let q = supabase
       .from("documents")
       .select(
-        "id, org_id, type, status, document_number, title, total_amount, currency, client_id, source_quote_id, created_at, updated_at"
+        "id, org_id, type, status, document_number, title, total_amount, currency, base_currency, exchange_rate, client_id, source_quote_id, created_at, updated_at"
       )
       .eq("org_id", orgId)
       .order("created_at", { ascending: false })
@@ -212,7 +247,16 @@ export const DocumentService = {
     if (error) {
       throw throwWithCause(getSupabaseErrorMessage(error, "Failed to list documents"), error);
     }
-    return Array.isArray(data) ? data : [];
+    const rows = Array.isArray(data) ? data : [];
+    return rows.map((row) => {
+      const exchangeRate = asPositiveNumber(row?.exchange_rate, 1);
+      const totalBaseAmount = Number(row?.total_amount || 0) * exchangeRate;
+      return {
+        ...row,
+        exchange_rate: exchangeRate,
+        total_base_amount: Math.round(totalBaseAmount * 100) / 100,
+      };
+    });
   },
 
   async get(documentId) {
@@ -253,6 +297,8 @@ export const DocumentService = {
     }
     const status = defaultStatus;
     const source_quote_id = payload?.source_quote_id ?? null;
+    const currency = normalizeCurrencyCode(payload?.currency, DEFAULT_BASE_CURRENCY);
+    const baseCurrency = normalizeCurrencyCode(payload?.base_currency, DEFAULT_BASE_CURRENCY);
     if (source_quote_id) {
       if (type !== DOCUMENT_TYPES.invoice) {
         throw new Error("source_quote_id can only be set when creating an invoice.");
@@ -278,6 +324,13 @@ export const DocumentService = {
     }
     const tax_rate = Number(payload?.tax_rate ?? 0);
     const discount_amount = Number(payload?.discount_amount ?? 0);
+    let exchangeRate = asPositiveNumber(payload?.exchange_rate, 0);
+    if (exchangeRate <= 0) {
+      exchangeRate = await fetchExchangeRate({
+        documentCurrency: currency,
+        baseCurrency: baseCurrency,
+      });
+    }
     const { rows, subtotal, tax_amount, total_amount } = aggregateFromItems(
       payload?.items,
       tax_rate,
@@ -299,7 +352,9 @@ export const DocumentService = {
       tax_amount,
       discount_amount,
       total_amount,
-      currency: payload?.currency || "ZAR",
+      currency,
+      base_currency: baseCurrency,
+      exchange_rate: exchangeRate,
       metadata: payload?.metadata && typeof payload.metadata === "object" ? payload.metadata : {},
       public_share_token: payload?.public_share_token ?? null,
       source_document_id: payload?.source_document_id ?? null,
@@ -322,6 +377,9 @@ export const DocumentService = {
         type,
         status,
         title: doc.title,
+        currency,
+        base_currency: baseCurrency,
+        exchange_rate: exchangeRate,
         ...(doc.source_quote_id ? { source_quote_id: doc.source_quote_id } : {}),
       },
     });
@@ -347,6 +405,15 @@ export const DocumentService = {
       if (patch.source_quote_id !== undefined && patch.source_quote_id !== existing.source_quote_id) {
         throw new Error("source_quote_id cannot be changed: it records which quote this invoice was converted from.");
       }
+    }
+    if (patch.currency !== undefined && normalizeCurrencyCode(patch.currency, existing.currency) !== normalizeCurrencyCode(existing.currency, existing.currency)) {
+      throw new Error("Currency cannot be changed after creation. Create a new document for a different currency.");
+    }
+    if (patch.base_currency !== undefined && normalizeCurrencyCode(patch.base_currency, existing.base_currency || DEFAULT_BASE_CURRENCY) !== normalizeCurrencyCode(existing.base_currency || DEFAULT_BASE_CURRENCY, DEFAULT_BASE_CURRENCY)) {
+      throw new Error("base_currency cannot be changed after creation.");
+    }
+    if (patch.exchange_rate !== undefined && Number(patch.exchange_rate) !== Number(existing.exchange_rate)) {
+      throw new Error("exchange_rate is immutable after creation.");
     }
 
     const tax_rate = patch.tax_rate != null ? Number(patch.tax_rate) : Number(existing.tax_rate ?? 0);
@@ -391,7 +458,9 @@ export const DocumentService = {
       tax_amount,
       discount_amount,
       total_amount,
-      currency: patch.currency !== undefined ? patch.currency : existing.currency,
+      currency: existing.currency,
+      base_currency: existing.base_currency || DEFAULT_BASE_CURRENCY,
+      exchange_rate: asPositiveNumber(existing.exchange_rate, 1),
       metadata:
         patch.metadata !== undefined
           ? typeof patch.metadata === "object" && patch.metadata
@@ -518,6 +587,8 @@ export const DocumentService = {
         client_id: quote.client_id,
         title: quote.title ? `Invoice — ${quote.title}` : null,
         currency: quote.currency,
+        base_currency: quote.base_currency || DEFAULT_BASE_CURRENCY,
+        exchange_rate: asPositiveNumber(quote.exchange_rate, 1),
         tax_rate: quote.tax_rate,
         discount_amount: quote.discount_amount,
         issue_date: quote.issue_date,

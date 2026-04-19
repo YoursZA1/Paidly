@@ -10,6 +10,7 @@ import { documentStatusBadgeVariant, documentTypeBadgeVariant } from "@/document
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -17,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/utils/currencyCalculations";
+import { COMMON_CURRENCIES } from "@/data/currencies";
 import { ArrowLeft, FileText, Loader2 } from "lucide-react";
 
 function lineFromRow(row) {
@@ -69,6 +71,7 @@ export default function DocumentDetailPage() {
   const [title, setTitle] = useState("");
   const [taxRate, setTaxRate] = useState("0");
   const [discount, setDiscount] = useState("0");
+  const [documentCurrency, setDocumentCurrency] = useState("ZAR");
   const [lines, setLines] = useState([]);
   const viewLoggedForId = useRef(null);
 
@@ -82,6 +85,7 @@ export default function DocumentDetailPage() {
         setTitle(row.title ?? "");
         setTaxRate(String(row.tax_rate ?? 0));
         setDiscount(String(row.discount_amount ?? 0));
+        setDocumentCurrency(row.currency || "ZAR");
         setLines((row.document_items || []).map(lineFromRow));
         if (row.type === DOCUMENT_TYPES.invoice) {
           const summary = await DocumentService.getPaymentSummary(row.id, row.total_amount);
@@ -124,11 +128,13 @@ export default function DocumentDetailPage() {
     try {
       const updated = await DocumentService.update(documentId, {
         title: title.trim() || null,
+        currency: documentCurrency,
         tax_rate: Number(taxRate) || 0,
         discount_amount: Number(discount) || 0,
         items: toPersistItems(lines),
       });
       setDoc(updated);
+      setDocumentCurrency(updated.currency || "ZAR");
       setLines((updated.document_items || []).map(lineFromRow));
       if (updated.type === DOCUMENT_TYPES.invoice) {
         const summary = await DocumentService.getPaymentSummary(updated.id, updated.total_amount);
@@ -293,6 +299,12 @@ export default function DocumentDetailPage() {
   }
 
   const currency = doc.currency || "ZAR";
+  const baseCurrency = doc.base_currency || "ZAR";
+  const exchangeRate = Number(doc.exchange_rate || 1);
+  const subtotalBase = previewTotals.subtotal * exchangeRate;
+  const taxBase = previewTotals.tax_amount * exchangeRate;
+  const discountBase = (Number(discount) || 0) * exchangeRate;
+  const totalBase = previewTotals.total_amount * exchangeRate;
   const isDraft = doc.status === "draft";
   const isQuote = doc.type === DOCUMENT_TYPES.quote;
   const isInvoice = doc.type === DOCUMENT_TYPES.invoice;
@@ -331,22 +343,47 @@ export default function DocumentDetailPage() {
       <dl className="space-y-2 text-sm">
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">Subtotal</dt>
-          <dd className="tabular-nums text-foreground">{formatCurrency(previewTotals.subtotal, currency)}</dd>
+          <dd className="tabular-nums text-foreground">
+            {formatCurrency(previewTotals.subtotal, currency)}
+            {currency !== baseCurrency ? (
+              <span className="ml-2 text-xs text-muted-foreground">({formatCurrency(subtotalBase, baseCurrency)})</span>
+            ) : null}
+          </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">Tax</dt>
-          <dd className="tabular-nums text-foreground">{formatCurrency(previewTotals.tax_amount, currency)}</dd>
+          <dd className="tabular-nums text-foreground">
+            {formatCurrency(previewTotals.tax_amount, currency)}
+            {currency !== baseCurrency ? (
+              <span className="ml-2 text-xs text-muted-foreground">({formatCurrency(taxBase, baseCurrency)})</span>
+            ) : null}
+          </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-muted-foreground">Discount</dt>
-          <dd className="tabular-nums text-foreground">{formatCurrency(Number(discount) || 0, currency)}</dd>
+          <dd className="tabular-nums text-foreground">
+            {formatCurrency(Number(discount) || 0, currency)}
+            {currency !== baseCurrency ? (
+              <span className="ml-2 text-xs text-muted-foreground">({formatCurrency(discountBase, baseCurrency)})</span>
+            ) : null}
+          </dd>
         </div>
         <Separator />
         <div className="flex justify-between gap-2 font-semibold">
           <dt>Total</dt>
-          <dd className="tabular-nums">{formatCurrency(previewTotals.total_amount, currency)}</dd>
+          <dd className="tabular-nums">
+            {formatCurrency(previewTotals.total_amount, currency)}
+            {currency !== baseCurrency ? (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">({formatCurrency(totalBase, baseCurrency)})</span>
+            ) : null}
+          </dd>
         </div>
       </dl>
+      {currency !== baseCurrency ? (
+        <p className="text-xs text-muted-foreground">
+          Rate locked at creation: 1 {currency} = {exchangeRate.toFixed(6)} {baseCurrency}
+        </p>
+      ) : null}
       {isInvoice && paymentSummary ? (
         <>
           <Separator />
@@ -383,12 +420,33 @@ export default function DocumentDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Details</CardTitle>
-          <CardDescription>Basics, tax, and discount. Currency is {currency}.</CardDescription>
+          <CardDescription>Basics, tax, and discount. Currency is locked after creation.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="doc-title">Title</Label>
             <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Website redesign" autoComplete="off" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="doc-currency">Document currency</Label>
+              <Select value={documentCurrency} onValueChange={setDocumentCurrency} disabled>
+                <SelectTrigger id="doc-currency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMON_CURRENCIES.map((item) => (
+                    <SelectItem key={item.code} value={item.code}>
+                      {item.code} — {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Base currency</Label>
+              <Input value={baseCurrency} disabled />
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
