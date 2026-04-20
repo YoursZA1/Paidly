@@ -312,6 +312,7 @@ export default function UsersPage() {
             actor: currentUser,
             action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
             category: 'users',
+            entity: 'platform_user',
             description: `Changed status of ${user.full_name || user.email} from "${prevStatus}" to "${newStatus}"`,
             targetId: rowId,
             targetLabel: user.email,
@@ -345,6 +346,7 @@ export default function UsersPage() {
       audit: {
         action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
         category: 'users',
+        entity: 'platform_user',
         description: `Bulk account status → ${newStatus} for ${ids.length} user(s)`,
         after: { userIds: ids, status: newStatus },
       },
@@ -364,6 +366,7 @@ export default function UsersPage() {
       audit: {
         action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
         category: 'users',
+        entity: 'platform_user',
         description: `Bulk account status → suspended for ${ids.length} user(s)`,
         after: { userIds: ids, status: 'suspended' },
       },
@@ -390,6 +393,7 @@ export default function UsersPage() {
       audit: {
         action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
         category: 'users',
+        entity: 'platform_user',
         description: `Bulk plan update for ${ids.length} user(s)`,
         after: { userIds: ids, ...data },
       },
@@ -413,6 +417,7 @@ export default function UsersPage() {
       audit: {
         action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
         category: 'users',
+        entity: 'platform_user',
         description: `Bulk subscription_status → ${subscriptionStatus} for ${ids.length} user(s)`,
         after: { userIds: ids, subscription_status: subscriptionStatus },
       },

@@ -29,7 +29,7 @@ import {
   declineAffiliateApplication,
   resendAffiliateReferralEmail,
 } from '@/api/affiliateAdminModerationApi';
-import { SystemSettingsService } from '@/services/SystemSettingsService';
+import { useAdminSettings } from '@/hooks/useAdminSettings';
 import { createAffiliateSignupShareUrl } from '@/utils';
 import { toast } from 'sonner';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
@@ -114,7 +114,7 @@ export default function AdminV2Dashboard() {
   const affiliates = affiliateAdmin.applications;
   const affiliateStatusCounts = affiliateAdmin.counts;
 
-  const defaultAffiliateCommissionPct = SystemSettingsService.getAffiliateDefaultCommissionPercent();
+  const { affiliateDefaultCommissionPercent: defaultAffiliateCommissionPct } = useAdminSettings();
 
   const handleDashboardApproveAffiliate = async (aff) => {
     setBusyAffiliateId(aff.id);
@@ -151,6 +151,7 @@ export default function AdminV2Dashboard() {
         actor: currentUser,
         action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
         category: 'affiliates',
+        entity: 'affiliate_application',
         description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
         targetId: aff.id,
         targetLabel: aff.applicant_email,
@@ -183,6 +184,7 @@ export default function AdminV2Dashboard() {
         actor: currentUser,
         action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
         category: 'affiliates',
+        entity: 'affiliate_application',
         description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
         targetId: aff.id,
         targetLabel: aff.applicant_email,

@@ -240,6 +240,254 @@ function handleSecurityEvents(res) {
   });
 }
 
+function toMinutesAgo(iso) {
+  const t = new Date(String(iso || "")).getTime();
+  if (!Number.isFinite(t)) return null;
+  const diffMs = Date.now() - t;
+  return Math.max(0, Math.floor(diffMs / 60000));
+}
+
+function deriveEmailHealth(latestSentAt) {
+  if (!latestSentAt) {
+    return { status: "error", label: "No email activity detected" };
+  }
+  const mins = toMinutesAgo(latestSentAt);
+  if (mins == null) return { status: "warn", label: "Email timestamp unavailable" };
+  if (mins <= 5) return { status: "ok", label: `Last success ${mins} min ago` };
+  if (mins <= 30) return { status: "warn", label: `Last success ${mins} min ago` };
+  return { status: "error", label: `No recent success (${mins} min ago)` };
+}
+
+function derivePaymentHealth(latestPayment) {
+  if (!latestPayment) {
+    return { status: "warn", label: "No payment events yet" };
+  }
+  const rawStatus = String(
+    latestPayment.status ?? latestPayment.payment_status ?? latestPayment.state ?? ""
+  ).toLowerCase();
+  const at =
+    latestPayment.updated_at || latestPayment.paid_at || latestPayment.created_at || null;
+  const mins = toMinutesAgo(at);
+
+  const settled = new Set(["paid", "success", "succeeded", "completed", "settled"]);
+  const pending = new Set(["pending", "processing", "queued", "initiated", "requires_action"]);
+
+  if (settled.has(rawStatus)) {
+    if (mins == null) return { status: "ok", label: "Payments active" };
+    return { status: "ok", label: `Last settlement ${mins} min ago` };
+  }
+  if (pending.has(rawStatus)) {
+    if (mins != null && mins > 10) {
+      return { status: "warn", label: "Webhook delayed" };
+    }
+    return { status: "warn", label: "Payment processing" };
+  }
+  if (rawStatus) {
+    return { status: "warn", label: `Latest status: ${rawStatus}` };
+  }
+  return { status: "warn", label: "Payments state unknown" };
+}
+
+async function handleSystemHealth(req, res, supabase) {
+  const started = Date.now();
+  let api = { status: "ok", label: "Healthy" };
+  try {
+    const { error } = await supabase.from("profiles").select("id").limit(1);
+    const elapsed = Date.now() - started;
+    if (error) {
+      api = { status: "error", label: `Database error: ${error.message}` };
+    } else if (elapsed > 1500) {
+      api = { status: "warn", label: `Slow response (${elapsed}ms)` };
+    } else {
+      api = { status: "ok", label: `Healthy (${elapsed}ms)` };
+    }
+  } catch (e) {
+    api = { status: "error", label: `Timeout detected: ${e?.message || "unknown error"}` };
+  }
+
+  const [{ data: latestMessageRows }, { data: latestPaymentRows }] = await Promise.all([
+    supabase
+      .from("message_logs")
+      .select("sent_at")
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("payments")
+      .select("status, payment_status, state, paid_at, updated_at, created_at")
+      .order("updated_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  const latestSentAt = latestMessageRows?.[0]?.sent_at ?? null;
+  const latestPayment = latestPaymentRows?.[0] ?? null;
+
+  const email = deriveEmailHealth(latestSentAt);
+  const payments = derivePaymentHealth(latestPayment);
+
+  return res.status(200).json({
+    status: "ok",
+    area: "system-health",
+    at: new Date().toISOString(),
+    summary: { api, email, payments },
+    meta: {
+      apiCheckedAt: new Date().toISOString(),
+      emailLastSentAt: latestSentAt,
+      paymentLastEventAt:
+        latestPayment?.updated_at || latestPayment?.paid_at || latestPayment?.created_at || null,
+    },
+  });
+}
+
+const DEFAULT_ADMIN_SETTINGS = {
+  system: {
+    siteName: "Paidly",
+    supportEmail: "support@paidly.co.za",
+    maintenanceMode: false,
+  },
+  affiliateProgram: {
+    defaultCommissionPercent: 15,
+    autoApproveApplications: false,
+  },
+};
+
+function mergeAdminSettingsRows(rows) {
+  const out = {
+    ...DEFAULT_ADMIN_SETTINGS,
+    system: { ...DEFAULT_ADMIN_SETTINGS.system },
+    affiliateProgram: { ...DEFAULT_ADMIN_SETTINGS.affiliateProgram },
+  };
+  for (const row of rows || []) {
+    const key = String(row?.key || "").trim();
+    const value = row?.value && typeof row.value === "object" ? row.value : {};
+    if (!key) continue;
+    if (key === "system") out.system = { ...out.system, ...value };
+    else if (key === "affiliateProgram") out.affiliateProgram = { ...out.affiliateProgram, ...value };
+    else out[key] = value;
+  }
+  return out;
+}
+
+async function handleGetSettings(res, supabase) {
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("key, value, updated_at, updated_by")
+    .in("key", ["system", "affiliateProgram"]);
+  if (error) {
+    return res.status(500).json({ error: error.message || "Failed to load admin settings" });
+  }
+  const settings = mergeAdminSettingsRows(data || []);
+  return res.status(200).json({ ok: true, settings });
+}
+
+async function writeSettingsAudit(supabase, user, payload) {
+  const actorRole =
+    user?.app_metadata?.role || user?.app_metadata?.claims?.role || user?.user_metadata?.role || null;
+  const actorName = user?.user_metadata?.full_name || null;
+  const { error } = await supabase.from("audit_logs").insert({
+    category: "settings",
+    action: "admin_settings_updated",
+    actor_id: user?.id || null,
+    actor_name: actorName,
+    actor_email: user?.email || null,
+    actor_role: actorRole,
+    entity: "admin_settings",
+    metadata: payload,
+    description: "Updated admin settings via /api/admin/settings",
+    after: payload,
+  });
+  if (error) {
+    throw new Error(`Audit write failed: ${error.message}`);
+  }
+}
+
+async function rollbackAdminSettingsRows(supabase, previousRows) {
+  const rows = Array.isArray(previousRows) ? previousRows : [];
+  if (!rows.length) return;
+  const restorePayload = rows
+    .filter((r) => r?.key)
+    .map((r) => ({
+      key: r.key,
+      value: r.value && typeof r.value === "object" ? r.value : {},
+      updated_by: r.updated_by || null,
+      updated_at: r.updated_at || new Date().toISOString(),
+    }));
+  if (!restorePayload.length) return;
+  const { error } = await supabase.from("admin_settings").upsert(restorePayload, { onConflict: "key" });
+  if (error) {
+    throw new Error(`Rollback failed: ${error.message}`);
+  }
+}
+
+async function handlePostSettings(req, res, supabase, user) {
+  let body = req.body;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON body" });
+    }
+  }
+  if (!body || typeof body !== "object") {
+    return res.status(400).json({ error: "Missing request body" });
+  }
+
+  const now = new Date().toISOString();
+  const updates = [];
+  if (body.settings && typeof body.settings === "object") {
+    const s = body.settings;
+    if (s.system && typeof s.system === "object") {
+      updates.push({ key: "system", value: s.system, updated_by: user.id, updated_at: now });
+    }
+    if (s.affiliateProgram && typeof s.affiliateProgram === "object") {
+      updates.push({ key: "affiliateProgram", value: s.affiliateProgram, updated_by: user.id, updated_at: now });
+    }
+  } else if (body.key && body.value && typeof body.value === "object") {
+    updates.push({
+      key: String(body.key).trim(),
+      value: body.value,
+      updated_by: user.id,
+      updated_at: now,
+    });
+  }
+
+  if (!updates.length) {
+    return res.status(400).json({ error: "No valid settings updates supplied" });
+  }
+
+  const keys = updates.map((u) => u.key);
+  const { data: previousRows, error: previousErr } = await supabase
+    .from("admin_settings")
+    .select("key, value, updated_by, updated_at")
+    .in("key", keys);
+  if (previousErr) {
+    return res.status(500).json({ error: previousErr.message || "Failed to snapshot previous settings state" });
+  }
+
+  const { error } = await supabase.from("admin_settings").upsert(updates, { onConflict: "key" });
+  if (error) {
+    return res.status(500).json({ error: error.message || "Failed to save admin settings" });
+  }
+
+  try {
+    await writeSettingsAudit(supabase, user, {
+      keys,
+      updated_at: now,
+    });
+  } catch (auditErr) {
+    try {
+      await rollbackAdminSettingsRows(supabase, previousRows);
+    } catch (rollbackErr) {
+      return res.status(500).json({
+        error: `Audit failed and rollback failed: ${auditErr.message}; ${rollbackErr.message}`,
+      });
+    }
+    return res.status(500).json({ error: auditErr.message || "Audit write failed; settings change reverted" });
+  }
+
+  return handleGetSettings(res, supabase);
+}
+
 export default async function handler(req, res) {
   try {
     const resource = adminResourceFromRequest(req);
@@ -249,6 +497,8 @@ export default async function handler(req, res) {
       "platform-user-messages",
       "sync-users",
       "security-events",
+      "system-health",
+      "settings",
     ]);
     const postResources = new Set([
       "approve",
@@ -257,6 +507,7 @@ export default async function handler(req, res) {
       "clean-orphaned-users",
       "send-platform-message",
       "broadcast-update",
+      "settings",
     ]);
 
     if (postResources.has(resource)) {
@@ -351,6 +602,23 @@ export default async function handler(req, res) {
             return res.status(status).json({ error: msg });
           }
         }
+        if (resource === "settings") {
+          await ensureGetDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+
+          const authHeader = req.headers.authorization || "";
+          const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+          if (!token) return res.status(401).json({ error: "Missing bearer token" });
+          const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+          if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
+
+          const deny = await assertCallerForAdminRoute(supabase, authData.user, { allowTeamManagement: true });
+          if (deny) return res.status(deny.status).json(deny.body);
+
+          return handlePostSettings(req, res, supabase, authData.user);
+        }
       }
       return res.status(405).json({ error: "Method not allowed" });
     }
@@ -374,11 +642,21 @@ export default async function handler(req, res) {
     const { data: authData, error: authErr } = await supabase.auth.getUser(token);
     if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
-    const deny = await assertCallerForAdminRoute(supabase, authData.user, { allowInternalTeam: true });
+    const authOpts = resource === "settings"
+      ? { allowTeamManagement: true }
+      : { allowInternalTeam: true };
+    const deny = await assertCallerForAdminRoute(supabase, authData.user, authOpts);
     if (deny) return res.status(deny.status).json(deny.body);
 
     if (resource === "security-events") {
       return handleSecurityEvents(res);
+    }
+
+    if (resource === "system-health") {
+      return handleSystemHealth(req, res, supabase);
+    }
+    if (resource === "settings") {
+      return handleGetSettings(res, supabase);
     }
 
     if (resource === "sync-users") {

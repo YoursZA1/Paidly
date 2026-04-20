@@ -95,158 +95,94 @@ export default function TeamMembers() {
           </AlertDescription>
         </Alert>
       ) : null}
-      <form onSubmit={handleInvite} className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-        <p className="text-sm text-muted-foreground">
-          Sends a Supabase invite email. After they set a password, their role (management, sales, or support) is
-          applied from the invite and they can open the staff dashboard and sidebar links for that role.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="invite-email">Email</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="colleague@company.com"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-name">Full name</Label>
-            <Input
-              id="invite-name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Jane Doe"
-            />
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="invite-role">Role</Label>
-            <select
-              id="invite-role"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              {INVITE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r] || r}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-plan">Plan</Label>
-            <select
-              id="invite-plan"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-              value={plan}
-              onChange={(e) => setPlan(e.target.value)}
-            >
-              <option value="none">none</option>
-              <option value="individual">individual</option>
-              <option value="sme">sme</option>
-              <option value="corporate">corporate</option>
-            </select>
-          </div>
-        </div>
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Sending…' : 'Send invite'}
-        </Button>
-      </form>
-
-      {myId ? (
-        <div className="space-y-6">
-          <div>
-            <p className="mb-1 text-sm font-medium">People you invited — signed in</p>
-            <p className="mb-2 text-xs text-muted-foreground">
-              Shows teammates who accepted your invite and have completed at least one sign-in. New invites include
-              attribution; older invites may not appear here.
-            </p>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : signedInInvitees.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No attributed invitees with a sign-in yet. Send an invite above, or check pending below.
+      <div className="grid gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <form onSubmit={handleInvite} className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+            <div className="space-y-1">
+              <p className="text-base font-semibold">Invite Team Member</p>
+              <p className="text-xs text-muted-foreground">
+                Send a secure invite and assign role-based dashboard access.
               </p>
-            ) : (
-              <ul className="divide-y divide-border rounded-lg border border-border">
-                {signedInInvitees.map((u) => (
-                  <li
-                    key={u.id}
-                    className="flex flex-col gap-1 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  >
-                    <span className="font-medium">{u.full_name || u.email}</span>
-                    <span className="text-muted-foreground">
-                      {ROLE_LABELS[u.role] || u.role} · {u.email}
-                    </span>
-                    <span className="text-xs text-muted-foreground sm:text-sm">
-                      Last sign-in: {formatLastSignIn(u.last_sign_in_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            </div>
 
-          <div>
-            <p className="mb-2 text-sm font-medium">People you invited — awaiting first sign-in</p>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : pendingInvitees.length === 0 ? (
-              <p className="text-sm text-muted-foreground">None pending.</p>
-            ) : (
-              <ul className="divide-y divide-border rounded-lg border border-border">
-                {pendingInvitees.map((u) => (
-                  <li
-                    key={u.id}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                  >
-                    <span className="font-medium">{u.full_name || u.email}</span>
-                    <span className="text-muted-foreground">
-                      {ROLE_LABELS[u.role] || u.role} · {u.email}
-                    </span>
-                    <span className="text-xs text-amber-700 dark:text-amber-400">Invite sent — not signed in yet</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="colleague@company.com"
+                required
+              />
+            </div>
 
-      <div>
-        <p className="mb-2 text-sm font-medium">All dashboard accounts (staff roles)</p>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : staff.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No staff profiles found yet.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {staff.map((u) => (
-              <li
-                key={u.id}
-                className="flex flex-col gap-1 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <select
+                id="invite-role"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
               >
-                <span className="font-medium">{u.full_name || u.email}</span>
-                <span className="text-muted-foreground">
-                  {ROLE_LABELS[u.role] || u.role} · {u.email}
-                </span>
-                {u.last_sign_in_at ? (
-                  <span className="text-xs text-muted-foreground">
-                    Last sign-in: {formatLastSignIn(u.last_sign_in_at)}
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">No sign-in yet</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+                {INVITE_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r] || r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Button type="submit" disabled={pending} className="w-full">
+              {pending ? 'Sending…' : 'Send Invite'}
+            </Button>
+          </form>
+        </div>
+
+        <div className="space-y-6 lg:col-span-7">
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <p className="text-base font-semibold">Team List</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Live roster of invited staff with role and access status.
+            </p>
+
+            {isLoading ? (
+              <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
+            ) : staff.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">No staff profiles found yet.</p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {staff.map((u) => {
+                  const isActive = Boolean(u.last_sign_in_at);
+                  const statusTone = isActive
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-amber-700 dark:text-amber-400';
+                  return (
+                    <li key={u.id} className="rounded-md border bg-background px-3 py-3">
+                      <p className="text-sm font-medium">
+                        {u.full_name || u.email} — {ROLE_LABELS[u.role] || u.role}
+                      </p>
+                      <p className={`mt-1 text-xs ${statusTone}`}>
+                        Status: {isActive ? 'Active' : 'Pending'}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{u.email}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {myId ? (
+            <div className="rounded-lg border border-border bg-background p-4">
+              <p className="text-sm font-medium">Your invite pipeline</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Active invites: {signedInInvitees.length} · Pending invites: {pendingInvitees.length}
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

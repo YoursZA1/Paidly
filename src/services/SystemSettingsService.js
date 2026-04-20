@@ -2,6 +2,12 @@
  * System Settings Service
  * Manages platform-wide configuration and settings for system admins
  *
+ * @deprecated For Admin V2 control-plane settings, use backend-authoritative APIs (`/api/admin/settings`).
+ * This service should not be used as the source of truth for admin authority decisions.
+ *
+ * NOTE: Admin V2 authoritative control-plane settings now live on the backend via `/api/admin/settings`.
+ * This service remains for legacy/local browser settings and non-authoritative UI helpers only.
+ *
  * Security: persisted data lives in localStorage. The `integrations` section includes fields
  * named like secretKey / clientSecret — these are for local/demo UI only. Do not put production
  * API secrets here; use server environment variables or a secrets manager instead.
@@ -446,14 +452,6 @@ export class SystemSettingsService {
   static isMaintenanceMode() {
     const settings = this.getSettings();
     return settings.system?.maintenanceMode || false;
-  }
-
-  /** Default affiliate commission (%) from admin Settings; falls back to 15. */
-  static getAffiliateDefaultCommissionPercent() {
-    const ap = this.getSettings().affiliateProgram || {};
-    const n = Number(ap.defaultCommissionPercent);
-    if (!Number.isFinite(n) || n < 0) return 15;
-    return Math.min(100, n);
   }
 
   /**

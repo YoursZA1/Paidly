@@ -13,14 +13,17 @@ pdf_options:
 
 ## Paidly Architecture v2 (clean reference)
 
-*One-page upgrade summary. Part A below expands **Relationship & Offering** as its own system—the client/catalog **input graph** that feeds the Document Engine.*
+*One-page upgrade summary. This section is the canonical **Paidly v2 system map** used across product and engineering.*
 
-Paidly is structured around **four core engines**:
+**Paidly v2 Systems (final):**
 
 1. **Identity System** — Auth, users, organizations, roles, RLS-backed tenancy.
 2. **Document Engine** — Invoices, quotes, payslips unified as `document(type=…)`; shared compose, send, and PDF paths.
-3. **Financial Engine** — Payments, cash flow, reports, subscriptions (reads and rails **downstream of** documents).
-4. **Growth Engine** — Affiliates, email, notifications, CRM-style behaviour (how Paidly scales).
+3. **Payment Intent Layer** — Canonical handoff from document delivery/observation to payment rails and settlement orchestration.
+4. **Revenue System** — Payment providers, subscriptions, cash flow, and reporting (reads/rails downstream of documents).
+5. **Relationship System** — Clients + catalog + offering intelligence that feeds document composition.
+6. **Experience System** — Shared UI/interaction contracts (shell, sticky actions, money UX consistency).
+7. **Payment Intelligence Layer** — Get Paid logic: reminders, nudges, triggers, and follow-up intelligence.
 
 **Frontend layout system** (consistent everywhere):
 
@@ -49,9 +52,13 @@ UI → Hooks → Services → Entity facades (EntityManager) → Supabase
 
 **Paidly is not an invoicing app.** It is a **business operating system** for SMBs: one place to **issue** commercial documents, **run** client and catalog relationships, **see** money and performance, and **grow** through channels like affiliates—without treating each area as a separate product bolted together in the UI only.
 
+**Investor-facing framing:** shift the story from “invoice app” to **financial workflow platform for SMEs**.
+
 **You already have (in shipped or advanced form):** invoices, quotes, payslips (unified as **documents**), clients, reporting, affiliates, and the plumbing for payments, subscriptions, and cash visibility.
 
-**Competitive edge:** most tools **excel at one slice** (invoicing-only, or accounting-only, or a disconnected referral program). **Few competitors unify** issuance (document engine), relationship/catalog input, financial read models, and growth mechanics **under one coherent architecture** and vocabulary. That unification—**Document → Financial → Growth** engines plus shared **Experience**—is the defensible story: not “another invoice PDF,” but **operating the business** in one system.
+**Competitive edge:** most tools **excel at one slice** (invoicing-only, or accounting-only, or a disconnected referral program). **Few competitors unify** issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence **under one coherent architecture** and vocabulary. That unification—**Document → Payment Intent → Revenue System** plus shared **Experience** and **Payment Intelligence**—is the defensible story: not “another invoice PDF,” but **operating the business** in one system.
+
+**Execution reality:** roughly 70% of the SaaS architecture is already in place. The remaining value-defining 30% is: payment abstraction, event tracking, and experience consistency.
 
 ---
 
@@ -71,11 +78,11 @@ UI → Hooks → Services → Entity facades (EntityManager) → Supabase
 
 # Part A — Product architecture (systems)
 
-## A.1 The five core systems
+## A.1 Paidly v2 systems (final architecture)
 
 These are the **real** architecture—not the sidebar.
 
-### 1. Identity & Access System
+### 1. Identity System
 
 **Job:** Who is acting, for which organisation, with what authority.
 
@@ -113,15 +120,81 @@ These are the **real** architecture—not the sidebar.
 
 **Shared lifecycle (conceptual):**
 
-`Author` → `Compose` (lines, tax, branding) → `Render` (PDF/HTML) → `Deliver` (email, link, portal) → `Observe` (opens, reminders) → `Settle` (payment, acceptance, archive)
+`Author` → `Compose` (lines, tax, branding) → `Render` (PDF/HTML) → `Deliver` (email, link, portal) → `Observe` (opens, reminders, delivery/engagement telemetry) → `Payment Intent` (amount/currency/expiry + rail handoff) → `Settle` (payment, acceptance, archive)
+
+#### Observe layer (formalized)
+
+`Observe` is not a loose log. It is a first-class event layer that records delivery, engagement, and money-adjacent milestones in a single stream per document.
+
+**Schema upgrade (`document_events`):**
+
+- `id`
+- `document_id`
+- `event_type` (`sent` | `opened` | `clicked` | `paid` | `reminded`)
+- `occurred_at`
+- `actor_type` (system | recipient | user | webhook)
+- `metadata` (jsonb for channel, provider payload refs, reminder run id, etc.)
+
+**Event taxonomy (minimum canonical set):**
+
+- `sent`
+- `opened`
+- `clicked`
+- `paid`
+- `reminded`
+
+**This powers:**
+
+- Timeline (client and document history)
+- Notifications (state-aware in-app/email nudges)
+- Smart reminders (behavior + due-date + payment-intent aware)
+- Analytics (delivery-to-payment funnel and conversion diagnostics)
 
 **Why this matters for product:**
 
 - One **mental model** for PM, design, and eng.
 - One place to invest: **send pipeline**, **PDF pipeline**, **public token model**, **status vocabulary**, **line-item model**.
+- One observable event stream (`document_events`) that unifies communication and payment lifecycle telemetry.
 - Feature parity (e.g. quote send = invoice send) becomes **engine work**, not three copies.
 
 **Technical anchor today:** `Invoice` / `Quote` / `Payslip` entities + `InvoiceSendService`-style orchestration + `/api/send-email` + public share routes. **In code:** `src/document-engine/` exports `DOCUMENT_TYPES`, `normalizeDocumentType`, `parseRouteDocumentTypeStrict`, `getDocumentEntity`, `documentRef`—use these for routing, analytics, and new engine code. **Roadmap:** grow this module (shared send/PDF adapters, shared status vocabulary) so new document kinds plug in, not fork.
+
+#### Critical addition: Payment Intent layer (Document Engine ↔ Revenue & Ops)
+
+Without a first-class `Payment Intent`, payments feel bolted on, Payfast-specific logic leaks across product surfaces, and the engine is harder to scale. Introduce a canonical handoff object between document delivery/observation and financial capture.
+
+**Why this matters:**
+
+- **Without it:** payments feel bolted on, provider logic leaks everywhere, and cross-surface consistency breaks.
+- **With it:** clean abstraction between document and payment rails, multi-provider readiness, and analytics-ready payment funneling.
+
+**Payment intent contract (per payable document):**
+
+- `intent_id` (idempotent)
+- `document_ref` (`type`, `id`, `org_id`)
+- `amount_snapshot` + `currency_snapshot`
+- `payer_context` (public share, portal user, or signed-in actor)
+- `rail` (`payfast`, future rails), `expires_at`
+- `status` (`pending`, `requires_action`, `paid`, `failed`, `cancelled`, `expired`, `refunded`)
+
+**Schema upgrade (`payment_intents`):**
+
+- `id`
+- `document_id`
+- `provider` (`payfast` | `stripe`)
+- `amount`
+- `currency`
+- `status`
+- `external_id`
+- `created_at`
+
+**Boundary of ownership:**
+
+- **Document Engine owns:** payable snapshot creation, due/expiry semantics, and `document_ref` identity.
+- **Revenue & Ops owns:** provider orchestration, webhook verification, settlement/reconciliation, and ledger-like payment records.
+- **Experience System owns:** one payment-status language and CTA behavior across document detail, public links, and portal views.
+
+**Result:** no direct “mark paid” shortcuts from UI paths; all payable settlement flows through `Payment Intent` + verified payment events.
 
 #### Product upgrade: one compose surface, many kinds
 
@@ -136,7 +209,7 @@ List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `
 
 ---
 
-### 3. Relationship & Offering System
+### 5. Relationship System
 
 **Job:** **Who** you sell to and **what** you sell—data that **feeds** the Document Engine.
 
@@ -148,22 +221,55 @@ List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `
 
 ---
 
-### 4. Financial Engine
+### 4. Revenue System (Revenue & Ops)
 
 **Job:** Everything that turns **issued documents** (especially invoices) into **cash, visibility, and tenant billing**—without re-implementing document authoring here.
 
 - **Payments:** Payfast, invoice payment state, webhooks (`api/payfast-handler`)
+- **Payment intents:** capture/retry/expiry orchestration and provider status normalization
 - **Cash flow:** timelines and balances built from documents + payments
 - **Reports:** read models and exports on top of documents + payments + catalog where relevant
 - **Subscriptions & dunning:** how Paidly bills the customer (packaging, crons in `vercel.json` → `/api/cron/...`)
 
-**Feeds off the Document Engine:** financial truth is **downstream of document state** (totals, status, due dates, line items). The Financial Engine aggregates, reconciles, and projects; it does not fork “another invoice.”
+**Feeds off the Document Engine:** revenue truth is **downstream of document state** (totals, status, due dates, line items). Revenue & Ops aggregates, reconciles, and projects; it does not fork “another invoice.”
 
 **Strategy:** Keep business rules that define **what a document is** (e.g. when an invoice is *overdue* in product terms) aligned with the Document Engine; keep **money rails** (capture, allocate, subscription charge) here.
 
+**Payment integration rule:** provider events never mutate document totals directly. They update payment-intent/payment records first; document settlement status is derived via verified reconciliation rules.
+
+#### Responsibility split (hard boundary)
+
+**Document Engine owns:**
+
+- Document status semantics (`paid`, `overdue`, lifecycle transitions)
+- Document totals and payable snapshots
+
+**Revenue & Ops owns:**
+
+- Payment providers (Payfast, Stripe, future rails)
+- Subscriptions and dunning/billing operations
+- Cash flow models
+- Reporting/read models
+
+**Boundary outcome:** clear separation keeps document rules coherent while allowing payment/billing systems to scale independently.
+
+### 7. Payment Intelligence Layer (Get Paid System)
+
+**Job:** Turn events + payment intent state into proactive actions that improve collection velocity.
+
+- Inputs: `document_events`, `payment_intents`, due dates, client/payment history
+- Decisions: reminder timing, CTA sequencing, retry windows, provider fallback policy
+- Outputs: auto reminders, smart nudges, “invoice viewed but not paid” triggers, suggested follow-ups, prioritized “at-risk” invoices, and payment funnel analytics
+
+**Example trigger (v1):**
+
+Client viewed invoice 3 times without a `paid` event in the observation window → trigger reminder and surface a suggested follow-up action in the right panel.
+
+**Position in architecture:** sits between observation/payment state and user-facing actions, orchestrating how Paidly gets customers paid faster without leaking provider logic into page code.
+
 ---
 
-### 5. Growth Engine
+### Growth loops (implemented within Revenue, Relationship, and Experience systems)
 
 **Job:** How Paidly **acquires, retains, and scales**—loops that sit beside day-to-day issuing.
 
@@ -178,7 +284,7 @@ List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `
 
 ---
 
-## A.2 Cross-cutting: Experience System (UX at scale)
+## 6. Experience System (UX at scale)
 
 **Job:** So Paidly **feels** like one product, not twenty features stitched together.
 
@@ -190,9 +296,28 @@ List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `
 | **Tokens** | `border-border`, `bg-card`, `text-muted-foreground`—no one-off palette per page. |
 | **Data discipline** | React Query keys, invalidation rules, “hydrate from cache then refresh” for perceived speed. |
 | **A11y & forms** | Label/`id` parity, focus order, disabled states that explain *why* (title/tooltip). |
+| **Money UX contract** | Same status chips + primary CTA logic (`Pay now`, `Retry payment`, `View receipt`) everywhere a payable document appears. |
 | **Page template** | List/index pages share one **three-zone** shell (below)—visual consistency reads as **premium**. |
 
 **Strategy:** Treat “Experience” as **governed**: a short **layout + form checklist** for any new surface that touches Identity or the Document Engine—same as you’d gate API changes.
+
+#### Experience upgrade: make the editor pattern universal
+
+The editor shell is a product advantage only if it is consistent across **documents and money actions**. Standardize the same right-side sticky panel pattern for invoice payment actions, not just compose/edit forms.
+
+**Universal right panel contract (sticky):**
+
+- Primary amount block (`Total`, optional secondary currency conversion).
+- Primary action first (`Pay Now` when payable).
+- Secondary lifecycle actions below (`Send Reminder`, receipt/share actions by state).
+- Deterministic state switching from `Payment Intent` status (no page-specific CTA ordering).
+
+**Invoice payment panel (reference pattern):**
+
+- `Total: $100`
+- `≈ R1,638`
+- `[ Pay Now ]`
+- `[ Send Reminder ]`
 
 ### Page Template System (UI system — critical)
 
@@ -226,6 +351,7 @@ Refactors can be **incremental**: introduce `PageTemplate` first, then move filt
 |----------------|-----------|
 | **List / index** (Invoices, Quotes, Clients, Services, Affiliates, …) | **`PageTemplate`**: Header (title + actions) → Content (table/grid) → Side panel (filters / summary) |
 | **Document compose / edit** | Shared **editor shell**: full-width work area, `max-w-*` content, **sticky** summary + primary actions (align `EditInvoice` / `EditQuote` / `CreateDocument` patterns) |
+| **Payment touchpoints** (document detail, public invoice, portal) | Shared payment state model driven by `Payment Intent` status; same CTA order and error/retry messaging |
 | **Admin / settings-style** | **`PageHeader`** + main column; use **`PageTemplate` with `embedded`** when inside `AdminLayout` if a side rail helps |
 
 **Deliverable:** keep the **Experience checklist** short: “Which template? Header actions? Side panel? Sticky save?”—**every new page picks a row**, no ad hoc fourth layout.
@@ -245,12 +371,40 @@ Refactors can be **incremental**: introduce `PageTemplate` first, then move filt
 │   & Access    │    │ (invoice/quote/      │    │ Offering           │
 └───────────────┘    │  payslip kinds)      │    └────────────────────┘
         │            └──────────┬───────────┘
-        │                       │ feeds (read models, state)
+        │                       │
         │                       ▼
         │            ┌───────────────────────┐
-        │            │   Financial Engine    │
-        │            │ pay · cash flow ·     │
-        │            │ reports · subs        │
+        │            │ Payment Intent Layer  │
+        │            │ create · track · map  │
+        │            └──────────┬────────────┘
+        │                       │
+        │                       ├──────────────┐
+        │                       ▼              │
+        │            ┌───────────────────────┐ │
+        │            │ Payment Intelligence  │ │
+        │            │ reminders · retry ·   │ │
+        │            │ funnel actions        │ │
+        │            └──────────┬────────────┘ │
+        │                       │              │
+        │                       └──────────────┘
+        │                       │
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │   Revenue & Ops       │
+        │            │ Payfast/Stripe · subs │
+        │            │ cash flow · reports   │
+        │            └──────────┬────────────┘
+        │                       │
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │       Webhook         │
+        │            │ verify · normalize    │
+        │            └──────────┬────────────┘
+        │                       │ settle signal
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │   Document Engine     │
+        │            │  status settlement    │
         │            └──────────┬────────────┘
         │                       │
         └───────────────────────┼───────────────────────┐
@@ -262,13 +416,21 @@ Refactors can be **incremental**: introduce `PageTemplate` first, then move filt
                     └───────────────────────┘
 ```
 
+**Money loop (explicit):**
+
+`Document Engine` → `Payment Intent Layer` → `Revenue & Ops` (Payfast/Stripe) → `Webhook` → `Document Engine (Settle)`
+
+**Get Paid loop (differentiator):**
+
+`Observe` (`document_events`) + `Payment Intent` state → `Payment Intelligence Layer` → smart reminders/CTA/retry strategy → `Revenue & Ops` + `Experience System`
+
 ---
 
 # Part B — Technical blueprint (stack & flow)
 
 ## B.1 What Paidly is (product one-liner)
 
-Paidly is a **business operating system for SMBs**—not a narrow invoicing tool: **documents** (invoice / quote / payslip), **relationships & catalog**, **financial visibility & payments**, and **growth** (e.g. affiliates) in one product story. **South Africa–first** (Payfast, ZAR defaults). **Stack:** **Vite + React** SPA on **Vercel**, **Supabase** as system of record.
+Paidly is a **business operating system for SMBs**—not a narrow invoicing tool: **documents** (invoice / quote / payslip), **relationships & catalog**, **revenue visibility & payments**, and **growth** (e.g. affiliates) in one product story. **South Africa–first** (Payfast, ZAR defaults). **Stack:** **Vite + React** SPA on **Vercel**, **Supabase** as system of record.
 
 ## B.2 What runs where
 
@@ -402,15 +564,60 @@ Ship these in parallel with **High impact next**—they reduce churn and make ev
 
 1. **Grow `src/document-engine/`** — status enums, send + PDF adapters, and thin facades over `Invoice` / `Quote` / `Payslip` where behaviour overlaps (**supports § High impact 1**).
 2. **Line up quote / invoice / payslip** on the same **deliver + observe** interfaces (even if tables stay separate short term); keep **compose** converging on **Create Document + type**, not parallel product UIs (**supports § High impact 1**).
-3. **Make Financial Engine consumers explicit** — cash flow and reports should pull through document-shaped APIs or views, not ad hoc duplicates (**supports Client Timeline + money story**).
-4. **Stabilize Auth + Session** — execute **Foundation §4** (session/read/write matrix, invites, org bootstrap, documentation).
-5. **Standardize UI layout** — execute **Foundation §5** + **A.2** table (`PageTemplate`, editor shell, embedded admin).
-6. **Publish an “Experience checklist”** (1 page) for new screens touching documents or money — include the **Page Template** three-zone rule (`PageTemplate`) and **layout grammar** row picker (**closes Foundation §5**).
-7. **Identity / role matrix doc** — admin vs management vs support capabilities (complements §4).
-8. **Roll out `PageTemplate`** on Invoices, Quotes, Clients, Services, and Affiliates — move filters/summary into **`sidePanel`** where they still live inside the main card.
-9. **Extend the hook → service → entity pattern** — add `*ListService` / query modules for Quotes, Clients, and other high-traffic reads; keep **`api/InvoiceService`-style** modules for non-CRUD delivery concerns.
-10. **Implement Client Timeline** — query + UI on **Client detail** per **High impact §2**; consider a small `ClientTimelineService` for aggregation and caching keys.
-11. **Implement quote → invoice conversion** — server or client path that creates draft invoice from accepted quote per **High impact §3**; validate RLS and idempotency (no duplicate drafts on double-accept).
+3. **Add first-class Payment Intent model + APIs** — define intent create/update/reconcile contract between `Document Engine` and `Revenue & Ops` (idempotency, status normalization, expiry/retry rules).
+4. **Make Revenue & Ops consumers explicit** — cash flow and reports should pull through document-shaped APIs or views, not ad hoc duplicates (**supports Client Timeline + money story**).
+5. **Publish payment UX contract in Experience checklist** — one status vocabulary + CTA matrix for document detail, public invoice, and portal paths.
+6. **Stabilize Auth + Session** — execute **Foundation §4** (session/read/write matrix, invites, org bootstrap, documentation).
+7. **Standardize UI layout** — execute **Foundation §5** + **A.2** table (`PageTemplate`, editor shell, embedded admin).
+8. **Publish an “Experience checklist”** (1 page) for new screens touching documents or money — include the **Page Template** three-zone rule (`PageTemplate`) and **layout grammar** row picker (**closes Foundation §5**).
+9. **Identity / role matrix doc** — admin vs management vs support capabilities (complements §4).
+10. **Roll out `PageTemplate`** on Invoices, Quotes, Clients, Services, and Affiliates — move filters/summary into **`sidePanel`** where they still live inside the main card.
+11. **Extend the hook → service → entity pattern** — add `*ListService` / query modules for Quotes, Clients, and other high-traffic reads; keep **`api/InvoiceService`-style** modules for non-CRUD delivery concerns.
+12. **Implement Client Timeline** — query + UI on **Client detail** per **High impact §2**; consider a small `ClientTimelineService` for aggregation and caching keys.
+13. **Implement quote → invoice conversion** — server or client path that creates draft invoice from accepted quote per **High impact §3**; validate RLS and idempotency (no duplicate drafts on double-accept).
+
+### Immediate execution order (exact)
+
+1. **Add `payment_intents` table.**
+2. **Integrate payment intents into the document lifecycle.**
+3. **Expand `document_events` coverage and event ingestion.**
+4. **Build payment UI into the sticky right panel on invoice/payment touchpoints.**
+5. **Add basic reminders (event- and due-date driven).**
+
+## v1 implementation contract (direct build plan)
+
+### Tables (Supabase)
+
+- `payment_intents` (new): `id`, `document_id`, `provider`, `amount`, `currency`, `status`, `external_id`, `created_at`
+- `document_events` (expand): ensure canonical events `sent`, `opened`, `clicked`, `paid`, `reminded` with `occurred_at`, `actor_type`, `metadata`
+- `payments` (existing): keep as settlement/reconciliation records linked to provider/webhook outcomes
+
+### Services (app/server orchestration)
+
+- `DocumentPaymentIntentService` (new): create/update intent from document snapshot; enforce idempotency by `document_id + provider + status window`
+- `DocumentEventService` (expand): append normalized document/payment lifecycle events; provide query helpers for timeline/reminders
+- `PaymentWebhookReconciliationService` (new or expanded from current Payfast handler): verify provider payloads, map to canonical statuses, write `payments` + `document_events`, trigger settle transition
+- `PaymentIntelligenceService` (v1 basic): evaluate reminder triggers (e.g., viewed-not-paid, due/overdue windows) and emit follow-up actions
+
+### Cron jobs (Vercel)
+
+- `POST /api/cron/reminders` (existing pattern; expand logic): process due/overdue + behavior-based reminder candidates
+- `POST /api/cron/payment-intelligence` (new): run lightweight trigger evaluation (`viewed>=N && not paid`, retry windows)
+- `POST /api/cron/subscriptions-dunning` (existing/adjacent): keep tenant billing and subscription retries isolated from document settlement logic
+
+### API endpoints (`/api/*`)
+
+- `POST /api/payment-intents` (new): create intent for payable document
+- `GET /api/payment-intents/:id` (new): fetch intent status for sticky panel + public views
+- `POST /api/payments/webhook/:provider` (new canonical route; may proxy existing `payfast-handler`)
+- `POST /api/documents/:type/:id/events` (new internal endpoint) or service-only ingestion path for `document_events`
+- `POST /api/reminders/dispatch` (new internal endpoint used by cron workers)
+
+**v1 acceptance checks:**
+
+- Invoice can move `Deliver → Observe → Payment Intent → Settle` using provider-verified events only.
+- Sticky right panel shows intent-aware CTA states (`Pay now`, `Retry payment`, `Send reminder`) without page-specific logic forks.
+- `document_events` powers timeline entries and at least one automated reminder trigger.
 
 ---
 

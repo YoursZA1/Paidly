@@ -21,18 +21,42 @@ export const AUDIT_ACTIONS = {
 };
 
 /**
- * @param {{ actor?: object, action: string, category?: string, description?: string, after?: object, before?: object, targetId?: string, targetLabel?: string }} payload
+ * @param {{
+ *  actor?: object,
+ *  action: string,
+ *  category?: string,
+ *  entity?: string,
+ *  description?: string,
+ *  after?: object,
+ *  before?: object,
+ *  metadata?: object,
+ *  targetId?: string,
+ *  targetLabel?: string
+ * }} payload
  */
-export function logAction({ actor, action, category, description, after, before, targetId, targetLabel }) {
+export function logAction({
+  actor,
+  action,
+  category,
+  entity,
+  description,
+  after,
+  before,
+  metadata,
+  targetId,
+  targetLabel,
+}) {
   const entry = {
     ts: new Date().toISOString(),
     action,
     category,
+    entity,
     description,
     actorId: actor?.id,
     actorEmail: actor?.email,
     after,
     before,
+    metadata: metadata ?? {},
     targetId,
     targetLabel,
   };
@@ -57,6 +81,12 @@ export function logAction({ actor, action, category, description, after, before,
       .insert({
         category: category || 'settings',
         action: action || '',
+        actor_id: actor?.id || null,
+        entity: entity || category || null,
+        metadata: {
+          ...(metadata && typeof metadata === 'object' ? metadata : {}),
+          target_id: targetId || null,
+        },
         description: description || null,
         before: before ?? null,
         after: after ?? null,

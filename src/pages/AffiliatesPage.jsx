@@ -29,7 +29,7 @@ import {
 } from '@/utils/affiliateApplicationCounts';
 import { formatQueryError } from '@/utils/apiErrorText';
 import { stableEntityRowKey } from '@/utils/stableListKey';
-import { SystemSettingsService } from '@/services/SystemSettingsService';
+import { useAdminSettings } from '@/hooks/useAdminSettings';
 import { createAffiliateSignupShareUrl } from '@/utils';
 
 export default function AffiliatesPage() {
@@ -106,7 +106,7 @@ export default function AffiliatesPage() {
     toast.success('Link copied');
   };
 
-  const defaultCommissionPct = SystemSettingsService.getAffiliateDefaultCommissionPercent();
+  const { affiliateDefaultCommissionPercent: defaultCommissionPct } = useAdminSettings();
 
   const handleApprove = async (aff) => {
     try {
@@ -142,6 +142,7 @@ export default function AffiliatesPage() {
         actor: currentUser,
         action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
         category: 'affiliates',
+        entity: 'affiliate_application',
         description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
         targetId: aff.id,
         targetLabel: aff.applicant_email,
@@ -204,6 +205,7 @@ export default function AffiliatesPage() {
         actor: currentUser,
         action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
         category: 'affiliates',
+        entity: 'affiliate_application',
         description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
         targetId: aff.id,
         targetLabel: aff.applicant_email,

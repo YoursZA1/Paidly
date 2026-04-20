@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paidly Admin Dashboard Reality Matrix</title>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #475569;
+        --border: #e2e8f0;
+        --ok-bg: #ecfdf5;
+        --ok-text: #065f46;
+        --hybrid-bg: #fff7ed;
+        --hybrid-text: #9a3412;
+        --needs-bg: #fef2f2;
+        --needs-text: #991b1b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px;
+        color: var(--text);
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #fff;
+      }
+      h1, h2, h3 { margin: 0 0 12px; line-height: 1.25; }
+      h1 { font-size: 28px; margin-bottom: 8px; }
+      h2 { font-size: 18px; margin-top: 26px; }
+      p { margin: 0 0 10px; color: var(--muted); }
+      .meta { margin-bottom: 20px; font-size: 12px; color: #64748b; }
+      .section {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      .ok { background: var(--ok-bg); color: var(--ok-text); }
+      .hybrid { background: var(--hybrid-bg); color: var(--hybrid-text); }
+      .needs { background: var(--needs-bg); color: var(--needs-text); }
+      ul { margin: 6px 0 0 18px; padding: 0; }
+      li { margin: 6px 0; }
+      .footer {
+        margin-top: 20px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border);
+        font-size: 12px;
+        color: #64748b;
+      }
+      .score {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .card b { display: block; font-size: 16px; margin-top: 2px; }
+      @media print {
+        body { padding: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Paidly Admin Dashboard Reality Matrix</h1>
+    <p>Connected vs Hybrid vs Needs Backend Wiring</p>
+    <div class="meta">Generated: 2026-04-20</div>
+
+    <div class="section">
+      <span class="badge ok">Production-ready</span>
+      <ul>
+        <li><b>Dashboard</b> (`/admin-v2`) — live queries, affiliate moderation, security telemetry via `/api/security/events`.</li>
+        <li><b>Users</b> (`/admin-v2/users`) — platform users + behavior, update/bulk actions, audited admin actions.</li>
+        <li><b>Subscriptions</b> (`/admin-v2/subscriptions`) — subscription listing and updates connected.</li>
+        <li><b>Affiliates</b> (`/admin-v2/affiliates`) — backend admin queue + moderation + payouts view.</li>
+        <li><b>Waitlist</b> (`/admin-v2/waitlist`) — full CRUD via entity layer.</li>
+        <li><b>Messages</b> (`/admin-v2/messages`) — user/waitlist context + message workflows.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <span class="badge hybrid">Hybrid</span>
+      <ul>
+        <li><b>Audit Log</b> (`/admin-v2/audit-log`) — server table when available, local/unified fallback when not.</li>
+        <li><b>Platform users loader</b> — API-first with fallback to profile/entity list for non-auth/config failures.</li>
+        <li><b>Affiliate loader model</b> — backend-driven queue with mixed local/entity surroundings.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <span class="badge needs">Needs backend wiring</span>
+      <ul>
+        <li><b>Settings command layer</b> (`/admin-v2/settings`) — major controls persist to browser/local storage.</li>
+        <li><b>System Health chips</b> — currently presentation-level labels, not probe-driven service health.</li>
+        <li><b>Activity Log card</b> — local audit stream + fallback entries, not authoritative server feed first.</li>
+        <li><b>Danger Zone actions</b> — UI/local operational changes, not full backend workflow enforcement.</li>
+      </ul>
+    </div>
+
+    <h2>Score Snapshot</h2>
+    <div class="score">
+      <div class="card">Production-ready<b>6</b></div>
+      <div class="card">Hybrid<b>3</b></div>
+      <div class="card">Needs hardening<b>4</b></div>
+    </div>
+
+    <h2>Highest-value next upgrades</h2>
+    <ul>
+      <li>Move settings persistence to admin config API + database table.</li>
+      <li>Replace static health chips with API/email/payments health checks.</li>
+      <li>Source settings activity log from server audit feed first, local fallback second.</li>
+      <li>Convert danger-zone actions into backend workflows with strict RBAC + audit guarantees.</li>
+    </ul>
+
+    <div class="footer">Prepared for Paidly admin architecture review.</div>
+  </body>
+</html>
