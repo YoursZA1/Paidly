@@ -5,9 +5,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
-import handleAffiliateDashboard from "./_affiliateDashboard.js";
-import handleAffiliateApprove from "./_approveHandler.js";
-import handleReferralsCreate from "./_referralsCreate.js";
+import { buildAffiliateDashboardPayload } from "../../server/src/affiliateDashboardData.js";
+import { createReferralAttributionForUser } from "../../server/src/affiliateReferralCreate.js";
+import { assertVercelAffiliateModerationAuth } from "../../server/src/vercelAffiliateModerationAuth.js";
+import {
+  createResendClient,
+  parseAffiliateApplicationId,
+  parseCommissionFractionFromBody,
+  runAffiliateApplicationApprove,
+} from "../../server/src/affiliateModerationCore.js";
 import {
   buildAffiliateSignupShareUrl,
   resolvePublicAppOriginForShareLinks,
@@ -48,6 +54,133 @@ function normalizeSlug(req) {
   const raw = req.query?.slug;
   if (raw == null) return [];
   return Array.isArray(raw) ? raw : [raw];
+}
+
+async function handleAffiliateDashboard(req, res) {
+  const allowedOrigins = ["https://paidly.co.za", "https://www.paidly.co.za"];
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).end();
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return res.status(503).json({ error: "Server misconfigured" });
+  }
+
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: "Missing bearer token" });
+  }
+
+  const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !authData?.user?.id) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  const payload = await buildAffiliateDashboardPayload(supabase, authData.user.id);
+  if (!payload.ok) {
+    return res.status(500).json({ error: payload.error || "failed" });
+  }
+
+  return res.status(200).json(payload);
+}
+
+async function handleReferralsCreate(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).end();
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return res.status(503).json({ error: "Server misconfigured" });
+  }
+
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: "Missing bearer token" });
+  }
+
+  const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !authData?.user?.id) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  let body = req.body;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+  }
+
+  const referralCode = body?.referral_code ?? body?.referralCode;
+  const result = await createReferralAttributionForUser(supabase, {
+    referralCode: referralCode != null ? String(referralCode) : "",
+    userId: authData.user.id,
+  });
+
+  if (!result.ok) {
+    const err = result.error;
+    if (err === "self_referral" || err === "invalid_affiliate" || err === "invalid_code") {
+      return res.status(400).json({ error: err });
+    }
+    return res.status(500).json({ error: err || "failed" });
+  }
+
+  return res.status(200).json({ ok: true, idempotent: result.idempotent === true });
+}
+
+async function handleAffiliateApprove(req, res) {
+  applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return res.status(503).json({ error: "Server misconfigured (Supabase)" });
+  }
+
+  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
+  if (!moderator) return;
+
+  const resend = createResendClient();
+  if (!resend) {
+    return res.status(503).json({ error: "Email service not configured (RESEND_API_KEY)" });
+  }
+
+  const applicationId = parseAffiliateApplicationId(req.body || {});
+  if (!applicationId) {
+    return res.status(400).json({ error: "Missing applicationId" });
+  }
+
+  const commissionFraction = parseCommissionFractionFromBody(req.body || {});
+  const result = await runAffiliateApplicationApprove(supabase, resend, {
+    applicationId,
+    commissionFraction,
+    httpRequest: req,
+  });
+
+  if (!result.ok) {
+    return res.status(result.status).json(result.body);
+  }
+  return res.status(200).json(result.payload);
 }
 
 async function handleGetAffiliateBundle(req, res, supabase) {

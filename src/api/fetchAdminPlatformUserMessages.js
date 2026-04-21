@@ -8,6 +8,14 @@ import { apiRequest } from "@/utils/apiRequest";
 /** Must match server/src/adminPlatformUserMessages.js */
 const ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT = 300;
 const ADMIN_PLATFORM_MESSAGE_MAX_CONTENT = 50_000;
+const ADMIN_MESSAGE_REQUEST_TIMEOUT_MS = 45_000;
+
+function makeIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `broadcast-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -72,6 +80,19 @@ function buildBroadcastUpdatePostUrls() {
   if (vite) push(`${vite}/api/admin/broadcast-update`);
   if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/broadcast-update`);
   return out;
+}
+
+async function apiRequestWithTimeout(url, init, timeoutMs = ADMIN_MESSAGE_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await apiRequest(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function getSessionToken() {
@@ -198,7 +219,7 @@ export async function postAdminPlatformUserMessage(body) {
   for (const url of candidates) {
     let res;
     try {
-      res = await apiRequest(url, {
+      res = await apiRequestWithTimeout(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -209,7 +230,11 @@ export async function postAdminPlatformUserMessage(body) {
         body: JSON.stringify(json),
       });
     } catch (e) {
-      lastError = e?.message || "Network error (Failed to fetch)";
+      if (String(e?.name || "") === "AbortError") {
+        lastError = "Send request timed out. Please try again.";
+      } else {
+        lastError = e?.message || "Network error (Failed to fetch)";
+      }
       continue;
     }
 
@@ -251,7 +276,7 @@ export async function postAdminPlatformUserMessage(body) {
 
 /**
  * @param {{ subject?: string, content: string }} body
- * @returns {Promise<{ recipients: number, inserted: number }>}
+ * @returns {Promise<{ jobId: string | null, status: string, recipients: number, inserted: number, insertedMessages: number, emailSent: number, emailSkipped: number, emailFailed: number, emailQueued: number }>}
  */
 export async function postAdminBroadcastUpdate(body) {
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
@@ -262,23 +287,29 @@ export async function postAdminBroadcastUpdate(body) {
   const candidates = buildBroadcastUpdatePostUrls();
   const subject = body.subject != null ? String(body.subject) : "";
   const content = String(body.content || "").trim();
+  const idempotencyKey = makeIdempotencyKey();
 
   let lastError = null;
   for (const url of candidates) {
     let res;
     try {
-      res = await apiRequest(url, {
+      res = await apiRequestWithTimeout(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
           "Content-Type": "application/json",
+          "X-Idempotency-Key": idempotencyKey,
         },
         credentials: "include",
-        body: JSON.stringify({ subject, content }),
+        body: JSON.stringify({ subject, content, idempotency_key: idempotencyKey }),
       });
     } catch (e) {
-      lastError = e?.message || "Network error (Failed to fetch)";
+      if (String(e?.name || "") === "AbortError") {
+        lastError = "Broadcast request timed out. Please retry with a shorter message.";
+      } else {
+        lastError = e?.message || "Network error (Failed to fetch)";
+      }
       continue;
     }
 
@@ -305,8 +336,15 @@ export async function postAdminBroadcastUpdate(body) {
     }
 
     return {
+      jobId: payload.jobId ? String(payload.jobId) : null,
+      status: String(payload.status || "queued"),
       recipients: Number(payload.recipients || 0),
       inserted: Number(payload.inserted || 0),
+      insertedMessages: Number(payload.insertedMessages || 0),
+      emailSent: Number(payload.emailSent || 0),
+      emailSkipped: Number(payload.emailSkipped || 0),
+      emailFailed: Number(payload.emailFailed || 0),
+      emailQueued: Number(payload.emailQueued || 0),
     };
   }
 

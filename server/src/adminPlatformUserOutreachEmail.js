@@ -112,3 +112,58 @@ export async function sendAdminPlatformMessageToSignupEmail(supabaseAdmin, opts)
   }
   return { status: "sent" };
 }
+
+/**
+ * Send outreach email when caller already has a trusted recipient email (skips Auth admin lookup).
+ *
+ * @param {{ email: string, subject: string, plainBody: string, messageId?: string }} opts
+ * @returns {Promise<{ status: "sent" | "skipped" | "failed", reason?: string }>}
+ */
+export async function sendAdminPlatformMessageToKnownEmail(opts) {
+  const email = String(opts.email || "").trim();
+  const subject = String(opts.subject || "");
+  const plainBody = String(opts.plainBody || "");
+  const messageId = opts.messageId != null ? String(opts.messageId).trim() : "";
+
+  if (!email) {
+    return { status: "skipped", reason: "no_email" };
+  }
+  if (!isValidEmail(email)) {
+    return { status: "skipped", reason: "invalid_signup_email" };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return { status: "skipped", reason: "resend_not_configured" };
+  }
+
+  const sub =
+    sanitizeOneLine(subject || "Message from the Paidly team", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
+    "Message from the Paidly team";
+  const html = buildAdminPlatformOutreachHtml({ plainBody });
+  const text = buildAdminPlatformOutreachPlainText({ plainBody, recipientEmail: email });
+
+  const headers = {
+    "X-Auto-Response-Suppress": "OOF, AutoReply",
+  };
+  if (messageId) {
+    headers["X-Entity-Ref-ID"] = `paidly-admin-msg-${messageId}`;
+  }
+
+  const replyTo = outreachReplyToAddress();
+  const mailOpts = {
+    text,
+    headers,
+    tags: [
+      { name: "category", value: "transactional" },
+      { name: "message_type", value: "admin_account_notice" },
+    ],
+  };
+  if (replyTo) {
+    mailOpts.reply_to = replyTo;
+  }
+
+  const result = await sendHtmlEmail(email, sub, html, "Paidly", mailOpts);
+  if (!result.success) {
+    return { status: "failed", reason: result.error || "send_failed" };
+  }
+  return { status: "sent" };
+}

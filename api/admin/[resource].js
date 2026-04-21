@@ -18,7 +18,6 @@ let fetchSyncUsersForAdmin;
 let getSecurityEventsSnapshot;
 let handleVercelAffiliateDeclinePost;
 let handleVercelAdminInviteUserPost;
-let affiliateApproveHandler;
 let applyPaidlyServerlessCors;
 let validateServiceRoleKey;
 let runAdminDeleteOrphanProfiles;
@@ -26,10 +25,16 @@ let getAdminPlatformUserMessages;
 let isAdminPlatformMessageClientError;
 let broadcastAdminUpdateToAllUsers;
 let validateAdminBroadcastPayload;
+let assertVercelAffiliateModerationAuth;
+let createResendClient;
+let parseAffiliateApplicationId;
+let parseCommissionFractionFromBody;
+let runAffiliateApplicationApprove;
 
 let corsPromise = null;
 let getDepsPromise = null;
 let approveDeclineDepsPromise = null;
+let affiliateApproveDepsPromise = null;
 let inviteUserDepsPromise = null;
 let sendPlatformMessageDepsPromise = null;
 
@@ -82,16 +87,37 @@ async function ensureGetDeps() {
 
 async function ensureApproveDeclineDeps() {
   await ensureCorsDeps();
-  if (affiliateApproveHandler && handleVercelAffiliateDeclinePost) return;
+  if (handleVercelAffiliateDeclinePost) return;
   if (approveDeclineDepsPromise) return approveDeclineDepsPromise;
-  approveDeclineDepsPromise = Promise.all([
-    import("../affiliates/_approveHandler.js"),
-    import("../../server/src/vercelAffiliateDeclinePost.js"),
-  ]).then(([affiliateApproveMod, affiliateDeclineMod]) => {
-    affiliateApproveHandler = affiliateApproveMod.default;
+  approveDeclineDepsPromise = import("../../server/src/vercelAffiliateDeclinePost.js").then((affiliateDeclineMod) => {
     handleVercelAffiliateDeclinePost = affiliateDeclineMod.handleVercelAffiliateDeclinePost;
   });
   return approveDeclineDepsPromise;
+}
+
+async function ensureAffiliateApproveDeps() {
+  await ensureCorsDeps();
+  if (
+    assertVercelAffiliateModerationAuth &&
+    createResendClient &&
+    parseAffiliateApplicationId &&
+    parseCommissionFractionFromBody &&
+    runAffiliateApplicationApprove
+  ) {
+    return;
+  }
+  if (affiliateApproveDepsPromise) return affiliateApproveDepsPromise;
+  affiliateApproveDepsPromise = Promise.all([
+    import("../../server/src/vercelAffiliateModerationAuth.js"),
+    import("../../server/src/affiliateModerationCore.js"),
+  ]).then(([moderationAuthMod, moderationCoreMod]) => {
+    assertVercelAffiliateModerationAuth = moderationAuthMod.assertVercelAffiliateModerationAuth;
+    createResendClient = moderationCoreMod.createResendClient;
+    parseAffiliateApplicationId = moderationCoreMod.parseAffiliateApplicationId;
+    parseCommissionFractionFromBody = moderationCoreMod.parseCommissionFractionFromBody;
+    runAffiliateApplicationApprove = moderationCoreMod.runAffiliateApplicationApprove;
+  });
+  return affiliateApproveDepsPromise;
 }
 
 async function ensureInviteUserDeps() {
@@ -139,6 +165,18 @@ function adminResourceFromRequest(req) {
     const rest = path.slice(i + marker.length).replace(/\/$/, "");
     const seg = rest.split("/")[0];
     return decodeURIComponent(seg || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function adminSubpathFromRequest(req) {
+  try {
+    const path = String(req.url || "").split("?")[0] || "";
+    const marker = "/api/admin/";
+    const i = path.indexOf(marker);
+    if (i === -1) return "";
+    return path.slice(i + marker.length).replace(/\/$/, "");
   } catch {
     return "";
   }
@@ -419,6 +457,221 @@ async function rollbackAdminSettingsRows(supabase, previousRows) {
   }
 }
 
+async function handleAffiliateApprovePost(req, res, supabase) {
+  await ensureAffiliateApproveDeps();
+
+  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
+  if (!moderator) return;
+
+  const resend = createResendClient();
+  if (!resend) {
+    return res.status(503).json({ error: "Email service not configured (RESEND_API_KEY)" });
+  }
+
+  const applicationId = parseAffiliateApplicationId(req.body || {});
+  if (!applicationId) {
+    return res.status(400).json({ error: "Missing applicationId" });
+  }
+
+  const commissionFraction = parseCommissionFractionFromBody(req.body || {});
+  const result = await runAffiliateApplicationApprove(supabase, resend, {
+    applicationId,
+    commissionFraction,
+    httpRequest: req,
+  });
+
+  if (!result.ok) {
+    return res.status(result.status).json(result.body);
+  }
+  return res.status(200).json(result.payload);
+}
+
+function parseSystemWorkflowBody(req, res) {
+  let body = req.body;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      res.status(400).json({ error: "Invalid JSON body" });
+      return null;
+    }
+  }
+  if (!body || typeof body !== "object") {
+    res.status(400).json({ error: "Missing request body" });
+    return null;
+  }
+  if (String(body.confirmation || "").trim() !== "CONFIRM") {
+    res.status(400).json({ error: 'Confirmation required: set confirmation to "CONFIRM"' });
+    return null;
+  }
+  return body;
+}
+
+async function writeSystemAuditLog(supabase, payload) {
+  const { error } = await supabase.from("audit_logs").insert(payload);
+  if (error) throw new Error(`Audit write failed: ${error.message}`);
+}
+
+async function getSystemStateSnapshot(supabase) {
+  const { data, error } = await supabase
+    .from("admin_system_state")
+    .select("id, maintenance_mode, last_reset_at, updated_by, updated_at, reset_reason")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(`Snapshot failed: ${error.message}`);
+  return data || null;
+}
+
+async function rollbackSystemState(supabase, snapshot) {
+  if (!snapshot) return;
+  const { error } = await supabase.from("admin_system_state").upsert(
+    {
+      id: true,
+      maintenance_mode: Boolean(snapshot.maintenance_mode),
+      last_reset_at: snapshot.last_reset_at || null,
+      updated_by: snapshot.updated_by || null,
+      updated_at: snapshot.updated_at || new Date().toISOString(),
+      reset_reason: snapshot.reset_reason || null,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`Rollback failed: ${error.message}`);
+}
+
+async function handleSystemMaintenance(req, res, supabase, actor, body) {
+  const enabled = Boolean(body.enabled);
+  const reason = String(body.reason || "").trim() || null;
+  const now = new Date().toISOString();
+
+  let snapshot = null;
+  try {
+    snapshot = await getSystemStateSnapshot(supabase);
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || "Could not snapshot system state" });
+  }
+
+  const { data, error } = await supabase
+    .from("admin_system_state")
+    .upsert(
+      {
+        id: true,
+        maintenance_mode: enabled,
+        updated_by: actor.id,
+        updated_at: now,
+        reset_reason: reason,
+      },
+      { onConflict: "id" }
+    )
+    .select("maintenance_mode, updated_at, updated_by")
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message || "Failed to update maintenance state" });
+  }
+
+  try {
+    await writeSystemAuditLog(supabase, {
+      category: "settings",
+      action: "system_maintenance_updated",
+      actor_id: actor.id,
+      actor_email: actor.email || null,
+      actor_name: actor.user_metadata?.full_name || null,
+      actor_role: actor.app_metadata?.role || null,
+      entity: "system",
+      metadata: { enabled, reason },
+      description: enabled
+        ? "Maintenance mode enabled from danger zone."
+        : "Maintenance mode disabled from danger zone.",
+      before: snapshot
+        ? {
+            maintenance_mode: snapshot.maintenance_mode,
+            last_reset_at: snapshot.last_reset_at,
+            reset_reason: snapshot.reset_reason,
+          }
+        : null,
+      after: { maintenance_mode: enabled, reason },
+      created_at: now,
+    });
+  } catch (auditErr) {
+    try {
+      await rollbackSystemState(supabase, snapshot);
+    } catch (rollbackErr) {
+      return res.status(500).json({
+        error: `Audit failed and rollback failed: ${auditErr.message}; ${rollbackErr.message}`,
+      });
+    }
+    return res.status(500).json({ error: auditErr.message || "Audit write failed; system change reverted" });
+  }
+
+  return res.status(200).json({ ok: true, state: data });
+}
+
+async function handleSystemReset(req, res, supabase, actor, body) {
+  const reason = String(body.reason || "").trim() || null;
+  const now = new Date().toISOString();
+
+  let snapshot = null;
+  try {
+    snapshot = await getSystemStateSnapshot(supabase);
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || "Could not snapshot system state" });
+  }
+
+  const { data, error } = await supabase
+    .from("admin_system_state")
+    .upsert(
+      {
+        id: true,
+        maintenance_mode: false,
+        last_reset_at: now,
+        updated_by: actor.id,
+        updated_at: now,
+        reset_reason: reason,
+      },
+      { onConflict: "id" }
+    )
+    .select("maintenance_mode, last_reset_at, updated_at, updated_by")
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message || "Failed to reset system state" });
+  }
+
+  try {
+    await writeSystemAuditLog(supabase, {
+      category: "settings",
+      action: "system_reset_executed",
+      actor_id: actor.id,
+      actor_email: actor.email || null,
+      actor_name: actor.user_metadata?.full_name || null,
+      actor_role: actor.app_metadata?.role || null,
+      entity: "system",
+      metadata: { reason },
+      description: "System reset workflow executed from danger zone.",
+      before: snapshot
+        ? {
+            maintenance_mode: snapshot.maintenance_mode,
+            last_reset_at: snapshot.last_reset_at,
+            reset_reason: snapshot.reset_reason,
+          }
+        : null,
+      after: { maintenance_mode: false, last_reset_at: now, reason },
+      created_at: now,
+    });
+  } catch (auditErr) {
+    try {
+      await rollbackSystemState(supabase, snapshot);
+    } catch (rollbackErr) {
+      return res.status(500).json({
+        error: `Audit failed and rollback failed: ${auditErr.message}; ${rollbackErr.message}`,
+      });
+    }
+    return res.status(500).json({ error: auditErr.message || "Audit write failed; system change reverted" });
+  }
+
+  return res.status(200).json({ ok: true, state: data });
+}
+
 async function handlePostSettings(req, res, supabase, user) {
   let body = req.body;
   if (typeof body === "string") {
@@ -491,6 +744,8 @@ async function handlePostSettings(req, res, supabase, user) {
 export default async function handler(req, res) {
   try {
     const resource = adminResourceFromRequest(req);
+    const adminSubpath = adminSubpathFromRequest(req);
+    const systemAction = resource === "system" ? adminSubpath.split("/").slice(1).join("/") : "";
     const getResources = new Set([
       "affiliates",
       "platform-users",
@@ -508,9 +763,10 @@ export default async function handler(req, res) {
       "send-platform-message",
       "broadcast-update",
       "settings",
+      "system",
     ]);
 
-    if (postResources.has(resource)) {
+    if ((req.method === "POST" || req.method === "OPTIONS") && postResources.has(resource)) {
       if (req.method === "OPTIONS") {
         await ensureCorsDeps();
         applyPaidlyServerlessCors(req, res, { methods: "POST, OPTIONS" });
@@ -543,8 +799,11 @@ export default async function handler(req, res) {
           }
         }
         if (resource === "approve") {
-          await ensureApproveDeclineDeps();
-          return affiliateApproveHandler(req, res);
+          await ensureGetDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+          return handleAffiliateApprovePost(req, res, supabase);
         }
         if (resource === "decline") {
           await ensureApproveDeclineDeps();
@@ -584,6 +843,8 @@ export default async function handler(req, res) {
           }
 
           try {
+            const idempotencyKey =
+              String(req.headers["x-idempotency-key"] || body?.idempotency_key || body?.idempotencyKey || "").trim();
             const payload = { subject: body?.subject, content: body?.content };
             validateAdminBroadcastPayload(payload);
             const { users } = await fetchMergedPlatformUsersForAdmin(supabase, 2000);
@@ -591,12 +852,13 @@ export default async function handler(req, res) {
               supabase,
               authData.user.id,
               users,
-              payload
+              payload,
+              { idempotencyKey }
             );
             return res.status(200).json({ ok: true, ...result });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            const status = /content is required|subject too long|content too long|Invalid sender_id/i.test(msg)
+            const status = /content is required|subject too long|content too long|Invalid sender_id|idempotency key is required/i.test(msg)
               ? 400
               : 500;
             return res.status(status).json({ error: msg });
@@ -618,6 +880,31 @@ export default async function handler(req, res) {
           if (deny) return res.status(deny.status).json(deny.body);
 
           return handlePostSettings(req, res, supabase, authData.user);
+        }
+        if (resource === "system") {
+          await ensureGetDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+
+          const authHeader = req.headers.authorization || "";
+          const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+          if (!token) return res.status(401).json({ error: "Missing bearer token" });
+          const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+          if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
+
+          const deny = await assertCallerForAdminRoute(supabase, authData.user, { allowTeamManagement: true });
+          if (deny) return res.status(deny.status).json(deny.body);
+
+          const body = parseSystemWorkflowBody(req, res);
+          if (!body) return;
+          if (!["maintenance", "reset"].includes(systemAction)) {
+            return res.status(404).json({ error: "Unknown system action" });
+          }
+          if (systemAction === "maintenance") {
+            return handleSystemMaintenance(req, res, supabase, authData.user, body);
+          }
+          return handleSystemReset(req, res, supabase, authData.user, body);
         }
       }
       return res.status(405).json({ error: "Method not allowed" });

@@ -357,6 +357,7 @@ export default function AdminPlatformMessages() {
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastSubject, setBroadcastSubject] = useState('Paidly platform update');
   const [broadcastBody, setBroadcastBody] = useState('');
+  const [broadcastResult, setBroadcastResult] = useState(null);
   const threadEndRef = useRef(null);
 
   const {
@@ -519,10 +520,10 @@ export default function AdminPlatformMessages() {
     }
     try {
       const result = await broadcastMutation.mutateAsync({ subject, content });
+      setBroadcastResult(result);
       toast.success('Update sent', {
-        description: `Delivered to ${result.inserted} users.`,
+        description: `Inbox messages: ${result.insertedMessages}. Notifications: ${result.inserted}. Email sent: ${result.emailSent}. Queued: ${result.emailQueued}.`,
       });
-      setBroadcastOpen(false);
       setBroadcastSubject('Paidly platform update');
       setBroadcastBody('');
     } catch {
@@ -1056,7 +1057,7 @@ export default function AdminPlatformMessages() {
           <DialogHeader>
             <DialogTitle>Broadcast platform update</DialogTitle>
             <DialogDescription>
-              Sends one in-app notification to all users via the notification bell feed.
+              Sends one in-app notification and an email update to all users.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1080,9 +1081,36 @@ export default function AdminPlatformMessages() {
                 placeholder="Describe the release/update for all users…"
               />
             </div>
+            {broadcastResult ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <p className="font-medium text-foreground">Latest delivery breakdown</p>
+                <p className="mt-1 text-muted-foreground">
+                  Job status: <span className="font-medium text-foreground">{String(broadcastResult.status || 'queued')}</span>
+                  {" · "}
+                  Inbox messages: <span className="font-medium text-foreground">{broadcastResult.insertedMessages}</span>
+                  {" · "}
+                  In-app notifications: <span className="font-medium text-foreground">{broadcastResult.inserted}</span>
+                  {" · "}
+                  Emails sent: <span className="font-medium text-foreground">{broadcastResult.emailSent}</span>
+                  {" · "}
+                  Queued: <span className="font-medium text-foreground">{broadcastResult.emailQueued ?? 0}</span>
+                  {" · "}
+                  Skipped: <span className="font-medium text-foreground">{broadcastResult.emailSkipped}</span>
+                  {" · "}
+                  Failed: <span className="font-medium text-foreground">{broadcastResult.emailFailed}</span>
+                </p>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setBroadcastOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setBroadcastOpen(false);
+                setBroadcastResult(null);
+              }}
+            >
               Cancel
             </Button>
             <Button

@@ -2,6 +2,7 @@
  * Single Vercel cron entry (Hobby plan). Jobs dispatched via `?job=` (see vercel.json rewrites).
  */
 import { createClient } from "@supabase/supabase-js";
+import { processQueuedBroadcastJobs } from "../server/src/adminBroadcastQueue.js";
 
 function isAuthorized(req) {
   const secret = process.env.CRON_SECRET;
@@ -369,6 +370,18 @@ export default async function handler(req, res) {
         ok: true,
         at: new Date().toISOString(),
         path: "subscription-prebill-invoices",
+        ...out,
+      });
+    }
+    if (job === "admin-broadcast-email") {
+      const out = await processQueuedBroadcastJobs(getSupabaseAdmin(), {
+        jobLimit: Math.max(1, Number(req.query?.job_limit || 5)),
+        batchSize: Math.max(1, Number(req.query?.batch_size || 100)),
+      });
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "admin-broadcast-email",
         ...out,
       });
     }

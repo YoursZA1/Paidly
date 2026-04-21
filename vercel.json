@@ -45,6 +45,10 @@
       "destination": "/api/cron?job=subscription-prebill-invoices"
     },
     {
+      "source": "/api/cron/admin-broadcast-email",
+      "destination": "/api/cron?job=admin-broadcast-email"
+    },
+    {
       "source": "/api/public-invoice",
       "destination": "/api/public-share?doc=invoice&op=get"
     },
@@ -132,6 +136,10 @@
     {
       "path": "/api/cron/subscription-prebill-invoices",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/admin-broadcast-email",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
