@@ -139,7 +139,7 @@
     },
     {
       "path": "/api/cron/admin-broadcast-email",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 10 * * *"
     }
   ]
 }
