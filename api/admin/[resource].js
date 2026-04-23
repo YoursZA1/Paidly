@@ -389,6 +389,31 @@ async function handleSystemHealth(req, res, supabase) {
   });
 }
 
+async function handleBroadcastJobs(req, res, supabase) {
+  let limit = 100;
+  if (req.query?.limit != null && String(req.query.limit).trim() !== "") {
+    const n = Number(String(req.query.limit).trim());
+    if (!Number.isInteger(n) || n < 1 || n > 500) {
+      return res.status(400).json({ error: "Invalid limit (use integer 1–500)" });
+    }
+    limit = n;
+  }
+  const { data, error } = await supabase
+    .from("admin_broadcast_jobs")
+    .select(
+      "id, idempotency_key, sender_id, subject, content, total_recipients, notifications_inserted, messages_inserted, email_sent, email_skipped, email_failed, status, error, created_at, updated_at, started_at, finished_at"
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (String(error.code || "") === "42P01") {
+      return res.status(200).json({ jobs: [] });
+    }
+    return res.status(500).json({ error: error.message || "Failed to load broadcast jobs" });
+  }
+  return res.status(200).json({ jobs: data || [] });
+}
+
 const DEFAULT_ADMIN_SETTINGS = {
   system: {
     siteName: "Paidly",
@@ -762,6 +787,7 @@ export default async function handler(req, res) {
       "affiliates",
       "platform-users",
       "platform-user-messages",
+      "broadcast-jobs",
       "sync-users",
       "security-events",
       "system-health",
@@ -959,6 +985,9 @@ export default async function handler(req, res) {
     if (resource === "system-health") {
       return handleSystemHealth(req, res, supabase);
     }
+    if (resource === "broadcast-jobs") {
+      return handleBroadcastJobs(req, res, supabase);
+    }
     if (resource === "settings") {
       return handleGetSettings(res, supabase);
     }
@@ -969,6 +998,11 @@ export default async function handler(req, res) {
 
     if (resource === "platform-user-messages") {
       const recipientId = String(req.query?.recipient_id ?? "").trim();
+      const messageTypeRaw = String(req.query?.message_type ?? "").trim().toLowerCase();
+      const messageType = messageTypeRaw || undefined;
+      if (messageType && !["direct", "broadcast"].includes(messageType)) {
+        return res.status(400).json({ error: "Invalid message_type (use direct or broadcast)" });
+      }
       let threadLimit = 100;
       if (req.query?.thread_limit != null && String(req.query.thread_limit).trim() !== "") {
         const n = Number(String(req.query.thread_limit).trim());
@@ -988,6 +1022,7 @@ export default async function handler(req, res) {
       try {
         const data = await getAdminPlatformUserMessages(supabase, {
           recipientId: recipientId || undefined,
+          messageType,
           threadLimit,
           listLimit,
         });

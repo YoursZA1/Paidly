@@ -72,9 +72,14 @@ export async function handleVercelSendPlatformMessagePost(req, res) {
   const recipient_id = String(body?.recipient_id ?? "").trim();
   const subject = body?.subject != null ? String(body.subject) : "";
   const content = String(body?.content ?? "").trim();
+  const sendEmail = body?.send_email != null ? Boolean(body.send_email) : true;
+  const sendInApp = body?.send_in_app != null ? Boolean(body.send_in_app) : false;
 
   if (!recipient_id) {
     return res.status(400).json({ error: "recipient_id is required" });
+  }
+  if (!sendEmail && !sendInApp) {
+    return res.status(400).json({ error: "Select at least one delivery channel" });
   }
 
   try {
@@ -83,13 +88,21 @@ export async function handleVercelSendPlatformMessagePost(req, res) {
       senderId: authData.user.id,
       subject,
       content,
+      sendEmail,
+      sendInApp,
+      messageType: "direct",
+      status: sendInApp ? "delivered" : "pending",
     });
-    const email_delivery = await sendAdminPlatformMessageToSignupEmail(supabase, {
-      recipientId: recipient_id,
-      subject: message?.subject ?? subject,
-      plainBody: content,
-      messageId: message?.id,
-    });
+
+    let email_delivery = { status: "skipped", reason: "send_email_disabled" };
+    if (sendEmail) {
+      email_delivery = await sendAdminPlatformMessageToSignupEmail(supabase, {
+        recipientId: recipient_id,
+        subject: message?.subject ?? subject,
+        plainBody: content,
+        messageId: message?.id,
+      });
+    }
     return res.status(200).json({ ok: true, message, email_delivery });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

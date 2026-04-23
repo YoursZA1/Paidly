@@ -13,6 +13,12 @@ import {
   LayoutTemplate,
   ClipboardList,
   Copy,
+  Mail,
+  CircleAlert,
+  CheckCircle2,
+  Clock3,
+  Radio,
+  Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -20,6 +26,7 @@ import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import {
   fetchAdminPlatformUserMessages,
+  fetchAdminBroadcastJobs,
   postAdminBroadcastUpdate,
   postAdminSendMessage,
 } from '@/api/fetchAdminPlatformUserMessages';
@@ -47,6 +54,7 @@ import {
   DEFAULT_ADMIN_PLATFORM_SUBJECT,
 } from '@/lib/adminPlatformMessagePresets';
 import { useCurrentUser } from '@/lib/useCurrentUser';
+import { notifySuccess } from '@/lib/notify';
 import { cn } from '@/lib/utils';
 import { stableDirectoryRowKey } from '@/utils/stableListKey';
 
@@ -81,6 +89,23 @@ function platformUserSearchBlob(u) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
+}
+
+function channelLabelFromConversation(c) {
+  const hasEmail = Boolean(c?.send_email);
+  const hasInApp = Boolean(c?.send_in_app);
+  if (hasEmail && hasInApp) return 'both';
+  if (hasEmail) return 'email';
+  if (hasInApp) return 'in_app';
+  return String(c?.channel || 'both');
+}
+
+function statusTone(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'failed') return 'destructive';
+  if (s === 'opened' || s === 'delivered') return 'default';
+  if (s === 'sent') return 'secondary';
+  return 'outline';
 }
 
 function normalizeEmailKey(email) {
@@ -161,7 +186,7 @@ function WaitlistContextBlock({ entry, loading, errorMessage, className }) {
     const text = buildWaitlistClipboardSummary(entry);
     try {
       await navigator.clipboard.writeText(text);
-      toast.success('Waitlist summary copied');
+      notifySuccess('Waitlist summary copied');
     } catch {
       toast.error('Could not copy to clipboard');
     }
@@ -292,8 +317,12 @@ export default function AdminPlatformMessages() {
     []
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const [messageKindFilter, setMessageKindFilter] = useState('all');
+  const [segmentFilter, setSegmentFilter] = useState('all-users');
   const [userPickerQuery, setUserPickerQuery] = useState('');
   const [selectedRecipientId, setSelectedRecipientId] = useState(null);
+  const [selectedHubType, setSelectedHubType] = useState('direct');
+  const [selectedBroadcastJobId, setSelectedBroadcastJobId] = useState(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [newRecipientId, setNewRecipientId] = useState('');
   const [newTemplateId, setNewTemplateId] = useState('');
@@ -353,11 +382,18 @@ export default function AdminPlatformMessages() {
     error: convError,
   } = useQuery({
     queryKey: ['admin-platform-user-messages', 'conversations'],
-    queryFn: () => fetchAdminPlatformUserMessages({ listLimit: 500 }),
+    queryFn: () => fetchAdminPlatformUserMessages({ listLimit: 500, messageType: 'direct' }),
     refetchInterval: 12_000,
   });
 
   const conversations = convPayload?.conversations ?? [];
+
+  const { data: broadcastPayload, isLoading: broadcastLoading } = useQuery({
+    queryKey: ['admin-broadcast-jobs'],
+    queryFn: () => fetchAdminBroadcastJobs({ limit: 120 }),
+    refetchInterval: 20_000,
+  });
+  const broadcastJobs = broadcastPayload?.jobs ?? [];
 
   const {
     data: threadPayload,
@@ -368,7 +404,7 @@ export default function AdminPlatformMessages() {
   } = useQuery({
     queryKey: ['admin-platform-user-messages', 'thread', selectedRecipientId],
     queryFn: () =>
-      fetchAdminPlatformUserMessages({ recipientId: selectedRecipientId, threadLimit: 150 }),
+      fetchAdminPlatformUserMessages({ recipientId: selectedRecipientId, threadLimit: 150, messageType: 'direct' }),
     enabled: Boolean(selectedRecipientId),
     refetchInterval: 12_000,
   });
@@ -382,17 +418,87 @@ export default function AdminPlatformMessages() {
     if (sub) setReplySubject(sub.startsWith('Re:') ? sub : `Re: ${sub}`);
   }, [selectedRecipientId, threadMessages]);
 
+  const userSegments = useMemo(() => {
+    const now = Date.now();
+    const activeIds = new Set(
+      conversations
+        .filter((c) => {
+          const ts = c?.last_at ? new Date(c.last_at).getTime() : 0;
+          return Number.isFinite(ts) && now - ts <= 1000 * 60 * 60 * 24 * 14;
+        })
+        .map((c) => c.recipient_id)
+    );
+    const trialIds = new Set(
+      platformUsers
+        .filter((u) => {
+          const role = platformUserRole(u);
+          const plan = String(u?.subscription_status || u?.subscription_plan || u?.plan || '').toLowerCase();
+          return role.includes('trial') || plan.includes('trial');
+        })
+        .map((u) => u.id)
+    );
+    const payingIds = new Set(
+      platformUsers
+        .filter((u) => {
+          const plan = String(u?.subscription_status || u?.subscription_plan || u?.plan || '').toLowerCase();
+          return ['active', 'paid', 'pro', 'premium', 'business'].some((t) => plan.includes(t));
+        })
+        .map((u) => u.id)
+    );
+    const failedEmailIds = new Set(
+      conversations
+        .filter((c) => {
+          const st = String(c?.status || '').toLowerCase();
+          const emailSt = String(c?.deliveries?.email?.status || '').toLowerCase();
+          return st === 'failed' || emailSt === 'failed';
+        })
+        .map((c) => c.recipient_id)
+    );
+    return [
+      { id: 'all-users', label: 'All Users', count: platformUsers.length, ids: null },
+      { id: 'recently-active', label: 'Recently Active', count: activeIds.size, ids: activeIds },
+      { id: 'trial-users', label: 'Trial Users', count: trialIds.size, ids: trialIds },
+      { id: 'paying-users', label: 'Paying Users', count: payingIds.size, ids: payingIds },
+      { id: 'failed-email-users', label: 'Failed Email Users', count: failedEmailIds.size, ids: failedEmailIds },
+    ];
+  }, [platformUsers, conversations]);
+
   const filteredConversations = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return conversations;
+    const segment = userSegments.find((s) => s.id === segmentFilter);
     return conversations.filter((c) => {
+      if (segment?.ids && !segment.ids.has(c.recipient_id)) return false;
+      const status = String(c?.status || '').toLowerCase();
+      const channel = channelLabelFromConversation(c);
+      const failed = status === 'failed' || String(c?.deliveries?.email?.status || '').toLowerCase() === 'failed';
+      if (messageKindFilter === 'broadcast') return false;
+      if (messageKindFilter === 'email' && !(channel === 'email' || channel === 'both')) return false;
+      if (messageKindFilter === 'direct' && channel === 'email') return false;
+      if (messageKindFilter === 'failed' && !failed) return false;
+      if (!q) return true;
       const u = userMap.get(c.recipient_id);
       const label = platformUserLabel(u).toLowerCase();
       const email = platformUserEmail(u).toLowerCase();
       const prev = String(c.preview || '').toLowerCase();
       return label.includes(q) || email.includes(q) || prev.includes(q);
     });
-  }, [conversations, searchTerm, userMap]);
+  }, [conversations, searchTerm, userMap, segmentFilter, messageKindFilter, userSegments]);
+
+  const filteredBroadcastJobs = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return broadcastJobs.filter((job) => {
+      if (messageKindFilter === 'direct') return false;
+      if (messageKindFilter === 'email') return true;
+      if (messageKindFilter === 'failed') {
+        return Number(job?.email_failed || 0) > 0 || String(job?.status || '').toLowerCase() === 'failed';
+      }
+      if (!q) return true;
+      return (
+        String(job?.subject || '').toLowerCase().includes(q) ||
+        String(job?.content || '').toLowerCase().includes(q)
+      );
+    });
+  }, [broadcastJobs, messageKindFilter, searchTerm]);
 
   const sendMutation = useMutation({
     mutationFn: postAdminSendMessage,
@@ -401,6 +507,7 @@ export default function AdminPlatformMessages() {
       const recipientId = variables.recipientId || variables.recipientIds?.[0];
       if (recipientId) {
         setSelectedRecipientId(recipientId);
+        setSelectedHubType('direct');
       }
     },
     onError: (e) => {
@@ -444,9 +551,10 @@ export default function AdminPlatformMessages() {
         .filter(Boolean)
         .join(' + ');
       const skippedEmail = Number(result?.skippedEmail || 0);
-      toast.success('Message sent', {
-        description: `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`,
-      });
+      notifySuccess(
+        'Message sent',
+        `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`
+      );
       setComposerOpen(false);
       setNewRecipientId('');
       setNewTemplateId('');
@@ -485,9 +593,10 @@ export default function AdminPlatformMessages() {
         .filter(Boolean)
         .join(' + ');
       const skippedEmail = Number(result?.skippedEmail || 0);
-      toast.success('Message sent', {
-        description: `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`,
-      });
+      notifySuccess(
+        'Message sent',
+        `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`
+      );
       setReplyTemplateId('');
       setReplyBody('');
     } catch {
@@ -505,9 +614,14 @@ export default function AdminPlatformMessages() {
     try {
       const result = await broadcastMutation.mutateAsync({ subject, content });
       setBroadcastResult(result);
-      toast.success('Update sent', {
-        description: `Inbox messages: ${result.insertedMessages}. Notifications: ${result.inserted}. Email sent: ${result.emailSent}. Queued: ${result.emailQueued}.`,
-      });
+      if (result?.jobId) {
+        setSelectedBroadcastJobId(String(result.jobId));
+        setSelectedHubType('broadcast');
+      }
+      notifySuccess(
+        'Update sent',
+        `Inbox messages: ${result.insertedMessages}. Notifications: ${result.inserted}. Email sent: ${result.emailSent}. Queued: ${result.emailQueued}.`
+      );
       setBroadcastSubject('Paidly platform update');
       setBroadcastBody('');
     } catch {
@@ -539,6 +653,10 @@ export default function AdminPlatformMessages() {
   }, [sortedThread.length, selectedRecipientId]);
 
   const selectedUser = selectedRecipientId ? userMap.get(selectedRecipientId) : null;
+  const selectedBroadcastJob = useMemo(
+    () => broadcastJobs.find((j) => String(j?.id || '') === String(selectedBroadcastJobId || '')) || null,
+    [broadcastJobs, selectedBroadcastJobId]
+  );
   const selectedSignupEmailKey = normalizeEmailKey(platformUserEmail(selectedUser));
   const selectedWaitlistEntry = selectedSignupEmailKey
     ? waitlistByEmail.get(selectedSignupEmailKey)
@@ -605,8 +723,8 @@ export default function AdminPlatformMessages() {
   return (
     <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
       <PageHeader
-        title="User messages"
-        description="Messages are stored in-app and emailed to each user’s signup (login) address via Resend — HTML and plain text, with Reply-To support. Ideal for product updates, moving waitlist sign-ups onto Paidly, and nudging users who have not confirmed their email. Use a verified sending domain with SPF, DKIM, and DMARC in Resend. Optional server env: ADMIN_OUTREACH_REPLY_TO, ADMIN_OUTREACH_MAILER_FOOTER."
+        title="User Communication"
+        description="Professional communication hub for direct support, broadcasts, and campaign-style updates with channel-aware delivery tracking."
       />
 
       {loadError ? (
@@ -619,338 +737,271 @@ export default function AdminPlatformMessages() {
         <PlatformUsersLoadErrorHint message={usersErr?.message} />
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] gap-0 min-w-0 lg:gap-px lg:rounded-xl lg:border lg:border-border lg:bg-border lg:shadow-sm overflow-hidden min-h-[min(85dvh,820px)]">
-        <motion.div
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          className={cn(
-            'min-h-0 bg-card lg:rounded-none',
-            selectedRecipientId ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'
-          )}
-        >
-          <Card className="border-0 shadow-none rounded-none flex flex-col min-h-0 flex-1">
-            <CardHeader className="border-b border-border space-y-3 shrink-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-lg mb-0">
-                  <MessageCircle className="h-5 w-5 shrink-0" />
-                  Inbox
-                </CardTitle>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setComposerOpen(true)}
-                  className="gap-1.5 shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Compose
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setBroadcastOpen(true)}
-                  className="gap-1.5 shrink-0"
-                >
-                  <Megaphone className="h-4 w-4" />
-                  Broadcast update
-                </Button>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, email, or preview…"
-                  className="pl-9"
-                  aria-label="Search conversations"
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 pt-3 flex-1 min-h-0 flex flex-col">
-              {convLoading ? (
-                <div className="space-y-2 p-2">
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
-                </div>
-              ) : filteredConversations.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p>No conversations yet</p>
-                  <p className="text-sm mt-1">Use Compose to message a user.</p>
-                </div>
-              ) : (
-                <ScrollArea className="flex-1 min-h-[200px] lg:min-h-0 pr-2">
-                  <div className="space-y-2">
-                    {filteredConversations.map((c) => {
-                      const u = userMap.get(c.recipient_id);
-                      const active = selectedRecipientId === c.recipient_id;
-                      const lastAt = c.last_at ? new Date(c.last_at) : null;
-                      return (
-                        <button
-                          key={c.recipient_id}
-                          type="button"
-                          onClick={() => setSelectedRecipientId(c.recipient_id)}
-                          className={cn(
-                            'w-full text-left rounded-lg border px-3 py-3 transition-colors',
-                            active
-                              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
-                              : 'border-border/60 bg-card hover:bg-muted/50'
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={cn(
-                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-                                active ? 'bg-primary/20' : 'bg-muted'
-                              )}
-                            >
-                              <User className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-semibold truncate">{platformUserLabel(u)}</p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {platformUserEmail(u) || c.recipient_id}
-                              </p>
-                              <p className="text-sm text-muted-foreground truncate mt-1">
-                                {String(c.preview || '').replace(/<[^>]*>?/gm, '')}
-                              </p>
-                            </div>
-                            <div className="text-xs text-muted-foreground shrink-0">
-                              {lastAt
-                                ? isToday(lastAt)
-                                  ? format(lastAt, 'HH:mm')
-                                  : format(lastAt, 'MMM d')
-                                : ''}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+      <div className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={() => setComposerOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            New Message
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setBroadcastOpen(true)} className="gap-1.5">
+            <Megaphone className="h-4 w-4" />
+            Broadcast Message
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setBroadcastSubject('Paidly email campaign');
+              setBroadcastOpen(true);
+            }}
+            className="gap-1.5"
+          >
+            <Mail className="h-4 w-4" />
+            Email Campaign
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground pr-1">
+            <Filter className="h-3.5 w-3.5" />
+            Filters:
+          </span>
+          {[
+            ['all', 'All'],
+            ['broadcast', 'Broadcasts'],
+            ['direct', 'Direct'],
+            ['email', 'Email'],
+            ['failed', 'Failed'],
+          ].map(([id, label]) => (
+            <Button
+              key={id}
+              type="button"
+              variant={messageKindFilter === id ? 'default' : 'outline'}
+              size="sm"
+              className="h-8 px-3"
+              onClick={() => setMessageKindFilter(id)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          className={cn(
-            'min-h-0 bg-card flex flex-col lg:rounded-none',
-            !selectedRecipientId ? 'hidden lg:flex' : 'flex flex-col flex-1 min-h-[50dvh] lg:min-h-0'
-          )}
-        >
-          <Card className="border-0 shadow-none rounded-none flex flex-col flex-1 min-h-0 overflow-hidden">
-            {selectedRecipientId ? (
-              <>
-                <div className="border-b border-border px-3 py-3 sm:px-5 sm:py-4 flex items-start gap-3 shrink-0 bg-card">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="lg:hidden shrink-0 mt-0.5"
-                    onClick={() => setSelectedRecipientId(null)}
-                    aria-label="Back to inbox"
-                  >
-                    <ArrowLeft className="h-5 w-5" />
-                  </Button>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-semibold text-base sm:text-lg leading-tight truncate">
-                      {platformUserLabel(selectedUser)}
-                    </h2>
-                    <p className="text-sm text-muted-foreground truncate mt-0.5">
-                      {platformUserEmail(selectedUser) || selectedRecipientId}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2 hidden sm:block">
-                      {sortedThread.length}{' '}
-                      {sortedThread.length === 1 ? 'message' : 'messages'} in this thread
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => refetchThread()}
-                    disabled={threadLoading || threadFetching}
-                  >
-                    Refresh
-                  </Button>
-                </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] gap-4 min-w-0 min-h-[min(85dvh,820px)]">
+        <Card className="border border-border bg-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">User Segments</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {userSegments.map((segment) => (
+              <button
+                key={segment.id}
+                type="button"
+                onClick={() => setSegmentFilter(segment.id)}
+                className={cn(
+                  'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  segmentFilter === segment.id
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border/60 text-muted-foreground hover:bg-muted/40'
+                )}
+              >
+                <span className="font-medium">{segment.label}</span>
+                <span className="ml-2 text-xs">({segment.count})</span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
 
-                <div className="border-b border-border px-3 py-2.5 sm:px-5 bg-muted/10 shrink-0 space-y-1.5">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Waitlist (matched by signup email)
-                  </p>
-                  <WaitlistContextBlock
-                    entry={selectedWaitlistEntry}
-                    loading={waitlistLoading}
-                    errorMessage={waitlistErrorMessage || undefined}
-                  />
-                </div>
-
-                <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
-                  <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
-                    {threadLoading && sortedThread.length === 0 ? (
-                      <>
-                        <Skeleton className="h-32 w-full rounded-xl" />
-                        <Skeleton className="h-28 w-full rounded-xl" />
-                      </>
-                    ) : sortedThread.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">
-                        No messages yet. Send the first one below.
-                      </p>
-                    ) : (
-                      sortedThread.map((m) => {
-                        const mine =
-                          m.sender_id === currentUser?.id ||
-                          m.sender_id === currentUser?.supabase_id;
-                        const at = m.created_at ? new Date(m.created_at) : null;
-                        const peerLabel = platformUserLabel(selectedUser);
-                        const peerInitial = peerLabel.charAt(0).toUpperCase() || 'U';
-                        return (
-                          <article
-                            key={m.id}
-                            className={cn(
-                              'rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden',
-                              mine ? 'border-primary/25 ring-1 ring-primary/10' : 'border-border'
-                            )}
-                          >
-                            <header className="flex items-start justify-between gap-3 border-b border-border/80 bg-muted/20 px-4 py-2.5">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div
-                                  className={cn(
-                                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                                    mine ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                                  )}
-                                  aria-hidden
-                                >
-                                  {mine ? 'You' : peerInitial}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold leading-tight truncate">
-                                    {mine ? 'You (Paidly team)' : peerLabel}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {mine
-                                      ? `To ${platformUserEmail(selectedUser) || 'user'}`
-                                      : 'Message in this thread'}
-                                  </p>
-                                </div>
-                              </div>
-                              {at ? (
-                                <time
-                                  dateTime={at.toISOString()}
-                                  className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums pt-0.5"
-                                >
-                                  {format(at, 'EEE, MMM d, yyyy · HH:mm')}
-                                </time>
-                              ) : null}
-                            </header>
-                            <div className="px-4 py-3 sm:py-4">
-                              <h3 className="text-sm sm:text-base font-medium text-foreground mb-2">
-                                {m.subject?.trim() || 'Message'}
-                              </h3>
-                              <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
-                                {m.content}
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })
-                    )}
-                    <div ref={threadEndRef} className="h-px shrink-0" aria-hidden />
-                  </div>
-                </div>
-
-                <div className="border-t border-border bg-card shrink-0 shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.12)]">
-                  <div className="max-w-3xl mx-auto px-3 py-3 sm:px-6 sm:py-4 space-y-3">
-                    <div className="flex flex-wrap items-end gap-2">
-                      <div className="flex-1 min-w-[200px] space-y-1">
-                        <Label htmlFor="reply-subject" className="text-xs text-muted-foreground">
-                          Subject
-                        </Label>
-                        <Input
-                          id="reply-subject"
-                          value={replySubject}
-                          onChange={(e) => setReplySubject(e.target.value)}
-                          placeholder="Subject"
-                          maxLength={300}
-                          className="h-9"
-                        />
+        <Card className="border border-border bg-card min-h-0 flex flex-col">
+          <CardHeader className="border-b border-border space-y-3 shrink-0">
+            <CardTitle className="text-sm">Message Threads</CardTitle>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search users, subjects, campaigns"
+                className="pl-9"
+                aria-label="Search communication hub"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="p-2 pt-3 flex-1 min-h-0">
+            <ScrollArea className="h-full pr-2">
+              <div className="space-y-2">
+                {filteredConversations.map((c) => {
+                  const u = userMap.get(c.recipient_id);
+                  const status = String(c?.status || 'pending').toLowerCase();
+                  const channel = channelLabelFromConversation(c);
+                  return (
+                    <button
+                      key={c.recipient_id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRecipientId(c.recipient_id);
+                        setSelectedHubType('direct');
+                      }}
+                      className={cn(
+                        'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                        selectedHubType === 'direct' && selectedRecipientId === c.recipient_id
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border/60 hover:bg-muted/40'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{platformUserLabel(u)}</p>
+                          <p className="text-xs text-muted-foreground truncate">{String(c.preview || '')}</p>
+                        </div>
+                        <Badge variant={statusTone(status)} className="capitalize">
+                          {status}
+                        </Badge>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 shrink-0 h-9"
-                        onClick={() => setTemplatePickerTarget('reply')}
-                      >
-                        <LayoutTemplate className="h-4 w-4" />
-                        Templates
-                      </Button>
-                    </div>
-                    {replyPresetLabel ? (
-                      <p className="text-xs text-muted-foreground">
-                        Starter: <span className="text-foreground font-medium">{replyPresetLabel}</span>
-                      </p>
-                    ) : null}
-                    <div className="space-y-1">
-                      <Label htmlFor="reply-body" className="text-xs text-muted-foreground">
-                        Reply
-                      </Label>
-                      <Textarea
-                        id="reply-body"
-                        value={replyBody}
-                        onChange={(e) => setReplyBody(e.target.value)}
-                        placeholder="Type your update…"
-                        rows={5}
-                        className="resize-y min-h-[120px] text-sm"
-                        maxLength={50000}
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox checked={replySendInApp} onCheckedChange={(v) => setReplySendInApp(v === true)} />
-                        Send to Dashboard
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox checked={replySendEmail} onCheckedChange={(v) => setReplySendEmail(v === true)} />
-                        Send via Email
-                      </label>
-                    </div>
-                    <div className="flex justify-end pt-1">
-                      {sendReplyDisabledReason ? (
-                        <p className="mr-auto text-xs text-muted-foreground self-center">
-                          {sendReplyDisabledReason}
-                        </p>
-                      ) : null}
-                      <Button
-                        type="button"
-                        onClick={handleSendReply}
-                        disabled={!canSendReply || usersLoading}
-                        className="gap-2"
-                      >
-                        <Send className="h-4 w-4" />
-                        {sendMutation.isPending ? 'Sending…' : 'Send'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center flex-1 min-h-[280px] text-muted-foreground p-8">
-                <MessageCircle className="w-16 h-16 mb-4 opacity-40" />
-                <p className="text-lg font-medium text-foreground">Select a conversation</p>
-                <p className="text-sm text-center max-w-sm mt-1">
-                  Choose a thread from the inbox, or use Compose to message someone new. Users match the
-                  platform directory on the Users page.
-                </p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
+                        {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
+                        <span className="ml-auto">
+                          {c.last_at ? format(new Date(c.last_at), isToday(new Date(c.last_at)) ? 'HH:mm' : 'MMM d') : '—'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+                {filteredBroadcastJobs.map((job) => {
+                  const failed = Number(job?.email_failed || 0);
+                  const delivered = Number(job?.email_sent || 0) + Number(job?.email_skipped || 0);
+                  const total = Number(job?.total_recipients || 0);
+                  const openRate = total > 0 ? Math.round((delivered / total) * 100) : 0;
+                  return (
+                    <button
+                      key={job.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedBroadcastJobId(String(job.id));
+                        setSelectedHubType('broadcast');
+                      }}
+                      className={cn(
+                        'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                        selectedHubType === 'broadcast' && String(selectedBroadcastJobId || '') === String(job.id)
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border/60 hover:bg-muted/40'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium truncate">{String(job?.subject || 'Broadcast campaign')}</p>
+                        <Badge variant={failed > 0 ? 'destructive' : 'secondary'}>{String(job?.status || 'queued')}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Audience {total} · Delivered {delivered} · Open {openRate}%</p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Megaphone className="h-3.5 w-3.5" />
+                        <Mail className="h-3.5 w-3.5" />
+                        <span className="ml-auto">
+                          {job?.created_at ? format(new Date(job.created_at), 'MMM d') : '—'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+                {(convLoading || broadcastLoading) ? (
+                  <>
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </>
+                ) : null}
               </div>
-            )}
-          </Card>
-        </motion.div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border bg-card min-h-0 flex flex-col overflow-hidden">
+          {selectedHubType === 'broadcast' && selectedBroadcastJob ? (
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Broadcast Campaign</h3>
+                <Badge variant="secondary">{String(selectedBroadcastJob.status || 'queued')}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">{String(selectedBroadcastJob.subject || 'Campaign')}</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border border-border p-3">Audience: {Number(selectedBroadcastJob.total_recipients || 0)}</div>
+                <div className="rounded-lg border border-border p-3">Channels: Email + In-App</div>
+                <div className="rounded-lg border border-border p-3">Sent: {Number(selectedBroadcastJob.email_sent || 0)}</div>
+                <div className="rounded-lg border border-border p-3">Delivered: {Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)}</div>
+                <div className="rounded-lg border border-border p-3">Failed: {Number(selectedBroadcastJob.email_failed || 0)}</div>
+                <div className="rounded-lg border border-border p-3">Open rate: {Number(selectedBroadcastJob.total_recipients || 0) > 0 ? Math.round(((Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)) / Number(selectedBroadcastJob.total_recipients || 1)) * 100) : 0}%</div>
+              </div>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{String(selectedBroadcastJob.content || '')}</p>
+            </div>
+          ) : selectedRecipientId ? (
+            <>
+              <div className="border-b border-border px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-semibold truncate">{platformUserLabel(selectedUser)}</h2>
+                  <p className="text-xs text-muted-foreground truncate">{platformUserEmail(selectedUser) || selectedRecipientId}</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => refetchThread()} disabled={threadLoading || threadFetching}>
+                  Refresh
+                </Button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
+                <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
+                  {sortedThread.map((m) => {
+                    const mine = m.sender_id === currentUser?.id || m.sender_id === currentUser?.supabase_id;
+                    const channel = String(m?.channel || (m?.send_email && m?.send_in_app ? 'both' : m?.send_email ? 'email' : 'in_app'));
+                    return (
+                      <article key={m.id} className={cn('rounded-xl border bg-card overflow-hidden', mine ? 'border-primary/25' : 'border-border')}>
+                        <header className="flex items-center justify-between gap-2 border-b border-border/80 bg-muted/20 px-4 py-2">
+                          <p className="text-xs font-medium">{mine ? 'Paidly team' : platformUserLabel(selectedUser)}</p>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
+                            {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
+                            <Badge variant={statusTone(m?.status)} className="ml-1 capitalize">{String(m?.status || 'pending')}</Badge>
+                          </div>
+                        </header>
+                        <div className="px-4 py-3">
+                          <h3 className="text-sm font-medium">{m.subject?.trim() || 'Message'}</h3>
+                          <p className="text-sm text-foreground/90 whitespace-pre-wrap mt-1">{m.content}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="border-t border-border bg-card p-4 space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="reply-subject">Subject</Label>
+                  <Input id="reply-subject" value={replySubject} onChange={(e) => setReplySubject(e.target.value)} maxLength={300} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="reply-body">Message</Label>
+                  <Textarea id="reply-body" value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={4} maxLength={50000} />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={replySendInApp} onCheckedChange={(v) => setReplySendInApp(v === true)} />
+                    In-App
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={replySendEmail} onCheckedChange={(v) => setReplySendEmail(v === true)} />
+                    Email
+                  </label>
+                  <span className="text-xs text-muted-foreground">Both = select both channels</span>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="button" onClick={handleSendReply} disabled={!canSendReply || usersLoading} className="gap-2">
+                    <Send className="h-4 w-4" />
+                    {sendMutation.isPending ? 'Sending…' : 'Send'}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center flex-1 min-h-[320px] text-muted-foreground p-8">
+              <MessageCircle className="w-12 h-12 mb-3 opacity-40" />
+              <p className="text-base font-medium text-foreground">Select a direct thread or broadcast campaign</p>
+              <p className="text-sm text-center mt-1">Use filters and segments to focus communication operations quickly.</p>
+            </div>
+          )}
+        </Card>
       </div>
 
       <AdminStarterTemplatesDialog

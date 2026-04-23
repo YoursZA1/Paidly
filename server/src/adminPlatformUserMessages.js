@@ -11,10 +11,12 @@ const MAX_THREAD = 150;
 /** Keep aligned with email + DB ergonomics (defense in depth vs oversized payloads). */
 export const ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT = 300;
 export const ADMIN_PLATFORM_MESSAGE_MAX_CONTENT = 50_000;
+const MESSAGE_STATUS_VALUES = new Set(["pending", "sent", "delivered", "opened", "failed"]);
+const MESSAGE_TYPE_VALUES = new Set(["direct", "broadcast"]);
 
 /** Maps to HTTP 400 when thrown from list/send helpers (Express + Vercel). */
 export function isAdminPlatformMessageClientError(message) {
-  return /Invalid (recipient|sender)_id|Recipient not found|Sender profile not found|recipient_id and sender_id are required|content is required|subject too long|content too long/i.test(
+  return /Invalid (recipient|sender|campaign)_id|Recipient not found|Sender profile not found|recipient_id and sender_id are required|content is required|subject too long|content too long|invalid channel|invalid status|invalid message_type/i.test(
     String(message || "")
   );
 }
@@ -41,20 +43,28 @@ export function isMissingAdminPlatformMessagesRelation(error) {
  */
 export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
   const recipientId = String(opts.recipientId || "").trim();
+  const messageType = opts.messageType ? String(opts.messageType).trim().toLowerCase() : "";
   const threadLimit = Math.min(MAX_THREAD, Math.max(1, Number(opts.threadLimit) || 100));
   const listLimit = Math.min(MAX_LIST, Math.max(1, Number(opts.listLimit) || 500));
 
   if (recipientId && !isValidUuid(recipientId)) {
     throw new Error("Invalid recipient_id");
   }
+  if (messageType && !MESSAGE_TYPE_VALUES.has(messageType)) {
+    throw new Error("invalid message_type");
+  }
 
   if (recipientId) {
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("admin_platform_messages")
-      .select("id, recipient_id, sender_id, subject, content, is_read, created_at")
+      .select(
+        "id, recipient_id, sender_id, subject, content, is_read, send_email, send_in_app, channel, status, delivered_at, failed_reason, created_at"
+      )
       .eq("recipient_id", recipientId)
       .order("created_at", { ascending: false })
       .limit(threadLimit);
+    if (messageType) query = query.eq("message_type", messageType);
+    const { data, error } = await query;
 
     if (error) {
       if (isMissingAdminPlatformMessagesRelation(error)) {
@@ -65,14 +75,49 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
       }
       throw new Error(error.message);
     }
-    return { messages: data || [] };
+    const messages = data || [];
+    const messageIds = messages.map((m) => String(m.id || "")).filter(Boolean);
+    let deliveriesByMessage = new Map();
+    if (messageIds.length) {
+      const { data: deliveryRows, error: deliveryErr } = await supabaseAdmin
+        .from("message_deliveries")
+        .select("message_id, channel, status, sent_at, read_at")
+        .in("message_id", messageIds);
+      if (deliveryErr) {
+        if (String(deliveryErr.code || "") !== "42P01") {
+          throw new Error(deliveryErr.message);
+        }
+      }
+      deliveriesByMessage = new Map();
+      for (const row of deliveryRows || []) {
+        const key = String(row.message_id || "");
+        if (!key) continue;
+        const current = deliveriesByMessage.get(key) || {};
+        current[row.channel === "email" ? "email" : "inApp"] = {
+          status: String(row.status || "pending"),
+          sent_at: row.sent_at || null,
+          read_at: row.read_at || null,
+        };
+        deliveriesByMessage.set(key, current);
+      }
+    }
+    return {
+      messages: messages.map((m) => ({
+        ...m,
+        deliveries: deliveriesByMessage.get(String(m.id || "")) || null,
+      })),
+    };
   }
 
-  const { data, error } = await supabaseAdmin
+  let listQuery = supabaseAdmin
     .from("admin_platform_messages")
-    .select("id, recipient_id, sender_id, subject, content, is_read, created_at")
+    .select(
+      "id, recipient_id, sender_id, subject, content, is_read, send_email, send_in_app, channel, status, delivered_at, failed_reason, created_at"
+    )
     .order("created_at", { ascending: false })
     .limit(listLimit);
+  if (messageType) listQuery = listQuery.eq("message_type", messageType);
+  const { data, error } = await listQuery;
 
   if (error) {
     if (isMissingAdminPlatformMessagesRelation(error)) {
@@ -85,17 +130,52 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
   }
 
   const rows = data || [];
+  const messageIds = rows.map((m) => String(m.id || "")).filter(Boolean);
+  let deliveriesByMessage = new Map();
+  if (messageIds.length) {
+    const { data: deliveryRows, error: deliveryErr } = await supabaseAdmin
+      .from("message_deliveries")
+      .select("message_id, channel, status, sent_at, read_at")
+      .in("message_id", messageIds);
+    if (deliveryErr) {
+      if (String(deliveryErr.code || "") !== "42P01") {
+        throw new Error(deliveryErr.message);
+      }
+    }
+    deliveriesByMessage = new Map();
+    for (const row of deliveryRows || []) {
+      const key = String(row.message_id || "");
+      if (!key) continue;
+      const current = deliveriesByMessage.get(key) || {};
+      current[row.channel === "email" ? "email" : "inApp"] = {
+        status: String(row.status || "pending"),
+        sent_at: row.sent_at || null,
+        read_at: row.read_at || null,
+      };
+      deliveriesByMessage.set(key, current);
+    }
+  }
+
   const seen = new Set();
   const conversations = [];
   for (const m of rows) {
     const rid = m.recipient_id;
     if (!rid || seen.has(rid)) continue;
     seen.add(rid);
+    const deliveries = deliveriesByMessage.get(String(m.id || "")) || null;
     conversations.push({
       recipient_id: rid,
       last_at: m.created_at,
       preview: String(m.content || "").slice(0, 140),
       subject: m.subject || "",
+      message_id: m.id,
+      status: m.status || "pending",
+      channel: m.channel || "both",
+      delivered_at: m.delivered_at || null,
+      failed_reason: m.failed_reason || null,
+      send_email: Boolean(m.send_email),
+      send_in_app: Boolean(m.send_in_app),
+      deliveries,
     });
   }
 
@@ -111,6 +191,24 @@ export async function insertAdminPlatformMessage(supabaseAdmin, payload) {
   const senderId = String(payload.senderId || "").trim();
   const content = String(payload.content || "").trim();
   const subject = String(payload.subject || "").trim();
+  const sendEmail = payload.sendEmail != null ? Boolean(payload.sendEmail) : true;
+  const sendInApp = payload.sendInApp != null ? Boolean(payload.sendInApp) : true;
+  const channel = sendEmail && sendInApp ? "both" : sendEmail ? "email" : sendInApp ? "in_app" : "";
+  const normalizedStatus = String(payload.status || "pending").toLowerCase();
+  const normalizedMessageType = String(payload.messageType || "direct").toLowerCase();
+  const campaignId = payload.campaignId != null ? String(payload.campaignId).trim() : null;
+  if (!channel) {
+    throw new Error("invalid channel");
+  }
+  if (!MESSAGE_STATUS_VALUES.has(normalizedStatus)) {
+    throw new Error("invalid status");
+  }
+  if (!MESSAGE_TYPE_VALUES.has(normalizedMessageType)) {
+    throw new Error("invalid message_type");
+  }
+  if (campaignId && !isValidUuid(campaignId)) {
+    throw new Error("Invalid campaign_id");
+  }
 
   if (!recipientId || !senderId) {
     throw new Error("recipient_id and sender_id are required");
@@ -163,9 +261,14 @@ export async function insertAdminPlatformMessage(supabaseAdmin, payload) {
     subject: subject || "Message from the Paidly team",
     content,
     is_read: false,
-    send_email: payload.sendEmail != null ? Boolean(payload.sendEmail) : true,
-    send_in_app: payload.sendInApp != null ? Boolean(payload.sendInApp) : true,
-    status: String(payload.status || "pending") === "sent" ? "sent" : "pending",
+    send_email: sendEmail,
+    send_in_app: sendInApp,
+    channel,
+    status: normalizedStatus,
+    delivered_at: payload.deliveredAt || null,
+    failed_reason: payload.failedReason ? String(payload.failedReason).slice(0, 500) : null,
+    message_type: normalizedMessageType,
+    campaign_id: campaignId || null,
   };
 
   const { data, error } = await supabaseAdmin.from("admin_platform_messages").insert(row).select("*").single();

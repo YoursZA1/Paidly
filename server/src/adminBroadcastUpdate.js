@@ -130,6 +130,14 @@ async function deliverBroadcastWithoutQueue(supabaseAdmin, sender, recipientRows
       subject: normalizedSubject,
       content,
       is_read: false,
+      send_email: true,
+      send_in_app: true,
+      channel: "both",
+      status: "sent",
+      delivered_at: new Date().toISOString(),
+      failed_reason: null,
+      message_type: "broadcast",
+      campaign_id: null,
     }));
     const { error } = await supabaseAdmin.from("admin_platform_messages").insert(rows);
     if (error) {
@@ -342,6 +350,14 @@ export async function broadcastAdminUpdateToAllUsers(supabaseAdmin, senderId, us
       subject: normalizedSubject,
       content,
       is_read: false,
+      send_email: true,
+      send_in_app: true,
+      channel: "both",
+      status: "sent",
+      delivered_at: new Date().toISOString(),
+      failed_reason: null,
+      message_type: "broadcast",
+      campaign_id: createdJob?.id || null,
     }));
     const { error } = await supabaseAdmin.from("admin_platform_messages").insert(rows);
     if (error) {

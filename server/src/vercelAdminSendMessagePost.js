@@ -73,7 +73,9 @@ async function insertDelivery(supabase, row) {
 }
 
 async function updateMessageStatus(supabase, messageId, status) {
-  const { error } = await supabase.from("admin_platform_messages").update({ status }).eq("id", messageId);
+  const patch = { status };
+  if (status === "delivered" || status === "sent") patch.delivered_at = new Date().toISOString();
+  const { error } = await supabase.from("admin_platform_messages").update(patch).eq("id", messageId);
   if (error) throw new Error(error.message || "Failed to update message status");
 }
 
@@ -131,10 +133,13 @@ export async function handleVercelAdminSendMessagePost(req, res) {
         sendEmail: payload.sendEmail,
         sendInApp: payload.sendInApp,
         status: "pending",
+        messageType: "direct",
       });
       const messageId = String(message?.id || "");
       if (!messageId) continue;
 
+      let finalStatus = "pending";
+      let failedReason = null;
       if (payload.sendInApp) {
         await insertDelivery(supabase, {
           message_id: messageId,
@@ -143,6 +148,7 @@ export async function handleVercelAdminSendMessagePost(req, res) {
           status: "sent",
           sent_at: nowIso,
         });
+        finalStatus = "delivered";
       }
 
       if (payload.sendEmail) {
@@ -162,9 +168,17 @@ export async function handleVercelAdminSendMessagePost(req, res) {
         const sentAt = emailDelivery?.status === "sent" ? new Date().toISOString() : null;
         if (emailDelivery?.status === "failed") {
           failedEmail += 1;
+          failedReason = emailDelivery?.reason || "send_failed";
+          if (!payload.sendInApp) finalStatus = "failed";
           console.error("[admin/send-message] email failed", { recipientId, reason: emailDelivery?.reason || "send_failed" });
         } else if (emailDelivery?.status !== "sent") {
           skippedEmail += 1;
+          if (!payload.sendInApp) {
+            failedReason = emailDelivery?.reason || "email_skipped";
+            finalStatus = "failed";
+          }
+        } else {
+          finalStatus = payload.sendInApp ? "delivered" : "sent";
         }
         const { error: deliveryUpdateError } = await supabase
           .from("message_deliveries")
@@ -175,7 +189,14 @@ export async function handleVercelAdminSendMessagePost(req, res) {
         if (deliveryUpdateError) throw new Error(deliveryUpdateError.message || "Failed to update email delivery");
       }
 
-      await updateMessageStatus(supabase, messageId, "sent");
+      if (failedReason) {
+        const { error: failedPatchErr } = await supabase
+          .from("admin_platform_messages")
+          .update({ failed_reason: String(failedReason).slice(0, 500) })
+          .eq("id", messageId);
+        if (failedPatchErr) throw new Error(failedPatchErr.message || "Failed to set failed reason");
+      }
+      await updateMessageStatus(supabase, messageId, finalStatus);
       sent += 1;
     }
 

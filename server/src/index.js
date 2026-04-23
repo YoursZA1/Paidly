@@ -2192,6 +2192,11 @@ app.get("/api/admin/platform-user-messages", async (req, res) => {
     }
 
     const recipientId = String(req.query.recipient_id || "").trim();
+    const messageTypeRaw = String(req.query.message_type || "").trim().toLowerCase();
+    const messageType = messageTypeRaw || undefined;
+    if (messageType && !["direct", "broadcast"].includes(messageType)) {
+      return res.status(400).json({ error: "Invalid message_type (use direct or broadcast)" });
+    }
     let threadLimit = 100;
     if (req.query.thread_limit != null && String(req.query.thread_limit).trim() !== "") {
       const n = Number(String(req.query.thread_limit).trim());
@@ -2211,6 +2216,7 @@ app.get("/api/admin/platform-user-messages", async (req, res) => {
 
     const data = await getAdminPlatformUserMessages(supabaseAdmin, {
       recipientId: recipientId || undefined,
+      messageType,
       threadLimit,
       listLimit,
     });
@@ -2227,6 +2233,42 @@ app.get("/api/admin/platform-user-messages", async (req, res) => {
   }
 });
 
+app.get("/api/admin/broadcast-jobs", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+    let limit = 100;
+    if (req.query.limit != null && String(req.query.limit).trim() !== "") {
+      const n = Number(String(req.query.limit).trim());
+      if (!Number.isInteger(n) || n < 1 || n > 500) {
+        return res.status(400).json({ error: "Invalid limit (use integer 1–500)" });
+      }
+      limit = n;
+    }
+    const { data, error } = await supabaseAdmin
+      .from("admin_broadcast_jobs")
+      .select(
+        "id, idempotency_key, sender_id, subject, content, total_recipients, notifications_inserted, messages_inserted, email_sent, email_skipped, email_failed, status, error, created_at, updated_at, started_at, finished_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) {
+      if (String(error.code || "") === "42P01") {
+        return res.json({ ok: true, jobs: [] });
+      }
+      return res.status(500).json({ error: error.message || "Failed to load broadcast jobs" });
+    }
+    return res.json({ ok: true, jobs: data || [] });
+  } catch (err) {
+    if (res.headersSent) return;
+    const msg = err?.message || "Failed to load broadcast jobs";
+    logAdminApi(req.method, req.path, 500, msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
 app.post("/api/admin/send-platform-message", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
@@ -2237,9 +2279,14 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
     const recipient_id = String(req.body?.recipient_id ?? "").trim();
     const subject = req.body?.subject != null ? String(req.body.subject) : "";
     const content = String(req.body?.content ?? "").trim();
+    const sendEmail = req.body?.send_email != null ? Boolean(req.body.send_email) : true;
+    const sendInApp = req.body?.send_in_app != null ? Boolean(req.body.send_in_app) : false;
 
     if (!recipient_id) {
       return res.status(400).json({ error: "recipient_id is required" });
+    }
+    if (!sendEmail && !sendInApp) {
+      return res.status(400).json({ error: "Select at least one delivery channel" });
     }
     if (!content) {
       return res.status(400).json({ error: "content is required" });
@@ -2250,13 +2297,21 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
       senderId: adminUser.id,
       subject,
       content,
+      sendEmail,
+      sendInApp,
+      messageType: "direct",
+      status: sendInApp ? "delivered" : "pending",
     });
-    const email_delivery = await sendAdminPlatformMessageToSignupEmail(supabaseAdmin, {
-      recipientId: recipient_id,
-      subject: message?.subject ?? subject,
-      plainBody: content,
-      messageId: message?.id,
-    });
+
+    let email_delivery = { status: "skipped", reason: "send_email_disabled" };
+    if (sendEmail) {
+      email_delivery = await sendAdminPlatformMessageToSignupEmail(supabaseAdmin, {
+        recipientId: recipient_id,
+        subject: message?.subject ?? subject,
+        plainBody: content,
+        messageId: message?.id,
+      });
+    }
     logAdminApi(
       req.method,
       req.path,

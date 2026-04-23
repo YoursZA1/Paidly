@@ -22,11 +22,12 @@ function viteEnvFlag(name) {
   return v === "1" || v === "true" || v === "yes";
 }
 
-function buildPlatformUserMessagesGetUrls(recipientId, threadLimit, listLimit) {
+function buildPlatformUserMessagesGetUrls(recipientId, threadLimit, listLimit, messageType) {
   const params = new URLSearchParams();
   if (recipientId) params.set("recipient_id", recipientId);
   if (threadLimit != null) params.set("thread_limit", String(threadLimit));
   if (listLimit != null) params.set("list_limit", String(listLimit));
+  if (messageType) params.set("message_type", String(messageType));
   const q = params.toString() ? `?${params.toString()}` : "";
 
   const out = [];
@@ -99,6 +100,26 @@ function buildBroadcastUpdatePostUrls() {
   return out;
 }
 
+function buildBroadcastJobsGetUrls(limit = 100) {
+  const params = new URLSearchParams();
+  if (limit != null) params.set("limit", String(limit));
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const out = [];
+  const seen = new Set();
+  const push = (u) => {
+    if (!u || seen.has(u)) return;
+    if (shouldSkipAdminFetchAbsoluteUrl(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
+  const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
+  push(`/api/admin/broadcast-jobs${q}`);
+  if (vite) push(`${vite}/api/admin/broadcast-jobs${q}`);
+  if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/broadcast-jobs${q}`);
+  return out;
+}
+
 async function apiRequestWithTimeout(url, init, timeoutMs = ADMIN_MESSAGE_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -125,7 +146,7 @@ async function getSessionToken() {
 }
 
 /**
- * @param {{ recipientId?: string, threadLimit?: number, listLimit?: number }} opts
+ * @param {{ recipientId?: string, threadLimit?: number, listLimit?: number, messageType?: "direct" | "broadcast" }} opts
  * @returns {Promise<{ conversations?: Array<{ recipient_id: string, last_at: string, preview: string, subject: string }>, messages?: Array<Record<string, unknown>> }>}
  */
 export async function fetchAdminPlatformUserMessages(opts = {}) {
@@ -138,7 +159,8 @@ export async function fetchAdminPlatformUserMessages(opts = {}) {
   const candidates = buildPlatformUserMessagesGetUrls(
     recipientId || undefined,
     opts.threadLimit,
-    opts.listLimit
+    opts.listLimit,
+    opts.messageType
   );
 
   let lastError = null;
@@ -432,4 +454,48 @@ export async function postAdminBroadcastUpdate(body) {
   }
 
   throw new Error(lastError || "Broadcast update failed");
+}
+
+/**
+ * @param {{ limit?: number }} opts
+ * @returns {Promise<{ jobs: Array<Record<string, unknown>> }>}
+ */
+export async function fetchAdminBroadcastJobs(opts = {}) {
+  if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
+    throw new Error("Admin broadcast jobs API requires Node backend (VITE_SUPABASE_ONLY=1).");
+  }
+  const token = await getSessionToken();
+  const candidates = buildBroadcastJobsGetUrls(opts.limit ?? 100);
+  let lastError = null;
+  for (const url of candidates) {
+    let res;
+    try {
+      res = await apiRequest(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        credentials: "include",
+      });
+    } catch (e) {
+      lastError = e?.message || "Network error (Failed to fetch)";
+      continue;
+    }
+    const contentType = res.headers.get("content-type") || "";
+    const looksJson = /json/i.test(contentType);
+    const payload = looksJson ? await res.json().catch(() => ({})) : {};
+    if (!res.ok) {
+      const raw = payload.error ?? payload.message;
+      const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
+      lastError = fromJson || `HTTP ${res.status}`;
+      continue;
+    }
+    if (!Array.isArray(payload.jobs)) {
+      lastError = "Invalid broadcast jobs response.";
+      continue;
+    }
+    return { jobs: payload.jobs };
+  }
+  throw new Error(lastError || "Broadcast jobs fetch failed");
 }
