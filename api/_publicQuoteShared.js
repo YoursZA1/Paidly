@@ -10,9 +10,9 @@ import {
 function mapQuoteItems(rawItems) {
   if (!Array.isArray(rawItems)) return [];
   return rawItems.map((item) => ({
-    description: item?.description || "",
+    description: item?.description || item?.service_name || "",
     quantity: Number(item?.quantity ?? 0) || 0,
-    rate: Number(item?.rate ?? 0) || 0,
+    rate: Number(item?.rate ?? item?.unit_price ?? 0) || 0,
   }));
 }
 
@@ -69,16 +69,27 @@ export async function handlePublicQuoteGet(req, res) {
     const { data: quoteRow, error } = await supabase
       .from("quotes")
       .select(
-        "id, quote_number, created_date, due_date, status, subtotal, tax_rate, tax_amount, discount_amount, total, currency, notes, terms, items, client_id, created_by"
+        "id, quote_number, created_at, valid_until, status, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, client_id, created_by"
       )
       .eq("public_share_token", shareToken)
       .maybeSingle();
 
     if (error) {
+      console.error("[public-quote] quote lookup failed", error);
       return res.status(500).json({ error: "Failed to load quote" });
     }
     if (!quoteRow) {
       return res.status(404).json({ error: "Quote not found" });
+    }
+
+    const { data: quoteItems, error: quoteItemsError } = await supabase
+      .from("quote_items")
+      .select("service_name, description, quantity, unit_price")
+      .eq("quote_id", quoteRow.id)
+      .order("id", { ascending: true });
+    if (quoteItemsError) {
+      console.error("[public-quote] quote items lookup failed", quoteItemsError);
+      return res.status(500).json({ error: "Failed to load quote items" });
     }
 
     const [client, owner] = await Promise.all([
@@ -89,7 +100,12 @@ export async function handlePublicQuoteGet(req, res) {
     return res.status(200).json({
       quote: {
         ...quoteRow,
-        items: mapQuoteItems(quoteRow.items),
+        created_date: quoteRow.created_at,
+        due_date: quoteRow.valid_until,
+        terms: quoteRow.terms_conditions || "",
+        total: Number(quoteRow.total_amount ?? 0) || 0,
+        discount_amount: 0,
+        items: mapQuoteItems(quoteItems),
       },
       client,
       owner,
