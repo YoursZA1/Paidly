@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, MessageCircle, Inbox, FileText, X, Bell } from 'lucide-react';
+import { Plus, Search, MessageCircle, Inbox, FileText, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -436,7 +436,7 @@ export default function MessagesPage() {
                     <CardHeader className="border-b border-border">
                         <div className="flex items-center justify-between gap-3">
                             <CardTitle className="flex items-center gap-2">
-                                <Bell className="w-5 h-5" />
+                                <MessageCircle className="w-5 h-5" />
                                 Admin inbox
                                 {adminInboxUnread > 0 && (
                                     <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
