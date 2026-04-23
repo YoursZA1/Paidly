@@ -112,6 +112,7 @@ import {
 } from "./affiliateApplicationAdminActions.js";
 import { registerClientPortalRoutes } from "./clientPortalApi.js";
 import { registerPublicInvoiceRoutes } from "./publicInvoiceApi.js";
+import { registerPublicQuoteRoutes } from "./publicQuoteApi.js";
 import { registerPublicPayslipRoutes } from "./publicPayslipApi.js";
 import { runExpireOverdueTrialsBatch } from "./trialExpiryBatch.js";
 import {
@@ -611,6 +612,7 @@ app.use(apiAbuseLimiterMiddleware(getClientIp, logSecurity));
 
 registerClientPortalRoutes(app);
 registerPublicInvoiceRoutes(app);
+registerPublicQuoteRoutes(app);
 registerPublicPayslipRoutes(app);
 
 /** Root URL — no SPA here; avoids a bare 404 when someone opens the API port in a browser. */
@@ -2016,6 +2018,56 @@ app.put("/api/admin/users/:userId", async (req, res) => {
   }
 });
 
+app.post("/api/admin/users/bulk-update", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res);
+    if (!adminUser) return;
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const data =
+      req.body?.data && typeof req.body.data === "object" && !Array.isArray(req.body.data)
+        ? req.body.data
+        : null;
+
+    if (!ids.length || !data) {
+      return res.status(400).json({ error: "ids[] and data object are required" });
+    }
+
+    const uniqueIds = [...new Set(ids.map((v) => String(v || "").trim()).filter(Boolean))];
+    const validIds = uniqueIds.filter((id) => isValidUuid(id));
+    if (!validIds.length) {
+      return res.status(400).json({ error: "No valid user ids provided" });
+    }
+
+    const results = [];
+    for (const id of validIds) {
+      try {
+        const { error } = await supabaseAdmin.from("profiles").update(data).eq("id", id);
+        if (error) {
+          results.push({ id, ok: false, error: error.message || "update failed" });
+        } else {
+          results.push({ id, ok: true });
+        }
+      } catch (err) {
+        results.push({ id, ok: false, error: err?.message || "update failed" });
+      }
+    }
+
+    const successCount = results.filter((r) => r.ok).length;
+    const failureCount = results.length - successCount;
+    return res.json({
+      ok: failureCount === 0,
+      total: results.length,
+      successCount,
+      failureCount,
+      results,
+    });
+  } catch (err) {
+    if (res.headersSent) return;
+    return sendUnexpectedError(res, err, "admin/users/bulk-update");
+  }
+});
+
 app.delete("/api/admin/users/:userId", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res);
@@ -2222,6 +2274,136 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
       : isAdminPlatformMessagesSchemaMissingError(msg)
         ? 503
         : 500;
+    logAdminApi(req.method, req.path, status, msg);
+    return res.status(status).json({ error: msg });
+  }
+});
+
+app.post("/api/admin/send-message", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) {
+      return;
+    }
+
+    const subject = req.body?.subject != null ? String(req.body.subject) : "";
+    const content = String(req.body?.content ?? "").trim();
+    const sendEmail = req.body?.send_email != null ? Boolean(req.body.send_email) : true;
+    const sendInApp = req.body?.send_in_app != null ? Boolean(req.body.send_in_app) : true;
+    if (!content) {
+      return res.status(400).json({ error: "content is required" });
+    }
+    if (!sendEmail && !sendInApp) {
+      return res.status(400).json({ error: "Select at least one delivery channel" });
+    }
+
+    const rawRecipientIds = Array.isArray(req.body?.recipient_ids) ? req.body.recipient_ids : [];
+    const singletonRecipient = String(req.body?.recipient_id || "").trim();
+    const parsedRecipients = [
+      ...rawRecipientIds.map((id) => String(id || "").trim()),
+      ...(singletonRecipient ? [singletonRecipient] : []),
+    ];
+    let recipientIds = Array.from(new Set(parsedRecipients)).filter((id) => isValidUuid(id));
+    if (parsedRecipients.length > 0 && recipientIds.length === 0) {
+      return res.status(400).json({ error: "Invalid recipient_id(s)" });
+    }
+    if (!recipientIds.length) {
+      const { data, error } = await supabaseAdmin.from("profiles").select("id").limit(3000);
+      if (error) {
+        return res.status(500).json({ error: error.message || "Failed to load recipients" });
+      }
+      recipientIds = Array.from(new Set((data || []).map((row) => String(row?.id || "").trim()))).filter(
+        (id) => isValidUuid(id)
+      );
+    }
+    recipientIds = recipientIds.filter((id) => id !== adminUser.id);
+
+    let sent = 0;
+    let failedEmail = 0;
+    let skippedEmail = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const recipientId of recipientIds) {
+      const { message } = await insertAdminPlatformMessage(supabaseAdmin, {
+        recipientId,
+        senderId: adminUser.id,
+        subject,
+        content,
+        sendEmail,
+        sendInApp,
+        status: "pending",
+      });
+      const messageId = String(message?.id || "");
+      if (!messageId) continue;
+
+      if (sendInApp) {
+        const { error: inAppErr } = await supabaseAdmin.from("message_deliveries").insert({
+          message_id: messageId,
+          user_id: recipientId,
+          channel: "in_app",
+          status: "sent",
+          sent_at: nowIso,
+        });
+        if (inAppErr) {
+          return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
+        }
+      }
+
+      if (sendEmail) {
+        const { error: emailInsertErr } = await supabaseAdmin.from("message_deliveries").insert({
+          message_id: messageId,
+          user_id: recipientId,
+          channel: "email",
+          status: "pending",
+        });
+        if (emailInsertErr) {
+          return res.status(500).json({ error: emailInsertErr.message || "Failed to save email delivery" });
+        }
+
+        const emailDelivery = await sendAdminPlatformMessageToSignupEmail(supabaseAdmin, {
+          recipientId,
+          subject: message?.subject ?? subject,
+          plainBody: content,
+          messageId,
+        });
+        const emailStatus = emailDelivery?.status === "sent" ? "sent" : "failed";
+        const sentAt = emailDelivery?.status === "sent" ? new Date().toISOString() : null;
+        if (emailDelivery?.status === "failed") {
+          failedEmail += 1;
+          console.error("[POST /api/admin/send-message] email failed", recipientId, emailDelivery?.reason || "send_failed");
+        } else if (emailDelivery?.status !== "sent") {
+          skippedEmail += 1;
+        }
+        const { error: emailUpdateErr } = await supabaseAdmin
+          .from("message_deliveries")
+          .update({ status: emailStatus, sent_at: sentAt })
+          .eq("message_id", messageId)
+          .eq("user_id", recipientId)
+          .eq("channel", "email");
+        if (emailUpdateErr) {
+          return res.status(500).json({ error: emailUpdateErr.message || "Failed to update email delivery" });
+        }
+      }
+
+      const { error: msgStatusErr } = await supabaseAdmin
+        .from("admin_platform_messages")
+        .update({ status: "sent" })
+        .eq("id", messageId);
+      if (msgStatusErr) {
+        return res.status(500).json({ error: msgStatusErr.message || "Failed to update message status" });
+      }
+
+      sent += 1;
+    }
+
+    logAdminApi(req.method, req.path, 200, `recipients=${recipientIds.length}`);
+    return res.json({ ok: true, recipients: recipientIds.length, sent, failedEmail, skippedEmail });
+  } catch (err) {
+    if (res.headersSent) {
+      return;
+    }
+    const msg = err?.message || "Failed to send message";
+    const status = isAdminPlatformMessageClientError(msg) ? 400 : 500;
     logAdminApi(req.method, req.path, status, msg);
     return res.status(status).json({ error: msg });
   }

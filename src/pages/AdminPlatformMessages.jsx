@@ -21,7 +21,7 @@ import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import {
   fetchAdminPlatformUserMessages,
   postAdminBroadcastUpdate,
-  postAdminPlatformUserMessage,
+  postAdminSendMessage,
 } from '@/api/fetchAdminPlatformUserMessages';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -213,56 +214,6 @@ function WaitlistContextBlock({ entry, loading, errorMessage, className }) {
   );
 }
 
-/** Toasts from server `email_delivery` (signup email via Auth + Resend). */
-function toastAfterEmailDelivery(d) {
-  const status = d?.status;
-  const reason = String(d?.reason || '');
-
-  if (status === 'sent') {
-    toast.success('Message sent', {
-      description:
-        'Delivered to the email address on their Paidly account (the one they use to sign in).',
-    });
-    return;
-  }
-  if (status === 'failed') {
-    toast.warning('Message saved', {
-      description: reason || 'Email could not be sent. Check server logs and Resend.',
-    });
-    return;
-  }
-  if (reason === 'resend_not_configured') {
-    toast.success('Message saved', {
-      description:
-        'Saved in-app only: set RESEND_API_KEY and RESEND_FROM on the API server to email signup addresses.',
-    });
-    return;
-  }
-  if (reason === 'invalid_signup_email') {
-    toast.success('Message saved', {
-      description:
-        'The signup email on their auth account looks invalid, so we did not send an email.',
-    });
-    return;
-  }
-  if (
-    /no signup email on account/i.test(reason) ||
-    reason === 'Auth user not found' ||
-    reason === 'Auth lookup failed'
-  ) {
-    toast.success('Message saved', {
-      description:
-        'No signup email found for this auth account — only the in-app message was created.',
-    });
-    return;
-  }
-  toast.success('Message saved', {
-    description: reason
-      ? `Not emailed: ${reason}`
-      : 'Not emailed (no signup address or delivery was skipped).',
-  });
-}
-
 function presetBodyPreview(body, max = 96) {
   const line = String(body || '')
     .replace(/\s+/g, ' ')
@@ -348,9 +299,13 @@ export default function AdminPlatformMessages() {
   const [newTemplateId, setNewTemplateId] = useState('');
   const [newSubject, setNewSubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [newBody, setNewBody] = useState('');
+  const [newSendInApp, setNewSendInApp] = useState(true);
+  const [newSendEmail, setNewSendEmail] = useState(true);
   const [replyTemplateId, setReplyTemplateId] = useState('');
   const [replySubject, setReplySubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [replyBody, setReplyBody] = useState('');
+  const [replySendInApp, setReplySendInApp] = useState(true);
+  const [replySendEmail, setReplySendEmail] = useState(true);
   const [templatePickerTarget, setTemplatePickerTarget] = useState(
     /** @type {null | 'reply' | 'new'} */ (null)
   );
@@ -440,11 +395,12 @@ export default function AdminPlatformMessages() {
   }, [conversations, searchTerm, userMap]);
 
   const sendMutation = useMutation({
-    mutationFn: postAdminPlatformUserMessage,
+    mutationFn: postAdminSendMessage,
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['admin-platform-user-messages'] });
-      if (variables.recipientId) {
-        setSelectedRecipientId(variables.recipientId);
+      const recipientId = variables.recipientId || variables.recipientIds?.[0];
+      if (recipientId) {
+        setSelectedRecipientId(recipientId);
       }
     },
     onError: (e) => {
@@ -471,18 +427,28 @@ export default function AdminPlatformMessages() {
       toast.error('Enter a message');
       return;
     }
+    if (!newSendInApp && !newSendEmail) {
+      toast.error('Select at least one delivery channel');
+      return;
+    }
     try {
-      const { emailDelivery } = await sendMutation.mutateAsync({
-        recipientId: rid,
+      const result = await sendMutation.mutateAsync({
+        recipientIds: [rid],
         subject: sub,
         content: body,
+        sendInApp: newSendInApp,
+        sendEmail: newSendEmail,
       });
-      toastAfterEmailDelivery(emailDelivery);
+      toast.success('Message sent', {
+        description: `Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}.`,
+      });
       setComposerOpen(false);
       setNewRecipientId('');
       setNewTemplateId('');
       setNewSubject(DEFAULT_ADMIN_PLATFORM_SUBJECT);
       setNewBody('');
+      setNewSendInApp(true);
+      setNewSendEmail(true);
       setUserPickerQuery('');
     } catch {
       /* toast in mutation */
@@ -497,13 +463,21 @@ export default function AdminPlatformMessages() {
       toast.error('Enter a message');
       return;
     }
+    if (!replySendInApp && !replySendEmail) {
+      toast.error('Select at least one delivery channel');
+      return;
+    }
     try {
-      const { emailDelivery } = await sendMutation.mutateAsync({
-        recipientId: selectedRecipientId,
+      const result = await sendMutation.mutateAsync({
+        recipientIds: [selectedRecipientId],
         subject: sub,
         content: body,
+        sendInApp: replySendInApp,
+        sendEmail: replySendEmail,
       });
-      toastAfterEmailDelivery(emailDelivery);
+      toast.success('Message sent', {
+        description: `Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}.`,
+      });
       setReplyTemplateId('');
       setReplyBody('');
     } catch {
@@ -904,6 +878,16 @@ export default function AdminPlatformMessages() {
                         maxLength={50000}
                       />
                     </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                        <Checkbox checked={replySendInApp} onCheckedChange={(v) => setReplySendInApp(v === true)} />
+                        Send to Dashboard
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                        <Checkbox checked={replySendEmail} onCheckedChange={(v) => setReplySendEmail(v === true)} />
+                        Send via Email
+                      </label>
+                    </div>
                     <div className="flex justify-end pt-1">
                       <Button
                         type="button"
@@ -1035,6 +1019,16 @@ export default function AdminPlatformMessages() {
                 className="resize-y"
                 maxLength={50000}
               />
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Checkbox checked={newSendInApp} onCheckedChange={(v) => setNewSendInApp(v === true)} />
+                Send to Dashboard
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Checkbox checked={newSendEmail} onCheckedChange={(v) => setNewSendEmail(v === true)} />
+                Send via Email
+              </label>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">

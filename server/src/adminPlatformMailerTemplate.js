@@ -90,8 +90,9 @@ function getHeaderLogoUrl(appOrigin) {
 const SUBTITLE_MAX = 200;
 const FOOTER_ENV_MAX = 4000;
 
-function getOutreachContext(plainBody) {
+function getOutreachContext(plainBody, title) {
   const body = String(plainBody || "");
+  const normalizedTitle = sanitizeOneLine(String(title || "").trim(), 300) || "Message from the Paidly team";
   const subtitleRaw = String(process.env.ADMIN_OUTREACH_MAILER_HEADER_SUBTITLE || "").trim();
   const subtitle =
     sanitizeOneLine(subtitleRaw || "A quick note from Paidly", SUBTITLE_MAX) ||
@@ -102,7 +103,7 @@ function getOutreachContext(plainBody) {
   const appOrigin = getMailerAppOrigin();
   const loginUrl = `${appOrigin.replace(/\/$/, "")}/Login`;
   const headerLogoUrl = getHeaderLogoUrl(appOrigin);
-  return { plainBody: body, subtitle, footerPlain, appOrigin, loginUrl, headerLogoUrl };
+  return { plainBody: body, title: normalizedTitle, subtitle, footerPlain, appOrigin, loginUrl, headerLogoUrl };
 }
 
 /**
@@ -110,13 +111,14 @@ function getOutreachContext(plainBody) {
  * @param {{ plainBody: string, recipientEmail?: string }} opts
  */
 export function buildAdminPlatformOutreachPlainText(opts) {
-  const c = getOutreachContext(opts.plainBody);
+  const c = getOutreachContext(opts.plainBody, opts.title);
   const toAddr = String(opts.recipientEmail || "").trim();
 
   let t = "";
   t += "PAIDLY\n";
   t += `${c.subtitle}\n`;
   t += "\n";
+  t += `${c.title}\n\n`;
   t += `${c.plainBody.trim()}\n`;
   t += "\n";
   t += "────────────────────────\n";
@@ -144,8 +146,8 @@ export function buildAdminPlatformOutreachPlainText(opts) {
  * @returns {string} full HTML document fragment for email body
  */
 export function buildAdminPlatformOutreachHtml(opts) {
-  const c = getOutreachContext(opts.plainBody);
-  const { plainBody, subtitle, footerPlain, appOrigin, loginUrl, headerLogoUrl } = c;
+  const c = getOutreachContext(opts.plainBody, opts.title);
+  const { plainBody, title, subtitle, footerPlain, appOrigin, loginUrl, headerLogoUrl } = c;
 
   const bodyHtml = linkifyPlainTextForEmail(plainBody);
   const footerHtml = footerPlain ? linkifyPlainTextForEmail(footerPlain) : "";
@@ -190,6 +192,9 @@ export function buildAdminPlatformOutreachHtml(opts) {
           <!-- Main card -->
           <tr>
             <td style="background-color:${CARD_BG};padding:28px 24px 8px;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+              <h1 style="margin:0 0 14px;font-size:20px;line-height:1.3;color:#0f172a;font-weight:700;">
+                ${escapeHtml(title)}
+              </h1>
               <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:${BODY_TEXT};">
                 ${bodyHtml}
               </p>

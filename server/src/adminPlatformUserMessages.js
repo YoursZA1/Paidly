@@ -104,7 +104,7 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
- * @param {{ recipientId: string, senderId: string, subject?: string, content: string }} payload
+ * @param {{ recipientId: string, senderId: string, subject?: string, content: string, sendEmail?: boolean, sendInApp?: boolean, status?: "pending" | "sent" }} payload
  */
 export async function insertAdminPlatformMessage(supabaseAdmin, payload) {
   const recipientId = String(payload.recipientId || "").trim();
@@ -163,6 +163,9 @@ export async function insertAdminPlatformMessage(supabaseAdmin, payload) {
     subject: subject || "Message from the Paidly team",
     content,
     is_read: false,
+    send_email: payload.sendEmail != null ? Boolean(payload.sendEmail) : true,
+    send_in_app: payload.sendInApp != null ? Boolean(payload.sendInApp) : true,
+    status: String(payload.status || "pending") === "sent" ? "sent" : "pending",
   };
 
   const { data, error } = await supabaseAdmin.from("admin_platform_messages").insert(row).select("*").single();

@@ -7,6 +7,7 @@ import { Bell, CheckCheck } from "lucide-react";
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [open, setOpen] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const panelId = useId();
@@ -26,6 +27,7 @@ export default function NotificationBell() {
       }
       const user = userData?.user;
       if (!user) return;
+      setCurrentUserId(String(user.id || ""));
       const { data, error } = await supabase
         .from("notifications")
         .select("id, message, created_at, read")
@@ -37,8 +39,47 @@ export default function NotificationBell() {
         setFetchError(getSupabaseErrorMessage(error, "Failed to load notifications"));
         return;
       }
-      setNotifications(data ?? []);
-      setUnreadCount((data ?? []).filter((n) => !n.read).length);
+      const { data: inAppMessages, error: inAppError } = await supabase
+        .from("message_deliveries")
+        .select(
+          "id, message_id, status, sent_at, read_at, channel, admin_platform_messages(subject, content)"
+        )
+        .eq("user_id", user.id)
+        .eq("channel", "in_app")
+        .order("sent_at", { ascending: false })
+        .limit(20);
+      if (inAppError) {
+        console.warn("NotificationBell: fetch in-app messages failed", getSupabaseErrorMessage(inAppError, "Load in-app messages failed"));
+      }
+
+      const activityRows = (data ?? []).map((n) => ({
+        id: `activity-${n.id}`,
+        source: "activity",
+        refId: n.id,
+        message: n.message,
+        createdAt: n.created_at,
+        read: Boolean(n.read),
+      }));
+      const messageRows = (inAppMessages ?? []).map((row) => {
+        const msg = Array.isArray(row.admin_platform_messages)
+          ? row.admin_platform_messages[0]
+          : row.admin_platform_messages;
+        const subject = String(msg?.subject || "Message from Paidly").trim();
+        const content = String(msg?.content || "").trim();
+        return {
+          id: `in-app-${row.id}`,
+          source: "in_app",
+          refId: row.id,
+          message: content ? `${subject}: ${content}` : subject,
+          createdAt: row.sent_at || null,
+          read: row.read_at != null || String(row.status || "").toLowerCase() === "read",
+        };
+      });
+      const merged = [...activityRows, ...messageRows]
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 20);
+      setNotifications(merged);
+      setUnreadCount(merged.filter((n) => !n.read).length);
     } catch (err) {
       const msg = getSupabaseErrorMessage(err, "Failed to load notifications");
       console.warn("NotificationBell:", msg);
@@ -69,10 +110,23 @@ export default function NotificationBell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const handleMarkRead = async (id) => {
-    const ok = await markNotificationRead(id);
+  const handleMarkRead = async (item) => {
+    let ok = false;
+    if (item.source === "activity") {
+      ok = await markNotificationRead(item.refId);
+    } else if (item.source === "in_app") {
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase
+        .from("message_deliveries")
+        .update({ read_at: nowIso, status: "read" })
+        .eq("id", item.refId);
+      ok = !error;
+      if (error) {
+        console.warn("NotificationBell: mark in-app message read failed", getSupabaseErrorMessage(error, "Mark read failed"));
+      }
+    }
     if (ok) {
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      setNotifications((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
       setUnreadCount((c) => Math.max(0, c - 1));
     }
   };
@@ -80,6 +134,15 @@ export default function NotificationBell() {
   const handleMarkAllRead = async () => {
     const ok = await markAllNotificationsReadForCurrentUser();
     if (ok) {
+      const nowIso = new Date().toISOString();
+      if (currentUserId) {
+        await supabase
+          .from("message_deliveries")
+          .update({ read_at: nowIso, status: "read" })
+          .eq("user_id", currentUserId)
+          .eq("channel", "in_app")
+          .is("read_at", null);
+      }
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
     }
@@ -150,14 +213,14 @@ export default function NotificationBell() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (!n.read) handleMarkRead(n.id);
+                        if (!n.read) handleMarkRead(n);
                       }}
                       className="text-sm text-foreground text-left w-full"
                       aria-label={`${n.read ? "Read" : "Unread"} notification: ${n.message}`}
                     >
                       {n.message}
                     </button>
-                    <div className="text-xs text-muted-foreground mt-1">{formatTime(n.created_at)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{formatTime(n.createdAt)}</div>
                   </li>
                 ))
               )}

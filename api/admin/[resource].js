@@ -37,6 +37,7 @@ let approveDeclineDepsPromise = null;
 let affiliateApproveDepsPromise = null;
 let inviteUserDepsPromise = null;
 let sendPlatformMessageDepsPromise = null;
+let sendMessageDepsPromise = null;
 
 async function ensureCorsDeps() {
   if (applyPaidlyServerlessCors) return;
@@ -131,6 +132,7 @@ async function ensureInviteUserDeps() {
 }
 
 let handleVercelSendPlatformMessagePost;
+let handleVercelAdminSendMessagePost;
 async function ensureSendPlatformMessageDeps() {
   await ensureCorsDeps();
   if (handleVercelSendPlatformMessagePost) return;
@@ -139,6 +141,16 @@ async function ensureSendPlatformMessageDeps() {
     handleVercelSendPlatformMessagePost = m.handleVercelSendPlatformMessagePost;
   });
   return sendPlatformMessageDepsPromise;
+}
+
+async function ensureSendMessageDeps() {
+  await ensureCorsDeps();
+  if (handleVercelAdminSendMessagePost) return;
+  if (sendMessageDepsPromise) return sendMessageDepsPromise;
+  sendMessageDepsPromise = import("../../server/src/vercelAdminSendMessagePost.js").then((m) => {
+    handleVercelAdminSendMessagePost = m.handleVercelAdminSendMessagePost;
+  });
+  return sendMessageDepsPromise;
 }
 
 let broadcastDepsPromise = null;
@@ -761,6 +773,7 @@ export default async function handler(req, res) {
       "invite-user",
       "clean-orphaned-users",
       "send-platform-message",
+      "send-message",
       "broadcast-update",
       "settings",
       "system",
@@ -816,6 +829,10 @@ export default async function handler(req, res) {
         if (resource === "send-platform-message") {
           await ensureSendPlatformMessageDeps();
           return handleVercelSendPlatformMessagePost(req, res);
+        }
+        if (resource === "send-message") {
+          await ensureSendMessageDeps();
+          return handleVercelAdminSendMessagePost(req, res);
         }
         if (resource === "broadcast-update") {
           await ensureBroadcastDeps();

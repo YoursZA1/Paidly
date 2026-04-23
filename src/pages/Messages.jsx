@@ -12,6 +12,7 @@ import { breakApi } from '@/api/apiClient';
 import MessageComposer from '../components/messages/MessageComposer';
 import ConversationList from '../components/messages/ConversationList';
 import ConversationThread from '../components/messages/ConversationThread';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function MessagesPage() {
     const [messages, setMessages] = useState([]);
@@ -30,6 +31,8 @@ export default function MessagesPage() {
     const [invoiceViews, setInvoiceViews] = useState([]);
     const [payments, setPayments] = useState([]);
     const [selectedMessageDetail, setSelectedMessageDetail] = useState(null);
+    const [adminInboxMessages, setAdminInboxMessages] = useState([]);
+    const [adminInboxUnread, setAdminInboxUnread] = useState(0);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -49,8 +52,57 @@ export default function MessagesPage() {
         try {
             const messagesData = await Message.list('-created_date');
             if (mountedRef.current) setMessages(messagesData || []);
+            await loadAdminInbox();
         } catch (error) {
             console.error('Error polling messages:', error);
+        }
+    };
+
+    const loadAdminInbox = async () => {
+        try {
+            const { data: authData, error: authError } = await supabase.auth.getUser();
+            if (authError || !authData?.user?.id) return;
+            const { data, error } = await supabase
+                .from('message_deliveries')
+                .select('id, status, sent_at, read_at, admin_platform_messages(subject, content)')
+                .eq('user_id', authData.user.id)
+                .eq('channel', 'in_app')
+                .order('sent_at', { ascending: false })
+                .limit(20);
+            if (error) throw error;
+            const rows = (data || []).map((row) => {
+                const source = Array.isArray(row.admin_platform_messages)
+                    ? row.admin_platform_messages[0]
+                    : row.admin_platform_messages;
+                return {
+                    id: row.id,
+                    subject: String(source?.subject || 'Message from Paidly'),
+                    content: String(source?.content || ''),
+                    sent_at: row.sent_at,
+                    read: row.read_at != null || String(row.status || '').toLowerCase() === 'read',
+                };
+            });
+            if (!mountedRef.current) return;
+            setAdminInboxMessages(rows);
+            setAdminInboxUnread(rows.filter((row) => !row.read).length);
+        } catch (error) {
+            console.error('Error loading admin inbox messages:', error);
+        }
+    };
+
+    const markAdminInboxRead = async () => {
+        try {
+            const { data: authData, error: authError } = await supabase.auth.getUser();
+            if (authError || !authData?.user?.id) return;
+            await supabase
+                .from('message_deliveries')
+                .update({ read_at: new Date().toISOString(), status: 'read' })
+                .eq('user_id', authData.user.id)
+                .eq('channel', 'in_app')
+                .is('read_at', null);
+            await loadAdminInbox();
+        } catch (error) {
+            console.error('Error marking admin inbox read:', error);
         }
     };
 
@@ -100,6 +152,7 @@ export default function MessagesPage() {
             setMessageLogs(logsData || []);
             setInvoiceViews(viewsData || []);
             setPayments(paymentsData || []);
+            await loadAdminInbox();
         } catch (error) {
             console.error('Error loading messages:', error);
         } finally {
@@ -378,6 +431,42 @@ export default function MessagesPage() {
                         New Message
                     </Button>
                 </motion.div>
+
+                <Card className="bg-card shadow-xl border border-border mb-6">
+                    <CardHeader className="border-b border-border">
+                        <div className="flex items-center justify-between gap-3">
+                            <CardTitle className="flex items-center gap-2">
+                                <Bell className="w-5 h-5" />
+                                Admin inbox
+                                {adminInboxUnread > 0 && (
+                                    <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
+                                        {adminInboxUnread} unread
+                                    </span>
+                                )}
+                            </CardTitle>
+                            {adminInboxUnread > 0 ? (
+                                <Button variant="outline" size="sm" onClick={markAdminInboxRead}>
+                                    Mark all read
+                                </Button>
+                            ) : null}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3 pt-4">
+                        {adminInboxMessages.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No admin messages yet.</p>
+                        ) : (
+                            adminInboxMessages.slice(0, 3).map((row) => (
+                                <div key={row.id} className={`rounded-lg border px-3 py-2 ${row.read ? 'bg-card' : 'bg-primary/5 border-primary/30'}`}>
+                                    <p className="text-sm font-semibold text-foreground">{row.subject}</p>
+                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{row.content}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {row.sent_at ? format(new Date(row.sent_at), 'MMM d, yyyy HH:mm') : '—'}
+                                    </p>
+                                </div>
+                            ))
+                        )}
+                    </CardContent>
+                </Card>
 
                 <Tabs value={pageTab} onValueChange={setPageTab} className="mb-6">
                     <TabsList className="grid w-full max-w-xs grid-cols-2">

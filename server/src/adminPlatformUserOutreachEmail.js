@@ -81,8 +81,8 @@ export async function sendAdminPlatformMessageToSignupEmail(supabaseAdmin, opts)
   const sub =
     sanitizeOneLine(subject || "Message from the Paidly team", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
     "Message from the Paidly team";
-  const html = buildAdminPlatformOutreachHtml({ plainBody });
-  const text = buildAdminPlatformOutreachPlainText({ plainBody, recipientEmail: email });
+  const html = buildAdminPlatformOutreachHtml({ title: sub, plainBody });
+  const text = buildAdminPlatformOutreachPlainText({ title: sub, plainBody, recipientEmail: email });
 
   // Omit Auto-Submitted: auto-generated — that value is for machine auto-replies (RFC 3834);
   // these are staff-initiated account notices and should not mimic vacation/list software.
@@ -138,8 +138,8 @@ export async function sendAdminPlatformMessageToKnownEmail(opts) {
   const sub =
     sanitizeOneLine(subject || "Message from the Paidly team", ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) ||
     "Message from the Paidly team";
-  const html = buildAdminPlatformOutreachHtml({ plainBody });
-  const text = buildAdminPlatformOutreachPlainText({ plainBody, recipientEmail: email });
+  const html = buildAdminPlatformOutreachHtml({ title: sub, plainBody });
+  const text = buildAdminPlatformOutreachPlainText({ title: sub, plainBody, recipientEmail: email });
 
   const headers = {
     "X-Auto-Response-Suppress": "OOF, AutoReply",

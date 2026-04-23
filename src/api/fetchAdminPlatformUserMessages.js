@@ -65,6 +65,23 @@ function buildSendPlatformMessagePostUrls() {
   return out;
 }
 
+function buildSendMessagePostUrls() {
+  const out = [];
+  const seen = new Set();
+  const push = (u) => {
+    if (!u || seen.has(u)) return;
+    if (shouldSkipAdminFetchAbsoluteUrl(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  const vite = String(import.meta.env.VITE_SERVER_URL ?? "").trim().replace(/\/$/, "");
+  const adminBase = String(getAdminDataApiBase() ?? "").trim().replace(/\/$/, "");
+  push("/api/admin/send-message");
+  if (vite) push(`${vite}/api/admin/send-message`);
+  if (adminBase && adminBase !== vite) push(`${adminBase}/api/admin/send-message`);
+  return out;
+}
+
 function buildBroadcastUpdatePostUrls() {
   const out = [];
   const seen = new Set();
@@ -272,6 +289,72 @@ export async function postAdminPlatformUserMessage(body) {
   }
 
   throw new Error(lastError || "Send platform message failed");
+}
+
+/**
+ * @param {{ recipientIds?: string[], recipientId?: string, subject?: string, content: string, sendEmail?: boolean, sendInApp?: boolean }} body
+ */
+export async function postAdminSendMessage(body) {
+  if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
+    throw new Error("Admin send message API requires Node backend (VITE_SUPABASE_ONLY=1).");
+  }
+
+  const token = await getSessionToken();
+  const candidates = buildSendMessagePostUrls();
+  const subject = body.subject != null ? String(body.subject) : "";
+  const content = String(body.content || "").trim();
+  if (subject.length > ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT) {
+    throw new Error(`Subject is too long (max ${ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT} characters).`);
+  }
+  if (content.length > ADMIN_PLATFORM_MESSAGE_MAX_CONTENT) {
+    throw new Error(`Message is too long (max ${ADMIN_PLATFORM_MESSAGE_MAX_CONTENT} characters).`);
+  }
+
+  const json = {
+    recipient_id: body.recipientId ? String(body.recipientId).trim() : "",
+    recipient_ids: Array.isArray(body.recipientIds) ? body.recipientIds : undefined,
+    subject,
+    content,
+    send_email: body.sendEmail != null ? Boolean(body.sendEmail) : true,
+    send_in_app: body.sendInApp != null ? Boolean(body.sendInApp) : true,
+  };
+
+  let lastError = null;
+  for (const url of candidates) {
+    let res;
+    try {
+      res = await apiRequestWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(json),
+      });
+    } catch (e) {
+      lastError = String(e?.name || "") === "AbortError" ? "Send request timed out. Please try again." : e?.message || "Network error (Failed to fetch)";
+      continue;
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    const looksJson = /json/i.test(contentType);
+    const payload = looksJson ? await res.json().catch(() => ({})) : {};
+    if (!res.ok) {
+      const raw = payload.error ?? payload.message;
+      const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
+      lastError = fromJson || `HTTP ${res.status}`;
+      continue;
+    }
+    if (!payload?.ok) {
+      lastError = "Invalid send response.";
+      continue;
+    }
+    return payload;
+  }
+
+  throw new Error(lastError || "Send message failed");
 }
 
 /**
