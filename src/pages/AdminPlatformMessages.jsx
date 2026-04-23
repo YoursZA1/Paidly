@@ -243,8 +243,8 @@ function AdminStarterTemplatesDialog({ open, onOpenChange, presets, onSelect }) 
             login links use this site&apos;s origin.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="min-h-0 flex-1 max-h-[min(52vh,480px)] border-y border-border">
-          <div className="space-y-2 p-4 pr-5">
+        <div className="min-h-0 flex-1 border-y border-border overflow-y-auto overscroll-contain">
+          <div className="space-y-2 p-4 pr-4 pb-6">
             <button
               type="button"
               onClick={() => onSelect(null)}
@@ -270,7 +270,7 @@ function AdminStarterTemplatesDialog({ open, onOpenChange, presets, onSelect }) 
               </button>
             ))}
           </div>
-        </ScrollArea>
+        </div>
         <DialogFooter className="shrink-0 border-t border-border bg-muted/10 px-6 py-4 sm:justify-end">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
