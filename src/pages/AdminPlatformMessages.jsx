@@ -416,9 +416,10 @@ export default function AdminPlatformMessages() {
   });
 
   const handleSendNew = async () => {
+    if (sendMutation.isPending) return;
     const rid = String(newRecipientId || '').trim();
     const sub = String(newSubject || '').trim() || DEFAULT_ADMIN_PLATFORM_SUBJECT;
-    const body = String(newBody || '').trim();
+    const body = newBodyTrimmed;
     if (!rid) {
       toast.error('Choose a recipient');
       return;
@@ -439,8 +440,12 @@ export default function AdminPlatformMessages() {
         sendInApp: newSendInApp,
         sendEmail: newSendEmail,
       });
+      const channelSummary = [newSendInApp ? 'Dashboard' : null, newSendEmail ? 'Email' : null]
+        .filter(Boolean)
+        .join(' + ');
+      const skippedEmail = Number(result?.skippedEmail || 0);
       toast.success('Message sent', {
-        description: `Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}.`,
+        description: `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`,
       });
       setComposerOpen(false);
       setNewRecipientId('');
@@ -456,9 +461,10 @@ export default function AdminPlatformMessages() {
   };
 
   const handleSendReply = async () => {
+    if (sendMutation.isPending) return;
     if (!selectedRecipientId) return;
     const sub = String(replySubject || '').trim() || DEFAULT_ADMIN_PLATFORM_SUBJECT;
-    const body = String(replyBody || '').trim();
+    const body = replyBodyTrimmed;
     if (!body) {
       toast.error('Enter a message');
       return;
@@ -475,8 +481,12 @@ export default function AdminPlatformMessages() {
         sendInApp: replySendInApp,
         sendEmail: replySendEmail,
       });
+      const channelSummary = [replySendInApp ? 'Dashboard' : null, replySendEmail ? 'Email' : null]
+        .filter(Boolean)
+        .join(' + ');
+      const skippedEmail = Number(result?.skippedEmail || 0);
       toast.success('Message sent', {
-        description: `Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}.`,
+        description: `${channelSummary} delivery attempted. Delivered to ${result.sent || 0} recipient(s). Email failed: ${result.failedEmail || 0}. Email skipped: ${skippedEmail}.`,
       });
       setReplyTemplateId('');
       setReplyBody('');
@@ -569,6 +579,28 @@ export default function AdminPlatformMessages() {
   };
 
   const loadError = convError?.message || threadError?.message;
+  const newBodyTrimmed = String(newBody || '').trim();
+  const replyBodyTrimmed = String(replyBody || '').trim();
+  const newChannelsSelected = newSendInApp || newSendEmail;
+  const replyChannelsSelected = replySendInApp || replySendEmail;
+  const canSendNew =
+    !sendMutation.isPending && Boolean(newRecipientId) && Boolean(newBodyTrimmed) && newChannelsSelected;
+  const canSendReply =
+    !sendMutation.isPending && Boolean(selectedRecipientId) && Boolean(replyBodyTrimmed) && replyChannelsSelected;
+  const sendNewDisabledReason = !newRecipientId
+    ? 'Choose a recipient'
+    : !newBodyTrimmed
+      ? 'Enter a message'
+      : !newChannelsSelected
+        ? 'Select Dashboard, Email, or both'
+        : '';
+  const sendReplyDisabledReason = !selectedRecipientId
+    ? 'Choose a recipient'
+    : !replyBodyTrimmed
+      ? 'Enter a reply'
+      : !replyChannelsSelected
+        ? 'Select Dashboard, Email, or both'
+        : '';
 
   return (
     <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
@@ -889,14 +921,19 @@ export default function AdminPlatformMessages() {
                       </label>
                     </div>
                     <div className="flex justify-end pt-1">
+                      {sendReplyDisabledReason ? (
+                        <p className="mr-auto text-xs text-muted-foreground self-center">
+                          {sendReplyDisabledReason}
+                        </p>
+                      ) : null}
                       <Button
                         type="button"
                         onClick={handleSendReply}
-                        disabled={sendMutation.isPending || usersLoading}
+                        disabled={!canSendReply || usersLoading}
                         className="gap-2"
                       >
                         <Send className="h-4 w-4" />
-                        Send
+                        {sendMutation.isPending ? 'Sending…' : 'Send'}
                       </Button>
                     </div>
                   </div>
@@ -930,6 +967,13 @@ export default function AdminPlatformMessages() {
           <DialogHeader>
             <DialogTitle>Message a platform user</DialogTitle>
           </DialogHeader>
+          <form
+            className="contents"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendNew();
+            }}
+          >
           <div className="space-y-3 overflow-y-auto flex-1 min-h-0 py-1">
             <div className="space-y-1">
               <Label>Find user</Label>
@@ -1032,17 +1076,21 @@ export default function AdminPlatformMessages() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
+            {sendNewDisabledReason ? (
+              <p className="mr-auto text-xs text-muted-foreground">{sendNewDisabledReason}</p>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => setComposerOpen(false)}>
               Cancel
             </Button>
             <Button
-              type="button"
+              type="submit"
               onClick={handleSendNew}
-              disabled={sendMutation.isPending || !newRecipientId}
+              disabled={!canSendNew}
             >
-              Send
+              {sendMutation.isPending ? 'Sending…' : 'Send'}
             </Button>
           </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
