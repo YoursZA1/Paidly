@@ -556,10 +556,6 @@ export default function AdminPlatformMessages() {
       toast.error('Enter a message');
       return;
     }
-    if (!newSendInApp && !newSendEmail) {
-      toast.error('Select at least one delivery channel');
-      return;
-    }
     try {
       const { sendInApp, sendEmail } = channelToFlags(newChannel);
       const result = await sendMutation.mutateAsync({
