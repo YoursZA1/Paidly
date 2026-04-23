@@ -601,6 +601,8 @@ const STANDALONE_PAGE_NAMES = [
   "Affiliate",
   "Affiliate/apply",
 ];
+const SHARED_STORE_STALE_MS = 5 * 60 * 1000;
+const FETCH_ALL_COOLDOWN_MS = 10000;
 
 export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
@@ -667,9 +669,9 @@ export default function Layout({ children, currentPageName }) {
   const lastFetchedAt = useAppStore((s) => s.lastFetchedAt);
   const userProfile = useAppStore((s) => s.userProfile);
   const resetStore = useAppStore((s) => s.reset);
+  const lastFetchAllRequestAtRef = useRef(0);
 
   // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
-  const STALE_MS = 5 * 60 * 1000; // 5 min – same as React Query staleTime
   useEffect(() => {
     if (!user?.id) return;
     // Do not gate on authSession: after password login, session and user update in the same tick, but a
@@ -677,9 +679,12 @@ export default function Layout({ children, currentPageName }) {
     // Admin V2 pages fetch their own datasets with React Query.
     // Skipping legacy store bootstrap here avoids blocking admin loads on auth.me timeouts.
     if (isAdminV2Route) return;
-    const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < STALE_MS;
+    const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < SHARED_STORE_STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
+    const now = Date.now();
+    if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
+    lastFetchAllRequestAtRef.current = now;
     // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
     fetchAll(user);
   }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
@@ -690,11 +695,14 @@ export default function Layout({ children, currentPageName }) {
     let debounceId = null;
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      const stale = lastFetchedAt == null || Date.now() - lastFetchedAt >= STALE_MS;
+      const stale = lastFetchedAt == null || Date.now() - lastFetchedAt >= SHARED_STORE_STALE_MS;
       if (!stale) return;
       if (debounceId) clearTimeout(debounceId);
       debounceId = window.setTimeout(() => {
         debounceId = null;
+        const now = Date.now();
+        if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
+        lastFetchAllRequestAtRef.current = now;
         fetchAll(userRef.current);
       }, 400);
     };

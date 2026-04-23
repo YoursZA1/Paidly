@@ -70,6 +70,7 @@ const RECENT_INVOICES_PREVIEW_ROWS = 3;
 const TRANSACTION_PREVIEW_ROWS = 3;
 const TRANSACTIONS_SOURCE_EACH = 30;
 const TRANSACTIONS_MERGED_MAX = 60;
+const DASHBOARD_REALTIME_DEBOUNCE_MS = 1500;
 
 function getCachedDashboard(userId) {
   if (!userId) return null;
@@ -364,6 +365,7 @@ export default function Dashboard() {
   });
   const navigate = useNavigate();
   const mountedRef = useRef(true);
+  const realtimeRefreshTimeoutRef = useRef(null);
 
   // Non-admin: read from global store (filled by Layout fetchAll). Admin: use local state from loadAdminData.
   const storeInvoices = useAppStore((s) => s.invoices);
@@ -950,16 +952,33 @@ export default function Dashboard() {
   }, [user, calendarYear]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
-  useSupabaseRealtime(
-    ["invoices", "payments", "expenses", "quotes", "payslips"],
-    () => {
+  useEffect(() => {
+    return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (realtimeRefreshTimeoutRef.current) {
+      clearTimeout(realtimeRefreshTimeoutRef.current);
+    }
+    realtimeRefreshTimeoutRef.current = setTimeout(() => {
+      realtimeRefreshTimeoutRef.current = null;
       if (isAdmin) {
         loadAdminData();
       } else {
-        fetchAll(); // refresh store in background
+        fetchAll();
         refreshBusinessGoal();
       }
-    },
+    }, DASHBOARD_REALTIME_DEBOUNCE_MS);
+  }, [fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
+
+  useSupabaseRealtime(
+    ["invoices", "payments", "expenses", "quotes", "payslips"],
+    scheduleRealtimeRefresh,
     { channelName: "dashboard-kpis" }
   );
 

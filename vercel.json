@@ -57,6 +57,10 @@
       "destination": "/api/public-share?doc=invoice&op=verify"
     },
     {
+      "source": "/api/public-quote",
+      "destination": "/api/public-share?doc=quote&op=get"
+    },
+    {
       "source": "/api/public-payslip",
       "destination": "/api/public-share?doc=payslip&op=get"
     },

@@ -56,8 +56,9 @@ describe("fetchAffiliateDashboardData", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("VITE_NODE_AFFILIATE_API", "1");
-    mockSupabase.auth.getSession.mockClear();
-    mockSupabase.from.mockClear();
+    mockSupabase.auth.getSession.mockReset();
+    mockSupabase.from.mockReset();
+    mockSupabase.rpc.mockReset();
     global.fetch = vi.fn();
   });
 
@@ -152,21 +153,20 @@ describe("fetchAffiliateDashboardData", () => {
 
     const referralsQueryBuilder = {
       select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockResolvedValue(mockReferralsRes),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue(mockReferralsRes),
     };
 
     const commissionsQueryBuilder = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue(mockCommissionsRes),
+      order: vi.fn().mockResolvedValue(mockCommissionsRes),
     };
 
     mockSupabase.from
       .mockReturnValueOnce(affiliateQueryBuilder)
       .mockReturnValueOnce(clicksQueryBuilder)
       .mockReturnValueOnce(referralsQueryBuilder)
-      .mockReturnValueOnce(referralsQueryBuilder) // For recentReferralsRes
       .mockReturnValueOnce(commissionsQueryBuilder);
 
     const { fetchAffiliateDashboardData } = await import("@/api/affiliateClient");
@@ -176,6 +176,7 @@ describe("fetchAffiliateDashboardData", () => {
     expect(result.affiliate).toEqual(mockAffiliate);
     expect(result.stats.clicks).toBe(10);
     expect(result.stats.signups).toBe(2);
+    expect(result.recentReferrals).toHaveLength(3);
   });
 
   it("returns error when both API and Supabase fail", async () => {

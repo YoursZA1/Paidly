@@ -265,16 +265,36 @@ function getAffiliateDashboardApiUrl() {
 }
 
 async function fetchAffiliateDashboardFromSupabase() {
+  const runMaybeSingle = async (qb) => {
+    if (qb && typeof qb.maybeSingle === "function") return qb.maybeSingle();
+    if (qb && typeof qb.single === "function") return qb.single();
+    if (qb && typeof qb.limit === "function") {
+      const out = await qb.limit(1);
+      const row = Array.isArray(out?.data) ? out.data[0] ?? null : null;
+      return { data: row, error: out?.error ?? null };
+    }
+    return { data: null, error: new Error("Unsupported Supabase query builder") };
+  };
+
   const { data: sessionData } = await supabase.auth.getSession();
   const uid = sessionData?.session?.user?.id;
   if (!uid) return { ok: false, error: "no_session" };
 
-  const { data: affiliate, error: affErr } = await supabase
+  const affiliateQuery = supabase
     .from("affiliates")
     .select("id, referral_code, commission_rate, status, created_at")
     .eq("user_id", uid)
-    .eq("status", "approved")
-    .maybeSingle();
+    .eq("status", "approved");
+  const affiliateResult = await runMaybeSingle(affiliateQuery);
+  if (
+    !affiliateResult ||
+    typeof affiliateResult !== "object" ||
+    (!Object.prototype.hasOwnProperty.call(affiliateResult, "data") &&
+      !Object.prototype.hasOwnProperty.call(affiliateResult, "error"))
+  ) {
+    return { ok: false, error: "Affiliate query returned an invalid response" };
+  }
+  const { data: affiliate, error: affErr } = affiliateResult;
 
   if (affErr) {
     return { ok: false, error: affErr.message };
@@ -293,31 +313,31 @@ async function fetchAffiliateDashboardFromSupabase() {
 
   const aid = affiliate.id;
 
-  const [clicksRes, referralsRes, recentReferralsRes, commissionsRes] = await Promise.all([
+  const [clicksRes, referralsRes, commissionsRes] = await Promise.all([
     supabase.from("affiliate_clicks").select("id", { count: "exact", head: true }).eq("affiliate_id", aid),
-    supabase.from("referrals").select("id, status").eq("affiliate_id", aid),
     supabase
       .from("referrals")
-      .select("id, referred_user_id, status, created_at")
+      .select("id, status, created_at")
       .eq("affiliate_id", aid)
-      .order("created_at", { ascending: false })
-      .limit(20),
+      .order("created_at", { ascending: false }),
     supabase
       .from("commissions")
       .select("id, amount, status, created_at")
       .eq("affiliate_id", aid)
-      .order("created_at", { ascending: false })
-      .limit(20),
+      .order("created_at", { ascending: false }),
   ]);
 
-  const referrals = referralsRes.data || [];
+  const referralsRaw = Array.isArray(referralsRes.data) ? referralsRes.data : [];
+  const recentReferrals = referralsRaw.slice(0, 20);
+  const referrals = recentReferrals;
   const signups = referrals.filter(
     (r) => r.status === "signed_up" || r.status === "subscribed" || r.status === "paid"
   ).length;
   const subscribed = referrals.filter((r) => r.status === "subscribed" || r.status === "paid").length;
   const paidUsers = referrals.filter((r) => r.status === "paid").length;
 
-  const commissions = commissionsRes.data || [];
+  const commissionsRaw = Array.isArray(commissionsRes.data) ? commissionsRes.data : [];
+  const commissions = commissionsRaw.slice(0, 20);
   const earningsPending = commissions
     .filter((c) => c.status === "pending" || c.status === "approved")
     .reduce((s, c) => s + Number(c.amount || 0), 0);
@@ -340,7 +360,7 @@ async function fetchAffiliateDashboardFromSupabase() {
     },
     summary: { signups, paid_users: paidUsers, earnings: earningsTotal },
     recentCommissions: commissions,
-    recentReferrals: recentReferralsRes.data || [],
+    recentReferrals,
     referralsError: referralsRes.error?.message,
   };
 }

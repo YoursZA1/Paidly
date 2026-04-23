@@ -60,3 +60,13 @@ export async function updateUserSubscription(userId, plan, user_metadata = {}) {
     { headers }
   );
 }
+
+export async function bulkUpdateUsers(ids, data) {
+  const headers = await adminAuthHeaders();
+  const response = await backendApi.post(
+    "/api/admin/users/bulk-update",
+    { ids, data },
+    { headers }
+  );
+  return response.data;
+}

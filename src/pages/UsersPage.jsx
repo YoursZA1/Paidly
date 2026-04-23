@@ -37,8 +37,11 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS } from '@shared/plans.js';
+import { bulkUpdateUsers } from '@/api/userManagement';
 
 const EMPTY_PLAN = '__empty__';
+const USERS_PAGE_REFETCH_MS = 90000;
+const USERS_PAGE_STALE_MS = 60000;
 
 /** Normalized billing slug from profile + merged user fields. */
 function rawPlanSlug(u) {
@@ -129,7 +132,10 @@ export default function UsersPage() {
   } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(),
-    refetchInterval: 30000,
+    refetchInterval: USERS_PAGE_REFETCH_MS,
+    staleTime: USERS_PAGE_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const usersFetching = useIsFetching({ queryKey: ['platform-users'] }) > 0;
@@ -137,7 +143,10 @@ export default function UsersPage() {
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => paidly.entities.Invoice.list('-created_date', 500),
-    refetchInterval: 30000,
+    refetchInterval: USERS_PAGE_REFETCH_MS,
+    staleTime: USERS_PAGE_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const usersWithInvoiceCounts = useMemo(() => {
@@ -273,22 +282,28 @@ export default function UsersPage() {
 
   const bulkMutation = useMutation({
     mutationFn: async ({ ids, data, label, audit }) => {
-      let failed = 0;
-      for (const id of ids) {
-        try {
-          await paidly.entities.PlatformUser.update(id, data);
-        } catch {
-          failed += 1;
-        }
+      const result = await bulkUpdateUsers(ids, data);
+      if (!result || !Array.isArray(result.results)) {
+        throw new Error("Bulk update returned an invalid response.");
       }
-      if (failed > 0) {
-        throw new Error(`${failed} of ${ids.length} updates failed`);
-      }
-      return { count: ids.length, label, audit };
+      const failedItems = result.results.filter((row) => !row.ok);
+      return {
+        count: result.successCount ?? ids.length - failedItems.length,
+        failedItems,
+        label,
+        audit,
+      };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
-      toast.success(`Updated ${result.count} user(s)${result.label ? `: ${result.label}` : ''}`);
+      if (result.failedItems.length > 0) {
+        const sample = result.failedItems.slice(0, 3).map((f) => f.id).join(", ");
+        toast.warning(
+          `Updated ${result.count} user(s), ${result.failedItems.length} failed${sample ? ` (e.g. ${sample})` : ""}.`
+        );
+      } else {
+        toast.success(`Updated ${result.count} user(s)${result.label ? `: ${result.label}` : ''}`);
+      }
       if (result.audit) {
         logAction({ actor: currentUser, ...result.audit });
       }

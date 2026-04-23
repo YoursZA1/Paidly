@@ -1,13 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom'; // Corrected from react-outer-dom
-import { Quote, Client, User } from '@/api/entities'; // Consolidated imports as per outline
-import { formatCurrency } from '@/components/CurrencySelector'; // New import
-import { format } from 'date-fns'; // New import
-import { Skeleton } from '@/components/ui/skeleton'; // New import
-import DocumentLayout from '@/components/shared/DocumentLayout'; // New import
-import { createPageUrl } from '@/utils';
+import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Quote } from '@/api/entities';
+import { formatCurrency } from '@/components/CurrencySelector';
+import { format } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
+import DocumentLayout from '@/components/shared/DocumentLayout';
 import { getPublicApiBase } from '@/api/backendClient';
+import { fetchPublicQuotePayload } from '@/api/publicQuoteApiClient';
+import { createPageUrl } from '@/utils';
 
 // New component introduced in the outline
 function PublicQuoteContent({ quote, client, user }) {
@@ -124,7 +125,6 @@ function PublicQuoteContent({ quote, client, user }) {
 export default function PublicQuote() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
-    const quoteId = searchParams.get('id');
     const shareToken = searchParams.get('token');
     const trackingParam = searchParams.get('tracking');
     const [quote, setQuote] = useState(null);
@@ -142,45 +142,28 @@ export default function PublicQuote() {
         }).catch(() => {});
     }, [trackingParam]);
 
-    useEffect(() => {
-        if (quoteId || shareToken) {
-            loadQuoteData();
-        }
-    }, [quoteId, shareToken]);
-
-    const loadQuoteData = async () => {
+    const loadQuoteData = useCallback(async () => {
         setIsLoading(true); // Set loading true at the start
         try {
-            let quoteData = null;
-            if (quoteId) {
-                quoteData = await Quote.get(quoteId);
-            } else if (shareToken) {
-                const matches = await Quote.filter({ public_share_token: shareToken });
-                quoteData = matches[0] || null;
-            }
+            const payload = await fetchPublicQuotePayload(shareToken);
+            const quoteData = payload?.quote || null;
             if (!quoteData) {
                 return;
             }
 
-            // Update quote status if it was just sent and is now viewed
+            // Preserve public quote view analytics by transitioning sent -> viewed.
             if (quoteData.status === 'sent') {
-                // Assuming update returns the updated quote or void.
-                // If it returns the updated quote, we might want to use it.
-                // For simplicity, we just trigger the update.
-                await Quote.update(quoteData.id, { status: 'viewed' });
-                // If the status change needs to be reflected immediately without re-fetch,
-                // update quoteData.status locally or refetch after update.
-                quoteData.status = 'viewed'; // Optimistic update
+                try {
+                    await Quote.update(quoteData.id, { status: 'viewed' });
+                    quoteData.status = 'viewed';
+                } catch (viewErr) {
+                    console.warn('Could not update quote viewed status:', viewErr);
+                }
             }
-            
-            const [clientData, userData] = await Promise.all([
-                Client.get(quoteData.client_id), // Fetch client data
-                User.get(quoteData.created_by) // Fetch user who created the quote
-            ]);
 
             setQuote(quoteData);
-            setClient(clientData); // Set client state
-            setUser(userData);
+            setClient(payload?.client || null);
+            setUser(payload?.owner || null);
         } catch (error) {
             console.error('Error loading public quote:', error);
             // Optionally set quote/client/user to null on error to display error message
@@ -190,7 +173,13 @@ export default function PublicQuote() {
         } finally {
             setIsLoading(false); // Set loading false after data is fetched or an error occurs
         }
-    };
+    }, [shareToken]);
+
+    useEffect(() => {
+        if (shareToken) {
+            loadQuoteData();
+        }
+    }, [loadQuoteData, shareToken]);
 
     if (isLoading) {
         return (
@@ -205,7 +194,7 @@ export default function PublicQuote() {
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold text-gray-900">Quote not found</h2>
-                    <p className="text-gray-600 mt-2">The quote you're looking for doesn't exist or has been removed.</p>
+                    <p className="text-gray-600 mt-2">The quote you are looking for does not exist or has been removed.</p>
                 </div>
             </div>
         );

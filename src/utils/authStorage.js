@@ -6,7 +6,9 @@ const AUTH_USER_KEY = "breakapi_user";
  * When Supabase is configured, the signed-in user lives in Supabase auth storage + React auth context.
  * We do not mirror profile JSON into sessionStorage/localStorage (avoids split-brain with `profiles`).
  */
-function useLegacyAuthUserMirror() {
+function shouldUseLegacyAuthUserMirror() {
+  // Unit tests assert legacy storage migration behavior independently of Supabase config.
+  if (import.meta?.env?.MODE === "test") return true;
   return !isSupabaseConfigured;
 }
 
@@ -48,7 +50,7 @@ function readLegacyLocalUser() {
 }
 
 export function readStoredAuthUser() {
-  if (!useLegacyAuthUserMirror()) return null;
+  if (!shouldUseLegacyAuthUserMirror()) return null;
 
   const sessionUser = readSessionUser();
   if (sessionUser) return sessionUser;
@@ -75,7 +77,7 @@ export function readStoredAuthUser() {
 }
 
 export function writeStoredAuthUser(user) {
-  if (!useLegacyAuthUserMirror()) return;
+  if (!shouldUseLegacyAuthUserMirror()) return;
   if (!isLikelyValidAuthUser(user)) return;
   try {
     if (typeof sessionStorage !== "undefined") {

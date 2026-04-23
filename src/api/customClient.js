@@ -822,10 +822,11 @@ class EntityManager {
   }
 
   async ensureUserHasOrganization(userId) {
-    if (!userId || !isSupabaseAuthUuid(String(userId))) {
+    const requestedUserId = String(userId || "");
+    if (!requestedUserId || !isSupabaseAuthUuid(requestedUserId)) {
       throw new Error("Organization setup requires a valid signed-in user (Supabase auth id).");
     }
-    if (orgIdCache[userId]) return orgIdCache[userId];
+    if (orgIdCache[requestedUserId]) return orgIdCache[requestedUserId];
 
     let sessionUid = null;
     try {
@@ -838,8 +839,18 @@ class EntityManager {
       const { data: sd } = await getSessionWithRetry();
       sessionUid = sd?.session?.user?.id ?? null;
     }
-    if (!sessionUid || sessionUid !== userId) {
+
+    if (!sessionUid || !isSupabaseAuthUuid(String(sessionUid))) {
       throw new Error("Organization setup requires the active session user. Sign in again and retry.");
+    }
+
+    const effectiveUserId = String(sessionUid);
+    if (sessionUid && sessionUid !== requestedUserId) {
+      console.warn(
+        `[Paidly][EntityManager] ensureUserHasOrganization: session/request user mismatch; using active session user ${sessionUid}.`
+      );
+      // Never keep cross-user cache aliases when identities differ.
+      delete orgIdCache[requestedUserId];
     }
 
     let orgName = "My Organization";
@@ -847,7 +858,7 @@ class EntityManager {
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("company_name, full_name")
-        .eq("id", userId)
+        .eq("id", effectiveUserId)
         .maybeSingle();
       if (userProfile) {
         orgName = userProfile.company_name || userProfile.full_name || orgName;
@@ -866,7 +877,7 @@ class EntityManager {
         String(rpcErr.code || "") === "42883");
 
     if (!rpcErr && rpcOrgId) {
-      orgIdCache[userId] = rpcOrgId;
+      orgIdCache[effectiveUserId] = rpcOrgId;
       return rpcOrgId;
     }
     if (rpcErr && !missingRpc) {
@@ -878,7 +889,7 @@ class EntityManager {
       const { data: existingMembership, error: membershipCheckError } = await supabase
         .from('memberships')
         .select('org_id')
-        .eq('user_id', userId)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -889,7 +900,7 @@ class EntityManager {
       }
 
       if (existingMembership?.org_id) {
-        if (userId) orgIdCache[userId] = existingMembership.org_id;
+        orgIdCache[effectiveUserId] = existingMembership.org_id;
         return existingMembership.org_id;
       }
 
@@ -897,7 +908,7 @@ class EntityManager {
       const { data: existingOrg, error: orgCheckError } = await supabase
         .from('organizations')
         .select('id')
-        .eq('owner_id', userId)
+        .eq('owner_id', effectiveUserId)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -915,7 +926,7 @@ class EntityManager {
           .from('organizations')
           .insert({
             name: orgName,
-            owner_id: userId
+            owner_id: effectiveUserId
           })
           .select('id')
           .single();
@@ -943,7 +954,7 @@ class EntityManager {
           .from('memberships')
           .insert({
             org_id: orgId,
-            user_id: userId,
+            user_id: effectiveUserId,
             role: 'owner'
           });
 
@@ -956,12 +967,12 @@ class EntityManager {
             const { data: existingMem } = await supabase
               .from('memberships')
               .select('org_id')
-              .eq('user_id', userId)
+              .eq('user_id', effectiveUserId)
               .eq('org_id', orgId)
               .maybeSingle();
             
             if (existingMem?.org_id) {
-              if (userId) orgIdCache[userId] = existingMem.org_id;
+              orgIdCache[effectiveUserId] = existingMem.org_id;
               return existingMem.org_id;
             }
           } else {
@@ -980,7 +991,7 @@ class EntityManager {
         throw new Error('Unable to determine organization ID');
       }
 
-      if (userId) orgIdCache[userId] = orgId;
+      orgIdCache[effectiveUserId] = orgId;
       return orgId;
     } catch (error) {
       console.error('Error in ensureUserHasOrganization:', error);

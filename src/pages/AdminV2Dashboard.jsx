@@ -55,6 +55,8 @@ const DASHBOARD_QUERY_KEYS = [
   'quotes',
   'payslips',
 ];
+const ADMIN_DASHBOARD_REFETCH_MS = 120000;
+const ADMIN_DASHBOARD_STALE_MS = 60000;
 
 function burstWindowMinutes(securityEvents, kind) {
   const ms = securityEvents?.bursts?.windowsMs?.[kind];
@@ -88,15 +90,19 @@ export default function AdminV2Dashboard() {
   } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: subscriptions = [], dataUpdatedAt: subscriptionsUpdatedAt } = useQuery({
     queryKey: ['subscriptions'],
     queryFn: () => paidly.entities.Subscription.list('-created_date', 150),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -108,8 +114,10 @@ export default function AdminV2Dashboard() {
     queryKey: ['affiliates'],
     select: normalizeAffiliateAdminQueryResult,
     queryFn: () => affiliateApplicationsAdminQueryFn(),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const affiliates = affiliateAdmin.applications;
   const affiliateStatusCounts = affiliateAdmin.counts;
@@ -230,29 +238,37 @@ export default function AdminV2Dashboard() {
   const { data: waitlist = [], dataUpdatedAt: waitlistUpdatedAt } = useQuery({
     queryKey: ['waitlist'],
     queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 150),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: invoices = [], dataUpdatedAt: invoicesUpdatedAt } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => paidly.entities.Invoice.list('-created_date', 500),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: quotes = [], dataUpdatedAt: quotesUpdatedAt } = useQuery({
     queryKey: ['quotes'],
     queryFn: () => paidly.entities.Quote.list('-created_date', 500),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: payslips = [], dataUpdatedAt: payslipsUpdatedAt } = useQuery({
     queryKey: ['payslips'],
     queryFn: () => paidly.entities.Payroll.list('-created_date', 500),
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: securityEvents, isLoading: securityLoading, error: securityError } = useQuery({
@@ -273,8 +289,10 @@ export default function AdminV2Dashboard() {
       }
       return json?.summary || null;
     },
-    refetchInterval: 45000,
-    staleTime: 30000,
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
     retry: 1,
   });
 

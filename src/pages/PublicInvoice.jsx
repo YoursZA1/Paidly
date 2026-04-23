@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Invoice } from '@/api/entities';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { Invoice } from '@/api/entities';
 import {
   fetchPublicInvoicePayload,
   verifyPublicInvoiceEmail,
@@ -82,17 +82,16 @@ export default function PublicInvoice() {
                 }
 
                 setBankingDetail(payload.bankingDetail || null);
-                
                 const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
                 if (autoUpdate) {
                     try {
                         await Invoice.update(currentInvoice.id, autoUpdate);
                         setInvoice(prev => ({ ...prev, ...autoUpdate }));
-                    } catch (e) {
-                        console.error("Could not update invoice status:", e);
+                    } catch (viewErr) {
+                        console.warn("Could not update invoice viewed status:", viewErr);
                     }
                 }
-
+                
             } catch (e) {
                 console.error("Error fetching public invoice:", e);
                 setError(e?.message || "Could not load the invoice. Please check the link and try again.");
@@ -135,16 +134,16 @@ export default function PublicInvoice() {
                 setClient({ name: "Client", email: "", address: "", phone: "" });
             }
             setBankingDetail(payload.bankingDetail || null);
-
             const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
             if (autoUpdate) {
                 try {
                     await Invoice.update(currentInvoice.id, autoUpdate);
                     setInvoice(prev => ({ ...prev, ...autoUpdate }));
-                } catch (e) {
-                    console.error("Could not update invoice status:", e);
+                } catch (viewErr) {
+                    console.warn("Could not update invoice viewed status:", viewErr);
                 }
             }
+
         } catch (error) {
             setVerificationError(
                 error?.message ||
@@ -296,11 +295,14 @@ export default function PublicInvoice() {
                 {/* Action Buttons */}
                 <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
                     {canPayOnline && (
-                         <a href={bankingDetail.payment_gateway_url} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
-                            <button className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
-                                <CreditCard className="w-5 h-5"/>
-                                Pay Now ({formatCurrency(invoice.total_amount, ownerCurrency)})
-                            </button>
+                        <a
+                            href={bankingDetail.payment_gateway_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-grow sm:flex-grow-0 w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
+                        >
+                            <CreditCard className="w-5 h-5"/>
+                            Pay Now ({formatCurrency(invoice.total_amount, ownerCurrency)})
                         </a>
                     )}
                     {ownerCurrency === 'ZAR' && (
@@ -314,11 +316,14 @@ export default function PublicInvoice() {
                             {isPaying ? 'Redirecting to PayFast…' : `Pay with PayFast (${formatCurrency(invoice.total_amount, ownerCurrency)})`}
                         </button>
                     )}
-                    <a href={pdfDownloadHref} target="_blank" rel="noopener noreferrer" className="flex-grow sm:flex-grow-0">
-                        <button className="w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
-                            <Download className="w-5 h-5" />
-                            Download as PDF
-                        </button>
+                    <a
+                        href={pdfDownloadHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-grow sm:flex-grow-0 w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
+                    >
+                        <Download className="w-5 h-5" />
+                        Download as PDF
                     </a>
                 </div>
 

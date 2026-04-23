@@ -129,6 +129,9 @@ function getReadableSaleError(error) {
   if (msg.includes("not enough stock") || msg.includes("negative stock")) {
     return "Not enough stock available to record this sale.";
   }
+  if (msg.includes("insufficient stock")) {
+    return "Not enough stock available to record this sale.";
+  }
   return raw.length > 180 ? `${raw.slice(0, 177)}...` : raw;
 }
 
@@ -369,32 +372,15 @@ export default function Inventory() {
           throw new Error("No organization found for this user.");
         }
 
-        const { data: row, error: getErr } = await supabase
-          .from("services")
-          .select("stock_quantity")
-          .eq("id", product_id)
-          .eq("org_id", resolvedOrgId)
-          .maybeSingle();
-        if (getErr) throw getErr;
-        const current = Number(row?.stock_quantity ?? 0) || 0;
-        const nextStock = current + qty;
-
-        const { error: updErr } = await supabase
-          .from("services")
-          .update({ stock_quantity: nextStock })
-          .eq("id", product_id)
-          .eq("org_id", resolvedOrgId);
-        if (updErr) throw updErr;
-
-        const { error: movErr } = await supabase.from("inventory_movements").insert({
-          product_id,
-          quantity: qty,
-          type: "in",
-          source: notes || "barcode_receive",
-          reference_id: null,
-          created_at: new Date().toISOString(),
+        const { error: rpcErr } = await supabase.rpc("adjust_inventory_stock", {
+          p_product_id: product_id,
+          p_org_id: resolvedOrgId,
+          p_delta: qty,
+          p_type: "in",
+          p_source: notes || "barcode_receive",
+          p_reference_id: null,
         });
-        if (!checkSupabaseWriteResult({ error: movErr }, "Record stock movement (receive)")) return;
+        if (rpcErr) throw rpcErr;
 
         toast({
           title: "✓ Stock Received",
@@ -456,35 +442,20 @@ export default function Inventory() {
           throw new Error("Product not found in your organization.");
         }
 
-        // Best-effort: ensure the product satisfies trigger semantics (`services.type='product'`).
-        const { error: typeErr } = await supabase
-          .from("services")
-          .update({ type: "product" })
-          .eq("id", product_id)
-          .eq("org_id", resolvedOrgId);
-        if (typeErr) throw typeErr;
-
         const dbStock = Number(currentRow.stock_quantity ?? 0) || 0;
         if (dbStock < qty) {
-          throw new Error(`Not enough stock. Available stock is ${dbStock}.`);
+          throw new Error(`Insufficient stock. Available stock is ${dbStock}.`);
         }
-        const nextStock = dbStock - qty;
-        const { error: updErr } = await supabase
-          .from("services")
-          .update({ stock_quantity: nextStock })
-          .eq("id", product_id)
-          .eq("org_id", resolvedOrgId);
-        if (updErr) throw updErr;
 
-        const { error: insErr } = await supabase.from("inventory_movements").insert({
-          product_id,
-          quantity: qty,
-          type: "out",
-          source: "manual_sale",
-          reference_id: null,
-          created_at: new Date().toISOString(),
+        const { error: rpcErr } = await supabase.rpc("adjust_inventory_stock", {
+          p_product_id: product_id,
+          p_org_id: resolvedOrgId,
+          p_delta: -qty,
+          p_type: "out",
+          p_source: "manual_sale",
+          p_reference_id: null,
         });
-        if (!checkSupabaseWriteResult({ error: insErr }, "Record stock movement (sale)")) return;
+        if (rpcErr) throw rpcErr;
 
         toast({
           title: "✓ Sale Recorded",
@@ -713,12 +684,22 @@ export default function Inventory() {
           return;
         }
 
-        // Best-effort: ensure the product satisfies trigger semantics.
-        const { error: typeErr } = await supabase
-          .from("services")
-          .update({ type: "product" })
-          .eq("id", delivery.product_id);
-        if (!checkSupabaseWriteResult({ error: typeErr }, "Update product type for delivery")) return;
+        const membershipOrgId = await getOrgIdForCurrentUser();
+        const product = products.find((p) => p.id === delivery.product_id);
+        const resolvedOrgId = resolveInventoryProductOrgId(product, membershipOrgId);
+        if (!resolvedOrgId) {
+          throw new Error("No organization found for this delivery.");
+        }
+
+        const { error: rpcErr } = await supabase.rpc("adjust_inventory_stock", {
+          p_product_id: delivery.product_id,
+          p_org_id: resolvedOrgId,
+          p_delta: qty,
+          p_type: "in",
+          p_source: "delivery",
+          p_reference_id: delivery.id,
+        });
+        if (rpcErr) throw rpcErr;
 
         if (!alreadyMarkedDelivered) {
           const { error: updDelErr } = await supabase
@@ -727,32 +708,6 @@ export default function Inventory() {
             .eq("id", delivery.id);
           if (updDelErr) throw updDelErr;
         }
-
-        // Then apply stock + insert movement history.
-        const { data: productRow, error: prodErr } = await supabase
-          .from("services")
-          .select("stock_quantity")
-          .eq("id", delivery.product_id)
-          .maybeSingle();
-        if (prodErr) throw prodErr;
-
-        const stock = Number(productRow?.stock_quantity ?? 0);
-        const nextStock = stock + qty;
-        const { error: updProdErr } = await supabase
-          .from("services")
-          .update({ stock_quantity: nextStock })
-          .eq("id", delivery.product_id);
-        if (updProdErr) throw updProdErr;
-
-        const { error: insErr } = await supabase.from("inventory_movements").insert({
-          product_id: delivery.product_id,
-          quantity: qty,
-          type: "in",
-          source: "delivery",
-          reference_id: delivery.id,
-          created_at: new Date().toISOString(),
-        });
-        if (insErr) throw insErr;
 
         toast({
           title: "✓ Delivery Received",
@@ -770,7 +725,7 @@ export default function Inventory() {
         });
       }
     },
-    [refetchAll, toast]
+    [getOrgIdForCurrentUser, products, refetchAll, toast]
   );
 
   const handleSaveDelivery = useCallback(
