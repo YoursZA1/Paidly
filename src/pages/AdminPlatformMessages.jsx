@@ -58,6 +58,29 @@ import { notifySuccess } from '@/lib/notify';
 import { cn } from '@/lib/utils';
 import { stableDirectoryRowKey } from '@/utils/stableListKey';
 
+const CHANNEL_OPTIONS = [
+  { id: 'in_app', label: 'In-App' },
+  { id: 'email', label: 'Email' },
+  { id: 'both', label: 'Both' },
+];
+
+function channelToFlags(channel) {
+  const normalized = String(channel || 'both').toLowerCase();
+  if (normalized === 'in_app') return { sendInApp: true, sendEmail: false };
+  if (normalized === 'email') return { sendInApp: false, sendEmail: true };
+  return { sendInApp: true, sendEmail: true };
+}
+
+function normalizeMessageChannel(message) {
+  const raw = String(message?.channel || '').toLowerCase();
+  if (raw === 'in_app' || raw === 'email' || raw === 'both') return raw;
+  const hasEmail = Boolean(message?.send_email);
+  const hasInApp = Boolean(message?.send_in_app);
+  if (hasEmail && hasInApp) return 'both';
+  if (hasEmail) return 'email';
+  return 'in_app';
+}
+
 function platformUserLabel(u) {
   if (!u) return 'Unknown user';
   const name = String(u.full_name || u.profile?.full_name || '').trim();
@@ -328,13 +351,11 @@ export default function AdminPlatformMessages() {
   const [newTemplateId, setNewTemplateId] = useState('');
   const [newSubject, setNewSubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [newBody, setNewBody] = useState('');
-  const [newSendInApp, setNewSendInApp] = useState(true);
-  const [newSendEmail, setNewSendEmail] = useState(true);
+  const [newChannel, setNewChannel] = useState('both');
   const [replyTemplateId, setReplyTemplateId] = useState('');
   const [replySubject, setReplySubject] = useState(DEFAULT_ADMIN_PLATFORM_SUBJECT);
   const [replyBody, setReplyBody] = useState('');
-  const [replySendInApp, setReplySendInApp] = useState(true);
-  const [replySendEmail, setReplySendEmail] = useState(true);
+  const [replyChannel, setReplyChannel] = useState('both');
   const [templatePickerTarget, setTemplatePickerTarget] = useState(
     /** @type {null | 'reply' | 'new'} */ (null)
   );
@@ -540,14 +561,15 @@ export default function AdminPlatformMessages() {
       return;
     }
     try {
+      const { sendInApp, sendEmail } = channelToFlags(newChannel);
       const result = await sendMutation.mutateAsync({
         recipientIds: [rid],
         subject: sub,
         content: body,
-        sendInApp: newSendInApp,
-        sendEmail: newSendEmail,
+        sendInApp,
+        sendEmail,
       });
-      const channelSummary = [newSendInApp ? 'Dashboard' : null, newSendEmail ? 'Email' : null]
+      const channelSummary = [sendInApp ? 'Dashboard' : null, sendEmail ? 'Email' : null]
         .filter(Boolean)
         .join(' + ');
       const skippedEmail = Number(result?.skippedEmail || 0);
@@ -560,8 +582,7 @@ export default function AdminPlatformMessages() {
       setNewTemplateId('');
       setNewSubject(DEFAULT_ADMIN_PLATFORM_SUBJECT);
       setNewBody('');
-      setNewSendInApp(true);
-      setNewSendEmail(true);
+      setNewChannel('both');
       setUserPickerQuery('');
     } catch {
       /* toast in mutation */
@@ -577,19 +598,16 @@ export default function AdminPlatformMessages() {
       toast.error('Enter a message');
       return;
     }
-    if (!replySendInApp && !replySendEmail) {
-      toast.error('Select at least one delivery channel');
-      return;
-    }
     try {
+      const { sendInApp, sendEmail } = channelToFlags(replyChannel);
       const result = await sendMutation.mutateAsync({
         recipientIds: [selectedRecipientId],
         subject: sub,
         content: body,
-        sendInApp: replySendInApp,
-        sendEmail: replySendEmail,
+        sendInApp,
+        sendEmail,
       });
-      const channelSummary = [replySendInApp ? 'Dashboard' : null, replySendEmail ? 'Email' : null]
+      const channelSummary = [sendInApp ? 'Dashboard' : null, sendEmail ? 'Email' : null]
         .filter(Boolean)
         .join(' + ');
       const skippedEmail = Number(result?.skippedEmail || 0);
@@ -699,26 +717,18 @@ export default function AdminPlatformMessages() {
   const loadError = convError?.message || threadError?.message;
   const newBodyTrimmed = String(newBody || '').trim();
   const replyBodyTrimmed = String(replyBody || '').trim();
-  const newChannelsSelected = newSendInApp || newSendEmail;
-  const replyChannelsSelected = replySendInApp || replySendEmail;
-  const canSendNew =
-    !sendMutation.isPending && Boolean(newRecipientId) && Boolean(newBodyTrimmed) && newChannelsSelected;
-  const canSendReply =
-    !sendMutation.isPending && Boolean(selectedRecipientId) && Boolean(replyBodyTrimmed) && replyChannelsSelected;
+  const canSendNew = !sendMutation.isPending && Boolean(newRecipientId) && Boolean(newBodyTrimmed);
+  const canSendReply = !sendMutation.isPending && Boolean(selectedRecipientId) && Boolean(replyBodyTrimmed);
   const sendNewDisabledReason = !newRecipientId
     ? 'Choose a recipient'
     : !newBodyTrimmed
       ? 'Enter a message'
-      : !newChannelsSelected
-        ? 'Select Dashboard, Email, or both'
-        : '';
+      : '';
   const sendReplyDisabledReason = !selectedRecipientId
     ? 'Choose a recipient'
     : !replyBodyTrimmed
       ? 'Enter a reply'
-      : !replyChannelsSelected
-        ? 'Select Dashboard, Email, or both'
-        : '';
+      : '';
 
   return (
     <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
@@ -737,7 +747,7 @@ export default function AdminPlatformMessages() {
         <PlatformUsersLoadErrorHint message={usersErr?.message} />
       ) : null}
 
-      <div className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-3">
+      <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-3.5 space-y-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" onClick={() => setComposerOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" />
@@ -778,7 +788,7 @@ export default function AdminPlatformMessages() {
               type="button"
               variant={messageKindFilter === id ? 'default' : 'outline'}
               size="sm"
-              className="h-8 px-3"
+              className="h-7 px-2.5 text-xs"
               onClick={() => setMessageKindFilter(id)}
             >
               {label}
@@ -787,22 +797,22 @@ export default function AdminPlatformMessages() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[240px_minmax(320px,420px)_minmax(0,1fr)] gap-4 min-w-0 min-h-[min(85dvh,820px)]">
-        <Card className="border border-border bg-card">
-          <CardHeader className="pb-3">
+      <div className="grid grid-cols-1 xl:grid-cols-[228px_minmax(320px,410px)_minmax(0,1fr)] gap-3.5 min-w-0 min-h-[min(85dvh,820px)]">
+        <Card className="border border-border/70 bg-card">
+          <CardHeader className="pb-2.5">
             <CardTitle className="text-sm">User Segments</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="space-y-1 pb-4">
             {userSegments.map((segment) => (
               <button
                 key={segment.id}
                 type="button"
                 onClick={() => setSegmentFilter(segment.id)}
                 className={cn(
-                  'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  'w-full rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors',
                   segmentFilter === segment.id
                     ? 'border-primary bg-primary/10 text-foreground'
-                    : 'border-border/60 text-muted-foreground hover:bg-muted/40'
+                    : 'border-border/45 text-muted-foreground hover:bg-muted/35'
                 )}
               >
                 <span className="font-medium">{segment.label}</span>
@@ -812,8 +822,8 @@ export default function AdminPlatformMessages() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border bg-card min-h-0 flex flex-col">
-          <CardHeader className="border-b border-border space-y-3 shrink-0">
+        <Card className="border border-border/70 bg-card min-h-0 flex flex-col">
+          <CardHeader className="border-b border-border/50 space-y-2.5 shrink-0 pb-3">
             <CardTitle className="text-sm">Message Threads</CardTitle>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -826,9 +836,9 @@ export default function AdminPlatformMessages() {
               />
             </div>
           </CardHeader>
-          <CardContent className="p-2 pt-3 flex-1 min-h-0">
+          <CardContent className="p-2 pt-2.5 flex-1 min-h-0">
             <ScrollArea className="h-full pr-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {filteredConversations.map((c) => {
                   const u = userMap.get(c.recipient_id);
                   const status = String(c?.status || 'pending').toLowerCase();
@@ -842,22 +852,22 @@ export default function AdminPlatformMessages() {
                         setSelectedHubType('direct');
                       }}
                       className={cn(
-                        'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                        'w-full rounded-md border px-2.5 py-2.5 text-left transition-colors',
                         selectedHubType === 'direct' && selectedRecipientId === c.recipient_id
                           ? 'border-primary bg-primary/10'
-                          : 'border-border/60 hover:bg-muted/40'
+                          : 'border-border/45 hover:bg-muted/35'
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-medium truncate">{platformUserLabel(u)}</p>
-                          <p className="text-xs text-muted-foreground truncate">{String(c.preview || '')}</p>
+                          <p className="text-[13px] text-muted-foreground truncate leading-5">{String(c.preview || '')}</p>
                         </div>
-                        <Badge variant={statusTone(status)} className="capitalize">
+                        <Badge variant={statusTone(status)} className="capitalize h-5 px-1.5 text-[10px]">
                           {status}
                         </Badge>
                       </div>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                         {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
                         {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
                         <span className="ml-auto">
@@ -881,18 +891,20 @@ export default function AdminPlatformMessages() {
                         setSelectedHubType('broadcast');
                       }}
                       className={cn(
-                        'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                        'w-full rounded-md border px-2.5 py-2.5 text-left transition-colors',
                         selectedHubType === 'broadcast' && String(selectedBroadcastJobId || '') === String(job.id)
                           ? 'border-primary bg-primary/10'
-                          : 'border-border/60 hover:bg-muted/40'
+                          : 'border-border/45 hover:bg-muted/35'
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-medium truncate">{String(job?.subject || 'Broadcast campaign')}</p>
-                        <Badge variant={failed > 0 ? 'destructive' : 'secondary'}>{String(job?.status || 'queued')}</Badge>
+                        <Badge variant={failed > 0 ? 'destructive' : 'secondary'} className="h-5 px-1.5 text-[10px]">
+                          {String(job?.status || 'queued')}
+                        </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">Audience {total} · Delivered {delivered} · Open {openRate}%</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <p className="text-[13px] leading-5 text-muted-foreground mt-1">Audience {total} · Delivered {delivered} · Open {openRate}%</p>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                         <Megaphone className="h-3.5 w-3.5" />
                         <Mail className="h-3.5 w-3.5" />
                         <span className="ml-auto">
@@ -913,60 +925,77 @@ export default function AdminPlatformMessages() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border bg-card min-h-0 flex flex-col overflow-hidden">
+        <Card className="border border-border/70 bg-card min-h-0 flex flex-col overflow-hidden">
           {selectedHubType === 'broadcast' && selectedBroadcastJob ? (
-            <div className="p-5 space-y-4">
+            <div className="p-4.5 space-y-3.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Broadcast Campaign</h3>
-                <Badge variant="secondary">{String(selectedBroadcastJob.status || 'queued')}</Badge>
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                  {String(selectedBroadcastJob.status || 'queued')}
+                </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">{String(selectedBroadcastJob.subject || 'Campaign')}</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border border-border p-3">Audience: {Number(selectedBroadcastJob.total_recipients || 0)}</div>
-                <div className="rounded-lg border border-border p-3">Channels: Email + In-App</div>
-                <div className="rounded-lg border border-border p-3">Sent: {Number(selectedBroadcastJob.email_sent || 0)}</div>
-                <div className="rounded-lg border border-border p-3">Delivered: {Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)}</div>
-                <div className="rounded-lg border border-border p-3">Failed: {Number(selectedBroadcastJob.email_failed || 0)}</div>
-                <div className="rounded-lg border border-border p-3">Open rate: {Number(selectedBroadcastJob.total_recipients || 0) > 0 ? Math.round(((Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)) / Number(selectedBroadcastJob.total_recipients || 1)) * 100) : 0}%</div>
+                  <p className="text-[13px] leading-5 text-muted-foreground">{String(selectedBroadcastJob.subject || 'Campaign')}</p>
+              <div className="grid grid-cols-2 gap-2.5 text-sm">
+                <div className="rounded-md border border-border/55 p-2.5">Audience: {Number(selectedBroadcastJob.total_recipients || 0)}</div>
+                <div className="rounded-md border border-border/55 p-2.5">Channels: Email + In-App</div>
+                <div className="rounded-md border border-border/55 p-2.5">Sent: {Number(selectedBroadcastJob.email_sent || 0)}</div>
+                <div className="rounded-md border border-border/55 p-2.5">Delivered: {Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)}</div>
+                <div className="rounded-md border border-border/55 p-2.5">Failed: {Number(selectedBroadcastJob.email_failed || 0)}</div>
+                <div className="rounded-md border border-border/55 p-2.5">Open rate: Not tracked</div>
               </div>
-              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{String(selectedBroadcastJob.content || '')}</p>
+              <p className="text-[13px] leading-5 text-muted-foreground whitespace-pre-wrap">{String(selectedBroadcastJob.content || '')}</p>
             </div>
           ) : selectedRecipientId ? (
             <>
-              <div className="border-b border-border px-4 py-3 flex items-center justify-between gap-3">
+              <div className="border-b border-border/50 px-4 py-2.5 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="font-semibold truncate">{platformUserLabel(selectedUser)}</h2>
-                  <p className="text-xs text-muted-foreground truncate">{platformUserEmail(selectedUser) || selectedRecipientId}</p>
+                  <p className="text-[13px] leading-5 text-muted-foreground truncate">{platformUserEmail(selectedUser) || selectedRecipientId}</p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={() => refetchThread()} disabled={threadLoading || threadFetching}>
                   Refresh
                 </Button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30">
+              <div className="flex-1 min-h-0 overflow-y-auto bg-muted/20">
                 <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
                   {sortedThread.map((m) => {
                     const mine = m.sender_id === currentUser?.id || m.sender_id === currentUser?.supabase_id;
-                    const channel = String(m?.channel || (m?.send_email && m?.send_in_app ? 'both' : m?.send_email ? 'email' : 'in_app'));
+                    const channel = normalizeMessageChannel(m);
                     return (
-                      <article key={m.id} className={cn('rounded-xl border bg-card overflow-hidden', mine ? 'border-primary/25' : 'border-border')}>
-                        <header className="flex items-center justify-between gap-2 border-b border-border/80 bg-muted/20 px-4 py-2">
-                          <p className="text-xs font-medium">{mine ? 'Paidly team' : platformUserLabel(selectedUser)}</p>
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
-                            {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
-                            <Badge variant={statusTone(m?.status)} className="ml-1 capitalize">{String(m?.status || 'pending')}</Badge>
+                      <article key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={cn(
+                            'max-w-[82%] rounded-2xl border px-3.5 py-2.5',
+                            mine
+                              ? 'bg-primary/10 border-primary/30 text-foreground'
+                              : 'bg-card border-border/60'
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[13px] font-medium leading-5">{mine ? 'Paidly team' : platformUserLabel(selectedUser)}</p>
+                            <span className="text-[11px] leading-4 text-muted-foreground">
+                              {m.created_at ? format(new Date(m.created_at), isToday(new Date(m.created_at)) ? 'HH:mm' : 'MMM d, HH:mm') : '—'}
+                            </span>
                           </div>
-                        </header>
-                        <div className="px-4 py-3">
-                          <h3 className="text-sm font-medium">{m.subject?.trim() || 'Message'}</h3>
-                          <p className="text-sm text-foreground/90 whitespace-pre-wrap mt-1">{m.content}</p>
+                          <h3 className="text-[13px] font-medium leading-5 mt-1">{m.subject?.trim() || 'Message'}</h3>
+                          <p className="text-[13px] leading-5 text-foreground/90 whitespace-pre-wrap mt-1">{m.content}</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <Badge variant="outline" className="gap-1 h-5 px-1.5 text-[10px]">
+                              {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3 w-3" /> : null}
+                              {(channel === 'both' || channel === 'email') ? <Mail className="h-3 w-3" /> : null}
+                              {channel === 'both' ? 'Both' : channel === 'email' ? 'Email' : 'In-App'}
+                            </Badge>
+                            <Badge variant={statusTone(m?.status)} className="capitalize h-5 px-1.5 text-[10px]">
+                              {String(m?.status || 'pending')}
+                            </Badge>
+                          </div>
                         </div>
                       </article>
                     );
                   })}
                 </div>
               </div>
-              <div className="border-t border-border bg-card p-4 space-y-3">
+              <div className="border-t border-border/50 bg-card p-3.5 space-y-2.5">
                 <div className="space-y-1">
                   <Label htmlFor="reply-subject">Subject</Label>
                   <Input id="reply-subject" value={replySubject} onChange={(e) => setReplySubject(e.target.value)} maxLength={300} />
@@ -975,16 +1004,22 @@ export default function AdminPlatformMessages() {
                   <Label htmlFor="reply-body">Message</Label>
                   <Textarea id="reply-body" value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={4} maxLength={50000} />
                 </div>
-                <div className="flex items-center gap-4">
-                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox checked={replySendInApp} onCheckedChange={(v) => setReplySendInApp(v === true)} />
-                    In-App
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox checked={replySendEmail} onCheckedChange={(v) => setReplySendEmail(v === true)} />
-                    Email
-                  </label>
-                  <span className="text-xs text-muted-foreground">Both = select both channels</span>
+                <div className="space-y-1">
+                  <Label>Channel</Label>
+                  <div className="inline-flex rounded-lg border border-border p-1">
+                    {CHANNEL_OPTIONS.map((option) => (
+                      <Button
+                        key={option.id}
+                        type="button"
+                        size="sm"
+                        variant={replyChannel === option.id ? 'default' : 'ghost'}
+                        className="h-8 px-3"
+                        onClick={() => setReplyChannel(option.id)}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex justify-end">
                   <Button type="button" onClick={handleSendReply} disabled={!canSendReply || usersLoading} className="gap-2">
@@ -1115,15 +1150,22 @@ export default function AdminPlatformMessages() {
                 maxLength={50000}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox checked={newSendInApp} onCheckedChange={(v) => setNewSendInApp(v === true)} />
-                Send to Dashboard
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox checked={newSendEmail} onCheckedChange={(v) => setNewSendEmail(v === true)} />
-                Send via Email
-              </label>
+            <div className="space-y-1">
+              <Label>Channel</Label>
+              <div className="inline-flex rounded-lg border border-border p-1">
+                {CHANNEL_OPTIONS.map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={newChannel === option.id ? 'default' : 'ghost'}
+                    className="h-8 px-3"
+                    onClick={() => setNewChannel(option.id)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">

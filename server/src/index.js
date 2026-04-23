@@ -2300,17 +2300,86 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
       sendEmail,
       sendInApp,
       messageType: "direct",
-      status: sendInApp ? "delivered" : "pending",
+      status: "pending",
     });
+    const messageId = String(message?.id || "");
+    const nowIso = new Date().toISOString();
+    let finalStatus = sendInApp ? "delivered" : "pending";
+    let finalDeliveredAt = sendInApp ? nowIso : null;
+    let failedReason = null;
+
+    if (sendInApp && messageId) {
+      const { error: notifyErr } = await supabaseAdmin.from("notifications").insert({
+        user_id: recipient_id,
+        message: `${String(message?.subject || subject || "Message from the Paidly team").trim()}: ${content}`,
+        read: false,
+      });
+      if (notifyErr) {
+        return res.status(500).json({ error: notifyErr.message || "Failed to save notification" });
+      }
+      const { error: inAppErr } = await supabaseAdmin.from("message_deliveries").insert({
+        message_id: messageId,
+        user_id: recipient_id,
+        channel: "in_app",
+        status: "sent",
+        sent_at: nowIso,
+      });
+      if (inAppErr) {
+        return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
+      }
+    }
 
     let email_delivery = { status: "skipped", reason: "send_email_disabled" };
-    if (sendEmail) {
+    if (sendEmail && messageId) {
+      const { error: emailInsertErr } = await supabaseAdmin.from("message_deliveries").insert({
+        message_id: messageId,
+        user_id: recipient_id,
+        channel: "email",
+        status: "pending",
+      });
+      if (emailInsertErr) {
+        return res.status(500).json({ error: emailInsertErr.message || "Failed to save email delivery" });
+      }
       email_delivery = await sendAdminPlatformMessageToSignupEmail(supabaseAdmin, {
         recipientId: recipient_id,
         subject: message?.subject ?? subject,
         plainBody: content,
         messageId: message?.id,
       });
+      const emailStatus = email_delivery?.status === "sent" ? "sent" : "failed";
+      const sentAt = email_delivery?.status === "sent" ? new Date().toISOString() : null;
+      const { error: emailUpdateErr } = await supabaseAdmin
+        .from("message_deliveries")
+        .update({ status: emailStatus, sent_at: sentAt })
+        .eq("message_id", messageId)
+        .eq("user_id", recipient_id)
+        .eq("channel", "email");
+      if (emailUpdateErr) {
+        return res.status(500).json({ error: emailUpdateErr.message || "Failed to update email delivery" });
+      }
+      if (email_delivery?.status === "sent") {
+        finalStatus = sendInApp ? "delivered" : "sent";
+        finalDeliveredAt = sentAt || finalDeliveredAt;
+      } else if (!sendInApp) {
+        finalStatus = "failed";
+        finalDeliveredAt = null;
+        failedReason = String(email_delivery?.reason || "send_failed").slice(0, 500);
+      }
+    } else if (!sendInApp) {
+      finalStatus = "failed";
+      finalDeliveredAt = null;
+      failedReason = "send_email_disabled";
+    }
+
+    if (messageId) {
+      const patch = { status: finalStatus, delivered_at: finalDeliveredAt, failed_reason: failedReason };
+      const { error: msgStatusErr } = await supabaseAdmin
+        .from("admin_platform_messages")
+        .update(patch)
+        .eq("id", messageId);
+      if (msgStatusErr) {
+        return res.status(500).json({ error: msgStatusErr.message || "Failed to update message status" });
+      }
     }
     logAdminApi(
       req.method,
@@ -2390,8 +2459,19 @@ app.post("/api/admin/send-message", async (req, res) => {
       });
       const messageId = String(message?.id || "");
       if (!messageId) continue;
+      let finalStatus = "pending";
+      let failedReason = null;
+      let deliveredAt = null;
 
       if (sendInApp) {
+        const { error: notifyErr } = await supabaseAdmin.from("notifications").insert({
+          user_id: recipientId,
+          message: `${String(message?.subject || subject || "Message from the Paidly team").trim()}: ${content}`,
+          read: false,
+        });
+        if (notifyErr) {
+          return res.status(500).json({ error: notifyErr.message || "Failed to save notification" });
+        }
         const { error: inAppErr } = await supabaseAdmin.from("message_deliveries").insert({
           message_id: messageId,
           user_id: recipientId,
@@ -2402,6 +2482,8 @@ app.post("/api/admin/send-message", async (req, res) => {
         if (inAppErr) {
           return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
         }
+        finalStatus = "delivered";
+        deliveredAt = nowIso;
       }
 
       if (sendEmail) {
@@ -2425,9 +2507,20 @@ app.post("/api/admin/send-message", async (req, res) => {
         const sentAt = emailDelivery?.status === "sent" ? new Date().toISOString() : null;
         if (emailDelivery?.status === "failed") {
           failedEmail += 1;
+          failedReason = String(emailDelivery?.reason || "send_failed").slice(0, 500);
+          if (!sendInApp) {
+            finalStatus = "failed";
+          }
           console.error("[POST /api/admin/send-message] email failed", recipientId, emailDelivery?.reason || "send_failed");
         } else if (emailDelivery?.status !== "sent") {
           skippedEmail += 1;
+          if (!sendInApp) {
+            finalStatus = "failed";
+            failedReason = String(emailDelivery?.reason || "email_skipped").slice(0, 500);
+          }
+        } else {
+          finalStatus = sendInApp ? "delivered" : "sent";
+          deliveredAt = sentAt || deliveredAt;
         }
         const { error: emailUpdateErr } = await supabaseAdmin
           .from("message_deliveries")
@@ -2439,10 +2532,18 @@ app.post("/api/admin/send-message", async (req, res) => {
           return res.status(500).json({ error: emailUpdateErr.message || "Failed to update email delivery" });
         }
       }
+      if (!sendInApp && !sendEmail) {
+        finalStatus = "failed";
+        failedReason = "no_delivery_channel_selected";
+      }
 
       const { error: msgStatusErr } = await supabaseAdmin
         .from("admin_platform_messages")
-        .update({ status: "sent" })
+        .update({
+          status: finalStatus || "pending",
+          delivered_at: deliveredAt,
+          failed_reason: failedReason,
+        })
         .eq("id", messageId);
       if (msgStatusErr) {
         return res.status(500).json({ error: msgStatusErr.message || "Failed to update message status" });

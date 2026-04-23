@@ -72,6 +72,11 @@ async function insertDelivery(supabase, row) {
   if (error) throw new Error(error.message || "Failed to create message delivery");
 }
 
+async function insertNotification(supabase, row) {
+  const { error } = await supabase.from("notifications").insert(row);
+  if (error) throw new Error(error.message || "Failed to save notification");
+}
+
 async function updateMessageStatus(supabase, messageId, status) {
   const patch = { status };
   if (status === "delivered" || status === "sent") patch.delivered_at = new Date().toISOString();
@@ -141,6 +146,11 @@ export async function handleVercelAdminSendMessagePost(req, res) {
       let finalStatus = "pending";
       let failedReason = null;
       if (payload.sendInApp) {
+        await insertNotification(supabase, {
+          user_id: recipientId,
+          message: `${String(message?.subject || payload.subject || "Message from the Paidly team").trim()}: ${payload.content}`,
+          read: false,
+        });
         await insertDelivery(supabase, {
           message_id: messageId,
           user_id: recipientId,
