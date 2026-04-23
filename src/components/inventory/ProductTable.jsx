@@ -1,89 +1,107 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, AlertTriangle } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
 
-export default function ProductTable({ products, onEdit, onDelete, currencyCode = "ZAR" }) {
+export default function ProductTable({
+  products,
+  onEdit,
+  onDelete,
+  onOpenProduct,
+  currencyCode = "ZAR",
+}) {
   const getStockBadge = (product) => {
-    if (product.stock_on_hand <= 0) {
-      return <Badge variant="destructive" className="text-xs">Out of Stock</Badge>;
+    const stock = Number(product.stock_on_hand ?? 0);
+    const threshold = Number(product.reorder_level ?? 10);
+    if (stock <= 0) {
+      return <Badge className="text-xs bg-status-overdue/15 text-status-overdue border-transparent">Out of Stock</Badge>;
     }
-    if (product.stock_on_hand <= (product.reorder_level || 10)) {
+    if (stock <= threshold) {
       return (
-        <Badge className="bg-status-pending/10 text-status-pending border-border text-xs">
-          <AlertTriangle className="w-3 h-3 mr-1" /> Low
-        </Badge>
+        <Badge className="bg-status-pending/15 text-status-pending border-transparent text-xs">Low Stock</Badge>
       );
     }
-    return <Badge className="bg-status-paid/10 text-status-paid border-border text-xs">In Stock</Badge>;
+    return <Badge className="bg-status-paid/15 text-status-paid border-transparent text-xs">In Stock</Badge>;
   };
 
   if (!products.length) {
     return (
-      <div className="text-center py-16 text-muted-foreground">
+      <div className="text-center py-16 text-muted-foreground px-4">
         <p className="text-lg font-medium">No products yet</p>
-        <p className="text-sm mt-1">Add your first product to get started</p>
+        <p className="text-sm mt-1">Add your first product to start tracking inventory</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table>
+    <div>
+      <Table className="table-fixed">
         <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="font-semibold text-xs uppercase tracking-wider">Product</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider">SKU</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider">Category</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider">Count Style</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider text-right">Stock On Hand</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider">Status</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider text-right">Price</TableHead>
-            <TableHead className="font-semibold text-xs uppercase tracking-wider text-right">Actions</TableHead>
+          <TableRow className="bg-muted/20 hover:bg-muted/20">
+            <TableHead className="h-10 px-4 font-medium text-[11px] uppercase tracking-wide text-muted-foreground">Product</TableHead>
+            <TableHead className="h-10 px-4 font-medium text-[11px] uppercase tracking-wide text-muted-foreground text-right">Stock</TableHead>
+            <TableHead className="h-10 px-4 font-medium text-[11px] uppercase tracking-wide text-muted-foreground">Status</TableHead>
+            <TableHead className="h-10 px-4 font-medium text-[11px] uppercase tracking-wide text-muted-foreground text-right">Price</TableHead>
+            <TableHead className="h-10 px-4 font-medium text-[11px] uppercase tracking-wide text-muted-foreground">Category</TableHead>
+            <TableHead className="h-10 px-3 font-medium text-[11px] uppercase tracking-wide text-muted-foreground text-right"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <AnimatePresence>
-            {products.map((product, i) => (
-              <motion.tr
-                key={product.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className="border-b border-border/40 hover:bg-muted/20 transition-colors"
-              >
-                <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell className="text-muted-foreground font-mono text-sm">{product.sku || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{product.category || "—"}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="capitalize text-xs">
-                    {product.count_style}
-                    {product.units_per_count > 1 && ` (${product.units_per_count}/each)`}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  {product.stock_on_hand || 0}
-                </TableCell>
-                <TableCell>{getStockBadge(product)}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {product.price ? formatCurrency(product.price, currencyCode) : "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(product)}>
+          {products.map((product) => (
+            <TableRow
+              key={product.id}
+              className="border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer"
+              onClick={() => onOpenProduct?.(product)}
+            >
+              <TableCell className="min-w-0 px-4 py-3.5">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{product.name}</p>
+                  <p className="text-xs text-muted-foreground truncate" title={product.sku ? `SKU ${product.sku}` : "No SKU"}>
+                    {product.sku ? `SKU ${product.sku}` : "No SKU"}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="px-4 py-3.5 text-right font-semibold tabular-nums whitespace-nowrap">
+                {Number(product.stock_on_hand ?? 0).toLocaleString()}
+                <span className="text-xs text-muted-foreground ml-1">{product.count_style || "units"}</span>
+              </TableCell>
+              <TableCell className="px-4 py-3.5">{getStockBadge(product)}</TableCell>
+              <TableCell className="px-4 py-3.5 text-right tabular-nums whitespace-nowrap">
+                {product.price ? formatCurrency(product.price, currencyCode) : "—"}
+              </TableCell>
+              <TableCell className="px-4 py-3.5 text-muted-foreground truncate">{product.category || "—"}</TableCell>
+              <TableCell className="px-3 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onOpenProduct?.(product)}>Open product</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onEdit(product)}>
                       <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(product)}>
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onDelete(product)}
+                      className="text-destructive focus:text-destructive"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </motion.tr>
-            ))}
-          </AnimatePresence>
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

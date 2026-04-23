@@ -1,8 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangle, Barcode, Package, Plus, Search, ShoppingCart, Truck } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertTriangle,
+  Barcode,
+  ChevronDown,
+  Package,
+  Plus,
+  Search,
+  ShoppingCart,
+  Truck,
+} from "lucide-react";
 import { format } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -12,6 +29,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { normalizeInventoryRows } from "@/utils/inventoryNormalization";
 import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
+import { createPageUrl } from "@/utils";
 
 import StatsCard from "../components/inventory/StatsCard";
 import ProductTable from "../components/inventory/ProductTable";
@@ -123,6 +141,7 @@ function resolveInventoryProductOrgId(product, membershipOrgId) {
 export default function Inventory() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const userProfile = useAppStore((s) => s.userProfile);
   const userCurrency = userProfile?.currency || "ZAR";
 
@@ -131,7 +150,12 @@ export default function Inventory() {
   const [deliveries, setDeliveries] = useState([]);
   const [pendingBarcode, setPendingBarcode] = useState(null);
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("products");
+  const [productFilter, setProductFilter] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
@@ -291,16 +315,27 @@ export default function Inventory() {
   }, []);
 
   const refetchAll = useCallback(async () => {
-    const [p, t, d] = await Promise.allSettled([loadProducts(), loadTransactions(), loadDeliveries()]);
-    if (p.status === "fulfilled") setProducts(p.value);
-    if (t.status === "fulfilled") setTransactions(t.value);
-    if (d.status === "fulfilled") setDeliveries(d.value);
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const [p, t, d] = await Promise.allSettled([loadProducts(), loadTransactions(), loadDeliveries()]);
+      if (p.status === "fulfilled") setProducts(p.value);
+      if (t.status === "fulfilled") setTransactions(t.value);
+      if (d.status === "fulfilled") setDeliveries(d.value);
+
+      if (p.status === "rejected" || t.status === "rejected") {
+        throw new Error("Some inventory data failed to load.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }, [loadDeliveries, loadProducts, loadTransactions]);
 
   useEffect(() => {
     if (!user?.id) return;
     refetchAll().catch((e) => {
       console.error("Inventory: initial load failed", e);
+      setLoadError("Failed to load inventory data. Please refresh and try again.");
       toast({
         title: "✗ Inventory Load Failed",
         description: "Failed to load inventory data. Please refresh and try again.",
@@ -308,6 +343,11 @@ export default function Inventory() {
       });
     });
   }, [refetchAll, toast, user?.id]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const handleReceive = useCallback(
     async ({ product_id, quantity, notes }) => {
@@ -512,15 +552,30 @@ export default function Inventory() {
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return products;
+    const matchesQuery = (p) =>
+      !q ||
+      String(p.name ?? "").toLowerCase().includes(q) ||
+      String(p.sku ?? "").toLowerCase().includes(q) ||
+      String(p.category ?? "").toLowerCase().includes(q);
+
     return products.filter((p) => {
-      return (
-        String(p.name ?? "").toLowerCase().includes(q) ||
-        String(p.sku ?? "").toLowerCase().includes(q) ||
-        String(p.category ?? "").toLowerCase().includes(q)
-      );
+      if (!matchesQuery(p)) return false;
+
+      const stock = Number(p.stock_on_hand ?? 0);
+      const threshold = Number(p.reorder_level ?? 10);
+      if (productFilter === "out") return stock <= 0;
+      if (productFilter === "low") return stock > 0 && stock <= threshold;
+      return true;
     });
-  }, [products, search]);
+  }, [productFilter, products, search]);
+
+  const openProductPage = useCallback(
+    (product) => {
+      if (!product?.id) return;
+      navigate(`${createPageUrl("EditCatalogItem")}?id=${encodeURIComponent(product.id)}`);
+    },
+    [navigate]
+  );
 
   // Product handlers
   const handleSaveProduct = useCallback(
@@ -867,109 +922,132 @@ export default function Inventory() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-primary text-primary-foreground">
-                <Package className="w-6 h-6" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventory</h1>
-                <p className="text-sm text-muted-foreground">{products.length} products tracked</p>
-              </div>
+        <div className="responsive-page-shell py-4 sm:py-5 space-y-3">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1.1fr)_auto] lg:items-center">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">Inventory</h1>
+              <p className="text-sm text-muted-foreground">Manage stock, track sales, and monitor product performance</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setScannerMode("receive");
-                  setScannerQty(1);
-                  setScannerOpen(true);
-                }}
-                className="gap-2"
-                title="Scan barcode to receive stock"
-              >
-                <Barcode className="w-4 h-4" />
-                Scan Receive
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setScannerMode("sell");
-                  setScannerQty(1);
-                  setScannerOpen(true);
-                }}
-                className="gap-2"
-                title="Scan barcode to record a sale"
-              >
-                <Barcode className="w-4 h-4" />
-                Scan Sale
-              </Button>
-              <Button variant="outline" onClick={() => setSellDialogOpen(true)} className="gap-2">
-                Record Sale
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditingDelivery(null);
-                  setDeliveryDialogOpen(true);
-                }}
-                className="gap-2"
-              >
-                New Delivery
-              </Button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products by name, SKU, or category..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-10 h-10 sm:h-11 bg-card border-border/50"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
               <Button
                 onClick={() => {
                   setEditingProduct(null);
                   setProductDialogOpen(true);
                 }}
-                className="gap-2"
+                className="gap-2 h-11 px-4"
               >
                 <Plus className="w-4 h-4" /> Add Product
               </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-11 gap-1.5">
+                    Actions
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setScannerMode("receive");
+                      setScannerQty(1);
+                      setScannerOpen(true);
+                    }}
+                  >
+                    <Barcode className="w-4 h-4" />
+                    Scan Receive
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setScannerMode("sell");
+                      setScannerQty(1);
+                      setScannerOpen(true);
+                    }}
+                  >
+                    <Barcode className="w-4 h-4" />
+                    Scan Sale
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSellDialogOpen(true)}>Record Sale</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setEditingDelivery(null);
+                      setDeliveryDialogOpen(true);
+                    }}
+                  >
+                    New Delivery
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            title="Stock On Hand"
-            value={stats.totalStock.toLocaleString()}
-            subtitle={`Across ${products.length} products`}
-            icon={Package}
-            color="primary"
-          />
-          <StatsCard
-            title="Total Sold"
-            value={stats.totalSold.toLocaleString()}
-            subtitle="All time"
-            icon={ShoppingCart}
-            color="accent"
-          />
-          <StatsCard
-            title="Low Stock"
-            value={stats.lowStockCount}
-            subtitle="Products need restock"
-            icon={AlertTriangle}
-            color="red"
-          />
-          <StatsCard
-            title="Pending Deliveries"
-            value={stats.pendingDeliveries}
-            subtitle="In transit or pending"
-            icon={Truck}
-            color="blue"
-          />
-        </div>
+      <main className="responsive-page-shell py-4 sm:py-6 md:py-8">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-4 md:gap-6">
+          <section className="space-y-4 md:space-y-5 min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <StatsCard
+                title="Stock on Hand"
+                value={stats.totalStock.toLocaleString()}
+                subtitle={`Across ${products.length} products`}
+                trend="+12 this week"
+                icon={Package}
+                color="primary"
+                active={productFilter === "all" && activeTab === "products"}
+                onClick={() => {
+                  setActiveTab("products");
+                  setProductFilter("all");
+                }}
+              />
+              <StatsCard
+                title="Total Sold"
+                value={stats.totalSold.toLocaleString()}
+                subtitle="All time"
+                trend="Sales activity"
+                icon={ShoppingCart}
+                color="accent"
+                active={activeTab === "stock"}
+                onClick={() => setActiveTab("stock")}
+              />
+              <StatsCard
+                title="Low Stock"
+                value={stats.lowStockCount}
+                subtitle="Needs restock"
+                trend={stats.lowStockCount > 0 ? "Act now to avoid stockouts" : "Healthy levels"}
+                icon={AlertTriangle}
+                color="yellow"
+                active={productFilter === "low" && activeTab === "products"}
+                onClick={() => {
+                  setActiveTab("products");
+                  setProductFilter("low");
+                }}
+              />
+              <StatsCard
+                title="Pending Deliveries"
+                value={stats.pendingDeliveries}
+                subtitle="Pending or in transit"
+                trend={stats.pendingDeliveries > 0 ? "Inbound stock expected" : "No pending deliveries"}
+                icon={Truck}
+                color="blue"
+                active={activeTab === "deliveries"}
+                onClick={() => setActiveTab("deliveries")}
+              />
+            </div>
 
-        <LowStockAlert lowStockProducts={lowStockProducts} reorderingIds={reorderingIds} onReorder={handleReorder} />
+            <LowStockAlert lowStockProducts={lowStockProducts} reorderingIds={reorderingIds} onReorder={handleReorder} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Tabs defaultValue="products" className="w-full">
-              <TabsList className="w-full sm:w-auto bg-muted/60">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="w-full sm:w-auto bg-muted/30">
                 <TabsTrigger value="products" className="gap-1.5">
                   Products
                 </TabsTrigger>
@@ -982,32 +1060,39 @@ export default function Inventory() {
               </TabsList>
 
               <TabsContent value="products" className="mt-4">
-                <div className="bg-card rounded-2xl border border-border/60 overflow-hidden">
-                  <div className="p-4 border-b border-border/40">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search products by name, SKU, or category..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-10"
-                      />
+                <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-sm">
+                  {isLoading ? (
+                    <div className="p-4 space-y-3">
+                      <Skeleton className="h-9 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
                     </div>
-                  </div>
-                  <ProductTable
-                    products={filteredProducts}
-                    currencyCode={userCurrency}
-                    onEdit={(p) => {
-                      setEditingProduct(p);
-                      setProductDialogOpen(true);
-                    }}
-                    onDelete={handleDeleteProduct}
-                  />
+                  ) : loadError ? (
+                    <div className="p-6 text-sm">
+                      <p className="text-destructive font-medium">Unable to load inventory.</p>
+                      <p className="text-muted-foreground mt-1">{loadError}</p>
+                      <Button variant="outline" className="mt-3" onClick={() => refetchAll()}>
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <ProductTable
+                      products={filteredProducts}
+                      currencyCode={userCurrency}
+                      onOpenProduct={openProductPage}
+                      onEdit={(p) => {
+                        setEditingProduct(p);
+                        setProductDialogOpen(true);
+                      }}
+                      onDelete={handleDeleteProduct}
+                    />
+                  )}
                 </div>
               </TabsContent>
 
               <TabsContent value="deliveries" className="mt-4">
-                <div className="bg-card rounded-2xl border border-border/60 overflow-hidden">
+                <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-sm">
                   <DeliveryTable
                     deliveries={deliveries}
                     products={products}
@@ -1022,23 +1107,59 @@ export default function Inventory() {
               </TabsContent>
 
               <TabsContent value="stock" className="mt-4">
-                <div className="bg-card rounded-2xl border border-border/60 overflow-hidden p-4">
+                <div className="bg-card rounded-xl border border-border/50 overflow-hidden p-4 shadow-sm">
                   <div className="text-sm text-muted-foreground mb-3">
-                    Recent stock movements (manual sales, deliveries, invoice adjustments).
+                    Recent stock movements for sales, restocks, and deliveries.
                   </div>
-                  <RecentActivity transactions={transactions} products={products} />
+                  <RecentActivity transactions={transactions} products={products} limit={16} />
                 </div>
               </TabsContent>
             </Tabs>
-          </div>
+          </section>
 
-          <div className="bg-card rounded-2xl border border-border/60 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-              <h2 className="font-semibold text-foreground">Recent Activity</h2>
+          <aside className="space-y-4 xl:sticky xl:top-24 self-start">
+            <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
+              <h3 className="font-semibold text-sm text-foreground">Quick Actions</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  className="justify-start"
+                  onClick={() => {
+                    setEditingProduct(null);
+                    setProductDialogOpen(true);
+                  }}
+                >
+                  + Add Product
+                </Button>
+                <Button variant="outline" className="justify-start" onClick={() => setSellDialogOpen(true)}>
+                  Record Sale
+                </Button>
+                <Button
+                  variant="outline"
+                  className="justify-start"
+                  onClick={() => {
+                    setEditingDelivery(null);
+                    setDeliveryDialogOpen(true);
+                  }}
+                >
+                  Receive Stock
+                </Button>
+              </div>
             </div>
-            <RecentActivity transactions={transactions} products={products} />
-          </div>
+
+            <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                <h2 className="font-semibold text-sm text-foreground">Recent Activity</h2>
+              </div>
+              <RecentActivity
+                transactions={transactions}
+                products={products}
+                compact
+                onViewAll={() => setActiveTab("stock")}
+              />
+            </div>
+          </aside>
         </div>
       </main>
 

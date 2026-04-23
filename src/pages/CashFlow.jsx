@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expense, Invoice, User, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
@@ -7,27 +6,62 @@ import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Camera, Download, Mail, Upload, ArrowUpRight, ArrowDownLeft, Wallet, LayoutGrid, List } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarClock,
+  ChevronDown,
+  Download,
+  DollarSign,
+  Plus,
+  ScanLine,
+  TrendingDown,
+  TrendingUp,
+  Upload,
+  Wallet,
+} from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
-import { format, startOfMonth, endOfMonth, subMonths, parseISO } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import {
+  addDays,
+  endOfMonth,
+  format,
+  isAfter,
+  isBefore,
+  parseISO,
+  startOfMonth,
+  subMonths,
+} from "date-fns";
 import ExpenseForm from "@/components/cashflow/ExpenseForm";
 import ExpenseList from "@/components/cashflow/ExpenseList";
 import ReceiptScanner from "@/components/cashflow/ReceiptScanner";
 import BankImportModal from "@/components/cashflow/BankImportModal";
+import CashFlowKpiCard from "@/components/cashflow/CashFlowKpiCard";
+import CashPositionCard from "@/components/cashflow/CashPositionCard";
+import CashFlowOverTimeChart from "@/components/cashflow/CashFlowOverTimeChart";
+import UpcomingCashEventsPanel from "@/components/cashflow/UpcomingCashEventsPanel";
+import InsightTiles from "@/components/cashflow/InsightTiles";
 import ExpenseFilters, { applyExpenseFilters } from "@/components/filters/ExpenseFilters";
 import CashFlowAccuracy from "@/components/cashflow/CashFlowAccuracy";
 import PaymentTimingAnalysis from "@/components/payments/PaymentTimingAnalysis";
 import OverduePaymentTracker from "@/components/payments/OverduePaymentTracker";
 import PaymentMethodAnalytics from "@/components/payments/PaymentMethodAnalytics";
 import OutstandingBalanceDashboard from "@/components/payments/OutstandingBalanceDashboard";
-import { breakApi } from "@/api/apiClient";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { createPageUrl } from "@/utils";
+import {
+  buildCashFlowInsights,
+  buildCashFlowKpis,
+  buildCashPositionModel,
+  buildUpcomingCashEvents,
+} from "@/utils/cashFlowViewModels";
 import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const CASHFLOW_PAGE_QUERY_KEY = ['cashflow-page'];
 
@@ -48,10 +82,7 @@ async function fetchCashFlowPageData() {
     };
 }
 
-const COLORS = ['#f24e00', '#ef4444', '#10b981', '#f59e0b', '#ff7c00', '#ec4899'];
-
 export default function CashFlowPage() {
-    const [searchParams, setSearchParams] = useSearchParams();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const setExpensesInStore = useAppStore((s) => s.setExpenses);
@@ -99,31 +130,14 @@ export default function CashFlowPage() {
     const [expenseFormFromScan, setExpenseFormFromScan] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
-    const [monthsToShow, setMonthsToShow] = useState(6);
-    const [showEmailDialog, setShowEmailDialog] = useState(false);
-    const [recipientEmail, setRecipientEmail] = useState('');
+    const [timeRange, setTimeRange] = useState("30D"); // 7D | 30D | 6M | 12M
+    const [quickFilter, setQuickFilter] = useState("thisMonth"); // thisMonth | lastMonth
+    const [kpiFilter, setKpiFilter] = useState("all");
     const [expenseFilters, setExpenseFilters] = useState({});
     const [activeTab, setActiveTab] = useState('overview');
-    const [expenseViewMode, setExpenseViewMode] = useState('list');
     const [isExportingExpenses, setIsExportingExpenses] = useState(false);
     const [isImportingExpenses, setIsImportingExpenses] = useState(false);
     const expenseFileInputRef = useRef(null);
-
-    useEffect(() => {
-        if (searchParams.get("openAddExpense") !== "1") return;
-        setEditingExpense({
-            date: new Date().toISOString().slice(0, 10),
-            category: "General",
-            description: "Initial income/expense record",
-            amount: "",
-            payment_method: "bank_transfer",
-        });
-        setExpenseFormFromScan(false);
-        setShowExpenseForm(true);
-        const next = new URLSearchParams(searchParams);
-        next.delete("openAddExpense");
-        setSearchParams(next, { replace: true });
-    }, [searchParams, setSearchParams]);
 
     const invalidateCashFlow = () => queryClient.invalidateQueries({ queryKey: CASHFLOW_PAGE_QUERY_KEY });
 
@@ -190,117 +204,168 @@ export default function CashFlowPage() {
         reader.readAsText(file, "UTF-8");
     };
 
-    const calculateMetrics = () => {
-        const now = new Date();
-        const currentMonthStart = startOfMonth(now);
-        const currentMonthEnd = endOfMonth(now);
+    const userCurrency = user?.currency || 'ZAR';
 
-        // Current month income from received payments (not invoice creation date)
-        const currentMonthIncome = payments
-            .filter(payment => {
-                if (!payment.payment_date) return false;
-                const paymentDate = parseISO(payment.payment_date);
-                return paymentDate >= currentMonthStart && paymentDate <= currentMonthEnd;
-            })
-            .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    const now = new Date();
+    const monthRange = useMemo(() => {
+      if (quickFilter === "lastMonth") {
+        const start = startOfMonth(subMonths(now, 1));
+        const end = endOfMonth(subMonths(now, 1));
+        return { start, end };
+      }
+      return { start: startOfMonth(now), end: endOfMonth(now) };
+    }, [quickFilter, now]);
 
-        // Current month expenses
-        const currentMonthExpenses = (storeExpenses || [])
-            .filter(exp => {
-                if (!exp.date) return false;
-                const expDate = parseISO(exp.date);
-                return expDate >= currentMonthStart && expDate <= currentMonthEnd;
-            })
-            .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const monthlyIncome = payments
+      .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), monthRange.start) && isBefore(parseISO(p.payment_date), addDays(monthRange.end, 1)))
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-        // Net cash flow
-        const netCashFlow = currentMonthIncome - currentMonthExpenses;
+    const monthlyExpenses = (storeExpenses || [])
+      .filter((e) => e.date && isAfter(parseISO(e.date), monthRange.start) && isBefore(parseISO(e.date), addDays(monthRange.end, 1)))
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-        // Total income (all time) - sum of all received payments
-        const totalIncome = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    const netCashFlow = monthlyIncome - monthlyExpenses;
 
-        // Total expenses (all time)
-        const totalExpenses = (storeExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const outstandingInvoices = invoices
+      .filter((inv) => String(inv.status || "").toLowerCase() !== "paid")
+      .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
 
-        return {
-            currentMonthIncome,
-            currentMonthExpenses,
-            netCashFlow,
-            totalIncome,
-            totalExpenses
-        };
+    const previousMonthRange = {
+      start: startOfMonth(subMonths(monthRange.start, 1)),
+      end: endOfMonth(subMonths(monthRange.start, 1)),
     };
 
-    const getChartData = () => {
-        const months = [];
-        for (let i = monthsToShow - 1; i >= 0; i--) {
-            const date = subMonths(new Date(), i);
-            const monthStart = startOfMonth(date);
-            const monthEnd = endOfMonth(date);
+    const prevIncome = payments
+      .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), previousMonthRange.start) && isBefore(parseISO(p.payment_date), addDays(previousMonthRange.end, 1)))
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const prevExpenses = (storeExpenses || [])
+      .filter((e) => e.date && isAfter(parseISO(e.date), previousMonthRange.start) && isBefore(parseISO(e.date), addDays(previousMonthRange.end, 1)))
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const prevNet = prevIncome - prevExpenses;
+    const netTrendPct = prevNet === 0 ? 0 : ((netCashFlow - prevNet) / Math.abs(prevNet)) * 100;
 
-            // Use payment_date instead of invoice created_date
-            const income = payments
-                .filter(payment => {
-                    if (!payment.payment_date) return false;
-                    const paymentDate = parseISO(payment.payment_date);
-                    return paymentDate >= monthStart && paymentDate <= monthEnd;
-                })
-                .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    const projectionStart = now;
+    const projectionEnd = addDays(now, 30);
+    const incomingProjection = invoices
+      .filter((inv) => {
+        const raw = inv.due_date || inv.delivery_date;
+        if (!raw) return false;
+        const due = parseISO(raw);
+        return isAfter(due, projectionStart) && isBefore(due, addDays(projectionEnd, 1)) && String(inv.status || "").toLowerCase() !== "paid";
+      })
+      .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
+    const outgoingProjection = (storeExpenses || [])
+      .filter((exp) => exp.date && isAfter(parseISO(exp.date), projectionStart) && isBefore(parseISO(exp.date), addDays(projectionEnd, 1)))
+      .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    const netProjection = incomingProjection - outgoingProjection;
 
-            const expensesAmount = (storeExpenses || [])
-                .filter(exp => {
-                    if (!exp.date) return false;
-                    const expDate = parseISO(exp.date);
-                    return expDate >= monthStart && expDate <= monthEnd;
-                })
-                .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const chartConfig = {
+      "7D": { points: 7, bucket: "day" },
+      "30D": { points: 30, bucket: "day" },
+      "6M": { points: 6, bucket: "month" },
+      "12M": { points: 12, bucket: "month" },
+    };
 
-            months.push({
-                month: format(date, 'MMM yyyy'),
-                income: income,
-                expenses: expensesAmount,
-                net: income - expensesAmount
-            });
+    const chartData = useMemo(() => {
+      const conf = chartConfig[timeRange];
+      const rows = [];
+      if (conf.bucket === "day") {
+        for (let i = conf.points - 1; i >= 0; i -= 1) {
+          const date = subMonths(now, 0);
+          const day = addDays(startOfMonth(date), (new Date().getDate() - 1) - i);
+          const dayStart = new Date(day);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = addDays(dayStart, 1);
+          const income = payments
+            .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), dayStart) && isBefore(parseISO(p.payment_date), dayEnd))
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const expenses = (storeExpenses || [])
+            .filter((e) => e.date && isAfter(parseISO(e.date), dayStart) && isBefore(parseISO(e.date), dayEnd))
+            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+          rows.push({
+            label: format(dayStart, "MMM d"),
+            income,
+            expenses,
+            net: income - expenses,
+          });
         }
-        return months;
-    };
+        return rows;
+      }
 
-    const getCategoryBreakdown = () => {
-        const breakdown = {};
-        (storeExpenses || []).forEach(exp => {
-            const category = exp.category || 'other';
-            breakdown[category] = (breakdown[category] || 0) + exp.amount;
+      for (let i = conf.points - 1; i >= 0; i -= 1) {
+        const month = subMonths(now, i);
+        const monthStart = startOfMonth(month);
+        const monthEnd = endOfMonth(month);
+        const income = payments
+          .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), monthStart) && isBefore(parseISO(p.payment_date), addDays(monthEnd, 1)))
+          .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const expenses = (storeExpenses || [])
+          .filter((e) => e.date && isAfter(parseISO(e.date), monthStart) && isBefore(parseISO(e.date), addDays(monthEnd, 1)))
+          .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        rows.push({
+          label: format(month, "MMM yyyy"),
+          income,
+          expenses,
+          net: income - expenses,
         });
-        return Object.entries(breakdown).map(([name, value]) => ({ name, value }));
-    };
+      }
+      return rows;
+    }, [payments, storeExpenses, timeRange, now]);
 
-    const MetricCard = ({ title, value, icon: Icon, color, trend, trendValue }) => (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-        >
-            <Card className="hover:shadow-lg transition-shadow bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2 min-w-0">
-                    <CardTitle className="text-sm font-medium text-gray-600 dark:text-slate-400 min-w-0 truncate">{title}</CardTitle>
-                    <div className={`p-2 rounded-lg ${color}`}>
-                        <Icon className="h-4 w-4 text-white" />
-                    </div>
-                </CardHeader>
-                <CardContent className="min-w-0">
-                    <div className="currency-nums tabular-nums break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100 sm:text-base">
-                        {formatCurrency(value, userCurrency)}
-                    </div>
-                    {trend && (
-                        <div className={`text-xs flex items-center gap-1 mt-2 ${trendValue >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {trendValue >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
-                            {Math.abs(trendValue)}% from last month
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-        </motion.div>
+    const upcomingCashEvents = useMemo(
+      () =>
+        buildUpcomingCashEvents({
+          invoices,
+          expenses: storeExpenses || [],
+          now,
+          windowDays: 30,
+        }).slice(0, 10),
+      [invoices, storeExpenses, now]
     );
+
+    const insights = useMemo(
+      () =>
+        buildCashFlowInsights({
+          monthlyExpenses,
+          prevExpenses,
+          outstandingInvoices,
+          netCashFlow,
+          prevNet,
+          quickFilter,
+          userCurrency,
+        }),
+      [monthlyExpenses, prevExpenses, outstandingInvoices, netCashFlow, prevNet, quickFilter, userCurrency]
+    );
+
+    const kpiModels = useMemo(
+      () =>
+        buildCashFlowKpis({
+          netCashFlow,
+          netTrendPct,
+          monthlyIncome,
+          monthlyExpenses,
+          outstandingInvoices,
+        }),
+      [netCashFlow, netTrendPct, monthlyIncome, monthlyExpenses, outstandingInvoices]
+    );
+
+    const cashPositionModel = useMemo(
+      () =>
+        buildCashPositionModel({
+          currentBalance: netCashFlow,
+          incomingProjection,
+          outgoingProjection,
+          netProjection,
+        }),
+      [netCashFlow, incomingProjection, outgoingProjection, netProjection]
+    );
+
+    const filteredTransactions = useMemo(() => {
+      if (kpiFilter === "all") return applyExpenseFilters(storeExpenses || [], expenseFilters);
+      if (kpiFilter === "moneyOut") return applyExpenseFilters(storeExpenses || [], expenseFilters);
+      if (kpiFilter === "outstanding") return [];
+      return applyExpenseFilters(storeExpenses || [], expenseFilters);
+    }, [storeExpenses, expenseFilters, kpiFilter]);
 
     const handleSaveExpense = async (expenseData) => {
         try {
@@ -353,73 +418,62 @@ export default function CashFlowPage() {
         setShowExpenseForm(true);
     };
 
-    const metrics = calculateMetrics();
-    const chartData = getChartData();
-    const categoryData = getCategoryBreakdown();
-    const userCurrency = user?.currency || 'ZAR';
-
     return (
         <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="w-full min-w-0 h-full overflow-x-hidden mobile-page p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-900/95"
+            className="w-full min-w-0 h-full overflow-x-hidden mobile-page bg-background"
         >
-            <div className="max-w-7xl mx-auto space-y-6 min-w-0">
-                {/* Header */}
+            <div className="responsive-page-shell py-4 sm:py-6 md:py-8 space-y-6 min-w-0">
                 <motion.div 
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                    className="responsive-page-header"
                 >
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash flow</h1>
-                        <p className="text-gray-600 dark:text-slate-400 mt-1">Monitor your income and expenses to pull data correctly throughout the platform</p>
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash Flow</h1>
+                        <p className="text-muted-foreground mt-1">Understand your financial health in real time</p>
                     </div>
-                    <div className="flex gap-2 flex-wrap">
-                        <Button 
-                            onClick={() => setShowReceiptScanner(true)}
-                            variant="outline"
-                            className="gap-2"
-                        >
-                            <Camera className="w-4 h-4" />
-                            <span className="hidden sm:inline">Scan Receipt</span>
+                    <div className="responsive-page-header-actions gap-2">
+                        <Button variant="outline" className="gap-2" onClick={() => setShowImportModal(true)}>
+                          <Upload className="w-4 h-4" /> Import
                         </Button>
-                        <Button 
-                            onClick={() => setShowImportModal(true)}
-                            variant="outline"
-                            className="gap-2"
-                        >
-                            <Upload className="w-4 h-4" />
-                            <span className="hidden sm:inline">Import</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                              <Download className="w-4 h-4" />
+                              Export
+                              <ChevronDown className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={handleExportExpenseCsv}>Export CSV</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => window.open(createPageUrl(`CashFlowPDF?range=${timeRange}`), "_blank")}>
+                              Export PDF
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button variant="outline" className="gap-2" onClick={() => setShowReceiptScanner(true)}>
+                          <ScanLine className="w-4 h-4" /> Scan Receipt
                         </Button>
-                        <Button 
-                            onClick={() => setShowEmailDialog(true)}
-                            variant="outline"
-                            className="gap-2"
+                        <Button
+                          onClick={() => {
+                            setEditingExpense(null);
+                            setExpenseFormFromScan(false);
+                            setShowExpenseForm(true);
+                          }}
+                          className="gap-2"
                         >
-                            <Mail className="w-4 h-4" />
-                            <span className="hidden sm:inline">Email</span>
-                        </Button>
-                        <Button 
-                            onClick={() => {
-                                setEditingExpense(null);
-                                setExpenseFormFromScan(false);
-                                setShowExpenseForm(true);
-                            }}
-                            className="bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white border-0 gap-2 font-semibold"
-                        >
-                            <Plus className="w-4 h-4" />
-                            <span className="hidden sm:inline">Add Expense</span>
+                          <Plus className="w-4 h-4" /> Add Expense
                         </Button>
                     </div>
                 </motion.div>
 
-                {/* Metrics Cards */}
                 {isLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {[...Array(4)].map((_, i) => (
-                            <Card key={i} className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <Card key={i}>
                                 <CardHeader className="pb-2">
                                     <Skeleton className="h-4 w-1/2" />
                                 </CardHeader>
@@ -431,45 +485,63 @@ export default function CashFlowPage() {
                         ))}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
-                        <MetricCard 
-                            title="Income (This Month)" 
-                            value={metrics.currentMonthIncome}
-                            icon={TrendingUp}
-                            color="bg-primary/100"
-                        />
-                        <MetricCard 
-                            title="Expenses (This Month)" 
-                            value={metrics.currentMonthExpenses}
-                            icon={TrendingDown}
-                            color="bg-red-500"
-                        />
-                        <MetricCard 
-                            title="Net Cash Flow" 
-                            value={metrics.netCashFlow}
-                            icon={Wallet}
-                            color={metrics.netCashFlow >= 0 ? "bg-green-500" : "bg-orange-500"}
-                        />
-                        <MetricCard 
-                            title="Total Income" 
-                            value={metrics.totalIncome}
-                            icon={DollarSign}
-                            color="bg-purple-500"
-                        />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {kpiModels.map((kpi) => {
+                          const isNet = kpi.id === "net";
+                          const iconMap = {
+                            net: Wallet,
+                            moneyIn: TrendingUp,
+                            moneyOut: TrendingDown,
+                            outstanding: DollarSign,
+                          };
+                          const toneValueClass = {
+                            positive: "text-xl font-semibold text-emerald-600",
+                            negative: "text-xl font-semibold text-red-600",
+                            warning: "text-xl font-semibold text-orange-600",
+                          };
+                          const toneIconClass = {
+                            positive: "text-emerald-600",
+                            negative: "text-red-600",
+                            warning: "text-orange-600",
+                          };
+                          return (
+                            <CashFlowKpiCard
+                              key={kpi.id}
+                              title={kpi.title}
+                              value={kpi.value}
+                              currency={userCurrency}
+                              icon={iconMap[kpi.id]}
+                              iconClassName={toneIconClass[kpi.tone] || "text-muted-foreground"}
+                              valueClassName={isNet ? "text-3xl font-semibold tracking-tight" : toneValueClass[kpi.tone]}
+                              className={isNet ? "sm:col-span-2 border-primary/30" : undefined}
+                              onClick={() => setKpiFilter(kpi.id)}
+                              trendLabel={kpi.trendLabel}
+                              trendIcon={kpi.trendDirection === "up" ? ArrowUpRight : kpi.trendDirection === "down" ? ArrowDownRight : undefined}
+                              trendClassName={kpi.trendDirection === "up" ? "text-emerald-600" : "text-red-600"}
+                            />
+                          );
+                        })}
                     </div>
                 )}
 
-                {/* Charts Tabs */}
-                <div className="flex gap-1 sm:gap-2 border-b border-gray-200 dark:border-slate-700 overflow-x-auto overflow-y-hidden pb-px -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x">
-                    {['overview', 'expenses', 'analysis'].map(tab => (
+                <CashPositionCard
+                  currentBalance={cashPositionModel.currentBalance}
+                  incomingProjection={cashPositionModel.incomingProjection}
+                  outgoingProjection={cashPositionModel.outgoingProjection}
+                  netProjection={cashPositionModel.netProjection}
+                  currency={userCurrency}
+                />
+
+                <div className="flex gap-1 sm:gap-2 border-b border-border overflow-x-auto pb-px -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x">
+                    {['overview', 'transactions', 'insights'].map(tab => (
                         <button
                             key={tab}
                             type="button"
                             onClick={() => setActiveTab(tab)}
                             className={`shrink-0 px-3 sm:px-4 py-2 font-medium transition-colors capitalize whitespace-nowrap ${
                                 activeTab === tab 
-                                    ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-600 dark:border-emerald-400' 
-                                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100'
+                                    ? 'text-primary border-b-2 border-primary' 
+                                    : 'text-muted-foreground hover:text-foreground'
                             }`}
                         >
                             {tab}
@@ -477,216 +549,77 @@ export default function CashFlowPage() {
                     ))}
                 </div>
 
-                {/* Charts */}
                 {activeTab === 'overview' && (
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="space-y-6"
-                    >
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            <CardHeader>
-                                <CardTitle className="text-slate-900 dark:text-slate-100">Income vs Expenses ({monthsToShow} months)</CardTitle>
-                                <div className="flex gap-2 mt-2">
-                                    {[3, 6, 12].map(months => (
-                                        <Button
-                                            key={months}
-                                            onClick={() => setMonthsToShow(months)}
-                                            variant={monthsToShow === months ? 'default' : 'outline'}
-                                            size="sm"
-                                        >
-                                            {months}M
-                                        </Button>
-                                    ))}
-                                </div>
-                            </CardHeader>
-                            <CardContent className="min-w-0 overflow-x-auto">
-                                <div className="w-full min-w-0 max-w-full">
-                                <ResponsiveContainer width="100%" height={400}>
-                                    <BarChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip formatter={(value) => formatCurrency(value, userCurrency)} />
-                                        <Legend />
-                                        <Bar dataKey="income" fill="#f24e00" name="Income" />
-                                        <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
+                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-6">
+                    <CashFlowOverTimeChart
+                      chartData={chartData}
+                      userCurrency={userCurrency}
+                      timeRange={timeRange}
+                      onTimeRangeChange={setTimeRange}
+                      quickFilter={quickFilter}
+                      onQuickFilterChange={setQuickFilter}
+                    />
 
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            <CardHeader>
-                                <CardTitle className="text-slate-900 dark:text-slate-100">Net Cash Flow Trend</CardTitle>
-                            </CardHeader>
-                            <CardContent className="min-w-0 overflow-x-auto">
-                                <div className="w-full min-w-0 max-w-full">
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" />
-                                        <YAxis />
-                                        <Tooltip formatter={(value) => formatCurrency(value, userCurrency)} />
-                                        <Legend />
-                                        <Line type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={2} name="Net Flow" />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                    <div className="space-y-4">
+                      <UpcomingCashEventsPanel
+                        events={upcomingCashEvents}
+                        userCurrency={userCurrency}
+                        onViewAllTransactions={() => setActiveTab("transactions")}
+                      />
+                      <InsightTiles insights={insights} />
+                    </div>
+                  </div>
                 )}
 
-                {activeTab === 'expenses' && (
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="space-y-6"
-                    >
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
-                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
-                                <CardHeader>
-                                    <CardTitle className="text-slate-900 dark:text-slate-100">Expense Breakdown</CardTitle>
-                                </CardHeader>
-                                <CardContent className="min-w-0 overflow-x-hidden">
-                                    {categoryData.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={280}>
-                                            <PieChart>
-                                                <Pie
-                                                    data={categoryData}
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    labelLine={false}
-                                                    label={({ name, percent }) => {
-                                                        const n = String(name || "");
-                                                        const short = n.length > 14 ? `${n.slice(0, 12)}…` : n;
-                                                        return `${short} ${((percent || 0) * 100).toFixed(0)}%`;
-                                                    }}
-                                                    outerRadius={72}
-                                                    fill="#8884d8"
-                                                    dataKey="value"
-                                                >
-                                                    {categoryData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip formatter={(value) => formatCurrency(value, userCurrency)} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="h-48 flex items-center justify-center text-gray-500 dark:text-slate-400">
-                                            No expense data available
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
-                                <CardHeader>
-                                    <CardTitle className="text-slate-900 dark:text-slate-100">Category Summary</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-3 min-w-0">
-                                        {categoryData.map((category, idx) => (
-                                            <div key={idx} className="flex items-center justify-between gap-2 min-w-0">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <div 
-                                                        className="w-3 h-3 rounded-full shrink-0" 
-                                                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                                                    />
-                                                    <span className="text-sm font-medium capitalize text-slate-900 dark:text-slate-100 truncate">{category.name}</span>
-                                                </div>
-                                                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 shrink-0 tabular-nums">{formatCurrency(category.value, userCurrency)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
+                {activeTab === 'transactions' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                         <ExpenseFilters onFilterChange={setExpenseFilters} />
-                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="file"
-                                    name="cashflow_expense_csv"
-                                    ref={expenseFileInputRef}
-                                    accept=".csv"
-                                    className="hidden"
-                                    onChange={handleImportExpenseCsv}
-                                />
-                                <Button variant="outline" size="sm" disabled={isImportingExpenses} onClick={() => expenseFileInputRef.current?.click()}>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    {isImportingExpenses ? "Importing…" : "Import CSV"}
-                                </Button>
-                                <Button variant="outline" size="sm" disabled={isExportingExpenses} onClick={handleExportExpenseCsv}>
-                                    <Download className="w-4 h-4 mr-2" />
-                                    {isExportingExpenses ? "Exporting…" : "Export CSV"}
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">View</span>
-                                <div className="flex bg-muted/50 p-1 rounded-xl border border-border h-9">
-                                <button
-                                    type="button"
-                                    onClick={() => setExpenseViewMode('list')}
-                                    className={`inline-flex items-center justify-center h-7 px-3 rounded-lg text-sm font-medium transition-colors ${expenseViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                                >
-                                    <List className="w-4 h-4 mr-1" /> List
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setExpenseViewMode('grid')}
-                                    className={`inline-flex items-center justify-center h-7 px-3 rounded-lg text-sm font-medium transition-colors ${expenseViewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                                >
-                                    <LayoutGrid className="w-4 h-4 mr-1" /> Grid
-                                </button>
-                                </div>
-                            </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={kpiFilter === "all" ? "default" : "outline"} onClick={() => setKpiFilter("all")} className="cursor-pointer">All</Badge>
+                          <Badge variant={kpiFilter === "moneyIn" ? "default" : "outline"} onClick={() => setKpiFilter("moneyIn")} className="cursor-pointer">Money In</Badge>
+                          <Badge variant={kpiFilter === "moneyOut" ? "default" : "outline"} onClick={() => setKpiFilter("moneyOut")} className="cursor-pointer">Money Out</Badge>
+                          <Badge variant={kpiFilter === "outstanding" ? "default" : "outline"} onClick={() => setKpiFilter("outstanding")} className="cursor-pointer">Outstanding</Badge>
                         </div>
-                        {expenseViewMode === 'grid' ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {isLoading ? (
-                                    [...Array(6)].map((_, i) => (
-                                        <Card key={i} className="rounded-xl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"><CardContent><Skeleton className="h-20 w-full" /></CardContent></Card>
-                                    ))
-                                ) : applyExpenseFilters(storeExpenses || [], expenseFilters).length === 0 ? (
-                                    <div className="col-span-full text-center py-12 text-muted-foreground dark:text-slate-400">No expenses match the filters.</div>
-                                ) : (
-                                    applyExpenseFilters(storeExpenses || [], expenseFilters).map((exp) => (
-                                        <Card key={exp.id} className="rounded-xl border border-border dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800">
-                                            <CardContent>
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="font-semibold text-foreground">{formatCurrency(exp.amount, userCurrency)}</span>
-                                                    <Badge variant="outline" className="text-xs capitalize">{exp.category || 'other'}</Badge>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground line-clamp-2">{exp.description || '—'}</p>
-                                                <p className="text-xs text-muted-foreground mt-2">{exp.date ? format(parseISO(exp.date), 'MMM d, yyyy') : '—'}</p>
-                                                <div className="flex gap-2 mt-3">
-                                                    <Button variant="outline" size="sm" className="rounded-lg flex-1" onClick={() => handleEditExpense(exp)}>Edit</Button>
-                                                    <Button variant="outline" size="sm" className="rounded-lg text-destructive hover:text-destructive" onClick={() => handleDeleteExpense(exp.id)}>Delete</Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))
-                                )}
-                            </div>
+
+                        {filteredTransactions.length === 0 && payments.length === 0 && invoices.length === 0 ? (
+                          <Card>
+                            <CardContent className="py-16 text-center">
+                              <CalendarClock className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+                              <p className="font-medium">No financial data yet</p>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Start by creating an invoice or adding an expense
+                              </p>
+                              <div className="flex gap-2 justify-center mt-4">
+                                <Button onClick={() => window.location.href = createPageUrl("CreateInvoice")}>
+                                  + Create Invoice
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingExpense(null);
+                                    setExpenseFormFromScan(false);
+                                    setShowExpenseForm(true);
+                                  }}
+                                >
+                                  + Add Expense
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
                         ) : (
-                            <ExpenseList 
-                                expenses={applyExpenseFilters(storeExpenses || [], expenseFilters)}
-                                isLoading={isLoading}
-                                onEdit={handleEditExpense}
-                                onDelete={handleDeleteExpense}
-                                currency={userCurrency}
-                                onActionSuccess={invalidateCashFlow}
-                            />
+                          <ExpenseList
+                            expenses={filteredTransactions}
+                            isLoading={isLoading}
+                            onEdit={handleEditExpense}
+                            onDelete={handleDeleteExpense}
+                            currency={userCurrency}
+                            onActionSuccess={invalidateCashFlow}
+                          />
                         )}
                     </motion.div>
                 )}
 
-                {activeTab === 'analysis' && (
+                {activeTab === 'insights' && (
                     <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -726,21 +659,21 @@ export default function CashFlowPage() {
                         />
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
+                        <Card>
                             <CardHeader>
-                                <CardTitle className="text-slate-900 dark:text-slate-100">Monthly Summary</CardTitle>
+                                <CardTitle>Monthly Summary</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
                                     {chartData.slice(-3).reverse().map((month, idx) => (
-                                        <div key={idx} className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+                                        <div key={idx} className="p-4 bg-muted/30 rounded-lg">
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className="font-medium text-slate-900 dark:text-slate-100">{month.month}</span>
-                                                <span className={`text-lg font-bold ${month.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                <span className="font-medium">{month.label}</span>
+                                                <span className={`text-lg font-bold ${month.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                     {formatCurrency(month.net, userCurrency)}
                                                 </span>
                                             </div>
-                                            <div className="text-sm text-gray-600 dark:text-slate-400 space-y-1">
+                                            <div className="text-sm text-muted-foreground space-y-1">
                                                 <div>Income: {formatCurrency(month.income, userCurrency)}</div>
                                                 <div>Expenses: {formatCurrency(month.expenses, userCurrency)}</div>
                                             </div>
@@ -750,27 +683,33 @@ export default function CashFlowPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-0">
+                        <Card>
                             <CardHeader>
-                                <CardTitle className="text-slate-900 dark:text-slate-100">Statistics</CardTitle>
+                                <CardTitle>Statistics</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4 min-w-0">
-                                <div className="p-4 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30 min-w-0">
-                                    <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Income</p>
+                                <div className="p-4 bg-primary/10 rounded-lg border border-primary/20 min-w-0">
+                                    <p className="text-sm text-muted-foreground">Average Monthly Income</p>
                                     <p className="text-2xl font-bold text-primary break-words">
-                                        {formatCurrency(metrics.totalIncome / Math.max(chartData.length, 1), userCurrency)}
+                                        {formatCurrency(
+                                          payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) / Math.max(chartData.length, 1),
+                                          userCurrency
+                                        )}
                                     </p>
                                 </div>
-                                <div className="p-4 bg-red-50 dark:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-800 min-w-0">
-                                    <p className="text-sm text-gray-600 dark:text-slate-400">Average Monthly Expenses</p>
-                                    <p className="text-2xl font-bold text-red-600 dark:text-red-400 break-words">
-                                        {formatCurrency(metrics.totalExpenses / Math.max(chartData.length, 1), userCurrency)}
+                                <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/20 min-w-0">
+                                    <p className="text-sm text-muted-foreground">Average Monthly Expenses</p>
+                                    <p className="text-2xl font-bold text-red-600 break-words">
+                                        {formatCurrency(
+                                          (storeExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) / Math.max(chartData.length, 1),
+                                          userCurrency
+                                        )}
                                     </p>
                                 </div>
-                                <div className={`p-4 rounded-lg border min-w-0 ${metrics.totalIncome > metrics.totalExpenses ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800'}`}>
-                                    <p className="text-sm text-gray-600 dark:text-slate-400">Overall Balance</p>
-                                    <p className={`text-2xl font-bold break-words ${metrics.totalIncome > metrics.totalExpenses ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
-                                        {formatCurrency(metrics.totalIncome - metrics.totalExpenses, userCurrency)}
+                                <div className={`p-4 rounded-lg border min-w-0 ${netCashFlow >= 0 ? 'bg-green-500/10 border-green-500/20' : 'bg-orange-500/10 border-orange-500/20'}`}>
+                                    <p className="text-sm text-muted-foreground">Overall Balance</p>
+                                    <p className={`text-2xl font-bold break-words ${netCashFlow >= 0 ? 'text-green-600' : 'text-orange-600'}`}>
+                                        {formatCurrency(netCashFlow, userCurrency)}
                                     </p>
                                 </div>
                             </CardContent>
@@ -779,8 +718,6 @@ export default function CashFlowPage() {
                     </motion.div>
                 )}
 
-                {/* Modals */}
-                {/* Receipt Scanner Modal */}
                 {showReceiptScanner && (
                     <ReceiptScanner
                         onScanComplete={handleScanComplete}
@@ -788,7 +725,6 @@ export default function CashFlowPage() {
                     />
                 )}
 
-                {/* Bank Import Modal */}
                 {showImportModal && (
                     <BankImportModal
                         onImportComplete={() => {
@@ -799,7 +735,6 @@ export default function CashFlowPage() {
                     />
                 )}
 
-                {/* Expense Form Modal */}
                 {showExpenseForm && (
                     <ExpenseForm
                         expense={editingExpense}
@@ -813,53 +748,6 @@ export default function CashFlowPage() {
                     />
                 )}
 
-                {/* Email Dialog */}
-                <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Email Cash Flow Report</DialogTitle>
-                            <DialogDescription>
-                                Enter the email address to send the cash flow report
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                            <Input
-                                type="email"
-                                placeholder="recipient@example.com"
-                                value={recipientEmail}
-                                onChange={(e) => setRecipientEmail(e.target.value)}
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
-                                Cancel
-                            </Button>
-                            <Button 
-                                onClick={async () => {
-                                    if (recipientEmail) {
-                                        try {
-                                            const reportUrl = `${window.location.origin}${createPageUrl(`CashFlowPDF?months=${monthsToShow}`)}`;
-                                            await breakApi.integrations.Core.SendEmail({
-                                                to: recipientEmail,
-                                                subject: `Cash Flow Report - ${format(new Date(), 'MMMM yyyy')}`,
-                                                body: `Please find your cash flow report for the last ${monthsToShow} months here: ${reportUrl}`
-                                            });
-                                            setShowEmailDialog(false);
-                                            setRecipientEmail('');
-                                            alert('Report sent successfully!');
-                                        } catch (error) {
-                                            console.error('Error sending email:', error);
-                                            alert('Failed to send email. Please try again.');
-                                        }
-                                    }
-                                }}
-                                disabled={!recipientEmail}
-                            >
-                                Send
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             </div>
         </motion.div>
     );
