@@ -26,7 +26,7 @@ import SetupWizard from "@/components/SetupWizard";
 import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
-import SessionIndicator from "@/components/session/SessionIndicator.jsx";
+import SessionIndicator from "@/components/SessionIndicator";
 import SyncStatusIndicator from "@/components/sync/SyncStatusIndicator.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";

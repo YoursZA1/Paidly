@@ -22,6 +22,11 @@ export default function ConnectionStatusIndicator({ className }) {
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
 
   const [retryBusy, setRetryBusy] = useState(false);
+  const normalizedError =
+    String(lastError || "").toLowerCase().includes("session_timeout") ||
+    String(lastError || "").toLowerCase().includes("profiles_timeout")
+      ? "Connection recovering"
+      : lastError;
 
   const onRetry = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -67,7 +72,7 @@ export default function ConnectionStatusIndicator({ className }) {
           ? "Connected to Paidly"
           : status === "reconnecting"
             ? "Reconnecting to Paidly…"
-            : lastError || "Disconnected"
+            : normalizedError || "Disconnected"
       }
       className={cn(
         "pointer-events-auto flex items-center gap-1.5 text-[10px] font-medium sm:gap-2 sm:text-xs",
@@ -102,7 +107,7 @@ export default function ConnectionStatusIndicator({ className }) {
       {status === "connected" ? null : (
         <span className="max-w-[4.5rem] truncate sm:max-w-[9rem] md:max-w-[13rem]">
           {status === "reconnecting" && "Reconnecting…"}
-          {status === "disconnected" && (lastError || "Disconnected")}
+          {status === "disconnected" && (normalizedError || "Disconnected")}
         </span>
       )}
       {status === "disconnected" ? (

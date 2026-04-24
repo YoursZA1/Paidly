@@ -9,6 +9,17 @@ const CONNECTED_VISIBLE_MS = 3200;
 const RECONNECTING_GRACE_MS = 3000;
 const DISCONNECTED_AFTER_MS = 10000;
 
+function isTransientBackgroundError(errorMessage) {
+  const msg = String(errorMessage || "").toLowerCase();
+  return (
+    msg.includes("session_timeout") ||
+    msg.includes("profiles_timeout") ||
+    msg.includes("timeout") ||
+    msg.includes("aborted") ||
+    msg.includes("network")
+  );
+}
+
 /**
  * Mount once near the app root (under {@link AuthProvider}):
  * - Polls Supabase health + browser online/offline → {@link useConnectionStore} `status` / errors.
@@ -16,7 +27,7 @@ const DISCONNECTED_AFTER_MS = 10000;
  *   {@link ConnectionStatusIndicator} is mounted twice (mobile + desktop rows).
  */
 export default function ConnectionMonitor() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshSession } = useAuth();
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
@@ -26,8 +37,8 @@ export default function ConnectionMonitor() {
   const disconnectedTimerRef = useRef(null);
   const degradedSinceRef = useRef(null);
   const hiddenStartedAtRef = useRef(null);
-  const pendingDegradeReasonRef = useRef(null);
   const visibilityRef = useRef(typeof document === "undefined" ? "visible" : document.visibilityState);
+  const realtimeChannelRef = useRef(null);
 
   const clearDegradedTimers = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -43,7 +54,6 @@ export default function ConnectionMonitor() {
   const markConnected = useCallback(() => {
     degradedSinceRef.current = null;
     hiddenStartedAtRef.current = null;
-    pendingDegradeReasonRef.current = null;
     clearDegradedTimers();
     setConnectionState({
       status: "connected",
@@ -56,22 +66,18 @@ export default function ConnectionMonitor() {
     (errorMessage = null) => {
       // Hidden tabs often suspend networking/realtime; do not degrade user-facing status while hidden.
       if (visibilityRef.current !== "visible") {
-        if (degradedSinceRef.current == null) {
-          degradedSinceRef.current = Date.now();
-        }
-        pendingDegradeReasonRef.current = errorMessage || "Could not reach Paidly services.";
         clearDegradedTimers();
         return;
       }
-      pendingDegradeReasonRef.current = null;
       if (degradedSinceRef.current == null) {
         degradedSinceRef.current = Date.now();
       }
       const degradedForMs = Date.now() - degradedSinceRef.current;
+      const transient = isTransientBackgroundError(errorMessage);
       if (degradedForMs >= DISCONNECTED_AFTER_MS) {
         setConnectionState({
-          status: "disconnected",
-          lastError: errorMessage || "Could not reach Paidly services.",
+          status: transient ? "reconnecting" : "disconnected",
+          lastError: transient ? null : errorMessage || "Could not reach Paidly services.",
           lastCheckAt: Date.now(),
         });
         return;
@@ -100,9 +106,10 @@ export default function ConnectionMonitor() {
           disconnectedTimerRef.current = null;
           if (degradedSinceRef.current == null) return;
           if (visibilityRef.current !== "visible") return;
+          const transientNow = isTransientBackgroundError(errorMessage);
           setConnectionState({
-            status: "disconnected",
-            lastError: errorMessage || "Could not reach Paidly services.",
+            status: transientNow ? "reconnecting" : "disconnected",
+            lastError: transientNow ? null : errorMessage || "Could not reach Paidly services.",
             lastCheckAt: Date.now(),
           });
         }, DISCONNECTED_AFTER_MS);
@@ -141,6 +148,60 @@ export default function ConnectionMonitor() {
     }
   }, [clearDegradedTimers, markConnected, scheduleDegradedTransition, setConnectionState]);
 
+  const silentSessionCheck = useCallback(async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        setConnectionState({
+          status: "connected",
+          lastError: null,
+          lastCheckAt: Date.now(),
+        });
+        return true;
+      }
+      await refreshSession({ silent: true });
+      return false;
+    } catch {
+      await refreshSession({ silent: true });
+      return false;
+    }
+  }, [refreshSession, setConnectionState]);
+
+  const stopRealtime = useCallback(() => {
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+  }, []);
+
+  const reconnectRealtime = useCallback(() => {
+    stopRealtime();
+    const channel = supabase.channel("paidly-connection-monitor");
+    channel.subscribe((evt) => {
+      if (evt === "SUBSCRIBED") {
+        markConnected();
+        return;
+      }
+      if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
+        scheduleDegradedTransition("Realtime connection interrupted.");
+      }
+    });
+    realtimeChannelRef.current = channel;
+  }, [markConnected, scheduleDegradedTransition, stopRealtime]);
+
+  const startRealtime = useCallback(() => {
+    const current = realtimeChannelRef.current;
+    if (!current) {
+      reconnectRealtime();
+      return;
+    }
+    // Keep realtime reconnect logic clean: only reconnect when not joined.
+    const state = String(current.state || "").toLowerCase();
+    if (state !== "joined") {
+      reconnectRealtime();
+    }
+  }, [reconnectRealtime]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
 
@@ -162,6 +223,7 @@ export default function ConnectionMonitor() {
       if (visibilityRef.current === "hidden") {
         hiddenStartedAtRef.current = Date.now();
         clearDegradedTimers();
+        stopRealtime();
         return;
       }
       if (hiddenStartedAtRef.current && degradedSinceRef.current != null) {
@@ -171,10 +233,11 @@ export default function ConnectionMonitor() {
       }
       hiddenStartedAtRef.current = null;
       if (visibilityRef.current === "visible") {
-        if (pendingDegradeReasonRef.current) {
-          scheduleDegradedTransition(pendingDegradeReasonRef.current);
-        }
-        void runCheck();
+        startRealtime();
+        void (async () => {
+          await silentSessionCheck();
+          await runCheck();
+        })();
       }
     };
 
@@ -182,26 +245,17 @@ export default function ConnectionMonitor() {
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    const channel = supabase.channel("paidly-connection-monitor");
-    channel.subscribe((evt) => {
-      if (evt === "SUBSCRIBED") {
-        markConnected();
-        return;
-      }
-      if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
-        scheduleDegradedTransition("Realtime connection interrupted.");
-      }
-    });
+    startRealtime();
 
     return () => {
       window.clearInterval(id);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      supabase.removeChannel(channel);
+      stopRealtime();
       clearDegradedTimers();
     };
-  }, [clearDegradedTimers, markConnected, runCheck, scheduleDegradedTransition, setConnectionState]);
+  }, [clearDegradedTimers, runCheck, setConnectionState, silentSessionCheck, startRealtime, stopRealtime]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;

@@ -55,6 +55,11 @@ function isSessionValid(sessionNorm) {
   return sessionNorm.expiresAt > now - SESSION_EXPIRY_SKEW_SEC;
 }
 
+function isDocumentHidden() {
+  if (typeof document === "undefined") return false;
+  return document.visibilityState === "hidden";
+}
+
 /**
  * Prefer the typed getSession(); on failure (network, refresh race), fall back to the raw client so we
  * don't clear the app user and trigger RequireAuth → Login after mutations or token refresh.
@@ -352,10 +357,27 @@ export function AuthProvider({ children }) {
       }
       const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
       if (!silent) {
+        const canEscalateToExpired = !isDocumentHidden();
         setSessionHealthStatus(
-          believedSignedIn ? "expired" : "connected",
-          believedSignedIn ? "session_missing" : "guest"
+          believedSignedIn && canEscalateToExpired ? "expired" : "reconnecting",
+          believedSignedIn
+            ? canEscalateToExpired
+              ? "session_missing"
+              : "refreshing"
+            : "guest"
         );
+      }
+      // Active signed-in user with no recoverable session after refresh -> expire + local logout.
+      if (believedSignedIn && !isDocumentHidden()) {
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+        patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
+        setSessionHealthStatus("expired", "session_missing");
+        setError("");
+        redirectToLoginIfProtectedPath();
       }
       return !believedSignedIn;
     } catch {
