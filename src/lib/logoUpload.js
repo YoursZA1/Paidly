@@ -57,6 +57,42 @@ export function inferredLogoContentType(file) {
   return t || undefined;
 }
 
+async function convertRasterLogoToPng(file) {
+  if (typeof window === "undefined" || typeof document === "undefined") return file;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read logo image."));
+      el.src = objectUrl;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width || 1;
+    canvas.height = img.height || 1;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable for logo conversion.");
+    ctx.drawImage(img, 0, 0);
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Logo conversion failed."))), "image/png");
+    });
+    const safeBase = String(file?.name || "logo")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    return new File([blob], `${safeBase}.png`, { type: "image/png" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function normalizeLogoFileForUpload(file) {
+  const type = (inferredLogoContentType(file) || file?.type || "").toLowerCase();
+  if (type === "image/jpeg" || type === "image/jpg") {
+    return convertRasterLogoToPng(file);
+  }
+  return file;
+}
+
 /**
  * Validate a logo file against recommended constraints.
  * @param {File} file
@@ -94,15 +130,16 @@ export function validateLogoFile(file) {
  */
 export async function uploadLogo(file, companyId) {
   void companyId;
-  const validation = validateLogoFile(file);
+  const normalizedFile = await normalizeLogoFileForUpload(file);
+  const validation = validateLogoFile(normalizedFile);
   if (!validation.valid) {
     throw new Error(validation.message);
   }
 
-  let ext = logoExtension(file).replace(/[^a-z0-9]/g, "");
+  let ext = logoExtension(normalizedFile).replace(/[^a-z0-9]/g, "");
   if (ext === "jpeg") ext = "jpg";
   if (!["png", "jpg", "svg"].includes(ext)) {
-    const ct = inferredLogoContentType(file);
+    const ct = inferredLogoContentType(normalizedFile);
     ext = ct === "image/svg+xml" ? "svg" : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : "png";
   }
   const unique =
@@ -113,9 +150,9 @@ export async function uploadLogo(file, companyId) {
 
   const { error } = await supabase.storage
     .from(COMPANY_LOGOS_BUCKET)
-    .upload(fileName, file, {
+    .upload(fileName, normalizedFile, {
       upsert: true,
-      contentType: inferredLogoContentType(file) || file.type || undefined,
+      contentType: inferredLogoContentType(normalizedFile) || normalizedFile.type || undefined,
     });
 
   if (error) throw error;
@@ -132,7 +169,8 @@ export async function uploadLogo(file, companyId) {
  * @returns {Promise<string>} Storage path under company-logos bucket
  */
 export async function uploadDocumentLogo(file, userId) {
-  const validation = validateLogoFile(file);
+  const normalizedFile = await normalizeLogoFileForUpload(file);
+  const validation = validateLogoFile(normalizedFile);
   if (!validation.valid) {
     throw new Error(validation.message);
   }
@@ -141,10 +179,10 @@ export async function uploadDocumentLogo(file, userId) {
     throw new Error("You must be signed in to upload a document logo.");
   }
 
-  let ext = logoExtension(file).replace(/[^a-z0-9]/g, "");
+  let ext = logoExtension(normalizedFile).replace(/[^a-z0-9]/g, "");
   if (ext === "jpeg") ext = "jpg";
   if (!["png", "jpg", "svg"].includes(ext)) {
-    const ct = inferredLogoContentType(file);
+    const ct = inferredLogoContentType(normalizedFile);
     ext = ct === "image/svg+xml" ? "svg" : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : "png";
   }
   const unique =
@@ -153,9 +191,9 @@ export async function uploadDocumentLogo(file, userId) {
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const fileName = `document-logos/${uid}/${unique}.${ext}`;
 
-  const { error } = await supabase.storage.from(COMPANY_LOGOS_BUCKET).upload(fileName, file, {
+  const { error } = await supabase.storage.from(COMPANY_LOGOS_BUCKET).upload(fileName, normalizedFile, {
     upsert: true,
-    contentType: inferredLogoContentType(file) || file.type || undefined,
+    contentType: inferredLogoContentType(normalizedFile) || normalizedFile.type || undefined,
   });
 
   if (error) throw error;
