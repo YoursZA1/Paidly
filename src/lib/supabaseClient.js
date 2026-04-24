@@ -43,13 +43,12 @@ const effectiveKey = supabaseAnonKey || "not-configured";
 
 const inMemoryStorage = new Map();
 /**
- * Auth session JSON lives in sessionStorage only (per-tab, cleared when the tab closes).
- * Keeps long-lived localStorage for lightweight UI prefs (theme, drafts, etc.) — not refresh/access tokens.
- * GoTrue still owns format, refresh, and invalidation via the Supabase client.
+ * Auth session JSON lives in localStorage so tabs/windows share one durable Supabase session.
+ * GoTrue still owns token format, refresh, and invalidation via the Supabase client.
  */
 const authPersistStorageRaw =
-  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
-    ? window.sessionStorage
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+    ? window.localStorage
     : {
         getItem: (key) => (inMemoryStorage.has(key) ? inMemoryStorage.get(key) : null),
         setItem: (key, value) => {

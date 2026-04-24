@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
 import ConnectionMonitor from "@/components/connection/ConnectionMonitor.jsx";
 import SessionActivityBeacon from "@/components/activity/SessionActivityBeacon.jsx";
+import SessionExpiredModal from "@/components/session/SessionExpiredModal.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
     installGlobalAsyncErrorHandlers,
@@ -57,6 +58,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <AppProvider>
                 <ConnectionMonitor />
                 <SessionActivityBeacon />
+                <SessionExpiredModal />
                 <App />
               </AppProvider>
             </AuthProvider>

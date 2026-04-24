@@ -26,6 +26,7 @@ import SetupWizard from "@/components/SetupWizard";
 import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
+import SessionIndicator from "@/components/session/SessionIndicator.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
 import {
@@ -1038,7 +1039,10 @@ export default function Layout({ children, currentPageName }) {
                 <Search className="size-5" aria-hidden />
               </Button>
             )}
-            <ConnectionStatusIndicator className="shrink-0 max-w-[min(40vw,9rem)] sm:max-w-none" />
+            <div className="shrink-0 flex items-center gap-1">
+              <ConnectionStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
+              <SessionIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
+            </div>
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1119,7 +1123,10 @@ export default function Layout({ children, currentPageName }) {
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <ConnectionStatusIndicator className="mr-0.5 max-w-[min(28vw,10rem)] md:max-w-[14rem]" />
+            <div className="mr-0.5 flex items-center gap-1">
+              <ConnectionStatusIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
+              <SessionIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
+            </div>
             <NotificationBell />
             
             {user && (

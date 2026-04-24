@@ -26,6 +26,12 @@ import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
 import { setUnauthorizedSessionHandler } from "@/lib/unauthorizedSessionHandler";
 import { getAuthUserId } from "@/lib/authUserId";
+import {
+  recordAuthRefreshFailure,
+  recordAuthRefreshFatal,
+  recordAuthRefreshSuccess,
+} from "@/lib/authRefreshTelemetry";
+import { setSessionHealthStatus } from "@/stores/sessionHealthStore";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -146,6 +152,9 @@ export function AuthProvider({ children }) {
   const authLoadingFailSafeRef = useRef(null);
   const loadingRef = useRef(loading);
   const routeInvariantTimerRef = useRef(null);
+  const manualLogoutRef = useRef(false);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAttemptMsRef = useRef(0);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -317,36 +326,56 @@ export function AuthProvider({ children }) {
       void (async () => {
         const { data: snap } = await supabase.auth.getSession();
         if (!snap?.session?.refresh_token) return;
-
-        const r = await refreshSupabaseSessionWithRecovery();
-        if (r.fatal) {
-          try {
-            await supabase.auth.signOut({ scope: "local" });
-          } catch {
-            /* ignore */
-          }
-          patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
-          setError("");
-          redirectToLoginIfProtectedPath();
-          return;
-        }
-        if (r.ok) {
+        const ok = await refreshSession();
+        if (ok) {
           scheduleRefreshUser();
         }
       })();
     }, ms);
     return () => clearTimeout(id);
-  }, [session?.expiresAt, session?.accessToken, scheduleRefreshUser]);
+  }, [session?.expiresAt, session?.accessToken, scheduleRefreshUser, refreshSession]);
 
-  /** Tab focus / visibility: refresh React session from storage only — never log out on flaky reads. */
+  /** Tab focus / visibility / reconnect: refresh token + React session without hard-clearing on transient errors. */
   const refreshSession = useCallback(async () => {
+    const now = Date.now();
+    const MIN_REFRESH_GAP_MS = 3000;
+    if (refreshInFlightRef.current) return false;
+    if (now - lastRefreshAttemptMsRef.current < MIN_REFRESH_GAP_MS) return false;
+    refreshInFlightRef.current = true;
+    lastRefreshAttemptMsRef.current = now;
+    setSessionHealthStatus("reconnecting", navigator.onLine ? "refreshing" : "offline");
     try {
+      const refreshed = await refreshSupabaseSessionWithRecovery();
+      if (refreshed.fatal) {
+        recordAuthRefreshFatal({ source: "refresh_session", reason: "fatal_refresh_token" });
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* ignore */
+        }
+        patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
+        setSessionHealthStatus("expired", "fatal_refresh_token");
+        setError("");
+        redirectToLoginIfProtectedPath();
+        return false;
+      }
+      if (refreshed.ok) recordAuthRefreshSuccess({ source: "refresh_session" });
+      else if (refreshed.error) recordAuthRefreshFailure({ source: "refresh_session", reason: "refresh_failed" });
       const newSession = await readSessionSafe(true);
       if (newSession?.user && isSessionValid(newSession)) {
         patchAuthSession({ session: newSession });
+        setSessionHealthStatus("connected", "refresh_ok");
+        return true;
       }
+      const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
+      setSessionHealthStatus(believedSignedIn ? "expired" : "connected", believedSignedIn ? "session_missing" : "guest");
+      return !believedSignedIn;
     } catch {
       /* offline or race — keep current session + user */
+      setSessionHealthStatus("reconnecting", navigator.onLine ? "refresh_failed" : "offline");
+      return false;
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, []);
 
@@ -508,27 +537,6 @@ export function AuthProvider({ children }) {
       sessionResyncTimerRef.current = null;
       void (async () => {
         const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
-        try {
-          const recovered = await refreshSupabaseSessionWithRecovery();
-          if (recovered.fatal) {
-            try {
-              await supabase.auth.signOut({ scope: "local" });
-            } catch {
-              /* ignore */
-            }
-            patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
-            setError("");
-            redirectToLoginIfProtectedPath();
-            return;
-          }
-          if (recovered.error && import.meta.env.DEV) {
-            console.warn("[Auth] Tab resync refresh:", recovered.error?.message || recovered.error);
-          }
-        } catch (e) {
-          if (import.meta.env.DEV) {
-            console.warn("[Auth] Tab resync refresh threw:", e?.message || e);
-          }
-        }
         await refreshSession();
         await refreshUser();
         await enforceProtectedRouteSessionInvariant(
@@ -569,6 +577,18 @@ export function AuthProvider({ children }) {
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
+  }, [scheduleSessionResync]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleOnline = () => scheduleSessionResync();
+    const handleOffline = () => setSessionHealthStatus("reconnecting", "offline");
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, [scheduleSessionResync]);
 
   // Back/forward cache restore: session timers were frozen — same recovery path as visibility.
@@ -614,6 +634,19 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (event === "SIGNED_OUT") {
+        if (manualLogoutRef.current) {
+          manualLogoutRef.current = false;
+          setSessionHealthStatus("connected", "manual_logout");
+          patchAuthSession({
+            session: null,
+            user: null,
+            loading: false,
+            authLoadingTimedOut: false,
+          });
+          setError("");
+          return;
+        }
+        setSessionHealthStatus("expired", "signed_out");
         patchAuthSession({
           session: null,
           user: null,
@@ -671,15 +704,18 @@ export function AuthProvider({ children }) {
         : null;
 
       if (event === "SIGNED_IN" && norm) {
+        setSessionHealthStatus("connected", "signed_in");
         patchAuthSession({ session: norm });
         await refreshUserRef.current();
       } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
         if (import.meta.env.DEV && event === "TOKEN_REFRESHED") {
           console.info("[Auth] Session refreshed (TOKEN_REFRESHED)");
         }
+        setSessionHealthStatus("connected", "token_refreshed");
         patchAuthSession({ session: norm });
         scheduleRefreshUserRef.current();
       } else if (event === "INITIAL_SESSION" && norm?.user) {
+        setSessionHealthStatus("connected", "initial_session");
         patchAuthSession({ session: norm });
         await refreshUserRef.current();
       }
@@ -774,6 +810,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(
     async () => {
+      manualLogoutRef.current = true;
       // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
       clearNodeAuthUnreachable();
       try {
@@ -787,6 +824,7 @@ export function AuthProvider({ children }) {
         loading: false,
         authLoadingTimedOut: false,
       });
+      setSessionHealthStatus("connected", "manual_logout");
       setError("");
       setShowVerifyDialog(false);
       setVerifyGateEmail("");
