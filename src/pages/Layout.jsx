@@ -38,6 +38,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useToast } from "@/components/ui/use-toast";
+import Logo from "@/components/shared/Logo";
 import { useAppStore } from "@/stores/useAppStore";
 import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
 import { ROLES, STAFF_ROLES } from "@/lib/permissions";
@@ -527,7 +528,7 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
             >
               <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-muted border-2 border-white dark:border-card shadow-sm overflow-hidden shrink-0 flex items-center justify-center font-semibold text-slate-600 dark:text-muted-foreground text-sm">
                 {user?.logo_url ? (
-                  <img src={user.logo_url} alt="" className="w-full h-full object-cover" />
+                  <Logo path={user.logo_url} alt="" className="w-full h-full object-cover" />
                 ) : (
                   user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")
                 )}
@@ -1051,7 +1052,7 @@ export default function Layout({ children, currentPageName }) {
                   <Button variant="ghost" className="rounded-xl p-0 min-h-[44px] min-w-[44px] touch-manipulation shrink-0" aria-label="Account menu">
                     <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden border border-border">
                       {user.logo_url ? (
-                        <img src={user.logo_url} alt="" className="w-full h-full object-cover" />
+                        <Logo path={user.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : (
                         user.full_name ? user.full_name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : "U")
                       )}
@@ -1138,7 +1139,7 @@ export default function Layout({ children, currentPageName }) {
                   <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground min-h-[48px] min-w-[48px] md:min-h-11 md:min-w-11 sm:min-w-0 sm:min-h-10 touch-manipulation px-2 sm:px-3">
                     <div className="w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden shrink-0">
                       {user.logo_url ? (
-                        <img src={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
+                        <Logo path={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
                       ) : (
                         user.full_name ? user.full_name[0].toUpperCase() : 'U'
                       )}

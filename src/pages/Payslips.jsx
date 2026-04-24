@@ -20,6 +20,7 @@ export default function PayslipsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isExporting, setIsExporting] = useState(false);
@@ -34,11 +35,17 @@ export default function PayslipsPage() {
     const loadData = async () => {
         setIsLoading(true);
         setIsRefreshing(true);
+        setLoadError("");
         try {
-            const payslipsData = await Payroll.list("-created_date", { limit: 100, maxWaitMs: 4000 });
+            const payslipsData = await Payroll.list("-created_date", {
+                limit: 100,
+                maxWaitMs: 4000,
+                errorOnEmptyTimeout: true,
+            });
             setPayslipsInStore(Array.isArray(payslipsData) ? payslipsData : []);
         } catch (error) {
             console.error("Error loading data:", error);
+            setLoadError(error?.message || "Could not load payslips.");
             toast({ title: "Could not load payslips", description: error?.message, variant: "destructive" });
         } finally {
             setIsRefreshing(false);
@@ -194,6 +201,25 @@ export default function PayslipsPage() {
                     <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
                         {isLoading ? (
                             <PayslipList payslips={[]} isLoading userCurrency={userCurrency} onActionSuccess={loadData} />
+                        ) : loadError && filteredPayslips.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="mx-auto w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
+                                    <Receipt className="h-7 w-7 text-red-500" />
+                                </div>
+                                <h3 className="mt-2 text-base font-semibold text-foreground font-display">Could not load payslips</h3>
+                                <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">
+                                    {loadError}
+                                </p>
+                                <div className="mt-6">
+                                    <Button
+                                        onClick={loadData}
+                                        variant="outline"
+                                        className="rounded-xl"
+                                    >
+                                        Try again
+                                    </Button>
+                                </div>
+                            </div>
                         ) : filteredPayslips.length === 0 ? (
                             <div className="text-center py-12">
                                 <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">

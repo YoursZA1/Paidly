@@ -768,7 +768,7 @@ class EntityManager {
   /**
    * List records with optional sort and limit (limits Supabase query for performance).
    * @param {string} sortBy - e.g. "-created_date", "delivery_date"
-   * @param {{ limit?: number, offset?: number, maxWaitMs?: number } | number} options - limit/offset object, optional maxWaitMs to avoid hanging, or legacy numeric limit.
+   * @param {{ limit?: number, offset?: number, maxWaitMs?: number, errorOnEmptyTimeout?: boolean } | number} options - limit/offset object, optional maxWaitMs to avoid hanging, optionally throw when timeout leaves empty cache, or legacy numeric limit.
    */
   async list(sortBy = '', options = {}) {
     const opts = typeof options === 'number' ? { limit: options } : options;
@@ -780,6 +780,7 @@ class EntityManager {
     const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
     const offset = opts.offset ?? 0;
     const maxWaitMs = typeof opts.maxWaitMs === 'number' ? opts.maxWaitMs : null;
+    const errorOnEmptyTimeout = opts.errorOnEmptyTimeout === true;
     const orderColumn = getOrderColumn(sortBy);
     const orderAsc = getOrderAscending(sortBy);
 
@@ -802,15 +803,22 @@ class EntityManager {
             );
           }
         });
-        if (
+        const timedOutWithEmptyCache =
           this.skipLocalPersistence &&
           Object.keys(this.data).length === 0 &&
-          shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs)
-        ) {
+          shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs);
+        if (timedOutWithEmptyCache) {
           if (import.meta.env?.DEV) {
             console.warn(
               `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
             );
+          }
+          if (errorOnEmptyTimeout) {
+            const timeoutErr = new Error(
+              `Timed out loading ${this.entityName} after ${maxWaitMs}ms.`
+            );
+            timeoutErr.name = "EntityListTimeoutError";
+            throw timeoutErr;
           }
         }
       } else if (useRace && !isBrowserOnline()) {

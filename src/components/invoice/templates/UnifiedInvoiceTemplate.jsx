@@ -3,6 +3,7 @@ import {
   formatLineItemNameAndDescription,
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
+import { getLogoUrl } from "@/lib/logoUrl";
 
 /**
  * Typography scale (print + PDF): title 20px, section headers 12px, body 12–13px,
@@ -291,12 +292,13 @@ export default function UnifiedInvoiceTemplate({
     ? invoice.quote_number ?? invoice.number ?? "—"
     : invoice.invoice_number ?? invoice.number ?? "—";
 
-  const logoSrc =
+  const logoSrc = getLogoUrl(
     user?.logo_url ||
-    user?.company_logo_url ||
-    invoice?.owner_logo_url ||
-    invoice?.company?.logo_url ||
-    null;
+      user?.company_logo_url ||
+      invoice?.owner_logo_url ||
+      invoice?.company?.logo_url ||
+      null
+  );
   const businessContactRows = accountInfoRowsFromUser(user);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
   const hasAccountDetailsSection =

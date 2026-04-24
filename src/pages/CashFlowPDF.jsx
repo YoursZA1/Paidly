@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Expense, Invoice, User } from '@/api/entities';
 import { formatCurrency } from '@/components/CurrencySelector';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
+import Logo from "@/components/shared/Logo";
 
 export default function CashFlowPDF() {
     const location = useLocation();
@@ -151,9 +152,7 @@ export default function CashFlowPDF() {
             <div className="mb-8 border-b pb-6">
                 <div className="flex justify-between items-start">
                     <div>
-                        {user.logo_url && (
-                            <img src={user.logo_url} alt="Logo" className="h-16 mb-4" />
-                        )}
+                        {user.logo_url && <Logo path={user.logo_url} alt="Logo" className="h-16 mb-4" />}
                         <h1 className="text-3xl font-bold text-gray-900">Cash Flow Report</h1>
                         <p className="text-gray-600 mt-1">{user.company_name || user.full_name}</p>
                         {user.company_address && <p className="text-gray-600 text-sm">{user.company_address}</p>}

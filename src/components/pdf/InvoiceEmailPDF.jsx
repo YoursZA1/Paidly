@@ -8,6 +8,7 @@ import {
 } from "@react-pdf/renderer";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { LOGO_CONSTRAINTS } from "@/lib/logoUpload";
+import { getLogoUrl } from "@/lib/logoUrl";
 
 const formatCurrency = (value, currency = "ZAR") =>
   new Intl.NumberFormat("en-ZA", {
@@ -97,7 +98,9 @@ const styles = StyleSheet.create({
 
 export default function InvoiceEmailPDF({ invoice, currency = "ZAR" }) {
   const fmt = (value) => formatCurrency(value, currency);
-  const logoUrl = invoice.company?.logo_url ?? invoice.logo_url ?? invoice.owner_logo_url;
+  const logoUrl = getLogoUrl(
+    invoice.company?.logo_url ?? invoice.logo_url ?? invoice.owner_logo_url
+  );
 
   return (
     <Document>

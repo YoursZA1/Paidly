@@ -83,16 +83,17 @@ export function validateLogoFile(file) {
 }
 
 /**
- * Upload a logo file to the company-logos bucket and return its public URL.
- * Save the returned URL to profiles.logo_url (or companies.logo_url if you use a companies table).
+ * Upload a logo file to the company-logos bucket and return its storage file name.
+ * Save only this value to profiles.logo_url (for example: logo-<user-id>.png).
  * Validates format (JPEG, PNG, or SVG) and max size (2MB) before upload.
  *
  * @param {File} file - Logo image file (JPEG, PNG, or SVG, max 2MB)
  * @param {string} companyId - Company or profile id (e.g. user id or org id) used in the stored filename
- * @returns {Promise<string>} Public URL of the uploaded logo
+ * @returns {Promise<string>} Storage file name of the uploaded logo
  * @throws {Error} If validation or upload fails
  */
 export async function uploadLogo(file, companyId) {
+  void companyId;
   const validation = validateLogoFile(file);
   if (!validation.valid) {
     throw new Error(validation.message);
@@ -104,7 +105,11 @@ export async function uploadLogo(file, companyId) {
     const ct = inferredLogoContentType(file);
     ext = ct === "image/svg+xml" ? "svg" : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : "png";
   }
-  const fileName = `logo-${companyId}.${ext}`;
+  const unique =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const fileName = `logo-${unique}.${ext}`;
 
   const { error } = await supabase.storage
     .from(COMPANY_LOGOS_BUCKET)
@@ -115,11 +120,7 @@ export async function uploadLogo(file, companyId) {
 
   if (error) throw error;
 
-  const { data } = supabase.storage
-    .from(COMPANY_LOGOS_BUCKET)
-    .getPublicUrl(fileName);
-
-  return data.publicUrl;
+  return fileName;
 }
 
 /**
@@ -128,7 +129,7 @@ export async function uploadLogo(file, companyId) {
  *
  * @param {File} file
  * @param {string} userId - auth user id
- * @returns {Promise<string>} Public URL
+ * @returns {Promise<string>} Storage path under company-logos bucket
  */
 export async function uploadDocumentLogo(file, userId) {
   const validation = validateLogoFile(file);
@@ -159,6 +160,5 @@ export async function uploadDocumentLogo(file, userId) {
 
   if (error) throw error;
 
-  const { data } = supabase.storage.from(COMPANY_LOGOS_BUCKET).getPublicUrl(fileName);
-  return data.publicUrl;
+  return fileName;
 }

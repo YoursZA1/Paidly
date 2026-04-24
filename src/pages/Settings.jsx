@@ -326,7 +326,6 @@ function CompanyProfileSettings() {
         e.preventDefault();
         setIsSaving(true);
         let updatedData = { ...formData };
-        const saveStamp = Date.now();
 
         try {
             if (logoFile) {
@@ -345,10 +344,8 @@ function CompanyProfileSettings() {
                         });
                         return;
                     }
-                    const publicUrl = await uploadLogo(logoFile, userId);
-                    // Force fresh asset after replacement (storage/CDN may cache same file path).
-                    const cacheBustedLogoUrl = `${publicUrl}${publicUrl.includes("?") ? "&" : "?"}v=${saveStamp}`;
-                    updatedData.logo_url = cacheBustedLogoUrl;
+                    const storedLogoPath = await uploadLogo(logoFile, userId);
+                    updatedData.logo_url = storedLogoPath;
                 } catch (uploadError) {
                     console.error("Logo upload error:", uploadError);
                     toast({

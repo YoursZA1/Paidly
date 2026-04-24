@@ -8,6 +8,7 @@ import DocumentPreview from "@/components/DocumentPreview";
 import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 import { buildInvoiceTemplatePdfCaptureProps } from "./InvoiceTemplatePdfCapture";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
+import { getLogoUrl } from "@/lib/logoUrl";
 
 function bankBlockFromBankingRow(bankingDetail, refNumber) {
   if (!bankingDetail) return null;
@@ -58,14 +59,15 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
   const brand = user?.company_name || invoice?.owner_company_name || "Company";
   const address = user?.company_address || invoice?.owner_company_address || "";
   const number = invoice?.invoice_number || invoice?.reference_number || "—";
-  const logo_url =
+  const logo_url = getLogoUrl(
     user?.logo_url ||
-    user?.company_logo_url ||
-    invoice?.owner_logo_url ||
-    invoice?.owner_company_logo_url ||
-    invoice?.logo_url ||
-    invoice?.company?.logo_url ||
-    null;
+      user?.company_logo_url ||
+      invoice?.owner_logo_url ||
+      invoice?.owner_company_logo_url ||
+      invoice?.logo_url ||
+      invoice?.company?.logo_url ||
+      null
+  );
   const status = (invoice?.status || "draft").toString();
   const clientName = client?.name || "Client";
   const clientAddress =

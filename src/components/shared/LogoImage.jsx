@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import SupabaseStorageService from "@/services/SupabaseStorageService";
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getLogoUrl } from "@/lib/logoUrl";
 
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 
 const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+const DEFAULT_LOGO_SRC = "/default-logo.png";
 
 function parseSignedStoragePath(signedUrl) {
   try {
@@ -115,12 +117,12 @@ export default function LogoImage({
         setIsLoading(false);
       }
     } else {
-      // Assume it's a storage path, get signed URL
+      // Resolve stored logo paths (e.g. logo-<id>.png) to a public URL in company-logos bucket.
       (async () => {
         try {
-          const signedUrl = await SupabaseStorageService.getSignedUrl(src);
-          if (signedUrl) {
-            setImageSrc(signedUrl);
+          const resolvedUrl = getLogoUrl(src);
+          if (resolvedUrl) {
+            setImageSrc(resolvedUrl);
             setIsLoading(false);
           } else {
             setHasError(true);
@@ -153,12 +155,18 @@ export default function LogoImage({
 
   return (
     <img
-      src={imageSrc}
+      src={imageSrc || DEFAULT_LOGO_SRC}
       alt={alt}
       className={className}
       style={style}
       {...(needsCorsForCapture ? { crossOrigin: "anonymous" } : {})}
       onError={() => {
+        if (imageSrc !== DEFAULT_LOGO_SRC) {
+          setImageSrc(DEFAULT_LOGO_SRC);
+          setHasError(false);
+          setIsLoading(false);
+          return;
+        }
         setHasError(true);
         setIsLoading(false);
       }}

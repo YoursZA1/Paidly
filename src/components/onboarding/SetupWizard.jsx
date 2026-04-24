@@ -14,6 +14,7 @@ import {
 import { Loader2, UploadCloud, CheckCircle, ArrowRight, Building, CreditCard, Image as ImageIcon, X } from "lucide-react";
 import CurrencySelector from "@/components/CurrencySelector";
 import { motion, AnimatePresence } from "framer-motion";
+import Logo from "@/components/shared/Logo";
 
 export default function SetupWizard({ isOpen, onComplete }) {
     const [step, setStep] = useState(1);
@@ -228,11 +229,19 @@ export default function SetupWizard({ isOpen, onComplete }) {
                                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-8 bg-slate-50">
                                         {logoFile || formData.logo_url ? (
                                             <div className="relative w-32 h-32 mb-4">
-                                                <img 
-                                                    src={logoFile ? URL.createObjectURL(logoFile) : formData.logo_url} 
-                                                    alt="Logo" 
-                                                    className="w-full h-full object-contain rounded-lg"
-                                                />
+                                                {logoFile ? (
+                                                    <img
+                                                        src={URL.createObjectURL(logoFile)}
+                                                        alt="Logo"
+                                                        className="w-full h-full object-contain rounded-lg"
+                                                    />
+                                                ) : (
+                                                    <Logo
+                                                        path={formData.logo_url}
+                                                        alt="Logo"
+                                                        className="w-full h-full object-contain rounded-lg"
+                                                    />
+                                                )}
                                                 <Button 
                                                     size="sm" 
                                                     variant="destructive" 
