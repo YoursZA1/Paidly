@@ -313,28 +313,6 @@ export function AuthProvider({ children }) {
     []
   );
 
-  /**
-   * Proactive JWT refresh before expiry (tab timers can lag after sleep / backgrounding).
-   * Works with GoTrue autoRefreshToken; avoids surprise 401 bursts on API calls.
-   */
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const exp = session?.expiresAt;
-    const ms = msUntilProactiveRefresh(exp);
-    if (ms == null) return undefined;
-    const id = window.setTimeout(() => {
-      void (async () => {
-        const { data: snap } = await supabase.auth.getSession();
-        if (!snap?.session?.refresh_token) return;
-        const ok = await refreshSession();
-        if (ok) {
-          scheduleRefreshUser();
-        }
-      })();
-    }, ms);
-    return () => clearTimeout(id);
-  }, [session?.expiresAt, session?.accessToken, scheduleRefreshUser, refreshSession]);
-
   /** Tab focus / visibility / reconnect: refresh token + React session without hard-clearing on transient errors. */
   const refreshSession = useCallback(async () => {
     const now = Date.now();
@@ -378,6 +356,28 @@ export function AuthProvider({ children }) {
       refreshInFlightRef.current = false;
     }
   }, []);
+
+  /**
+   * Proactive JWT refresh before expiry (tab timers can lag after sleep / backgrounding).
+   * Works with GoTrue autoRefreshToken; avoids surprise 401 bursts on API calls.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const exp = session?.expiresAt;
+    const ms = msUntilProactiveRefresh(exp);
+    if (ms == null) return undefined;
+    const id = window.setTimeout(() => {
+      void (async () => {
+        const { data: snap } = await supabase.auth.getSession();
+        if (!snap?.session?.refresh_token) return;
+        const ok = await refreshSession();
+        if (ok) {
+          scheduleRefreshUser();
+        }
+      })();
+    }, ms);
+    return () => clearTimeout(id);
+  }, [session?.expiresAt, session?.accessToken, scheduleRefreshUser, refreshSession]);
 
   const retryAuthBootstrap = useCallback(async () => {
     patchAuthSession({ authLoadingTimedOut: false, loading: true });
