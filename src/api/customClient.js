@@ -795,7 +795,7 @@ class EntityManager {
           new Promise((resolve) => setTimeout(resolve, maxWaitMs)),
         ]);
         void pull.catch((err) => {
-          if (!isAbortError(err)) {
+          if (!isAbortError(err) && import.meta.env?.DEV) {
             console.warn(
               `[Paidly][EntityManager] list(${this.entityName}) Supabase pull finished after timeout:`,
               getSupabaseErrorMessage(err, String(err))
@@ -807,9 +807,11 @@ class EntityManager {
           Object.keys(this.data).length === 0 &&
           shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs)
         ) {
-          console.warn(
-            `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
-          );
+          if (import.meta.env?.DEV) {
+            console.warn(
+              `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
+            );
+          }
         }
       } else if (useRace && !isBrowserOnline()) {
         await pull;

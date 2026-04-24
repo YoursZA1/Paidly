@@ -7,6 +7,24 @@ import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 
 const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
 
+function parseSignedStoragePath(signedUrl) {
+  try {
+    const marker = "/object/sign/";
+    const idx = String(signedUrl || "").indexOf(marker);
+    if (idx < 0) return null;
+    const rest = signedUrl.slice(idx + marker.length).split("?")[0];
+    const decoded = decodeURIComponent(rest || "");
+    const slashIdx = decoded.indexOf("/");
+    if (slashIdx <= 0) return null;
+    return {
+      bucket: decoded.slice(0, slashIdx),
+      filePath: decoded.slice(slashIdx + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * LogoImage component that handles Supabase signed URLs and auto-refreshes expired ones
  * @param {string} src - The logo URL (can be signed URL, public URL, or storage path)
@@ -59,11 +77,9 @@ export default function LogoImage({
         img.onerror = async () => {
           // Signed URL expired, try to extract path and refresh
           try {
-            const urlParts = src.split('/object/sign/');
-            if (urlParts.length > 1) {
-              const pathPart = urlParts[1].split('?')[0];
-              const decodedPath = decodeURIComponent(pathPart);
-              const refreshedUrl = await SupabaseStorageService.getSignedUrl(decodedPath);
+            const parsed = parseSignedStoragePath(src);
+            if (parsed?.filePath) {
+              const refreshedUrl = await SupabaseStorageService.getSignedUrl(parsed.filePath, parsed.bucket);
               if (refreshedUrl) {
                 setImageSrc(refreshedUrl);
                 setIsLoading(false);
@@ -75,11 +91,9 @@ export default function LogoImage({
           }
           if (fallbackToPublic) {
             try {
-              const urlParts = src.split("/object/sign/");
-              if (urlParts.length > 1) {
-                const pathPart = urlParts[1].split("?")[0];
-                const decodedPath = decodeURIComponent(pathPart);
-                const { data } = supabase.storage.from(BUCKET).getPublicUrl(decodedPath);
+              const parsed = parseSignedStoragePath(src);
+              if (parsed?.filePath) {
+                const { data } = supabase.storage.from(parsed.bucket || BUCKET).getPublicUrl(parsed.filePath);
                 if (data?.publicUrl) {
                   setImageSrc(data.publicUrl);
                   setIsLoading(false);
