@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams, useLocation, Navigate } from "react-router-dom";
-import { Client, Invoice, Quote, QuoteTemplate, BankingDetail, Service } from "@/api/entities";
+import { Client, Quote, QuoteTemplate, BankingDetail, Service } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
-import { sendInvoiceToClient } from "@/services/InvoiceSendService";
+import { queueCreateInvoice } from "@/lib/syncQueueActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -813,37 +813,27 @@ function CreateDocumentCore({ docType }) {
       return;
     }
 
-    const created = await withTimeoutRetry(() => Invoice.create(invoiceToCreate), 45000, 2);
-    const invoiceId = created?.id;
+    const queuedCreate = queueCreateInvoice(invoiceToCreate, {
+      source: "create-document",
+      label: `Invoice ${number}`,
+    });
 
     if (sendNow) {
-      if (!invoiceId) {
-        toast({
-          title: "Could not send",
-          description: "The invoice was not returned with an id. Check the list or try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      await sendInvoiceToClient(invoiceId);
-      window.open(
-        createPageUrl(`InvoicePDF?id=${invoiceId}&download=true`),
-        "_blank",
-        "noopener,noreferrer"
-      );
       toast({
-        title: "Invoice sent",
-        description: `Marked sent and opened PDF for ${number}.`,
-        variant: "success",
+        title: "Invoice queued",
+        description:
+          "Create was queued for background sync. Once it appears in Invoices, you can send it with one click.",
+        variant: "default",
       });
-      setTimeout(() => navigate(createPageUrl("Invoices")), 1500);
+      void queuedCreate;
+      setTimeout(() => navigate(createPageUrl("Invoices")), 1200);
       return;
     }
 
     toast({
-      title: "Invoice created",
-      description: `Saved as draft ${number}.`,
-      variant: "success",
+      title: "Invoice queued",
+      description: `Draft ${number} was queued for background sync.`,
+      variant: "default",
     });
     setTimeout(() => navigate(createPageUrl("Invoices")), 800);
   };

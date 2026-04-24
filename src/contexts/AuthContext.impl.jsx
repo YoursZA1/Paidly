@@ -314,14 +314,17 @@ export function AuthProvider({ children }) {
   );
 
   /** Tab focus / visibility / reconnect: refresh token + React session without hard-clearing on transient errors. */
-  const refreshSession = useCallback(async () => {
+  const refreshSession = useCallback(async (opts = {}) => {
+    const silent = Boolean(opts?.silent);
     const now = Date.now();
     const MIN_REFRESH_GAP_MS = 3000;
     if (refreshInFlightRef.current) return false;
     if (now - lastRefreshAttemptMsRef.current < MIN_REFRESH_GAP_MS) return false;
     refreshInFlightRef.current = true;
     lastRefreshAttemptMsRef.current = now;
-    setSessionHealthStatus("reconnecting", navigator.onLine ? "refreshing" : "offline");
+    if (!silent) {
+      setSessionHealthStatus("reconnecting", navigator.onLine ? "refreshing" : "offline");
+    }
     try {
       const refreshed = await refreshSupabaseSessionWithRecovery();
       if (refreshed.fatal) {
@@ -342,15 +345,24 @@ export function AuthProvider({ children }) {
       const newSession = await readSessionSafe(true);
       if (newSession?.user && isSessionValid(newSession)) {
         patchAuthSession({ session: newSession });
-        setSessionHealthStatus("connected", "refresh_ok");
+        if (!silent) {
+          setSessionHealthStatus("connected", "refresh_ok");
+        }
         return true;
       }
       const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
-      setSessionHealthStatus(believedSignedIn ? "expired" : "connected", believedSignedIn ? "session_missing" : "guest");
+      if (!silent) {
+        setSessionHealthStatus(
+          believedSignedIn ? "expired" : "connected",
+          believedSignedIn ? "session_missing" : "guest"
+        );
+      }
       return !believedSignedIn;
     } catch {
       /* offline or race — keep current session + user */
-      setSessionHealthStatus("reconnecting", navigator.onLine ? "refresh_failed" : "offline");
+      if (!silent) {
+        setSessionHealthStatus("reconnecting", navigator.onLine ? "refresh_failed" : "offline");
+      }
       return false;
     } finally {
       refreshInFlightRef.current = false;
@@ -531,13 +543,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Debounced resync on focus / visibility / bfcache: ask Supabase for a fresh token, then align React state.
-  const scheduleSessionResync = useCallback(() => {
+  const scheduleSessionResync = useCallback((opts = {}) => {
     if (sessionResyncTimerRef.current) clearTimeout(sessionResyncTimerRef.current);
     sessionResyncTimerRef.current = setTimeout(() => {
       sessionResyncTimerRef.current = null;
       void (async () => {
         const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
-        await refreshSession();
+        await refreshSession({ silent: Boolean(opts?.silent) });
         await refreshUser();
         await enforceProtectedRouteSessionInvariant(
           typeof window !== "undefined" ? window.location.pathname : "",
@@ -561,7 +573,7 @@ export function AuthProvider({ children }) {
     if (typeof document === "undefined") return undefined;
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") scheduleSessionResync();
+      if (document.visibilityState === "visible") scheduleSessionResync({ silent: true });
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
@@ -572,16 +584,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-
-    const handleFocus = () => scheduleSessionResync();
-
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [scheduleSessionResync]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const handleOnline = () => scheduleSessionResync();
+    const handleOnline = () => scheduleSessionResync({ silent: true });
     const handleOffline = () => setSessionHealthStatus("reconnecting", "offline");
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -596,7 +599,7 @@ export function AuthProvider({ children }) {
     if (typeof window === "undefined") return undefined;
 
     const onPageShow = (e) => {
-      if (e.persisted) scheduleSessionResync();
+      if (e.persisted) scheduleSessionResync({ silent: true });
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);

@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import ClientForm from "@/components/clients/ClientForm";
+import { queueUpdateClient } from "@/lib/syncQueueActions";
 
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -98,9 +99,13 @@ export default function EditClient() {
                 });
                 navigate(`${createPageUrl("ClientDetail")}?id=${encodeURIComponent(created.id)}`);
             } else {
-                await Client.update(clientId, clientData);
+                queueUpdateClient(clientId, clientData, { source: "edit-client", label: clientData.name });
                 queryClient.invalidateQueries({ queryKey: ["clients", "list"], exact: false });
-                toast({ title: "Client updated", description: "Changes saved.", variant: "success" });
+                toast({
+                    title: "Client update queued",
+                    description: "Changes will sync in the background.",
+                    variant: "default",
+                });
                 navigate(`${createPageUrl("ClientDetail")}?id=${encodeURIComponent(clientId)}`);
             }
         } catch (error) {

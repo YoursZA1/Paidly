@@ -161,6 +161,27 @@ export const useAppStore = create((set, get) => ({
     }));
   },
 
+  upsertClient: (clientId, patch) =>
+    set((state) => {
+      const existing = (state.clients || []).find((c) => c.id === clientId);
+      if (!existing) return state;
+      return {
+        clients: state.clients.map((client) =>
+          client.id === clientId ? { ...client, ...patch, updated_at: new Date().toISOString() } : client
+        ),
+      };
+    }),
+
+  prependOptimisticInvoice: (invoice) =>
+    set((state) => ({
+      invoices: [invoice, ...(state.invoices || [])],
+    })),
+
+  replaceOptimisticInvoice: (tempId, realInvoice) =>
+    set((state) => ({
+      invoices: (state.invoices || []).map((inv) => (inv.id === tempId ? { ...inv, ...realInvoice } : inv)),
+    })),
+
   /** Append or replace invoices (e.g. after create). */
   setInvoices: (invoices) => set({ invoices: Array.isArray(invoices) ? invoices : get().invoices }),
 

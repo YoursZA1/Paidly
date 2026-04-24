@@ -35,6 +35,7 @@ import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
  */
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
+const entityListTimeoutWarnState = new Map();
 
 /**
  * Mobile/webview networks can spuriously abort in-flight auth/session reads.
@@ -119,6 +120,17 @@ function isBrowserOnline() {
   } catch {
     return true;
   }
+}
+
+function shouldLogEntityTimeoutWarning(entityName, maxWaitMs) {
+  const key = `${String(entityName || "")}:${Number(maxWaitMs || 0)}`;
+  const now = Date.now();
+  const last = entityListTimeoutWarnState.get(key) || 0;
+  // Avoid console storms when many views hit the same bounded list() concurrently.
+  const WARN_COOLDOWN_MS = 60_000;
+  if (now - last < WARN_COOLDOWN_MS) return false;
+  entityListTimeoutWarnState.set(key, now);
+  return true;
 }
 
 function normalizePaidlyPlan(rawPlan) {
@@ -790,7 +802,11 @@ class EntityManager {
             );
           }
         });
-        if (this.skipLocalPersistence && Object.keys(this.data).length === 0) {
+        if (
+          this.skipLocalPersistence &&
+          Object.keys(this.data).length === 0 &&
+          shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs)
+        ) {
           console.warn(
             `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
           );

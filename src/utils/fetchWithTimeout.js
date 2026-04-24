@@ -37,9 +37,11 @@ export async function withTimeoutRetry(fn, timeoutMs = 10000, retries = 2) {
       lastError = err;
       if (attempt < retries) {
         const backoffMs = Math.min(2500, 400 * 2 ** attempt);
-        console.warn(
-          `Fetch attempt ${attempt + 1} failed (${err?.message || err}), retrying in ${backoffMs}ms…`
-        );
+        if (import.meta.env?.DEV) {
+          console.warn(
+            `Fetch attempt ${attempt + 1} failed (${err?.message || err}), retrying in ${backoffMs}ms…`
+          );
+        }
         await sleep(backoffMs);
       } else {
         console.error("Fetch failed after retries:", err?.message || err);

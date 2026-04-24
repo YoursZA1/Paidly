@@ -27,6 +27,7 @@ import FastActivationOnboarding from "@/components/onboarding/FastActivationOnbo
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
 import SessionIndicator from "@/components/session/SessionIndicator.jsx";
+import SyncStatusIndicator from "@/components/sync/SyncStatusIndicator.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
 import {
@@ -1042,6 +1043,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="shrink-0 flex items-center gap-1">
               <ConnectionStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
               <SessionIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
+              <SyncStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
             </div>
             {user && (
               <DropdownMenu>
@@ -1126,6 +1128,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="mr-0.5 flex items-center gap-1">
               <ConnectionStatusIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
               <SessionIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
+              <SyncStatusIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
             </div>
             <NotificationBell />
             

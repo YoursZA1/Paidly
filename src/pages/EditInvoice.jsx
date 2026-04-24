@@ -15,7 +15,7 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import { Skeleton } from "@/components/ui/skeleton";
-import { sendInvoiceToClient } from "@/services/InvoiceSendService";
+import { queueSendInvoice } from "@/lib/syncQueueActions";
 import InvoiceStatusBadge from "../components/invoice/InvoiceStatusBadge";
 import { canEditInvoice } from "@/logic";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -205,7 +205,7 @@ export default function EditInvoice() {
             let emailSendFailed = false;
             if (originalStatus === 'draft' && newStatus === 'sent') {
                 try {
-                    await sendInvoiceToClient(invoiceId);
+                    queueSendInvoice(invoiceId, {}, { source: "edit-invoice", label: invoiceData.invoice_number });
                 } catch (sendError) {
                     console.error('Error sending invoice:', sendError);
                     emailSendFailed = true;
@@ -230,7 +230,7 @@ export default function EditInvoice() {
                 title: newStatus === 'draft' ? 'Draft saved' : 'Invoice updated',
                 description:
                     newStatus === 'sent' && originalStatus === 'draft'
-                        ? `Invoice ${invoiceData.invoice_number} was sent to the client.`
+                        ? `Invoice ${invoiceData.invoice_number} was queued for sending.`
                         : `Invoice ${invoiceData.invoice_number} was updated successfully.`,
                 variant: 'success',
             });

@@ -120,15 +120,15 @@ export default function MessagesPage() {
             };
 
             const settled = await Promise.allSettled([
-                safe(() => Message.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => Client.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => Invoice.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => Quote.list('-created_date', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => Message.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => Client.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => Invoice.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => Quote.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
                 safe(() => User.me(), null),
-                safe(() => DocumentSend.list('-sent_at', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => MessageLog.list('-sent_at', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => InvoiceView.list('-viewed_at', { limit: 100, maxWaitMs: 4000 }), []),
-                safe(() => Payment.list('-paid_at', { limit: 100, maxWaitMs: 4000 }), []),
+                safe(() => DocumentSend.list('-sent_at', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => MessageLog.list('-sent_at', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => InvoiceView.list('-viewed_at', { limit: 100, maxWaitMs: 12000 }), []),
+                safe(() => Payment.list('-paid_at', { limit: 100, maxWaitMs: 12000 }), []),
             ]);
 
             const [
