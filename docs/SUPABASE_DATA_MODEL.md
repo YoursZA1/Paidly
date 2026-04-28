@@ -64,3 +64,13 @@ Apply the Supabase schema (including any new columns/triggers) from the project 
 
 - **Local / linked project**: `supabase db push` or run `supabase/schema.postgres.sql` in the SQL editor.
 - **Existing DB**: The schema includes a `DO $$ ... $$` block that adds `updated_at` to `invoices`, `quotes`, and `payments` if the columns are missing.
+
+## 5. Canonical logo storage contract
+
+- **Authoritative bucket**: `paidly`
+- **URL model**: public URLs only via `supabase.storage.from("paidly").getPublicUrl(path)` (no signed URLs for logos)
+- **DB persistence rule**: store **path only** in DB fields (`logo_url`, `owner_logo_url`), never full `https://...` URLs
+- **Accepted logo path shapes**:
+  - profile/company logo: `logo-<uuid>.<ext>`
+  - document logo: `document-logos/<user-id>/<uuid>.<ext>`
+- **Fallback behavior**: if logo load fails, render branded fallback `/logo.svg`

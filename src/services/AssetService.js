@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 
 const LOGO_BUCKET = "paidly";
-const FALLBACK_LOGO = "/fallback-logo.png";
+const FALLBACK_LOGO = "/logo.svg";
 
 function extractAfterBucket(url, bucket) {
   const marker = `/${bucket}/`;

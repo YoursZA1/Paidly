@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AssetService from "@/services/AssetService";
 
-const DEFAULT_LOGO_SRC = "/fallback-logo.png";
+const DEFAULT_LOGO_SRC = "/logo.svg";
 
 /**
  * LogoImage component that resolves paths through AssetService.getLogo().
@@ -51,7 +51,14 @@ export default function LogoImage({
   }, [src]);
 
   if (hasError || !imageSrc) {
-    return null; // Or return a placeholder icon
+    return (
+      <img
+        src={DEFAULT_LOGO_SRC}
+        alt={alt}
+        className={className}
+        style={style}
+      />
+    );
   }
 
   if (isLoading) {

@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import AssetService from "@/services/AssetService";
 
-const COMPANY_LOGOS_BUCKET = "paidly";
+const PAIDLY_LOGO_BUCKET = "paidly";
 
 /** Recommended logo constraints to prevent broken layouts and sharp PDFs */
 export const LOGO_CONSTRAINTS = {
@@ -95,6 +95,7 @@ async function normalizeLogoFileForUpload(file) {
 }
 
 async function verifyLogoExists(fileName) {
+  if (!import.meta.env?.DEV) return;
   try {
     const list = await AssetService.listLogoAssets(200);
     const exists = list.some((item) => item?.name === fileName);
@@ -162,7 +163,7 @@ export async function uploadLogo(file, companyId) {
   const fileName = `logo-${unique}.${ext}`;
 
   const { error } = await supabase.storage
-    .from(COMPANY_LOGOS_BUCKET)
+    .from(PAIDLY_LOGO_BUCKET)
     .upload(fileName, normalizedFile, {
       upsert: true,
       contentType: inferredLogoContentType(normalizedFile) || normalizedFile.type || undefined,
@@ -205,7 +206,7 @@ export async function uploadDocumentLogo(file, userId) {
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const fileName = `document-logos/${uid}/${unique}.${ext}`;
 
-  const { error } = await supabase.storage.from(COMPANY_LOGOS_BUCKET).upload(fileName, normalizedFile, {
+  const { error } = await supabase.storage.from(PAIDLY_LOGO_BUCKET).upload(fileName, normalizedFile, {
     upsert: true,
     contentType: inferredLogoContentType(normalizedFile) || normalizedFile.type || undefined,
   });

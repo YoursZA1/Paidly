@@ -1,7 +1,7 @@
 import AssetService from "@/services/AssetService";
 
-const DEFAULT_LOGO_SRC = "/fallback-logo.png";
-const SECONDARY_FALLBACK_SRC = "/logo.svg";
+const DEFAULT_LOGO_SRC = "/logo.svg";
+const SECONDARY_FALLBACK_SRC = "/icon.svg";
 
 export default function Logo({ path, className = "", alt = "Logo" }) {
   const url = AssetService.getLogo(path);
