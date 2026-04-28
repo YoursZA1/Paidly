@@ -34,7 +34,7 @@ export async function runSupabaseHealthCheck() {
     const { data: sessionData, error: sessionError } = await withTimeout(
       supabase.auth.getSession(),
       HEALTH_TIMEOUT_MS,
-      "session_timeout"
+      "session_reconnecting"
     );
 
     if (sessionError) {

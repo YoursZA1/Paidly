@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Wifi, WifiOff, Loader2, RefreshCw } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
-import { useConnectionStore } from "@/stores/useConnectionStore";
+import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ export default function ConnectionStatusIndicator({ className }) {
 
   const [retryBusy, setRetryBusy] = useState(false);
   const normalizedError =
-    String(lastError || "").toLowerCase().includes("session_timeout") ||
+    String(lastError || "").toLowerCase().includes("session_reconnecting") ||
     String(lastError || "").toLowerCase().includes("profiles_timeout")
       ? "Connection recovering"
       : lastError;
@@ -31,15 +31,15 @@ export default function ConnectionStatusIndicator({ className }) {
   const onRetry = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     setRetryBusy(true);
-    setConnectionState({ status: "reconnecting", lastError: null });
+    setConnectionState({ status: CONNECTION_STATUS.RECONNECTING, lastError: null });
     try {
       await supabase.auth.getSession();
       const { ok, error } = await runSupabaseHealthCheck();
       if (ok) {
-        setConnectionState({ status: "connected", lastError: null, lastCheckAt: Date.now() });
+        setConnectionState({ status: CONNECTION_STATUS.CONNECTED, lastError: null, lastCheckAt: Date.now() });
       } else {
         setConnectionState({
-          status: "disconnected",
+          status: CONNECTION_STATUS.DISCONNECTED,
           lastError: error?.message || "Still unreachable.",
           lastCheckAt: Date.now(),
         });
@@ -52,8 +52,9 @@ export default function ConnectionStatusIndicator({ className }) {
   if (!isSupabaseConfigured) return null;
 
   const showConnectedIcon =
-    isAuthenticated && status === "connected" && !suppressConnectedIndicator;
-  const showProblemPill = status === "reconnecting" || status === "disconnected";
+    isAuthenticated && status === CONNECTION_STATUS.CONNECTED && !suppressConnectedIndicator;
+  const showProblemPill =
+    status === CONNECTION_STATUS.RECONNECTING || status === CONNECTION_STATUS.DISCONNECTED;
   const visible = showConnectedIcon || showProblemPill;
 
   const pill = (
@@ -68,34 +69,34 @@ export default function ConnectionStatusIndicator({ className }) {
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: prefersReducedMotion ? 0.12 : 0.2 }}
       title={
-        status === "connected"
+        status === CONNECTION_STATUS.CONNECTED
           ? "Connected to Paidly"
-          : status === "reconnecting"
+          : status === CONNECTION_STATUS.RECONNECTING
             ? "Reconnecting to Paidly…"
             : normalizedError || "Disconnected"
       }
       className={cn(
         "pointer-events-auto flex items-center gap-1.5 text-[10px] font-medium sm:gap-2 sm:text-xs",
-        status === "connected" &&
+        status === CONNECTION_STATUS.CONNECTED &&
           "rounded-md border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-0 text-muted-foreground",
-        status === "reconnecting" &&
+        status === CONNECTION_STATUS.RECONNECTING &&
           cn(
             "rounded-full border border-amber-500/35 bg-amber-500/8 px-2 py-1 shadow-none backdrop-blur-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:px-2.5 sm:py-1",
             !prefersReducedMotion && "animate-pulse"
           ),
-        status === "disconnected" &&
+        status === CONNECTION_STATUS.DISCONNECTED &&
           "rounded-full border border-red-500/35 bg-red-500/8 px-2 py-1 shadow-none backdrop-blur-sm text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100 sm:px-2.5 sm:py-1"
       )}
       role="status"
       aria-live="polite"
     >
-      {status === "connected" ? (
+      {status === CONNECTION_STATUS.CONNECTED ? (
         <Wifi
           className="h-3.5 w-3.5 shrink-0 opacity-55 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400"
           strokeWidth={1.5}
           aria-hidden
         />
-      ) : status === "reconnecting" ? (
+      ) : status === CONNECTION_STATUS.RECONNECTING ? (
         <Loader2
           className={cn("h-3 w-3 shrink-0 opacity-90 sm:h-3.5 sm:w-3.5", !prefersReducedMotion && "animate-spin")}
           strokeWidth={1.75}
@@ -104,13 +105,13 @@ export default function ConnectionStatusIndicator({ className }) {
       ) : (
         <WifiOff className="h-3 w-3 shrink-0 opacity-90 sm:h-3.5 sm:w-3.5" strokeWidth={1.75} aria-hidden />
       )}
-      {status === "connected" ? null : (
+      {status === CONNECTION_STATUS.CONNECTED ? null : (
         <span className="max-w-[4.5rem] truncate sm:max-w-[9rem] md:max-w-[13rem]">
-          {status === "reconnecting" && "Reconnecting…"}
-          {status === "disconnected" && (normalizedError || "Disconnected")}
+          {status === CONNECTION_STATUS.RECONNECTING && "Reconnecting…"}
+          {status === CONNECTION_STATUS.DISCONNECTED && (normalizedError || "Disconnected")}
         </span>
       )}
-      {status === "disconnected" ? (
+      {status === CONNECTION_STATUS.DISCONNECTED ? (
         <Button
           type="button"
           variant="ghost"

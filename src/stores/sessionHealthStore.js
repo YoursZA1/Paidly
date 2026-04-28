@@ -4,6 +4,12 @@ import { create } from "zustand";
  * Session health state for UX visibility.
  * @typedef {'connected' | 'reconnecting' | 'expired'} SessionHealthStatus
  */
+export const SESSION_STATUS = {
+  CONNECTED: "connected",
+  RECONNECTING: "reconnecting",
+  EXPIRED: "expired",
+};
+
 const RECONNECTING_DEBOUNCE_MS = 2000;
 let reconnectingTimer = null;
 let reconnectingRequestId = 0;
@@ -16,7 +22,7 @@ function clearReconnectingTimer() {
 }
 
 export const useSessionHealthStore = create((set) => ({
-  status: "connected",
+  status: SESSION_STATUS.CONNECTED,
   reason: null,
   lastTransitionAt: null,
   setStatus: (status, reason = null) =>
@@ -25,11 +31,11 @@ export const useSessionHealthStore = create((set) => ({
       reason: reason ? String(reason) : null,
       lastTransitionAt: Date.now(),
     }),
-  reset: () => set({ status: "connected", reason: null, lastTransitionAt: Date.now() }),
+  reset: () => set({ status: SESSION_STATUS.CONNECTED, reason: null, lastTransitionAt: Date.now() }),
 }));
 
 export function setSessionHealthStatus(status, reason = null) {
-  if (status !== "reconnecting") {
+  if (status !== SESSION_STATUS.RECONNECTING) {
     clearReconnectingTimer();
     reconnectingRequestId += 1;
     useSessionHealthStore.setState({
@@ -46,9 +52,9 @@ export function setSessionHealthStatus(status, reason = null) {
     if (requestId !== reconnectingRequestId) return;
     const current = useSessionHealthStore.getState();
     // If state already stabilized, suppress delayed reconnect flicker.
-    if (current.status === "connected" || current.status === "expired") return;
+    if (current.status === SESSION_STATUS.CONNECTED || current.status === SESSION_STATUS.EXPIRED) return;
     useSessionHealthStore.setState({
-      status: "reconnecting",
+      status: SESSION_STATUS.RECONNECTING,
       reason: reason ? String(reason) : null,
       lastTransitionAt: Date.now(),
     });
@@ -56,7 +62,7 @@ export function setSessionHealthStatus(status, reason = null) {
 
   // Keep default UX stable as connected while debounce window is open.
   useSessionHealthStore.setState({
-    status: "connected",
+    status: SESSION_STATUS.CONNECTED,
     reason: null,
     lastTransitionAt: useSessionHealthStore.getState().lastTransitionAt || Date.now(),
   });

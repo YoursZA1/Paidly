@@ -1,10 +1,11 @@
 import { useSessionHealth } from "@/hooks/useSessionHealth";
+import { SESSION_STATUS } from "@/stores/sessionHealthStore";
 import { cn } from "@/lib/utils";
 
 export default function SessionIndicator({ className }) {
   const { status } = useSessionHealth();
 
-  if (status === "connected") {
+  if (status === SESSION_STATUS.CONNECTED) {
     return (
       <div
         className={cn(
@@ -18,7 +19,7 @@ export default function SessionIndicator({ className }) {
     );
   }
 
-  if (status === "reconnecting") {
+  if (status === SESSION_STATUS.RECONNECTING) {
     return (
       <div
         className={cn(
@@ -27,12 +28,12 @@ export default function SessionIndicator({ className }) {
         )}
       >
         <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-        Reconnecting...
+        Reconnecting…
       </div>
     );
   }
 
-  if (status === "expired") {
+  if (status === SESSION_STATUS.EXPIRED) {
     return (
       <div
         className={cn(

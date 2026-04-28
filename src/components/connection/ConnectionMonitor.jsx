@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
-import { useConnectionStore } from "@/stores/useConnectionStore";
+import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -12,7 +12,7 @@ const DISCONNECTED_AFTER_MS = 10000;
 function isTransientBackgroundError(errorMessage) {
   const msg = String(errorMessage || "").toLowerCase();
   return (
-    msg.includes("session_timeout") ||
+    msg.includes("session_reconnecting") ||
     msg.includes("profiles_timeout") ||
     msg.includes("timeout") ||
     msg.includes("aborted") ||
@@ -56,7 +56,7 @@ export default function ConnectionMonitor() {
     hiddenStartedAtRef.current = null;
     clearDegradedTimers();
     setConnectionState({
-      status: "connected",
+      status: CONNECTION_STATUS.CONNECTED,
       lastError: null,
       lastCheckAt: Date.now(),
     });
@@ -76,7 +76,7 @@ export default function ConnectionMonitor() {
       const transient = isTransientBackgroundError(errorMessage);
       if (degradedForMs >= DISCONNECTED_AFTER_MS) {
         setConnectionState({
-          status: transient ? "reconnecting" : "disconnected",
+          status: transient ? CONNECTION_STATUS.RECONNECTING : CONNECTION_STATUS.DISCONNECTED,
           lastError: transient ? null : errorMessage || "Could not reach Paidly services.",
           lastCheckAt: Date.now(),
         });
@@ -84,7 +84,7 @@ export default function ConnectionMonitor() {
       }
       if (degradedForMs >= RECONNECTING_GRACE_MS) {
         setConnectionState({
-          status: "reconnecting",
+          status: CONNECTION_STATUS.RECONNECTING,
           lastError: null,
           lastCheckAt: Date.now(),
         });
@@ -95,7 +95,7 @@ export default function ConnectionMonitor() {
           if (degradedSinceRef.current == null) return;
           if (visibilityRef.current !== "visible") return;
           setConnectionState({
-            status: "reconnecting",
+            status: CONNECTION_STATUS.RECONNECTING,
             lastError: null,
             lastCheckAt: Date.now(),
           });
@@ -108,7 +108,7 @@ export default function ConnectionMonitor() {
           if (visibilityRef.current !== "visible") return;
           const transientNow = isTransientBackgroundError(errorMessage);
           setConnectionState({
-            status: transientNow ? "reconnecting" : "disconnected",
+            status: transientNow ? CONNECTION_STATUS.RECONNECTING : CONNECTION_STATUS.DISCONNECTED,
             lastError: transientNow ? null : errorMessage || "Could not reach Paidly services.",
             lastCheckAt: Date.now(),
           });
@@ -126,7 +126,7 @@ export default function ConnectionMonitor() {
       degradedSinceRef.current = Date.now();
       clearDegradedTimers();
       setConnectionState({
-        status: "disconnected",
+        status: CONNECTION_STATUS.DISCONNECTED,
         lastError: "You appear to be offline.",
         lastCheckAt: Date.now(),
       });
@@ -153,7 +153,7 @@ export default function ConnectionMonitor() {
       const { data } = await supabase.auth.getSession();
       if (data?.session) {
         setConnectionState({
-          status: "connected",
+          status: CONNECTION_STATUS.CONNECTED,
           lastError: null,
           lastCheckAt: Date.now(),
         });
@@ -213,7 +213,7 @@ export default function ConnectionMonitor() {
       degradedSinceRef.current = Date.now();
       clearDegradedTimers();
       setConnectionState({
-        status: "disconnected",
+        status: CONNECTION_STATUS.DISCONNECTED,
         lastError: "You appear to be offline.",
         lastCheckAt: Date.now(),
       });
@@ -260,7 +260,7 @@ export default function ConnectionMonitor() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
-    if (status !== "connected") {
+    if (status !== CONNECTION_STATUS.CONNECTED) {
       setSuppressConnectedIndicator(true);
       return;
     }

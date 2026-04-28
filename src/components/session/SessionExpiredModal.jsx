@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { useSessionHealthStore, setSessionHealthStatus } from "@/stores/sessionHealthStore";
+import {
+  SESSION_STATUS,
+  useSessionHealthStore,
+  setSessionHealthStatus,
+} from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { isPathAllowedWithoutSession } from "@/utils/sessionGuard";
 import Button from "@/components/ui/button";
@@ -12,13 +16,13 @@ export default function SessionExpiredModal() {
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
-    if (status !== "expired") return false;
+    if (status !== SESSION_STATUS.EXPIRED) return false;
     return !isPathAllowedWithoutSession(window.location.pathname);
   }, [status]);
 
   const handleReconnect = async () => {
     setBusy(true);
-    setSessionHealthStatus("reconnecting");
+    setSessionHealthStatus(SESSION_STATUS.RECONNECTING);
     try {
       const ok = await refreshSession();
       if (!ok) {
@@ -44,7 +48,7 @@ export default function SessionExpiredModal() {
             Go to login
           </Button>
           <Button onClick={() => void handleReconnect()} disabled={busy}>
-            {busy ? "Reconnecting..." : "Reconnect"}
+            {busy ? "Reconnecting…" : "Reconnect"}
           </Button>
         </div>
       </div>

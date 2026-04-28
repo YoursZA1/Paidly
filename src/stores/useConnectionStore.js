@@ -4,10 +4,15 @@ import { create } from "zustand";
  * Real-time app connectivity + Supabase session/API reachability.
  * @typedef {'connected' | 'reconnecting' | 'disconnected'} ConnectionStatus
  */
+export const CONNECTION_STATUS = {
+  CONNECTED: "connected",
+  RECONNECTING: "reconnecting",
+  DISCONNECTED: "disconnected",
+};
 
 export const useConnectionStore = create((set) => ({
   /** Last known connectivity to Supabase (auth + optional DB ping). Browser offline forces disconnected. */
-  status: "connected",
+  status: CONNECTION_STATUS.CONNECTED,
   /** Short message for disconnected UI / tooling */
   lastError: null,
   lastCheckAt: null,
@@ -23,7 +28,7 @@ export const useConnectionStore = create((set) => ({
 
   reset: () =>
     set({
-      status: "connected",
+      status: CONNECTION_STATUS.CONNECTED,
       lastError: null,
       lastCheckAt: null,
       suppressConnectedIndicator: true,
