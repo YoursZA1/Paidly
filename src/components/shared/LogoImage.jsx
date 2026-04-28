@@ -1,46 +1,20 @@
 import { useState, useEffect } from "react";
-import SupabaseStorageService from "@/services/SupabaseStorageService";
-import { supabase } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
-import { getLogoUrl } from "@/lib/logoUrl";
+import AssetService from "@/services/AssetService";
 
-import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
-
-const BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
-const DEFAULT_LOGO_SRC = "/default-logo.png";
-
-function parseSignedStoragePath(signedUrl) {
-  try {
-    const marker = "/object/sign/";
-    const idx = String(signedUrl || "").indexOf(marker);
-    if (idx < 0) return null;
-    const rest = signedUrl.slice(idx + marker.length).split("?")[0];
-    const decoded = decodeURIComponent(rest || "");
-    const slashIdx = decoded.indexOf("/");
-    if (slashIdx <= 0) return null;
-    return {
-      bucket: decoded.slice(0, slashIdx),
-      filePath: decoded.slice(slashIdx + 1),
-    };
-  } catch {
-    return null;
-  }
-}
+const DEFAULT_LOGO_SRC = "/fallback-logo.png";
 
 /**
- * LogoImage component that handles Supabase signed URLs and auto-refreshes expired ones
- * @param {string} src - The logo URL (can be signed URL, public URL, or storage path)
+ * LogoImage component that resolves paths through AssetService.getLogo().
+ * @param {string} src - The logo URL or stored logo path
  * @param {string} alt - Alt text for the image
  * @param {string} className - CSS classes
  * @param {object} style - Inline styles
- * @param {boolean} fallbackToPublic - Whether to fallback to public URL if signed URL fails
  */
 export default function LogoImage({ 
   src, 
   alt = "Logo", 
   className = "", 
-  style = {},
-  fallbackToPublic = true 
+  style = {}
 }) {
   const [imageSrc, setImageSrc] = useState(src);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,76 +40,15 @@ export default function LogoImage({
       return;
     }
 
-    // If it's already a full URL (http/https), use it directly
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-      // Check if it's a signed URL that might be expired
-      if (src.includes('supabase.co/storage/v1/object/sign/')) {
-        // Try to load the image, if it fails, refresh the signed URL
-        const img = new Image();
-        img.onload = () => {
-          setImageSrc(src);
-          setIsLoading(false);
-        };
-        img.onerror = async () => {
-          // Signed URL expired, try to extract path and refresh
-          try {
-            const parsed = parseSignedStoragePath(src);
-            if (parsed?.filePath) {
-              const refreshedUrl = await SupabaseStorageService.getSignedUrl(parsed.filePath, parsed.bucket);
-              if (refreshedUrl) {
-                setImageSrc(refreshedUrl);
-                setIsLoading(false);
-                return;
-              }
-            }
-          } catch (error) {
-            console.warn("LogoImage: refresh signed URL failed", getSupabaseErrorMessage(error, "Refresh URL failed"));
-          }
-          if (fallbackToPublic) {
-            try {
-              const parsed = parseSignedStoragePath(src);
-              if (parsed?.filePath) {
-                const { data } = supabase.storage.from(parsed.bucket || BUCKET).getPublicUrl(parsed.filePath);
-                if (data?.publicUrl) {
-                  setImageSrc(data.publicUrl);
-                  setIsLoading(false);
-                  return;
-                }
-              }
-            } catch (err) {
-              console.warn("LogoImage: get public URL failed", getSupabaseErrorMessage(err, "Get URL failed"));
-            }
-          }
-          
-          setHasError(true);
-          setIsLoading(false);
-        };
-        img.src = src;
-      } else {
-        // Regular URL, use directly (public bucket URLs, CDNs, etc.)
-        setImageSrc(src);
-        setIsLoading(false);
-      }
-    } else {
-      // Resolve stored logo paths (e.g. logo-<id>.png) to a public URL in company-logos bucket.
-      (async () => {
-        try {
-          const resolvedUrl = getLogoUrl(src);
-          if (resolvedUrl) {
-            setImageSrc(resolvedUrl);
-            setIsLoading(false);
-          } else {
-            setHasError(true);
-            setIsLoading(false);
-          }
-        } catch (error) {
-          console.warn("LogoImage: get signed URL failed", getSupabaseErrorMessage(error, "Get URL failed"));
-          setHasError(true);
-          setIsLoading(false);
-        }
-      })();
+    const resolvedUrl = AssetService.getLogo(src);
+    if (resolvedUrl) {
+      setImageSrc(resolvedUrl);
+      setIsLoading(false);
+      return;
     }
-  }, [src, fallbackToPublic]);
+    setHasError(true);
+    setIsLoading(false);
+  }, [src]);
 
   if (hasError || !imageSrc) {
     return null; // Or return a placeholder icon
@@ -147,7 +60,7 @@ export default function LogoImage({
     );
   }
 
-  // html2canvas needs CORS-safe images; limit to Supabase storage so other hosts still load without CORS.
+  // html2canvas needs CORS-safe images; limit to Supabase storage hosts.
   const needsCorsForCapture =
     typeof imageSrc === "string" &&
     imageSrc.includes("supabase.co") &&

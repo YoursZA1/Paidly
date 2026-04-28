@@ -23,11 +23,11 @@ async function resolveAuthUserId(userId) {
 
 const SupabaseStorageService = {
   /**
-   * Uploads a file to the main storage bucket (default: paidly) and returns a signed URL.
+   * Uploads a file to the main storage bucket (default: paidly) and returns a public URL.
    * Uses the main bucket first so it works without listBuckets permission; path must be userId/logo.* for RLS.
    * @param {File} file
    * @param {string} [userId] - Supabase auth user id (optional; resolved from session if missing)
-   * @returns {Promise<string>} signed URL (valid for 1 year)
+   * @returns {Promise<string>} public URL
    */
   async uploadProfileLogo(file, userId) {
     const authUserId = await resolveAuthUserId(userId);
@@ -76,46 +76,27 @@ const SupabaseStorageService = {
       console.log(`Logo uploaded to bucket: ${bucketToUse}, path: ${filePath}`);
     }
 
-    const expiresIn = 60 * 60 * 24 * 365; // 1 year
-    const { data: signedData, error: signedError } = await supabase
-      .storage
-      .from(bucketToUse)
-      .createSignedUrl(filePath, expiresIn);
-
-    if (signedError) {
-      console.error("Signed URL error:", signedError);
-      const { data: publicData } = supabase.storage.from(bucketToUse).getPublicUrl(filePath);
-      if (publicData?.publicUrl) return publicData.publicUrl;
-      throw new Error(`Upload succeeded but could not generate link: ${getSupabaseErrorMessage(signedError, "Signed URL failed")}`);
+    const { data: publicData } = supabase.storage.from(bucketToUse).getPublicUrl(filePath);
+    if (!publicData?.publicUrl) {
+      throw new Error("Upload succeeded but could not generate public logo URL.");
     }
-
-    if (!signedData?.signedUrl) {
-      throw new Error("Failed to generate logo URL after upload.");
-    }
-
-    return signedData.signedUrl;
+    return publicData.publicUrl;
   },
 
-  /**
-   * Refreshes a signed URL if it's expired or about to expire
-   * @param {string} filePath - The storage path (e.g., "userId/logo.png")
-   * @param {string} currentUrl - The current URL (may be expired)
-   * @returns {Promise<string>} Fresh signed URL
-   */
+  /** Returns a public URL for the provided path. */
   async refreshSignedUrl(filePath, currentUrl) {
     const url = await this.getSignedUrl(filePath);
     return url || currentUrl || "";
   },
 
   /**
-   * Gets a signed URL for a file path (useful for refreshing expired URLs).
+   * Gets a public URL for a file path.
    * Tries profile-logos first when path looks like userId/logo.*, then fallback bucket.
    * @param {string} filePath - The storage path (e.g. "userId/logo.png")
    * @param {string} [bucketHint] - Optional bucket id (e.g. "profile-logos") to try first
-   * @returns {Promise<string>} Signed URL
+   * @returns {Promise<string>} Public URL
    */
   async getSignedUrl(filePath, bucketHint = null) {
-    const expiresIn = 60 * 60 * 24 * 365; // 1 year
     const bucketsToTry = [];
     if (bucketHint) {
       bucketsToTry.push(bucketHint);
@@ -127,8 +108,6 @@ const SupabaseStorageService = {
 
     for (const bucket of bucketsToTry) {
       try {
-        const { data: signedData, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, expiresIn);
-        if (!error && signedData?.signedUrl) return signedData.signedUrl;
         const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
         if (data?.publicUrl) return data.publicUrl;
       } catch (err) {

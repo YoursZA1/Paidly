@@ -2656,17 +2656,7 @@ class IntegrationManager {
     };
 
     const buildFileUrl = async ({ filePath, preferSigned }) => {
-      if (preferSigned) {
-        const { data: signed, error: signedError } = await supabase
-          .storage
-          .from(storageBucket)
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365);
-
-        if (!signedError && signed?.signedUrl) {
-          return signed.signedUrl;
-        }
-      }
-
+      void preferSigned;
       const { data: publicData } = supabase
         .storage
         .from(storageBucket)
@@ -2675,18 +2665,6 @@ class IntegrationManager {
       if (publicData?.publicUrl) {
         return publicData.publicUrl;
       }
-
-      if (!preferSigned) {
-        const { data: signed, error: signedError } = await supabase
-          .storage
-          .from(storageBucket)
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365);
-
-        if (!signedError && signed?.signedUrl) {
-          return signed.signedUrl;
-        }
-      }
-
       return null;
     };
 
@@ -2743,15 +2721,11 @@ class IntegrationManager {
 
     const buildFileUrlWithBucket = async (opts, bucketName) => {
       const { filePath, preferSigned } = opts;
+      void preferSigned;
       const b = bucketName || storageBucket;
-      if (preferSigned) {
-        const { data: signed, error: signedError } = await supabase.storage.from(b).createSignedUrl(filePath, 60 * 60 * 24 * 365);
-        if (!signedError && signed?.signedUrl) return signed.signedUrl;
-      }
       const { data: publicData } = supabase.storage.from(b).getPublicUrl(filePath);
       if (publicData?.publicUrl) return publicData.publicUrl;
-      const { data: signed, error: signedError } = await supabase.storage.from(b).createSignedUrl(filePath, 60 * 60 * 24 * 365);
-      return !signedError && signed?.signedUrl ? signed.signedUrl : null;
+      return null;
     };
 
     this.Core = {

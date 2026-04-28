@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
+import AssetService from "@/services/AssetService";
 
-const COMPANY_LOGOS_BUCKET = "company-logos";
+const COMPANY_LOGOS_BUCKET = "paidly";
 
 /** Recommended logo constraints to prevent broken layouts and sharp PDFs */
 export const LOGO_CONSTRAINTS = {
@@ -93,6 +94,18 @@ async function normalizeLogoFileForUpload(file) {
   return file;
 }
 
+async function verifyLogoExists(fileName) {
+  try {
+    const list = await AssetService.listLogoAssets(200);
+    const exists = list.some((item) => item?.name === fileName);
+    if (!exists) {
+      console.warn(`[LogoUpload] Uploaded logo not found in paidly bucket list: ${fileName}`);
+    }
+  } catch (error) {
+    console.warn("[LogoUpload] Could not list paidly bucket for debug verification.", error);
+  }
+}
+
 /**
  * Validate a logo file against recommended constraints.
  * @param {File} file
@@ -119,7 +132,7 @@ export function validateLogoFile(file) {
 }
 
 /**
- * Upload a logo file to the company-logos bucket and return its storage file name.
+ * Upload a logo file to the paidly bucket and return its storage file name.
  * Save only this value to profiles.logo_url (for example: logo-<user-id>.png).
  * Validates format (JPEG, PNG, or SVG) and max size (2MB) before upload.
  *
@@ -156,17 +169,18 @@ export async function uploadLogo(file, companyId) {
     });
 
   if (error) throw error;
+  await verifyLogoExists(fileName);
 
   return fileName;
 }
 
 /**
  * Upload a logo used only for a specific invoice/quote (does not replace profile logo).
- * Stored under `document-logos/{userId}/{uuid}.{ext}` in the company-logos bucket.
+ * Stored under `document-logos/{userId}/{uuid}.{ext}` in the paidly bucket.
  *
  * @param {File} file
  * @param {string} userId - auth user id
- * @returns {Promise<string>} Storage path under company-logos bucket
+ * @returns {Promise<string>} Storage path under paidly bucket
  */
 export async function uploadDocumentLogo(file, userId) {
   const normalizedFile = await normalizeLogoFileForUpload(file);
@@ -197,6 +211,7 @@ export async function uploadDocumentLogo(file, userId) {
   });
 
   if (error) throw error;
+  await verifyLogoExists(fileName);
 
   return fileName;
 }
