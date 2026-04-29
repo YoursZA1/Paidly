@@ -1,0 +1,89 @@
+name: Logo Visual QA
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "playwright*.ts"
+      - ".github/workflows/logo-visual-qa.yml"
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  logo-visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run logo visual suite
+        id: run_logo_visual
+        continue-on-error: true
+        env:
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL || 'http://localhost:5173' }}
+          PLAYWRIGHT_SKIP_WEBSERVER: ${{ vars.PLAYWRIGHT_SKIP_WEBSERVER || '0' }}
+          PLAYWRIGHT_START_API: ${{ vars.PLAYWRIGHT_START_API || '0' }}
+          PLAYWRIGHT_LOGO_INVOICE_PATH: ${{ vars.PLAYWRIGHT_LOGO_INVOICE_PATH }}
+          PLAYWRIGHT_LOGO_QUOTE_PATH: ${{ vars.PLAYWRIGHT_LOGO_QUOTE_PATH }}
+        run: npm run test:e2e:logo-visual
+
+      - name: Summarize warning vs hard fail counts
+        if: always()
+        run: |
+          WARNING_COUNT=$(rg --files "playwright/test-results/logo-visual" -g "*-visual-warning.json" 2>/dev/null | wc -l | tr -d ' ' || true)
+          HARD_FAIL_COUNT=$(node -e "const fs=require('fs');const p='playwright/test-results/logo-visual/report.json';if(!fs.existsSync(p)){console.log(0);process.exit(0);}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r?.stats||{};const failed=Number(s.unexpected||0)+Number(s.flaky||0);console.log(failed);")
+          echo "WARNING_COUNT=$WARNING_COUNT" >> $GITHUB_ENV
+          echo "HARD_FAIL_COUNT=$HARD_FAIL_COUNT" >> $GITHUB_ENV
+          {
+            echo "## Logo Visual QA Summary"
+            echo ""
+            echo "- Warning threshold breaches (soft): **$WARNING_COUNT**"
+            echo "- Hard visual/test failures: **$HARD_FAIL_COUNT**"
+            echo ""
+            echo "Threshold policy:"
+            echo "- Settings preview: warn 0.25%, fail 1.0%"
+            echo "- Invoice/Quote pages: warn 1.0%, fail 3.0%"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce hard-fail gate
+        if: always()
+        run: |
+          if [ "${HARD_FAIL_COUNT:-0}" -gt 0 ]; then
+            echo "Hard logo visual failures detected: ${HARD_FAIL_COUNT}"
+            exit 1
+          fi
+          if [ "${{ steps.run_logo_visual.outcome }}" != "success" ]; then
+            echo "Logo visual suite step failed unexpectedly."
+            exit 1
+          fi
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logo-visual-playwright-report
+          path: playwright-report
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logo-visual-test-results
+          path: playwright/test-results/logo-visual

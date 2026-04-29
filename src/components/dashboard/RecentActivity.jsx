@@ -61,6 +61,34 @@ function formatRelative(at) {
   }
 }
 
+function semanticActivityKey(item) {
+  if (item.kind === 'signup') {
+    const id = String(item.user?.id || '').trim();
+    if (id) return `signup:${id}`;
+    return `signup-email:${String(item.user?.email || '').trim().toLowerCase()}`;
+  }
+  if (item.kind === 'affiliate_pending' || item.kind === 'affiliate_approved') {
+    const appId = String(item.aff?.id || '').trim();
+    if (appId) return `${item.kind}:id:${appId}`;
+    const email = String(item.aff?.applicant_email || item.aff?.email || '').trim().toLowerCase();
+    if (email) return `${item.kind}:email:${email}`;
+    return `${item.kind}:fallback:${String(item.subtext || '').trim().toLowerCase()}`;
+  }
+  if (item.kind === 'invoice') {
+    const id = String(item.inv?.id || '').trim();
+    if (id) return `invoice:${id}`;
+  }
+  if (item.kind === 'quote') {
+    const id = String(item.quote?.id || '').trim();
+    if (id) return `quote:${id}`;
+  }
+  if (item.kind === 'payslip') {
+    const id = String(item.payslip?.id || '').trim();
+    if (id) return `payslip:${id}`;
+  }
+  return `${item.kind}:${String(item.subtext || '').trim().toLowerCase()}:${item.sortAt}`;
+}
+
 /**
  * @param {{
  *   users: object[],
@@ -244,14 +272,26 @@ export default function RecentActivity({
   const hasDocLists =
     (invoices?.length || 0) + (quotes?.length || 0) + (payslips?.length || 0) > 0;
 
-  const merged = [
+  const mergedRaw = [
     ...signupItems,
     ...pendingAffiliateItems,
     ...approvedItems,
     ...invoiceItems,
     ...quoteItems,
     ...payslipItems,
-  ]
+  ];
+
+  // Defense in depth: if upstream writes duplicate events, keep the newest event per semantic entity.
+  const dedupedBySemanticKey = new Map();
+  for (const item of mergedRaw) {
+    const key = semanticActivityKey(item);
+    const prev = dedupedBySemanticKey.get(key);
+    if (!prev || item.sortAt > prev.sortAt) {
+      dedupedBySemanticKey.set(key, item);
+    }
+  }
+
+  const merged = Array.from(dedupedBySemanticKey.values())
     .sort((a, b) => b.sortAt - a.sortAt)
     .slice(0, FEED_MAX);
 

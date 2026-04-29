@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
+import { SESSION_STATUS, setSessionHealthStatus } from "@/stores/sessionHealthStore";
 
 let handler = null;
 let inFlight = false;
@@ -30,11 +31,21 @@ export async function triggerUnauthorizedSession(_reason) {
       } catch {
         /* ignore */
       }
-      redirectToLoginIfProtectedPath();
+      setSessionHealthStatus(SESSION_STATUS.EXPIRED, _reason || "unauthorized");
     }
   } finally {
     window.setTimeout(() => {
       inFlight = false;
     }, 1500);
   }
+}
+
+export async function hardSignOutUnauthorizedSession(reason = "unauthorized") {
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    /* ignore */
+  }
+  setSessionHealthStatus(SESSION_STATUS.EXPIRED, reason);
+  redirectToLoginIfProtectedPath();
 }

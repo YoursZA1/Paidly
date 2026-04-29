@@ -7,10 +7,17 @@ import axios from "axios";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { installBackendApiResilience } from "@/api/installBackendApiResilience";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
+import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
+import { queuePendingAction } from "@/lib/pendingActionQueue";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+function isReplaySafeAxiosMethod(method) {
+  const m = String(method || "get").toLowerCase();
+  return m === "get" || m === "head" || m === "options";
 }
 
 const isDev = import.meta.env.DEV;
@@ -122,6 +129,25 @@ backendApi.interceptors.response.use(
     const status = error.response?.status;
     const cfg = error.config;
     if (status === 401 && cfg && !cfg.__paidlySkipAuthRedirect) {
+      if (!cfg.__paidlyAuthRetriedOnce) {
+        cfg.__paidlyAuthRetriedOnce = true;
+        try {
+          const refreshed = await refreshSupabaseSessionWithRecovery();
+          if (refreshed?.ok) {
+            return backendApi(cfg);
+          }
+        } catch {
+          // fall through to session handler
+        }
+      }
+      if (isReplaySafeAxiosMethod(cfg.method)) {
+        const replayCfg = {
+          ...cfg,
+          headers: { ...(cfg.headers || {}), "x-paidly-auth-replay": "1" },
+          __paidlyAuthRetriedOnce: true,
+        };
+        queuePendingAction(async () => backendApi(replayCfg));
+      }
       await triggerUnauthorizedSession("axios-401");
     }
     return Promise.reject(error);

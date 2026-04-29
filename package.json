@@ -26,6 +26,7 @@
     "smoke:critical": "npm run test:run -- tests/unit/affiliateClient.test.js",
     "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test",
     "test:e2e:admin-affiliate": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test -c playwright.admin.config.ts",
+    "test:e2e:logo-visual": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test -c playwright.logo-visual.config.ts",
     "test:e2e:ui": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test --ui",
     "test:e2e:headed": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers PLAYWRIGHT_HEADED=1 playwright test"
   },

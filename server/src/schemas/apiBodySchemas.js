@@ -58,3 +58,7 @@ export const forgotPasswordBodySchema = z.object({
   redirectTo: z.string().url().max(2048).optional(),
   turnstile_token: z.string().trim().min(1).max(4096).optional(),
 });
+
+export const refreshSessionBodySchema = z.object({
+  refresh_token: z.string().trim().min(20).max(4096),
+});

@@ -46,6 +46,26 @@ export async function processPayfastInvoiceItn(supabase, payload) {
       return;
     }
 
+    const reference = String(payload.pf_payment_id || payload.m_payment_id || "").trim();
+    if (reference) {
+      const { data: duplicateRows, error: duplicateError } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("invoice_id", invoiceId)
+        .eq("payment_method", "payfast")
+        .eq("reference_number", reference)
+        .limit(1);
+      if (duplicateError) {
+        console.error("[payfast-itn] Failed duplicate lookup", duplicateError.message);
+      } else if ((duplicateRows || []).length > 0) {
+        console.log("[payfast-itn] Duplicate PayFast event skipped", {
+          invoiceId,
+          reference,
+        });
+        return;
+      }
+    }
+
     const { data: existingPayments, error: paymentsError } = await supabase
       .from("payments")
       .select("amount")
@@ -73,7 +93,6 @@ export async function processPayfastInvoiceItn(supabase, payload) {
     }
 
     const nowIso = new Date().toISOString();
-    const reference = String(payload.pf_payment_id || payload.m_payment_id || "");
 
     const { error: insertError } = await supabase.from("payments").insert({
       org_id: invoice.org_id,
@@ -87,6 +106,13 @@ export async function processPayfastInvoiceItn(supabase, payload) {
     });
 
     if (insertError) {
+      if (String(insertError.code || "") === "23505") {
+        console.log("[payfast-itn] Duplicate insert blocked by unique index", {
+          invoiceId,
+          reference,
+        });
+        return;
+      }
       console.error("[payfast-itn] Failed to insert payment", insertError.message);
       throw new Error(insertError.message);
     }

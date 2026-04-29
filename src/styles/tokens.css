@@ -1,0 +1,41 @@
+:root {
+  /* Gmail-inspired communication surface tokens */
+  --comm-bg: 210 20% 98%;
+  --comm-surface: 0 0% 100%;
+  --comm-surface-muted: 210 20% 96%;
+  --comm-border: 220 13% 90%;
+  --comm-border-strong: 220 10% 80%;
+  --comm-foreground: 222 47% 11%;
+  --comm-muted-foreground: 215 16% 47%;
+  --comm-selected-bg: 214 100% 97%;
+  --comm-hover-bg: 210 20% 95%;
+  --comm-focus-ring: 217 91% 60%;
+  --comm-danger: 0 84% 60%;
+
+  --comm-radius-sm: 0.5rem;
+  --comm-radius-md: 0.75rem;
+  --comm-radius-lg: 1rem;
+
+  --comm-font-size-xs: 0.75rem;
+  --comm-font-size-sm: 0.8125rem;
+  --comm-font-size-md: 0.875rem;
+
+  --comm-row-height-compact: 2.75rem;
+  --comm-row-height-comfortable: 3.25rem;
+  --comm-top-actions-height: 2.75rem;
+  --comm-search-height: 2.5rem;
+}
+
+.dark {
+  --comm-bg: 222 20% 10%;
+  --comm-surface: 222 18% 12%;
+  --comm-surface-muted: 222 18% 16%;
+  --comm-border: 222 18% 22%;
+  --comm-border-strong: 222 18% 30%;
+  --comm-foreground: 210 20% 98%;
+  --comm-muted-foreground: 215 15% 65%;
+  --comm-selected-bg: 215 45% 22%;
+  --comm-hover-bg: 222 18% 17%;
+  --comm-focus-ring: 214 95% 68%;
+  --comm-danger: 0 72% 62%;
+}

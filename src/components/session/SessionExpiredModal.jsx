@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   SESSION_STATUS,
   useSessionHealthStore,
@@ -7,12 +7,17 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { isPathAllowedWithoutSession } from "@/utils/sessionGuard";
 import Button from "@/components/ui/button";
+import { consumePendingAction, hasPendingAction } from "@/lib/pendingActionQueue";
 
 export default function SessionExpiredModal() {
   const status = useSessionHealthStore((s) => s.status);
   const reason = useSessionHealthStore((s) => s.reason);
-  const { refreshSession } = useAuth();
+  const { refreshSession, login } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [formError, setFormError] = useState("");
+  const [resumeNotice, setResumeNotice] = useState("");
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -33,6 +38,44 @@ export default function SessionExpiredModal() {
     }
   };
 
+  const handleInlineLogin = async () => {
+    if (!email.trim() || !password) {
+      setFormError("Enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    setFormError("");
+    try {
+      await login({ email: email.trim().toLowerCase(), password });
+      setSessionHealthStatus(SESSION_STATUS.CONNECTED, "reauthenticated");
+      if (hasPendingAction()) {
+        try {
+          await consumePendingAction();
+          setResumeNotice("Previous action resumed.");
+        } catch {
+          setResumeNotice("Signed in. Please retry your last action.");
+        }
+      } else {
+        setResumeNotice("");
+      }
+      setPassword("");
+    } catch (err) {
+      setFormError(err?.message || "Unable to sign in. Please try again.");
+      setSessionHealthStatus(SESSION_STATUS.EXPIRED, "reauth_failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (status !== SESSION_STATUS.EXPIRED) {
+      setBusy(false);
+      setFormError("");
+      setPassword("");
+      setResumeNotice("");
+    }
+  }, [status]);
+
   if (!shouldShow) return null;
 
   return (
@@ -40,15 +83,38 @@ export default function SessionExpiredModal() {
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
         <h2 className="text-lg font-semibold">Session expired</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Your session needs to be reconnected. You can try to reconnect now, otherwise continue to sign in.
+          Your session needs to be reconnected. Sign in below to continue exactly where you left off.
         </p>
         {reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {reason}</p> : null}
+        <div className="mt-4 space-y-2">
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          />
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          />
+          {formError ? <p className="text-xs text-red-500">{formError}</p> : null}
+          {resumeNotice ? <p className="text-xs text-primary">{resumeNotice}</p> : null}
+        </div>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => window.location.assign("/login")}>
+          <Button variant="outline" onClick={() => window.location.assign("/login")} disabled={busy}>
             Go to login
           </Button>
-          <Button onClick={() => void handleReconnect()} disabled={busy}>
+          <Button variant="outline" onClick={() => void handleReconnect()} disabled={busy}>
             {busy ? "Reconnecting…" : "Reconnect"}
+          </Button>
+          <Button onClick={() => void handleInlineLogin()} disabled={busy}>
+            {busy ? "Signing in…" : "Sign in here"}
           </Button>
         </div>
       </div>

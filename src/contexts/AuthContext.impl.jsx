@@ -32,6 +32,7 @@ import {
   recordAuthRefreshSuccess,
 } from "@/lib/authRefreshTelemetry";
 import { SESSION_STATUS, setSessionHealthStatus } from "@/stores/sessionHealthStore";
+import { createAuthTabSyncChannel } from "@/lib/authTabSync";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -161,6 +162,7 @@ export function AuthProvider({ children }) {
   const refreshInFlightRef = useRef(false);
   const lastRefreshAttemptMsRef = useRef(0);
   const reconnectEscalationTimerRef = useRef(null);
+  const authTabSyncRef = useRef(null);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -381,6 +383,7 @@ export function AuthProvider({ children }) {
         }
         patchAuthSession({ session: null, user: null, authLoadingTimedOut: false });
         setSessionHealthStatus(SESSION_STATUS.EXPIRED, "fatal_refresh_token");
+        authTabSyncRef.current?.publish("AUTH_REAUTH_REQUIRED", { reason: "fatal_refresh_token" });
         setError("");
         redirectToLoginIfProtectedPath();
         return false;
@@ -397,6 +400,7 @@ export function AuthProvider({ children }) {
         if (!silent) {
           setSessionHealthStatus(SESSION_STATUS.CONNECTED, "refresh_ok");
         }
+        authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { reason: "refresh_ok" });
         return true;
       }
       const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
@@ -621,6 +625,37 @@ export function AuthProvider({ children }) {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const sync = createAuthTabSyncChannel();
+    authTabSyncRef.current = sync;
+    const unsubscribe = sync.subscribe((message) => {
+      if (!message?.type) return;
+      if (message.type === "AUTH_SIGNED_OUT") {
+        patchAuthSession({
+          session: null,
+          user: null,
+          loading: false,
+          authLoadingTimedOut: false,
+        });
+        setSessionHealthStatus(SESSION_STATUS.EXPIRED, "signed_out_in_another_tab");
+        redirectToLoginIfProtectedPath();
+        return;
+      }
+      if (message.type === "AUTH_SESSION_UPDATED") {
+        scheduleSessionResync({ silent: true });
+      }
+      if (message.type === "AUTH_REAUTH_REQUIRED") {
+        setSessionHealthStatus(SESSION_STATUS.EXPIRED, message?.payload?.reason || "session_expired");
+      }
+    });
+    return () => {
+      unsubscribe();
+      sync.close();
+      authTabSyncRef.current = null;
+    };
+  }, [scheduleSessionResync]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return undefined;
 
     const handleVisibility = async () => {
@@ -723,6 +758,7 @@ export function AuthProvider({ children }) {
             authLoadingTimedOut: false,
           });
           setError("");
+          authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
           return;
         }
         setSessionHealthStatus(SESSION_STATUS.EXPIRED, "signed_out");
@@ -733,6 +769,7 @@ export function AuthProvider({ children }) {
           authLoadingTimedOut: false,
         });
         setError("");
+        authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
         // Hard navigation clears stale React/chunk state (layer 1 stability).
         redirectToLoginIfProtectedPath();
         return;
@@ -786,6 +823,7 @@ export function AuthProvider({ children }) {
         setSessionHealthStatus(SESSION_STATUS.CONNECTED, "signed_in");
         patchAuthSession({ session: norm });
         await refreshUserRef.current();
+        authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });
       } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
         if (import.meta.env.DEV && event === "TOKEN_REFRESHED") {
           console.info("[Auth] Session refreshed (TOKEN_REFRESHED)");
@@ -793,10 +831,12 @@ export function AuthProvider({ children }) {
         setSessionHealthStatus(SESSION_STATUS.CONNECTED, "token_refreshed");
         patchAuthSession({ session: norm });
         scheduleRefreshUserRef.current();
+        authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event });
       } else if (event === "INITIAL_SESSION" && norm?.user) {
         setSessionHealthStatus(SESSION_STATUS.CONNECTED, "initial_session");
         patchAuthSession({ session: norm });
         await refreshUserRef.current();
+        authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "INITIAL_SESSION" });
       }
     });
     return () => subscription.unsubscribe();
@@ -935,12 +975,53 @@ export function AuthProvider({ children }) {
     [purgeSupabaseAuthStorage]
   );
 
+  const handleUnauthorizedSession = useCallback(
+    async (reason) => {
+      clearNodeAuthUnreachable();
+      try {
+        await User.logout();
+      } catch {
+        // ignore
+      }
+      patchAuthSession({
+        session: null,
+        user: null,
+        loading: false,
+        authLoadingTimedOut: false,
+      });
+      setShowVerifyDialog(false);
+      setVerifyGateEmail("");
+      setResendLoading(false);
+      setResendSuccess("");
+
+      // Unauthorized 401 handling: clear local Supabase session keys so stale tokens do not keep failing in this tab.
+      const SIGNOUT_MS = 5000;
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("signOut timeout")), SIGNOUT_MS);
+      });
+      const signOutPromise = supabase.auth.signOut({ scope: "local" }).then(({ error }) => {
+        if (error) throw error;
+      });
+      try {
+        await Promise.race([signOutPromise, timeoutPromise]);
+      } catch {
+        // ignore and continue with storage purge
+      } finally {
+        clearTimeout(timeoutId);
+        purgeSupabaseAuthStorage();
+      }
+
+      setSessionHealthStatus(SESSION_STATUS.EXPIRED, reason || "unauthorized");
+      authTabSyncRef.current?.publish("AUTH_REAUTH_REQUIRED", { reason: reason || "unauthorized" });
+    },
+    [purgeSupabaseAuthStorage]
+  );
+
   useEffect(() => {
-    setUnauthorizedSessionHandler(async () => {
-      await logout();
-    });
+    setUnauthorizedSessionHandler(handleUnauthorizedSession);
     return () => setUnauthorizedSessionHandler(null);
-  }, [logout]);
+  }, [handleUnauthorizedSession]);
 
   /** Supabase-only password reset (no client-side tokens; expiry handled by Supabase). */
   const sendPasswordReset = useCallback(async (email) => {

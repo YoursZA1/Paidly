@@ -19,8 +19,16 @@ import {
   Clock3,
   Radio,
   Filter,
+  Star,
+  Sun,
+  Moon,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
 
 import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
@@ -63,6 +71,7 @@ const CHANNEL_OPTIONS = [
   { id: 'email', label: 'Email' },
   { id: 'both', label: 'Both' },
 ];
+const THREADS_PER_PAGE = 18;
 
 function channelToFlags(channel) {
   const normalized = String(channel || 'both').toLowerCase();
@@ -330,8 +339,10 @@ function AdminStarterTemplatesDialog({ open, onOpenChange, presets, onSelect }) 
 }
 
 export default function AdminPlatformMessages() {
+  const SWIPE_HINT_STORAGE_KEY = 'paidly_admin_messages_swipe_hint_dismissed';
   const queryClient = useQueryClient();
   const { user: currentUser } = useCurrentUser();
+  const { resolvedTheme, setTheme } = useTheme();
   const messagePresets = useMemo(
     () =>
       buildAdminPlatformMessagePresets(
@@ -363,7 +374,12 @@ export default function AdminPlatformMessages() {
   const [broadcastSubject, setBroadcastSubject] = useState('Paidly platform update');
   const [broadcastBody, setBroadcastBody] = useState('');
   const [broadcastResult, setBroadcastResult] = useState(null);
+  const [threadsPage, setThreadsPage] = useState(1);
+  const [segmentsCollapsed, setSegmentsCollapsed] = useState(true);
+  const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false);
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
   const threadEndRef = useRef(null);
+  const drawerTouchStartXRef = useRef(null);
 
   const {
     data: platformUsers = [],
@@ -520,6 +536,43 @@ export default function AdminPlatformMessages() {
       );
     });
   }, [broadcastJobs, messageKindFilter, searchTerm]);
+
+  const pagedThreadItems = useMemo(() => {
+    const conversationItems = filteredConversations.map((conversation) => ({
+      kind: 'direct',
+      id: String(conversation.recipient_id || ''),
+      sortAt: conversation?.last_at ? new Date(conversation.last_at).getTime() : 0,
+      payload: conversation,
+    }));
+    const broadcastItems = filteredBroadcastJobs.map((job) => ({
+      kind: 'broadcast',
+      id: String(job?.id || ''),
+      sortAt: job?.created_at ? new Date(job.created_at).getTime() : 0,
+      payload: job,
+    }));
+    const all = [...conversationItems, ...broadcastItems].sort((a, b) => b.sortAt - a.sortAt);
+    const totalPages = Math.max(1, Math.ceil(all.length / THREADS_PER_PAGE));
+    const safePage = Math.min(Math.max(1, threadsPage), totalPages);
+    const start = (safePage - 1) * THREADS_PER_PAGE;
+    const items = all.slice(start, start + THREADS_PER_PAGE);
+    return { items, total: all.length, totalPages, safePage };
+  }, [filteredConversations, filteredBroadcastJobs, threadsPage]);
+
+  useEffect(() => {
+    setThreadsPage(1);
+  }, [searchTerm, messageKindFilter, segmentFilter]);
+
+  useEffect(() => {
+    if (threadsPage !== pagedThreadItems.safePage) {
+      setThreadsPage(pagedThreadItems.safePage);
+    }
+  }, [threadsPage, pagedThreadItems.safePage]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const dismissed = window.sessionStorage.getItem(SWIPE_HINT_STORAGE_KEY) === '1';
+    setShowSwipeHint(!dismissed);
+  }, []);
 
   const sendMutation = useMutation({
     mutationFn: postAdminSendMessage,
@@ -725,9 +778,181 @@ export default function AdminPlatformMessages() {
     : !replyBodyTrimmed
       ? 'Enter a reply'
       : '';
+  const isDark = resolvedTheme === 'dark';
+  const hasDetailsSelection = (selectedHubType === 'broadcast' && Boolean(selectedBroadcastJob)) || Boolean(selectedRecipientId);
+
+  const handleSelectDirectThread = (recipientId) => {
+    setSelectedRecipientId(recipientId);
+    setSelectedHubType('direct');
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+      setDetailsDrawerOpen(true);
+    }
+  };
+
+  const handleSelectBroadcastThread = (jobId) => {
+    setSelectedBroadcastJobId(String(jobId));
+    setSelectedHubType('broadcast');
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+      setDetailsDrawerOpen(true);
+    }
+  };
+
+  const threadNavItems = useMemo(
+    () =>
+      pagedThreadItems.items.map((item) => ({
+        kind: item.kind,
+        id: item.kind === 'direct' ? String(item.payload?.recipient_id || '') : String(item.payload?.id || ''),
+      })),
+    [pagedThreadItems.items]
+  );
+
+  const activeThreadNavIndex = useMemo(() => {
+    if (selectedHubType === 'direct' && selectedRecipientId) {
+      return threadNavItems.findIndex((i) => i.kind === 'direct' && i.id === String(selectedRecipientId));
+    }
+    if (selectedHubType === 'broadcast' && selectedBroadcastJobId) {
+      return threadNavItems.findIndex((i) => i.kind === 'broadcast' && i.id === String(selectedBroadcastJobId));
+    }
+    return -1;
+  }, [selectedHubType, selectedRecipientId, selectedBroadcastJobId, threadNavItems]);
+
+  const goToAdjacentThread = (delta) => {
+    if (activeThreadNavIndex < 0) return;
+    const nextIndex = activeThreadNavIndex + delta;
+    if (nextIndex < 0 || nextIndex >= threadNavItems.length) return;
+    const nextItem = threadNavItems[nextIndex];
+    if (!nextItem) return;
+    if (nextItem.kind === 'direct') handleSelectDirectThread(nextItem.id);
+    else handleSelectBroadcastThread(nextItem.id);
+    if (showSwipeHint && typeof window !== 'undefined') {
+      setShowSwipeHint(false);
+      window.sessionStorage.setItem(SWIPE_HINT_STORAGE_KEY, '1');
+    }
+  };
+
+  const detailsPaneContent = (
+    <>
+      {selectedHubType === 'broadcast' && selectedBroadcastJob ? (
+        <div className="p-4.5 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Broadcast Campaign</h3>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+              {String(selectedBroadcastJob.status || 'queued')}
+            </Badge>
+          </div>
+          <p className="text-[13px] leading-5 text-muted-foreground">{String(selectedBroadcastJob.subject || 'Campaign')}</p>
+          <div className="grid grid-cols-2 gap-2.5 text-sm">
+            <div className="rounded-md border border-border/55 p-2.5">Audience: {Number(selectedBroadcastJob.total_recipients || 0)}</div>
+            <div className="rounded-md border border-border/55 p-2.5">Channels: Email + In-App</div>
+            <div className="rounded-md border border-border/55 p-2.5">Sent: {Number(selectedBroadcastJob.email_sent || 0)}</div>
+            <div className="rounded-md border border-border/55 p-2.5">Delivered: {Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)}</div>
+            <div className="rounded-md border border-border/55 p-2.5">Failed: {Number(selectedBroadcastJob.email_failed || 0)}</div>
+            <div className="rounded-md border border-border/55 p-2.5">Open rate: Not tracked</div>
+          </div>
+          <p className="text-[13px] leading-5 text-muted-foreground whitespace-pre-wrap">{String(selectedBroadcastJob.content || '')}</p>
+        </div>
+      ) : selectedRecipientId ? (
+        <>
+          <div className="border-b border-border/50 px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-semibold truncate">{platformUserLabel(selectedUser)}</h2>
+              <p className="text-[13px] leading-5 text-muted-foreground truncate">{platformUserEmail(selectedUser) || selectedRecipientId}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetchThread()} disabled={threadLoading || threadFetching}>
+              Refresh
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto bg-muted/20">
+            <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
+              {sortedThread.map((m) => {
+                const mine = m.sender_id === currentUser?.id || m.sender_id === currentUser?.supabase_id;
+                const channel = normalizeMessageChannel(m);
+                return (
+                  <article key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+                    <div
+                      className={cn(
+                        'max-w-[82%] rounded-2xl border px-3.5 py-2.5',
+                        mine
+                          ? 'bg-primary/10 border-primary/30 text-foreground'
+                          : 'bg-card border-border/60'
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[13px] font-medium leading-5">{mine ? 'Paidly team' : platformUserLabel(selectedUser)}</p>
+                        <span className="text-[11px] leading-4 text-muted-foreground">
+                          {m.created_at ? format(new Date(m.created_at), isToday(new Date(m.created_at)) ? 'HH:mm' : 'MMM d, HH:mm') : '—'}
+                        </span>
+                      </div>
+                      <h3 className="text-[13px] font-medium leading-5 mt-1">{m.subject?.trim() || 'Message'}</h3>
+                      <p className="text-[13px] leading-5 text-foreground/90 whitespace-pre-wrap mt-1">{m.content}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <Badge variant="outline" className="gap-1 h-5 px-1.5 text-[10px]">
+                          {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3 w-3" /> : null}
+                          {(channel === 'both' || channel === 'email') ? <Mail className="h-3 w-3" /> : null}
+                          {channel === 'both' ? 'Both' : channel === 'email' ? 'Email' : 'In-App'}
+                        </Badge>
+                        <Badge variant={statusTone(m?.status)} className="capitalize h-5 px-1.5 text-[10px]">
+                          {String(m?.status || 'pending')}
+                        </Badge>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+          <div className="border-t border-border/50 bg-card p-3.5 space-y-2.5">
+            <div className="space-y-1">
+              <Label htmlFor="reply-subject">Subject</Label>
+              <Input id="reply-subject" value={replySubject} onChange={(e) => setReplySubject(e.target.value)} maxLength={300} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="reply-body">Message</Label>
+              <Textarea id="reply-body" value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={4} maxLength={50000} />
+            </div>
+            <div className="space-y-1">
+              <Label>Channel</Label>
+              <div className="inline-flex rounded-lg border border-border p-1">
+                {CHANNEL_OPTIONS.map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={replyChannel === option.id ? 'default' : 'ghost'}
+                    className="h-8 px-3"
+                    onClick={() => setReplyChannel(option.id)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" onClick={handleSendReply} disabled={!canSendReply || usersLoading} className="gap-2">
+                <Send className="h-4 w-4" />
+                {sendMutation.isPending ? 'Sending…' : 'Send'}
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center flex-1 min-h-[320px] text-muted-foreground p-8">
+          <MessageCircle className="w-12 h-12 mb-3 opacity-40" />
+          <p className="text-base font-medium text-foreground">Select a direct thread or broadcast campaign</p>
+          <p className="text-sm text-center mt-1">Use filters and segments to focus communication operations quickly.</p>
+        </div>
+      )}
+    </>
+  );
 
   return (
-    <div className="w-full min-w-0 p-4 sm:p-6 space-y-6">
+    <div
+      className={cn(
+        'w-full min-w-0 p-4 sm:p-6 space-y-6 rounded-2xl border',
+        'bg-[#f6f8fc] border-[#dfe3eb] text-[#202124]',
+        isDark && 'bg-background border-border text-foreground'
+      )}
+    >
       <PageHeader
         title="User Communication"
         description="Professional communication hub for direct support, broadcasts, and campaign-style updates with channel-aware delivery tracking."
@@ -743,8 +968,15 @@ export default function AdminPlatformMessages() {
         <PlatformUsersLoadErrorHint message={usersErr?.message} />
       ) : null}
 
-      <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-3.5 space-y-2.5">
-        <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={cn(
+          'rounded-2xl border p-3 sm:p-3.5 space-y-2.5',
+          'border-[#dfe3eb] bg-white shadow-sm',
+          isDark && 'border-border bg-card'
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" onClick={() => setComposerOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" />
             New Message
@@ -765,6 +997,18 @@ export default function AdminPlatformMessages() {
           >
             <Mail className="h-4 w-4" />
             Email Campaign
+          </Button>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="gap-1.5"
+            aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? 'Light' : 'Dark'}
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -793,8 +1037,53 @@ export default function AdminPlatformMessages() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[228px_minmax(320px,410px)_minmax(0,1fr)] gap-3.5 min-w-0 min-h-[min(85dvh,820px)]">
-        <Card className="border border-border/70 bg-card">
+      <div className="grid grid-cols-1 xl:grid-cols-[240px_minmax(340px,460px)_minmax(0,1fr)] gap-3.5 min-w-0 min-h-[min(85dvh,820px)]">
+        <div className="xl:hidden space-y-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full h-11 justify-between"
+            onClick={() => setSegmentsCollapsed((v) => !v)}
+            aria-expanded={!segmentsCollapsed}
+            aria-controls="mobile-segment-rail"
+          >
+            <span>User Segments</span>
+            {segmentsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+          {!segmentsCollapsed ? (
+            <div id="mobile-segment-rail" className="rounded-xl border border-border/60 bg-card p-2 overflow-x-auto">
+              <div className="flex gap-2 min-w-max">
+                {userSegments.map((segment) => (
+                  <button
+                    key={`mobile-${segment.id}`}
+                    type="button"
+                    onClick={() => setSegmentFilter(segment.id)}
+                    className={cn(
+                      'rounded-full border px-4 py-2 text-sm whitespace-nowrap transition-colors',
+                      segmentFilter === segment.id
+                        ? 'border-[#c2dbff] bg-[#e8f0fe] text-[#174ea6]'
+                        : 'border-border/45 text-muted-foreground hover:bg-muted/35',
+                      isDark &&
+                        (segmentFilter === segment.id
+                          ? 'border-primary/40 bg-primary/15 text-foreground'
+                          : 'text-muted-foreground')
+                    )}
+                  >
+                    {segment.label} ({segment.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {hasDetailsSelection ? (
+            <Button type="button" variant="outline" size="sm" className="w-full h-11" onClick={() => setDetailsDrawerOpen(true)}>
+              Open Details
+            </Button>
+          ) : null}
+        </div>
+
+        <Card className="hidden xl:block border border-border/70 bg-card">
           <CardHeader className="pb-2.5">
             <CardTitle className="text-sm">User Segments</CardTitle>
           </CardHeader>
@@ -818,7 +1107,7 @@ export default function AdminPlatformMessages() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 bg-card min-h-0 flex flex-col">
+        <Card className={cn('border border-border/70 bg-card min-h-0 flex flex-col', !isDark && 'border-[#dfe3eb] bg-white shadow-sm')}>
           <CardHeader className="border-b border-border/50 space-y-2.5 shrink-0 pb-3">
             <CardTitle className="text-sm">Message Threads</CardTitle>
             <div className="relative">
@@ -827,71 +1116,97 @@ export default function AdminPlatformMessages() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search users, subjects, campaigns"
-                className="pl-9"
+                className={cn('pl-9', !isDark && 'bg-[#f1f3f4] border-transparent focus-visible:border-[#d2e3fc]')}
                 aria-label="Search communication hub"
               />
             </div>
           </CardHeader>
           <CardContent className="p-2 pt-2.5 flex-1 min-h-0">
-            <ScrollArea className="h-full pr-2">
-              <div className="space-y-1.5">
-                {filteredConversations.map((c) => {
+            <div className="h-[620px] min-h-0 rounded-xl border border-border/40 bg-background/40">
+              <ScrollArea className="h-[560px] pr-1">
+                <div className="space-y-1.5 p-1">
+                {pagedThreadItems.items.map((item) => {
+                  if (item.kind === 'direct') {
+                    const c = item.payload;
                   const u = userMap.get(c.recipient_id);
                   const status = String(c?.status || 'pending').toLowerCase();
                   const channel = channelLabelFromConversation(c);
+                    const unread = !['delivered', 'opened', 'sent'].includes(status);
+                    const failed = status === 'failed' || String(c?.deliveries?.email?.status || '').toLowerCase() === 'failed';
                   return (
                     <button
-                      key={c.recipient_id}
+                        key={`direct-${c.recipient_id}`}
                       type="button"
                       onClick={() => {
-                        setSelectedRecipientId(c.recipient_id);
-                        setSelectedHubType('direct');
+                        handleSelectDirectThread(c.recipient_id);
                       }}
                       className={cn(
-                        'w-full rounded-md border px-2.5 py-2.5 text-left transition-colors',
+                          'w-full rounded-xl border px-3 py-3 min-h-16 text-left transition-colors',
                         selectedHubType === 'direct' && selectedRecipientId === c.recipient_id
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border/45 hover:bg-muted/35'
+                            ? 'border-[#c2dbff] bg-[#e8f0fe]'
+                            : 'border-transparent hover:bg-muted/55',
+                          isDark &&
+                            (selectedHubType === 'direct' && selectedRecipientId === c.recipient_id
+                              ? 'border-primary/40 bg-primary/15'
+                              : 'hover:bg-muted/35')
                       )}
+                        aria-current={selectedHubType === 'direct' && selectedRecipientId === c.recipient_id}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{platformUserLabel(u)}</p>
-                          <p className="text-[13px] text-muted-foreground truncate leading-5">{String(c.preview || '')}</p>
+                        <div className="flex items-start gap-2">
+                          <div className="pt-0.5">
+                            <Star
+                              className={cn(
+                                'h-4 w-4',
+                                failed ? 'text-amber-500 fill-amber-500/30' : 'text-muted-foreground'
+                              )}
+                              aria-hidden
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className={cn('truncate text-[13px]', unread ? 'font-semibold' : 'font-medium')}>
+                                {platformUserLabel(u)}
+                              </p>
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            {c.last_at ? format(new Date(c.last_at), isToday(new Date(c.last_at)) ? 'HH:mm' : 'MMM d') : '—'}
+                              </span>
+                            </div>
+                            <p className={cn('truncate text-[12px] leading-5', unread ? 'text-foreground' : 'text-muted-foreground')}>
+                              {String(c.preview || '')}
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                              {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
+                              {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
+                              {unread ? <span className="h-2 w-2 rounded-full bg-[#1a73e8]" aria-label="Unread" /> : null}
+                            </div>
+                          </div>
                         </div>
-                        <Badge variant={statusTone(status)} className="capitalize h-5 px-1.5 text-[10px]">
-                          {status}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                        {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3.5 w-3.5" /> : null}
-                        {(channel === 'both' || channel === 'email') ? <Mail className="h-3.5 w-3.5" /> : null}
-                        <span className="ml-auto">
-                          {c.last_at ? format(new Date(c.last_at), isToday(new Date(c.last_at)) ? 'HH:mm' : 'MMM d') : '—'}
-                        </span>
-                      </div>
                     </button>
                   );
-                })}
-                {filteredBroadcastJobs.map((job) => {
+                  }
+                  const job = item.payload;
                   const failed = Number(job?.email_failed || 0);
                   const delivered = Number(job?.email_sent || 0) + Number(job?.email_skipped || 0);
                   const total = Number(job?.total_recipients || 0);
                   const openRate = total > 0 ? Math.round((delivered / total) * 100) : 0;
                   return (
                     <button
-                      key={job.id}
+                      key={`broadcast-${job.id}`}
                       type="button"
                       onClick={() => {
-                        setSelectedBroadcastJobId(String(job.id));
-                        setSelectedHubType('broadcast');
+                        handleSelectBroadcastThread(job.id);
                       }}
                       className={cn(
-                        'w-full rounded-md border px-2.5 py-2.5 text-left transition-colors',
+                        'w-full rounded-xl border px-3 py-3 min-h-16 text-left transition-colors',
                         selectedHubType === 'broadcast' && String(selectedBroadcastJobId || '') === String(job.id)
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border/45 hover:bg-muted/35'
+                          ? 'border-[#c2dbff] bg-[#e8f0fe]'
+                          : 'border-transparent hover:bg-muted/55',
+                        isDark &&
+                          (selectedHubType === 'broadcast' && String(selectedBroadcastJobId || '') === String(job.id)
+                            ? 'border-primary/40 bg-primary/15'
+                            : 'hover:bg-muted/35')
                       )}
+                      aria-current={selectedHubType === 'broadcast' && String(selectedBroadcastJobId || '') === String(job.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-medium truncate">{String(job?.subject || 'Broadcast campaign')}</p>
@@ -917,123 +1232,116 @@ export default function AdminPlatformMessages() {
                   </>
                 ) : null}
               </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 bg-card min-h-0 flex flex-col overflow-hidden">
-          {selectedHubType === 'broadcast' && selectedBroadcastJob ? (
-            <div className="p-4.5 space-y-3.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Broadcast Campaign</h3>
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                  {String(selectedBroadcastJob.status || 'queued')}
-                </Badge>
-              </div>
-                  <p className="text-[13px] leading-5 text-muted-foreground">{String(selectedBroadcastJob.subject || 'Campaign')}</p>
-              <div className="grid grid-cols-2 gap-2.5 text-sm">
-                <div className="rounded-md border border-border/55 p-2.5">Audience: {Number(selectedBroadcastJob.total_recipients || 0)}</div>
-                <div className="rounded-md border border-border/55 p-2.5">Channels: Email + In-App</div>
-                <div className="rounded-md border border-border/55 p-2.5">Sent: {Number(selectedBroadcastJob.email_sent || 0)}</div>
-                <div className="rounded-md border border-border/55 p-2.5">Delivered: {Number(selectedBroadcastJob.email_sent || 0) + Number(selectedBroadcastJob.email_skipped || 0)}</div>
-                <div className="rounded-md border border-border/55 p-2.5">Failed: {Number(selectedBroadcastJob.email_failed || 0)}</div>
-                <div className="rounded-md border border-border/55 p-2.5">Open rate: Not tracked</div>
-              </div>
-              <p className="text-[13px] leading-5 text-muted-foreground whitespace-pre-wrap">{String(selectedBroadcastJob.content || '')}</p>
-            </div>
-          ) : selectedRecipientId ? (
-            <>
-              <div className="border-b border-border/50 px-4 py-2.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="font-semibold truncate">{platformUserLabel(selectedUser)}</h2>
-                  <p className="text-[13px] leading-5 text-muted-foreground truncate">{platformUserEmail(selectedUser) || selectedRecipientId}</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => refetchThread()} disabled={threadLoading || threadFetching}>
-                  Refresh
-                </Button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto bg-muted/20">
-                <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 space-y-3">
-                  {sortedThread.map((m) => {
-                    const mine = m.sender_id === currentUser?.id || m.sender_id === currentUser?.supabase_id;
-                    const channel = normalizeMessageChannel(m);
-                    return (
-                      <article key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
-                        <div
-                          className={cn(
-                            'max-w-[82%] rounded-2xl border px-3.5 py-2.5',
-                            mine
-                              ? 'bg-primary/10 border-primary/30 text-foreground'
-                              : 'bg-card border-border/60'
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[13px] font-medium leading-5">{mine ? 'Paidly team' : platformUserLabel(selectedUser)}</p>
-                            <span className="text-[11px] leading-4 text-muted-foreground">
-                              {m.created_at ? format(new Date(m.created_at), isToday(new Date(m.created_at)) ? 'HH:mm' : 'MMM d, HH:mm') : '—'}
-                            </span>
-                          </div>
-                          <h3 className="text-[13px] font-medium leading-5 mt-1">{m.subject?.trim() || 'Message'}</h3>
-                          <p className="text-[13px] leading-5 text-foreground/90 whitespace-pre-wrap mt-1">{m.content}</p>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Badge variant="outline" className="gap-1 h-5 px-1.5 text-[10px]">
-                              {(channel === 'both' || channel === 'in_app') ? <Radio className="h-3 w-3" /> : null}
-                              {(channel === 'both' || channel === 'email') ? <Mail className="h-3 w-3" /> : null}
-                              {channel === 'both' ? 'Both' : channel === 'email' ? 'Email' : 'In-App'}
-                            </Badge>
-                            <Badge variant={statusTone(m?.status)} className="capitalize h-5 px-1.5 text-[10px]">
-                              {String(m?.status || 'pending')}
-                            </Badge>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="border-t border-border/50 bg-card p-3.5 space-y-2.5">
-                <div className="space-y-1">
-                  <Label htmlFor="reply-subject">Subject</Label>
-                  <Input id="reply-subject" value={replySubject} onChange={(e) => setReplySubject(e.target.value)} maxLength={300} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="reply-body">Message</Label>
-                  <Textarea id="reply-body" value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={4} maxLength={50000} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Channel</Label>
-                  <div className="inline-flex rounded-lg border border-border p-1">
-                    {CHANNEL_OPTIONS.map((option) => (
-                      <Button
-                        key={option.id}
-                        type="button"
-                        size="sm"
-                        variant={replyChannel === option.id ? 'default' : 'ghost'}
-                        className="h-8 px-3"
-                        onClick={() => setReplyChannel(option.id)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="button" onClick={handleSendReply} disabled={!canSendReply || usersLoading} className="gap-2">
-                    <Send className="h-4 w-4" />
-                    {sendMutation.isPending ? 'Sending…' : 'Send'}
+              </ScrollArea>
+              <div className="h-[60px] border-t border-border/40 px-3 flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Showing {pagedThreadItems.items.length} of {pagedThreadItems.total}
+                </p>
+                <div className="inline-flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 sm:h-7 sm:w-7"
+                    onClick={() => setThreadsPage((p) => Math.max(1, p - 1))}
+                    disabled={pagedThreadItems.safePage <= 1}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[64px] text-center">
+                    {pagedThreadItems.safePage} / {pagedThreadItems.totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 sm:h-7 sm:w-7"
+                    onClick={() => setThreadsPage((p) => Math.min(pagedThreadItems.totalPages, p + 1))}
+                    disabled={pagedThreadItems.safePage >= pagedThreadItems.totalPages}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center flex-1 min-h-[320px] text-muted-foreground p-8">
-              <MessageCircle className="w-12 h-12 mb-3 opacity-40" />
-              <p className="text-base font-medium text-foreground">Select a direct thread or broadcast campaign</p>
-              <p className="text-sm text-center mt-1">Use filters and segments to focus communication operations quickly.</p>
             </div>
-          )}
+          </CardContent>
+        </Card>
+
+        <Card className="hidden xl:flex border border-border/70 bg-card min-h-0 flex-col overflow-hidden">
+          {detailsPaneContent}
         </Card>
       </div>
+
+      <Dialog open={detailsDrawerOpen} onOpenChange={setDetailsDrawerOpen}>
+        <DialogContent className="xl:hidden max-w-[96vw] h-[92dvh] p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 py-3 border-b border-border/50">
+            <DialogTitle className="flex items-center justify-between gap-2 text-base">
+              <span>Thread Details</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => setDetailsDrawerOpen(false)}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            className="flex-1 min-h-0 overflow-y-auto pb-20"
+            onTouchStart={(e) => {
+              drawerTouchStartXRef.current = e.touches?.[0]?.clientX ?? null;
+            }}
+            onTouchEnd={(e) => {
+              const startX = drawerTouchStartXRef.current;
+              const endX = e.changedTouches?.[0]?.clientX ?? null;
+              drawerTouchStartXRef.current = null;
+              if (!Number.isFinite(startX) || !Number.isFinite(endX)) return;
+              const deltaX = endX - startX;
+              if (Math.abs(deltaX) < 40) return;
+              if (deltaX < 0) goToAdjacentThread(1);
+              if (deltaX > 0) goToAdjacentThread(-1);
+            }}
+          >
+            {detailsPaneContent}
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 border-t border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            {showSwipeHint ? (
+              <p className="px-3 pt-2 text-[11px] text-muted-foreground">
+                Swipe left/right to change thread
+              </p>
+            ) : null}
+            <div className="px-3 py-2 flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11"
+                onClick={() => setDetailsDrawerOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 flex-1"
+                onClick={() => goToAdjacentThread(-1)}
+                disabled={activeThreadNavIndex <= 0}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 flex-1"
+                onClick={() => goToAdjacentThread(1)}
+                disabled={activeThreadNavIndex < 0 || activeThreadNavIndex >= threadNavItems.length - 1}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AdminStarterTemplatesDialog
         open={templatePickerTarget !== null}

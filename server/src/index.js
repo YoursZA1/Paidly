@@ -79,6 +79,7 @@ import { generateHtmlPdfBuffer, getAnvilClient } from "./anvilPdf.js";
 import { parseBody } from "./validateBody.js";
 import {
   forgotPasswordBodySchema,
+  refreshSessionBodySchema,
   signInBodySchema,
   signUpBodySchema,
   waitlistBodySchema,
@@ -127,6 +128,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
 const app = express();
+const authRefreshInFlight = new Map();
 // So req.ip / X-Forwarded-For are correct behind a reverse proxy (e.g. nginx, Vercel, Railway).
 if (process.env.TRUST_PROXY === "false") {
   app.set("trust proxy", false);
@@ -1036,6 +1038,87 @@ app.post("/api/auth/sign-in", async (req, res) => {
     });
     if (!res.headersSent) {
       return res.status(500).json({ error: "Sign-in failed" });
+    }
+  }
+});
+
+/**
+ * Refresh an access token from a refresh token via the anon client.
+ * Includes in-process single-flight dedupe to avoid refresh races.
+ */
+app.post("/api/auth/refresh", async (req, res) => {
+  const ip = getClientIp(req);
+  try {
+    const parsed = parseBody(refreshSessionBodySchema, req, res, () =>
+      logSecurity("warn", "auth_refresh_bad_request", { ip, reason: "validation" })
+    );
+    if (!parsed) return;
+    const refreshToken = String(parsed.refresh_token || "");
+    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+    const existing = authRefreshInFlight.get(tokenHash);
+    if (existing) {
+      const payload = await existing;
+      return res.status(payload.status).json(payload.body);
+    }
+
+    const refreshPromise = (async () => {
+      const supabaseAnon = getSupabaseAnonClient();
+      if (!supabaseAnon) {
+        logSecurity("error", "auth_refresh_misconfigured", { ip, reason: "no_supabase_anon" });
+        return {
+          status: 503,
+          body: {
+            error:
+              "Refresh service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
+          },
+        };
+      }
+
+      const { data, error } = await supabaseAnon.auth.refreshSession({ refresh_token: refreshToken });
+      if (error || !data?.session?.access_token || !data?.session?.refresh_token) {
+        logSecurity("warn", "auth_refresh_failed", {
+          ip,
+          reason: error?.message || "refresh_failed",
+        });
+        return {
+          status: 401,
+          body: { error: error?.message || "Session refresh failed" },
+        };
+      }
+
+      return {
+        status: 200,
+        body: {
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+          expires_in: data.session.expires_in,
+          expires_at: data.session.expires_at,
+          user: data.session.user || null,
+        },
+      };
+    })();
+
+    authRefreshInFlight.set(tokenHash, refreshPromise);
+    const payload = await refreshPromise;
+    return res.status(payload.status).json(payload.body);
+  } catch (err) {
+    logSecurity("error", "auth_refresh_exception", {
+      ip,
+      message: err?.message || "unknown",
+    });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "Session refresh failed" });
+    }
+  } finally {
+    try {
+      const token = String(req?.body?.refresh_token || "");
+      if (token) {
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+        authRefreshInFlight.delete(tokenHash);
+      }
+    } catch {
+      // ignore map cleanup failures
     }
   }
 });

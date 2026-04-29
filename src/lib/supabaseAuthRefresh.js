@@ -4,6 +4,7 @@
  */
 
 import { supabase } from "@/lib/supabaseClient";
+import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
 
 /** Seconds before JWT expiry to force a refresh (clock skew + network latency). */
 export const PROACTIVE_REFRESH_BUFFER_SEC = 150;
@@ -32,11 +33,15 @@ export function isRefreshTokenFatalError(error) {
   return false;
 }
 
+let refreshInFlightPromise = null;
+
 /**
  * Refresh the session using the stored refresh token.
  * @returns {Promise<{ ok: boolean, session?: import("@supabase/supabase-js").Session, error?: unknown, fatal?: boolean, reason?: string }>}
  */
 export async function refreshSupabaseSessionWithRecovery() {
+  if (refreshInFlightPromise) return refreshInFlightPromise;
+  refreshInFlightPromise = (async () => {
   const { data: before, error: readErr } = await supabase.auth.getSession();
   if (readErr) {
     return { ok: false, error: readErr, fatal: false, reason: "get_session_failed" };
@@ -45,7 +50,42 @@ export async function refreshSupabaseSessionWithRecovery() {
     return { ok: false, reason: "no_refresh_token" };
   }
 
-  const { data, error } = await supabase.auth.refreshSession();
+  let data;
+  let error;
+  if (shouldUseNodeAuthApi()) {
+    try {
+      const response = await backendApi.post(
+        "/api/auth/refresh",
+        { refresh_token: before.session.refresh_token },
+        { __paidlySilent: true, validateStatus: () => true }
+      );
+      if (
+        response.status === 200 &&
+        response?.data?.access_token &&
+        response?.data?.refresh_token
+      ) {
+        const setRes = await supabase.auth.setSession({
+          access_token: response.data.access_token,
+          refresh_token: response.data.refresh_token,
+        });
+        data = setRes.data;
+        error = setRes.error || null;
+      } else {
+        error = {
+          message: response?.data?.error || `refresh_failed_${response.status}`,
+          code: response.status === 401 ? "refresh_token_not_found" : undefined,
+        };
+      }
+    } catch {
+      const refreshed = await supabase.auth.refreshSession();
+      data = refreshed.data;
+      error = refreshed.error;
+    }
+  } else {
+    const refreshed = await supabase.auth.refreshSession();
+    data = refreshed.data;
+    error = refreshed.error;
+  }
   if (!error && data?.session) {
     return { ok: true, session: data.session };
   }
@@ -53,6 +93,12 @@ export async function refreshSupabaseSessionWithRecovery() {
     return { ok: false, error, fatal: true };
   }
   return { ok: false, error, fatal: false };
+  })();
+  try {
+    return await refreshInFlightPromise;
+  } finally {
+    refreshInFlightPromise = null;
+  }
 }
 
 /**
