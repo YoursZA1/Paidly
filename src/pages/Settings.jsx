@@ -656,7 +656,14 @@ function CompanyProfileSettings() {
                             <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith("blob:") ? (
-                                        <img src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
+                                        <img
+                                            src={formData.logo_url}
+                                            alt="Profile"
+                                            className="object-cover w-full h-full"
+                                            onError={(e) => {
+                                                e.currentTarget.src = "/fallback-logo.png";
+                                            }}
+                                        />
                                     ) : (
                                         <LogoImage src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
                                     )
@@ -670,7 +677,14 @@ function CompanyProfileSettings() {
                             <div className="w-20 h-20 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith("blob:") ? (
-                                        <img src={formData.logo_url} alt="Logo" className="object-contain w-12 h-12" />
+                                        <img
+                                            src={formData.logo_url}
+                                            alt="Logo"
+                                            className="object-contain w-12 h-12"
+                                            onError={(e) => {
+                                                e.currentTarget.src = "/fallback-logo.png";
+                                            }}
+                                        />
                                     ) : (
                                         <LogoImage src={formData.logo_url} alt="Logo" className="object-contain w-12 h-12" />
                                     )

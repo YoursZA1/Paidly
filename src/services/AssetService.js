@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 
 const LOGO_BUCKET = "paidly";
-const FALLBACK_LOGO = "/logo.svg";
+const FALLBACK_LOGO = "/fallback-logo.png";
 
 function extractAfterBucket(url, bucket) {
   const marker = `/${bucket}/`;
@@ -19,7 +19,12 @@ function cleanPath(path) {
     const fromPaidly = extractAfterBucket(raw, LOGO_BUCKET);
     return fromPaidly || null;
   }
-  return raw.replace(/^paidly\//, "");
+  return raw
+    .replace(/^storage\/v1\/object\/public\/paidly\//, "")
+    .replace(/^storage\/v1\/object\/sign\/paidly\//, "")
+    .replace(/^public\/paidly\//, "")
+    .replace(/^sign\/paidly\//, "")
+    .replace(/^paidly\//, "");
 }
 
 function getLogo(path) {

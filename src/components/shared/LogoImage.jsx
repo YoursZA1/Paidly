@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AssetService from "@/services/AssetService";
 
-const DEFAULT_LOGO_SRC = "/logo.svg";
+const DEFAULT_LOGO_SRC = AssetService.FALLBACK_LOGO;
 
 /**
  * LogoImage component that resolves paths through AssetService.getLogo().

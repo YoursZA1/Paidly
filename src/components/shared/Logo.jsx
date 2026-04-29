@@ -1,7 +1,6 @@
 import AssetService from "@/services/AssetService";
 
-const DEFAULT_LOGO_SRC = "/logo.svg";
-const SECONDARY_FALLBACK_SRC = "/icon.svg";
+const DEFAULT_LOGO_SRC = AssetService.FALLBACK_LOGO;
 
 export default function Logo({ path, className = "", alt = "Logo" }) {
   const url = AssetService.getLogo(path);
@@ -12,10 +11,6 @@ export default function Logo({ path, className = "", alt = "Logo" }) {
       alt={alt}
       className={className}
       onError={(e) => {
-        if (e.currentTarget.src.includes(DEFAULT_LOGO_SRC)) {
-          e.currentTarget.src = SECONDARY_FALLBACK_SRC;
-          return;
-        }
         e.currentTarget.src = DEFAULT_LOGO_SRC;
       }}
     />
