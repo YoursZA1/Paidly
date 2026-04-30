@@ -74,3 +74,34 @@ export const supabase = createClient(effectiveUrl, effectiveKey, {
     storage: authPersistStorage,
   },
 });
+
+/**
+ * Defense-in-depth: these sensitive RPCs must only run server-side via `/api/*`.
+ * If an older/stale client path still calls them, block the browser request and
+ * surface a clear warning instead of spamming 403s.
+ */
+const BLOCKED_BROWSER_RPCS = new Set([
+  "bootstrap_user_organization",
+  "expire_trial_if_due",
+]);
+const originalRpc = supabase.rpc.bind(supabase);
+const warnedBlockedRpcNames = new Set();
+supabase.rpc = async (fnName, ...rest) => {
+  const rpcName = String(fnName || "");
+  if (BLOCKED_BROWSER_RPCS.has(rpcName)) {
+    if (!warnedBlockedRpcNames.has(rpcName)) {
+      warnedBlockedRpcNames.add(rpcName);
+      console.warn(
+        `[Supabase] Blocked browser RPC "${rpcName}". Use server API routes instead.`
+      );
+    }
+    return {
+      data: null,
+      error: {
+        message: `Blocked client RPC: ${rpcName}`,
+        code: "BLOCKED_CLIENT_RPC",
+      },
+    };
+  }
+  return originalRpc(fnName, ...rest);
+};

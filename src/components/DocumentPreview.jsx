@@ -163,8 +163,10 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
     ).trim();
     const company_address = doc.company_address || effectiveUser?.company_address || "";
+    // Always prefer the live profile logo (Settings) for authenticated previews;
+    // persisted document snapshot logo is a fallback for public/legacy records.
     const logo_url =
-      doc.owner_logo_url || effectiveUser?.logo_url || effectiveUser?.company_logo_url || null;
+      effectiveUser?.logo_url || effectiveUser?.company_logo_url || doc.owner_logo_url || null;
 
     const number = doc.number || doc.invoice_number || doc.quote_number || "—";
     const status = doc.status || "draft";

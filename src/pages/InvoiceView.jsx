@@ -248,7 +248,8 @@ export default function InvoiceView() {
 
   const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
   const publicUser = {
-    logo_url: invoice.owner_logo_url || invoice.company?.logo_url || '',
+    logo_url:
+      invoice.company?.logo_url || invoice.company?.company_logo_url || invoice.owner_logo_url || '',
     company_name: invoice.owner_company_name || invoice.company?.name || '',
     company_address: invoice.owner_company_address || '',
     email: invoice.owner_email || '',
