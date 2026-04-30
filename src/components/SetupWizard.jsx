@@ -4,6 +4,7 @@ import PropTypes from "prop-types";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { User, BankingDetail } from "@/api/entities";
 import { logoMaxSizeLabel } from "@/lib/logoUpload";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Setup wizard (Step 1 of 5 = Business Profile). Data is loaded from and saved to
@@ -48,6 +49,7 @@ const steps = [
 ];
 
 export default function SetupWizard({ isOpen, onComplete }) {
+  const { profile, authUserId } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialState);
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +62,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
     setLoadingProfile(true);
     (async () => {
       try {
-        const user = await User.me();
+        const user = profile;
         if (cancelled || !user) return;
         setForm(f => ({
           ...f,
@@ -77,7 +79,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen]);
+  }, [isOpen, profile]);
 
   if (!isOpen) return null;
 
@@ -91,11 +93,11 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
   /** Persist Step 1 (Business Profile) to current user's Supabase profile. */
   async function saveBusinessProfileStep() {
-    const user = await User.me();
+    const user = profile;
     if (!user?.id) return;
     let logoUrl = form.logo_url;
     if (form.logo instanceof File) {
-      logoUrl = await uploadAndSaveLogo(form.logo, form);
+      logoUrl = await uploadAndSaveLogo(form.logo, form, authUserId || user.id);
     }
     await User.updateMyUserData({
       company_name: (form.businessName || "").trim() || user.company_name,
@@ -128,7 +130,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const user = await User.me();
+      const user = profile;
       if (!user?.id) {
         alert("Please sign in to save.");
         setSubmitting(false);

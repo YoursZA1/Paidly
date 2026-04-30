@@ -3,6 +3,8 @@ import { Invoice, Client, User, Payment, InvoiceView, Expense, Quote, Payroll } 
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { withApiLogging } from "@/utils/apiLogger";
+import { getOrCreateAppQueryClient } from "@/lib/query-client";
+import { dashboardInvoicesQueryKey, dashboardPayslipsQueryKey } from "@/services/DashboardDataService";
 
 /**
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
@@ -82,17 +84,15 @@ export const useAppStore = create((set, get) => ({
         return;
       }
 
-      const settled = await Promise.allSettled([
+      const primarySettled = await Promise.allSettled([
         // Slightly longer caps so cold Supabase still returns rows; one retry on timeout.
         safe("invoices.list", () => Invoice.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
         safe("clients.list", () => Client.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
-        safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
-        safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
         safe("quotes.list", () => Quote.list("-created_date", { limit: 100, maxWaitMs: 12000 }), [], 20000, 1),
         safe("payslips.list", () => Payroll.list("-created_date", { limit: 100, maxWaitMs: 12000 }), [], 20000, 1),
       ]);
 
-      const [invoicesData, clientsData, paymentsData, expensesData, quotesData, payslipsData] = settled.map((r) =>
+      const [invoicesData, clientsData, quotesData, payslipsData] = primarySettled.map((r) =>
         r.status === "fulfilled" ? r.value : []
       );
 
@@ -110,19 +110,45 @@ export const useAppStore = create((set, get) => ({
 
       if (gen !== fetchAllGeneration) return;
 
+      const queryClient = getOrCreateAppQueryClient();
+      queryClient.setQueryData(
+        dashboardInvoicesQueryKey(userData?.id || userData?.supabase_id || null),
+        Array.isArray(resolvedInvoices) ? resolvedInvoices : []
+      );
+      queryClient.setQueryData(
+        dashboardPayslipsQueryKey(userData?.id || userData?.supabase_id || null),
+        Array.isArray(payslipsData) ? payslipsData : []
+      );
+
       set({
         invoices: resolvedInvoices,
         quotes: Array.isArray(quotesData) ? quotesData : [],
         clients: Array.isArray(clientsData) ? clientsData : [],
         payslips: Array.isArray(payslipsData) ? payslipsData : [],
         userProfile: userData,
-        payments: Array.isArray(paymentsData) ? paymentsData : [],
+        payments: [],
         // Invoice views are hydrated lazily on the Invoices page.
         invoiceViews: get().invoiceViews || [],
-        expenses: Array.isArray(expensesData) ? expensesData : [],
+        expenses: [],
         error: null,
         lastFetchedAt: Date.now(),
       });
+
+      // Defer non-critical, heavier reads until after first paint.
+      setTimeout(async () => {
+        try {
+          const [paymentsData, expensesData] = await Promise.all([
+            safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+            safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
+          ]);
+          set({
+            payments: Array.isArray(paymentsData) ? paymentsData : [],
+            expenses: Array.isArray(expensesData) ? expensesData : [],
+          });
+        } catch {
+          // ignore deferred failures
+        }
+      }, 250);
     } catch (err) {
       if (gen === fetchAllGeneration) {
         set({
@@ -145,6 +171,11 @@ export const useAppStore = create((set, get) => ({
     const next = [...prev];
     next[index] = { ...next[index], ...patch };
     set({ invoices: next });
+    const currentUserId = get().userProfile?.id || get().userProfile?.supabase_id || null;
+    if (currentUserId) {
+      const queryClient = getOrCreateAppQueryClient();
+      queryClient.setQueryData(dashboardInvoicesQueryKey(currentUserId), next.slice(0, 40));
+    }
     try {
       await Invoice.update(invoiceId, patch);
     } catch (err) {
@@ -173,14 +204,26 @@ export const useAppStore = create((set, get) => ({
     }),
 
   prependOptimisticInvoice: (invoice) =>
-    set((state) => ({
-      invoices: [invoice, ...(state.invoices || [])],
-    })),
+    set((state) => {
+      const nextInvoices = [invoice, ...(state.invoices || [])];
+      const currentUserId = state.userProfile?.id || state.userProfile?.supabase_id || null;
+      if (currentUserId) {
+        const queryClient = getOrCreateAppQueryClient();
+        queryClient.setQueryData(dashboardInvoicesQueryKey(currentUserId), nextInvoices.slice(0, 40));
+      }
+      return { invoices: nextInvoices };
+    }),
 
   replaceOptimisticInvoice: (tempId, realInvoice) =>
-    set((state) => ({
-      invoices: (state.invoices || []).map((inv) => (inv.id === tempId ? { ...inv, ...realInvoice } : inv)),
-    })),
+    set((state) => {
+      const nextInvoices = (state.invoices || []).map((inv) => (inv.id === tempId ? { ...inv, ...realInvoice } : inv));
+      const currentUserId = state.userProfile?.id || state.userProfile?.supabase_id || null;
+      if (currentUserId) {
+        const queryClient = getOrCreateAppQueryClient();
+        queryClient.setQueryData(dashboardInvoicesQueryKey(currentUserId), nextInvoices.slice(0, 40));
+      }
+      return { invoices: nextInvoices };
+    }),
 
   /** Append or replace invoices (e.g. after create). */
   setInvoices: (invoices) => set({ invoices: Array.isArray(invoices) ? invoices : get().invoices }),

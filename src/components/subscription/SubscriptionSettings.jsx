@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { Button } from "@/components/ui/button";
@@ -73,7 +72,6 @@ export default function SubscriptionSettings() {
     const navigate = useNavigate();
     const { user: authUser } = useAuth();
     const { profile: profileFromQuery, refetch: refetchProfile } = useUserProfileQuery();
-    const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -89,31 +87,20 @@ export default function SubscriptionSettings() {
     }, [refetchProfile]);
 
     useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const data = await User.me();
-                if (!cancelled) setUserData(data);
-            } catch (e) {
-                if (!cancelled) setUserData(authUser || null);
-            } finally {
-                if (!cancelled) setIsLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
+        setIsLoading(false);
     }, [
         authUser?.id,
         authUser?.subscription_plan,
         authUser?.plan,
+        profileFromQuery?.id,
     ]);
 
     const billingProfile = useMemo(
         () => ({
             ...(authUser || {}),
-            ...(userData || {}),
             ...(profileFromQuery || {}),
         }),
-        [authUser, userData, profileFromQuery]
+        [authUser, profileFromQuery]
     );
 
     const accountState = describeSubscriptionState(billingProfile);

@@ -110,6 +110,18 @@ These are the **real** architecture—not the sidebar.
 
 **Persistence (today):** still separate Supabase tables (`invoices`, `quotes`, `payslips` / payslip stack)—the **unification is logical and in code** first (`src/document-engine/`), not a forced single-table migration.
 
+**Migration status (implementation):**
+
+- **Unified now (code-level contracts):**
+  - Shared document type vocabulary and routing helpers in `src/document-engine/`.
+  - Shared list-controller and adapter pattern for invoice/quote/payslip list screens.
+  - Shared pagination and shared export assembly service paths.
+- **Partially unified (same behavior, separate persistence):**
+  - Compose/send/render flows increasingly share helpers/services, but write into legacy per-type tables.
+- **Not unified yet (roadmap):**
+  - Single persistence model for all document kinds.
+  - Full payment-intent/event model as canonical settlement source.
+
 **Reframe:** not “invoices vs quotes vs payslips” but **one engine**:
 
 | Document kind | Today’s surface | Same engine primitives |
@@ -485,6 +497,25 @@ UI (pages / components)
 **Anti-pattern:** `UI → Invoice.list()` scattered across pages.
 
 **Reference example:** `useInvoices` → `fetchInvoiceListPage` in **`src/services/InvoiceListService.js`** → `Invoice.list` → `EntityManager` → Supabase. PDF/email/share flows stay in **`src/api/InvoiceService.js`** (different concern: delivery, not list reads).
+
+### Canonical profile path (implemented)
+
+Profile state has a single fetch owner:
+
+- **Owner:** `AuthContext` (`src/contexts/AuthContext.impl.jsx`)
+- **Consumer path:** `useAuth()` and `useUserProfileQuery()` (selector facade over auth state)
+- **Rule:** pages/components should not add new `User.me()` fetches for normal shell state; use auth/context selectors.
+- **Allowed exceptions:** explicit one-off snapshot reads in render/send pipelines (PDF generation, email send branding snapshots) where point-in-time profile capture is intentional.
+
+### Domain-approved path matrix
+
+| Domain | Approved path |
+|---|---|
+| Auth/profile | `AuthContext` → `useAuth` / `useUserProfileQuery` |
+| Document lists | hook (`useInvoices`/etc.) → service (`*ListService`) → entity facade |
+| Document exports | page action → `DocumentExportService` |
+| Dashboard bounded data | dashboard hooks → `DashboardDataService` |
+| Side datasets | feature hook with explicit `enabled` gate + stale time |
 
 ### `customClient.js` / EntityManager — online vs offline
 

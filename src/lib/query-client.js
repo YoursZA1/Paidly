@@ -22,3 +22,12 @@ export function createAppQueryClient() {
     },
   });
 }
+
+let appQueryClient = null;
+
+export function getOrCreateAppQueryClient() {
+  if (!appQueryClient) {
+    appQueryClient = createAppQueryClient();
+  }
+  return appQueryClient;
+}

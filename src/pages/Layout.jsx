@@ -773,9 +773,9 @@ export default function Layout({ children, currentPageName }) {
       const oneDay = 24 * 60 * 60 * 1000;
       if (!lastFollowUpCheck || (now - parseInt(lastFollowUpCheck) > oneDay)) {
         try {
-          await PaymentReminderService.checkAndSendReminders();
+          await PaymentReminderService.checkAndSendReminders(user || null);
           const QuoteReminderService = (await import('@/components/quote/QuoteReminderService')).default;
-          await QuoteReminderService.checkAndSendReminders();
+          await QuoteReminderService.checkAndSendReminders(user || null);
           const ClientFollowUpService = (await import('@/components/clients/ClientFollowUpService')).default;
           await ClientFollowUpService.updateClientSegments();
           localStorage.setItem('lastFollowUpCheck', now.toString());

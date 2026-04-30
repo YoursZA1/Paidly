@@ -2,10 +2,11 @@ import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClientsList } from "@/hooks/useClientsList";
 import { useInvoices } from "@/hooks/useInvoices";
+import { getInvoiceListQueryKey } from "@/services/InvoiceListService";
 
 /**
  * Clients page: clients + invoices with shared infinite-query caches
- * (`['clients','list',userId]` and `['invoices','list',userId]` — same invoice key as Invoices page).
+ * (`['clients','list',userId]` and `['invoices','list',filters,userId]`).
  */
 export function useClientsQuery(options = {}) {
   const { user, clientsBootstrap = [], invoicesBootstrap = [] } = options;
@@ -13,7 +14,7 @@ export function useClientsQuery(options = {}) {
   const userId = user?.id ?? null;
 
   const cq = useClientsList(user);
-  const iq = useInvoices(user);
+  const iq = useInvoices({ userId, filters: {} });
 
   const clients = useMemo(() => {
     if (cq.clients.length > 0 || !cq.loading) return cq.clients;
@@ -39,7 +40,7 @@ export function useClientsQuery(options = {}) {
       ? queryClient.getQueryData(["clients", "list", userId])
       : null;
     const iPages = userId
-      ? queryClient.getQueryData(["invoices", "list", userId])
+      ? queryClient.getQueryData(getInvoiceListQueryKey({}, userId))
       : null;
     const cFlat = cPages?.pages?.flat?.() ?? [];
     const iFlat = iPages?.pages?.flat?.() ?? [];

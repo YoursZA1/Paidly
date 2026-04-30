@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Expense, Invoice, User, Payment } from "@/api/entities";
+import { Expense, Invoice, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
 import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,28 +62,29 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
 
 const CASHFLOW_PAGE_QUERY_KEY = ['cashflow-page'];
 
 const CASHFLOW_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
 
-async function fetchCashFlowPageData() {
-    const [expensesData, invoicesData, paymentsData, userData] = await Promise.all([
+async function fetchCashFlowPageData(profile) {
+    const [expensesData, invoicesData, paymentsData] = await Promise.all([
         Expense.list("-date", CASHFLOW_LIST_OPTS),
         Invoice.list("-created_date", CASHFLOW_LIST_OPTS),
         Payment.list("-payment_date", CASHFLOW_LIST_OPTS),
-        User.me(),
     ]);
     return {
         expenses: expensesData || [],
         invoices: invoicesData || [],
         payments: paymentsData || [],
-        user: userData,
+        user: profile || null,
     };
 }
 
 export default function CashFlowPage() {
     const { toast } = useToast();
+    const { profile, authUserId } = useAuth();
     const queryClient = useQueryClient();
     const setExpensesInStore = useAppStore((s) => s.setExpenses);
     const storeExpensesForInit = useAppStore((s) => s.expenses);
@@ -92,8 +93,8 @@ export default function CashFlowPage() {
     const storeUser = useAppStore((s) => s.userProfile);
     const hasStoreData = (storeExpensesForInit?.length > 0) || (storeInvoices?.length > 0) || (storePayments?.length > 0) || storeUser != null;
     const { data, isLoading, error } = useQuery({
-        queryKey: CASHFLOW_PAGE_QUERY_KEY,
-        queryFn: fetchCashFlowPageData,
+        queryKey: [...CASHFLOW_PAGE_QUERY_KEY, authUserId ?? null],
+        queryFn: () => fetchCashFlowPageData(profile),
         staleTime: 5 * 60 * 1000,
         refetchOnMount: false,
         refetchOnWindowFocus: true,

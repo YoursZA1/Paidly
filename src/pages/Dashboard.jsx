@@ -3,11 +3,10 @@ import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
 import { formatQueryError } from "@/utils/apiErrorText";
 import { adminRowPrimaryId, stableDirectoryRowKey } from "@/utils/stableListKey";
-import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, memo } from "react";
 import PropTypes from 'prop-types';
 import { Invoice } from "@/api/entities";
 import { Client } from "@/api/entities";
-import { User } from "@/api/entities";
 import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
@@ -53,6 +52,7 @@ import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
@@ -113,7 +113,7 @@ const itemVariants = {
   },
 };
 
-const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, animateFromZero, numericValue, currencyForAnimation }) => {
+const StatCard = memo(function StatCard({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, animateFromZero, numericValue, currencyForAnimation }) {
   const useTicker = animateFromZero && currencyForAnimation != null && !isLoading && typeof numericValue === 'number';
   const displayValue = useTicker ? null : value;
   const accentTone =
@@ -230,7 +230,7 @@ const StatCard = ({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color:
     </CardContent>
   </Card>
   );
-};
+});
 
 /** Drop in-memory goal rows when the dashboard year changes (e.g. New Year) or legacy rows lack `year`. */
 function businessGoalMatchesYear(goal, calendarYear) {
@@ -374,7 +374,16 @@ export default function Dashboard() {
   const storePayments = useAppStore((s) => s.payments);
   const storeIsLoading = useAppStore((s) => s.isLoading);
   const fetchAll = useAppStore((s) => s.fetchAll);
+  const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id);
+  const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id);
   const invoices = isAdmin ? invoicesState : storeInvoices;
+  const payslips = useAppStore((s) => s.payslips);
+  const resolvedInvoices = isAdmin
+    ? invoices
+    : (dashboardInvoicesQuery.data && dashboardInvoicesQuery.data.length > 0 ? dashboardInvoicesQuery.data : invoices);
+  const resolvedPayslips = isAdmin
+    ? payslips
+    : (dashboardPayslipsQuery.data && dashboardPayslipsQuery.data.length > 0 ? dashboardPayslipsQuery.data : payslips);
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
   const payments = isAdmin ? paymentsState : storePayments;
@@ -392,7 +401,9 @@ export default function Dashboard() {
     }
   }, [isAdmin, authUser?.id, authUser?.plan, authUser?.subscription_plan, profileFromQuery]);
 
-  const isLoading = isAdmin ? isLoadingState : storeIsLoading || appLoading;
+  const isLoading = isAdmin
+    ? isLoadingState
+    : storeIsLoading || appLoading || dashboardInvoicesQuery.isLoading || dashboardPayslipsQuery.isLoading;
 
   const onboardingChecklist = useMemo(() => {
     const businessName = String(user?.company_name || "").trim();
@@ -414,7 +425,7 @@ export default function Dashboard() {
       create_first_invoice: hasInvoice,
       add_first_client: hasClient,
     };
-  }, [user?.company_name, user?.business, invoices, clients]);
+  }, [user?.company_name, user?.business, resolvedInvoices, clients]);
 
   useEffect(() => {
     if (isAdmin || !user?.id) return;
@@ -836,19 +847,7 @@ export default function Dashboard() {
   const loadUserData = useCallback(async (hasCachedData = false, _authUserId = null) => {
     if (!hasCachedData) setIsLoadingState(true);
     try {
-      const userResult =
-        (await withTimeoutRetry(
-          async () => {
-            try {
-              return await User.me();
-            } catch {
-              return await User.restoreFromSupabaseSession();
-            }
-          },
-          8000,
-          0
-        ).catch(() => null)) ||
-        (await User.getCurrentUser?.().catch(() => null));
+      const userResult = profileFromQuery || authUser || null;
 
       if (!userResult) {
         throw new Error("Not authenticated");
@@ -942,7 +941,7 @@ export default function Dashboard() {
     } finally {
       if (mountedRef.current) setIsLoadingState(false);
     }
-  }, [toast, calendarYear]);
+  }, [toast, calendarYear, profileFromQuery, authUser]);
 
   const refreshBusinessGoal = useCallback(async () => {
     const uid = resolveBusinessGoalsUserId(user) || user?.id;
@@ -950,6 +949,16 @@ export default function Dashboard() {
     const goal = await getBusinessGoal(uid, calendarYear).catch(() => null);
     setBusinessGoal(businessGoalMatchesYear(goal, calendarYear) ? goal : null);
   }, [user, calendarYear]);
+
+  const refreshDashboardData = useCallback(async () => {
+    if (isAdmin) {
+      await loadAdminData();
+      return;
+    }
+    await fetchAll(authUser || null);
+    await Promise.allSettled([dashboardInvoicesQuery.refetch(), dashboardPayslipsQuery.refetch()]);
+    await refreshBusinessGoal();
+  }, [authUser, dashboardInvoicesQuery, dashboardPayslipsQuery, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
 
   // Real-time KPI updates: refetch when invoices, payments, or expenses change
   useEffect(() => {
@@ -970,11 +979,13 @@ export default function Dashboard() {
       if (isAdmin) {
         loadAdminData();
       } else {
-        fetchAll();
+        fetchAll(authUser || null);
+        dashboardInvoicesQuery.refetch();
+        dashboardPayslipsQuery.refetch();
         refreshBusinessGoal();
       }
     }, DASHBOARD_REALTIME_DEBOUNCE_MS);
-  }, [fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
+  }, [authUser, dashboardInvoicesQuery, dashboardPayslipsQuery, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
 
   useSupabaseRealtime(
     ["invoices", "payments", "expenses", "quotes", "payslips"],
@@ -994,7 +1005,7 @@ export default function Dashboard() {
     }
 
     const paidOrPartial = (inv) => inv.status === 'paid' || inv.status === 'partial_paid';
-    invoices.filter(paidOrPartial).forEach(inv => {
+    resolvedInvoices.filter(paidOrPartial).forEach(inv => {
       const createdAt = new Date(inv.created_date || inv.created_at || 0);
       if (createdAt < start || createdAt > now) return;
       const label = formatDate(createdAt, 'MMM d');
@@ -1006,7 +1017,7 @@ export default function Dashboard() {
       label,
       value
     }));
-  }, [invoices, revenueRange]);
+  }, [resolvedInvoices, revenueRange]);
 
   // Fintech KPIs: Revenue, Awaiting payment (consolidated), VAT/Tax liability (SARS), Cash Flow + growth %
   const fintechKpis = useMemo(() => {
@@ -1015,20 +1026,20 @@ export default function Dashboard() {
     const lastMonthStart = startOfMonth(subMonths(now, 1));
     const lastMonthEnd = endOfMonth(subMonths(now, 1));
 
-    const outstanding = OutstandingBalanceService.calculateTotalOutstanding(invoices);
-    const paidInvoices = invoices.filter(inv => inv.status === 'paid' || inv.status === 'partial_paid');
+    const outstanding = OutstandingBalanceService.calculateTotalOutstanding(resolvedInvoices);
+    const paidInvoices = resolvedInvoices.filter(inv => inv.status === 'paid' || inv.status === 'partial_paid');
     const taxSummary = TaxService.getTaxSummaryFromInvoices(paidInvoices);
     const rev = paidInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const exp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     const cashFlow = rev - exp;
 
-    const revThisMonth = invoices
+    const revThisMonth = resolvedInvoices
       .filter(inv => {
         const d = new Date(inv.created_date || inv.created_at || 0);
         return d >= thisMonthStart && (inv.status === 'paid' || inv.status === 'partial_paid');
       })
       .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const revLastMonth = invoices
+    const revLastMonth = resolvedInvoices
       .filter(inv => {
         const d = new Date(inv.created_date || inv.created_at || 0);
         return d >= lastMonthStart && d <= lastMonthEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
@@ -1054,15 +1065,15 @@ export default function Dashboard() {
       revenueGrowth,
       cashFlowGrowth
     };
-  }, [invoices, expenses]);
+  }, [resolvedInvoices, expenses, resolvedPayslips]);
 
   const recentTransactions = useMemo(
     () =>
-      invoices
+      resolvedInvoices
         .filter((inv) => inv.status === 'paid' || inv.status === 'partial_paid')
         .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
         .slice(0, TRANSACTIONS_SOURCE_EACH),
-    [invoices]
+    [resolvedInvoices]
   );
 
   const mergedTransactions = useMemo(() => {
@@ -1087,13 +1098,13 @@ export default function Dashboard() {
 
   const sortedRecentInvoices = useMemo(
     () =>
-      [...invoices]
+      [...resolvedInvoices]
         .sort(
           (a, b) =>
             new Date(b.created_date || b.created_at || 0) - new Date(a.created_date || a.created_at || 0)
         )
         .slice(0, RECENT_INVOICES_PREVIEW_ROWS),
-    [invoices]
+    [resolvedInvoices]
   );
 
   // ADMIN DASHBOARD
@@ -1689,7 +1700,7 @@ export default function Dashboard() {
 
         {/* Total Income — full width, glassmorphism, below KPI carousel on mobile */}
         <div className="mb-4 sm:mb-6 md:hidden w-full max-w-full">
-          <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} variant="carousel" />
+          <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={refreshDashboardData} isDataReady={!isLoading} variant="carousel" />
         </div>
 
         {/* Mobile: Action buttons + Recent Transactions — premium fintech order */}
@@ -1932,7 +1943,7 @@ export default function Dashboard() {
             {/* Top row: Total Income (desktop) + Pending Payments */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
               <div className="hidden md:block min-h-[220px]">
-                <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={loadUserData} isDataReady={!isLoading} />
+                <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={refreshDashboardData} isDataReady={!isLoading} />
               </div>
               <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
             </div>

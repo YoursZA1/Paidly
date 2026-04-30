@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Client, Invoice, Quote, Task, User } from "@/api/entities";
+import { Client, Invoice, Quote, Task } from "@/api/entities";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +33,7 @@ import TaskCard from "@/components/calendar/TaskCard";
 import TaskForm from "@/components/calendar/TaskForm";
 import TaskNotificationService from "@/components/calendar/TaskNotificationService";
 import { csvRowToTaskPayload, parseTaskCsv, tasksToCsv } from "@/utils/taskCsvMapping";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DAYS_HEADER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -45,6 +46,7 @@ function normalizeStatus(status) {
 
 export default function CalendarPage() {
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   const [invoices, setInvoices] = useState([]);
   const [quotes, setQuotes] = useState([]);
@@ -68,20 +70,19 @@ export default function CalendarPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [invoicesData, quotesData, tasksData, clientsData, userData] = await Promise.all([
+      const [invoicesData, quotesData, tasksData, clientsData] = await Promise.all([
         Invoice.list("-delivery_date"),
         Quote.list("-valid_until"),
         Task.list("-due_date"),
         Client.list(),
-        User.me(),
       ]);
 
       setInvoices(invoicesData || []);
       setQuotes(quotesData || []);
       setTasks(tasksData || []);
       setClients(clientsData || []);
-      if (userData) {
-        TaskNotificationService.checkAndSendDueReminders(tasksData || [], userData.id);
+      if (profile?.id) {
+        TaskNotificationService.checkAndSendDueReminders(tasksData || [], profile.id);
       }
     } catch (error) {
       console.error("Error loading calendar data:", error);
@@ -93,7 +94,7 @@ export default function CalendarPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, profile?.id]);
 
   useEffect(() => {
     loadData();

@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import PaymentReminderService from './PaymentReminderService';
 import { Bell, Send, Clock, AlertTriangle, CheckCircle, Mail } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ReminderDashboard() {
+    const { profile } = useAuth();
     const [pendingReminders, setPendingReminders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
@@ -29,7 +31,7 @@ export default function ReminderDashboard() {
     const handleCheckReminders = async () => {
         setIsLoading(true);
         try {
-            await PaymentReminderService.checkAndSendReminders();
+            await PaymentReminderService.checkAndSendReminders(profile || null);
             await loadPendingReminders();
         } catch (error) {
             console.error('Error checking reminders:', error);

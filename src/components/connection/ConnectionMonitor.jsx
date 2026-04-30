@@ -2,9 +2,9 @@ import { useEffect, useRef, useCallback } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
 
-const POLL_MS = 5000;
 const CONNECTED_VISIBLE_MS = 3200;
 const RECONNECTING_GRACE_MS = 3000;
 const DISCONNECTED_AFTER_MS = 10000;
@@ -27,7 +27,8 @@ function isTransientBackgroundError(errorMessage) {
  *   {@link ConnectionStatusIndicator} is mounted twice (mobile + desktop rows).
  */
 export default function ConnectionMonitor() {
-  const { isAuthenticated, refreshSession } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const sessionStatus = useSessionHealthStore((s) => s.status);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
@@ -148,25 +149,6 @@ export default function ConnectionMonitor() {
     }
   }, [clearDegradedTimers, markConnected, scheduleDegradedTransition, setConnectionState]);
 
-  const silentSessionCheck = useCallback(async () => {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        setConnectionState({
-          status: CONNECTION_STATUS.CONNECTED,
-          lastError: null,
-          lastCheckAt: Date.now(),
-        });
-        return true;
-      }
-      await refreshSession({ silent: true });
-      return false;
-    } catch {
-      await refreshSession({ silent: true });
-      return false;
-    }
-  }, [refreshSession, setConnectionState]);
-
   const stopRealtime = useCallback(() => {
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
@@ -204,9 +186,7 @@ export default function ConnectionMonitor() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
-
     void runCheck();
-    const id = window.setInterval(() => void runCheck(), POLL_MS);
 
     const onOnline = () => void runCheck();
     const onOffline = () => {
@@ -234,10 +214,7 @@ export default function ConnectionMonitor() {
       hiddenStartedAtRef.current = null;
       if (visibilityRef.current === "visible") {
         startRealtime();
-        void (async () => {
-          await silentSessionCheck();
-          await runCheck();
-        })();
+        void runCheck();
       }
     };
 
@@ -248,14 +225,41 @@ export default function ConnectionMonitor() {
     startRealtime();
 
     return () => {
-      window.clearInterval(id);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       stopRealtime();
       clearDegradedTimers();
     };
-  }, [clearDegradedTimers, runCheck, setConnectionState, silentSessionCheck, startRealtime, stopRealtime]);
+  }, [clearDegradedTimers, runCheck, setConnectionState, startRealtime, stopRealtime]);
+
+  // Read-only subscription: map centralized auth session health to connection UX state.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    if (sessionStatus === SESSION_STATUS.CONNECTED) {
+      setConnectionState({
+        status: CONNECTION_STATUS.CONNECTED,
+        lastError: null,
+        lastCheckAt: Date.now(),
+      });
+      return;
+    }
+    if (sessionStatus === SESSION_STATUS.RECONNECTING) {
+      setConnectionState({
+        status: CONNECTION_STATUS.RECONNECTING,
+        lastError: null,
+        lastCheckAt: Date.now(),
+      });
+      return;
+    }
+    if (sessionStatus === SESSION_STATUS.EXPIRED) {
+      setConnectionState({
+        status: CONNECTION_STATUS.DISCONNECTED,
+        lastError: "Session expired.",
+        lastCheckAt: Date.now(),
+      });
+    }
+  }, [sessionStatus, setConnectionState]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;

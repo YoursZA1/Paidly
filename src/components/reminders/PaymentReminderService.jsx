@@ -1,4 +1,4 @@
-import { Invoice, Client, PaymentReminder, User } from '@/api/entities';
+import { Invoice, Client, PaymentReminder } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
@@ -8,14 +8,15 @@ import { supabase } from '@/lib/supabaseClient';
 import { isAbortError } from '@/utils/retryOnAbort';
 
 class PaymentReminderService {
-    static async checkAndSendReminders() {
+    static async checkAndSendReminders(profileOverride = null) {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.user) {
                 return;
             }
 
-            const user = await User.me();
+            const user = profileOverride || null;
+            if (!user?.id) return;
             const settings = user.reminder_settings;
 
             // Default fallback if no settings exist (though UI should enforce defaults)

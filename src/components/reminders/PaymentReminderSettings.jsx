@@ -10,8 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { User } from '@/api/entities';
 import { Bell, Plus, Trash2, Edit2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PaymentReminderSettings() {
+    const { profile } = useAuth();
     const [settings, setSettings] = useState({
         reminders_enabled: true,
         auto_send: true,
@@ -48,11 +50,12 @@ export default function PaymentReminderSettings() {
 
     useEffect(() => {
         loadSettings();
-    }, []);
+    }, [profile]);
 
     const loadSettings = async () => {
         try {
-            const user = await User.me();
+            const user = profile;
+            if (!user) return;
             if (user.reminder_settings) {
                 // Ensure reminder_rules exists, if not use defaults or migration logic
                 const loadedSettings = {

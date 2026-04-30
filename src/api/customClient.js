@@ -19,10 +19,10 @@ import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
-import { expireTrialIfDueViaRpc } from "@/lib/trialExpiry";
 import { hasFeature } from "@shared/plans.js";
 import { apiRequest } from "@/utils/apiRequest";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
+import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -36,6 +36,42 @@ import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 const entityListTimeoutWarnState = new Map();
+const orgBootstrapApiAttemptedUsers = new Set();
+
+async function bootstrapOrganizationViaApi({ accessToken, userId, orgName }) {
+  if (!accessToken || !userId || orgBootstrapApiAttemptedUsers.has(String(userId))) return null;
+  orgBootstrapApiAttemptedUsers.add(String(userId));
+  try {
+    const response = await fetch("/api/bootstrap-org", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        org_name: orgName || "My Organization",
+      }),
+    });
+    if (!response.ok) {
+      if (import.meta.env.DEV) {
+        console.warn("[org-bootstrap] /api/bootstrap-org failed:", response.status);
+      }
+      return null;
+    }
+    const payload = await response.json().catch(() => null);
+    const orgId = payload?.org_id ? String(payload.org_id) : null;
+    if (orgId) {
+      orgIdCache[String(userId)] = orgId;
+      return orgId;
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn("[org-bootstrap] /api/bootstrap-org error:", e?.message || e);
+    }
+  }
+  return null;
+}
 
 /**
  * Mobile/webview networks can spuriously abort in-flight auth/session reads.
@@ -855,6 +891,7 @@ class EntityManager {
     if (orgIdCache[requestedUserId]) return orgIdCache[requestedUserId];
 
     let sessionUid = null;
+    let sessionAccessToken = null;
     try {
       const { data: gu } = await supabase.auth.getUser();
       sessionUid = gu?.user?.id ?? null;
@@ -864,6 +901,11 @@ class EntityManager {
     if (!sessionUid) {
       const { data: sd } = await getSessionWithRetry();
       sessionUid = sd?.session?.user?.id ?? null;
+      sessionAccessToken = sd?.session?.access_token ?? null;
+    }
+    if (!sessionAccessToken) {
+      const { data: sd } = await getSessionWithRetry();
+      sessionAccessToken = sd?.session?.access_token ?? null;
     }
 
     if (!sessionUid || !isSupabaseAuthUuid(String(sessionUid))) {
@@ -893,21 +935,13 @@ class EntityManager {
       /* ignore */
     }
 
-    const { data: rpcOrgId, error: rpcErr } = await supabase.rpc("bootstrap_user_organization", {
-      p_name: orgName,
+    const apiOrgId = await bootstrapOrganizationViaApi({
+      accessToken: sessionAccessToken,
+      userId: effectiveUserId,
+      orgName,
     });
-    const rpcMsg = rpcErr ? String(rpcErr.message || "") : "";
-    const missingRpc =
-      rpcErr &&
-      (/does not exist|schema cache|42883|function.*not.*found/i.test(rpcMsg) ||
-        String(rpcErr.code || "") === "42883");
-
-    if (!rpcErr && rpcOrgId) {
-      orgIdCache[effectiveUserId] = rpcOrgId;
-      return rpcOrgId;
-    }
-    if (rpcErr && !missingRpc) {
-      console.warn("bootstrap_user_organization:", getSupabaseErrorMessage(rpcErr, "Org bootstrap failed"));
+    if (apiOrgId) {
+      return apiOrgId;
     }
 
     try {
@@ -2099,10 +2133,6 @@ class AuthManager {
       return this.user;
     }
 
-    if (isSupabaseConfigured) {
-      await expireTrialIfDueViaRpc(supabase);
-    }
-
     try {
       let profile = null;
       let error = null;
@@ -2225,10 +2255,6 @@ class AuthManager {
         su = data.session.user;
       }
 
-      if (isSupabaseConfigured) {
-        await expireTrialIfDueViaRpc(supabase);
-      }
-
       let profileData = {};
       try {
         const { data: profile, error: profileErr } = await retryOnAbort(
@@ -2324,6 +2350,8 @@ class AuthManager {
    * Billing / subscription columns must NOT be updated from the browser — only PayFast ITN (service role) or admin.
    */
   async updateMyUserData(data) {
+    beginCriticalSessionOperation();
+    try {
     if (!this.user) {
       this.user = {};
     }
@@ -2513,6 +2541,9 @@ class AuthManager {
     }
 
     return this.user;
+    } finally {
+      endCriticalSessionOperation();
+    }
   }
 
   isAuth() {
@@ -2558,22 +2589,14 @@ class IntegrationManager {
         /* ignore */
       }
 
-      const { data: rpcOrgId, error: rpcErr } = await supabase.rpc("bootstrap_user_organization", {
-        p_name: orgName,
+      const { data: sessionData } = await getSessionWithRetry();
+      const apiOrgId = await bootstrapOrganizationViaApi({
+        accessToken: sessionData?.session?.access_token ?? null,
+        userId: String(userId),
+        orgName,
       });
-      const rpcMsg = rpcErr ? String(rpcErr.message || "") : "";
-      const missingRpc =
-        rpcErr &&
-        (/does not exist|schema cache|42883|function.*not.*found/i.test(rpcMsg) ||
-          String(rpcErr.code || "") === "42883");
-      if (!rpcErr && rpcOrgId) {
-        return rpcOrgId;
-      }
-      if (rpcErr && !missingRpc) {
-        console.warn(
-          "IntegrationManager bootstrap_user_organization:",
-          getSupabaseErrorMessage(rpcErr, "Org bootstrap failed")
-        );
+      if (apiOrgId) {
+        return apiOrgId;
       }
 
       const { data: existingMembership, error: membershipCheckError } = await supabase
@@ -2684,6 +2707,8 @@ class IntegrationManager {
     };
 
     const uploadToStorage = async ({ file, folder, bucket: bucketOverride }) => {
+      beginCriticalSessionOperation();
+      try {
       if (!file) {
         throw new Error("No file provided");
       }
@@ -2717,6 +2742,9 @@ class IntegrationManager {
       }
 
       return { file_url: fileUrl, file_path: filePath };
+      } finally {
+        endCriticalSessionOperation();
+      }
     };
 
     const buildFileUrlWithBucket = async (opts, bucketName) => {
@@ -2773,6 +2801,8 @@ class IntegrationManager {
       },
       /** Store receipt image in receipts bucket: receipt-{Date.now()}.{ext} under org_id */
       UploadToReceipts: async ({ file }) => {
+        beginCriticalSessionOperation();
+        try {
         if (!file) throw new Error("No file provided");
         validateReceiptUpload(file);
         const sessionUser = await getSessionUser();
@@ -2793,6 +2823,9 @@ class IntegrationManager {
           throw new Error("Receipt upload succeeded but could not generate URL.");
         }
         return { file_url: fileUrl, file_path: filePath };
+        } finally {
+          endCriticalSessionOperation();
+        }
       },
       /** Upload to bank-details bucket (statements, imports); path = org_id/bank-details/... */
       UploadToBankDetails: async ({ file }) => {

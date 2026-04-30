@@ -10,6 +10,7 @@ import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
+import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 
 /**
  * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
@@ -159,6 +160,8 @@ function pdfBlobToBase64(blob) {
  * @returns {Promise<{ success: boolean, sentAt: string }>}
  */
 export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
+  beginCriticalSessionOperation();
+  try {
   const { html: htmlOverride } = options || {};
   if (!client?.email?.trim()) {
     throw new Error('Client has no email address.');
@@ -238,6 +241,9 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
   await recordDocumentSend('quote', quoteForSend.id, client.id, 'email');
 
   return { success: true, sentAt: new Date().toISOString() };
+  } finally {
+    endCriticalSessionOperation();
+  }
 }
 
 /**
@@ -267,6 +273,7 @@ export const sendQuoteToClient = async (quoteId, options = {}) => {
  * @returns {Promise} Send result
  */
 export const sendInvoiceToClient = async (invoiceId, options = {}) => {
+  beginCriticalSessionOperation();
   try {
     // Options are preserved for future API implementation
     // Currently: emailSubject, emailMessage, cc, bcc, sendSMS, sendNotification
@@ -311,6 +318,8 @@ export const sendInvoiceToClient = async (invoiceId, options = {}) => {
       throw new Error('Request was interrupted. Please try again.');
     }
     throw error;
+  } finally {
+    endCriticalSessionOperation();
   }
 };
 

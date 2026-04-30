@@ -1,37 +1,73 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/services/ActivityNotificationService";
 import { Bell, CheckCheck } from "lucide-react";
 
+const REALTIME_REFRESH_DEBOUNCE_MS = 350;
+
 export default function NotificationBell() {
+  const { authUserId } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [currentUserId, setCurrentUserId] = useState("");
   const [open, setOpen] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const panelId = useId();
   const headingId = useId();
   const triggerRef = useRef(null);
+  const realtimeDebounceRef = useRef(null);
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (!authUserId) {
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const [{ count: activityUnreadCount, error: activityUnreadError }, { count: inAppUnreadCount, error: inAppUnreadError }] =
+        await Promise.all([
+          supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", authUserId)
+            .eq("read", false),
+          supabase
+            .from("message_deliveries")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", authUserId)
+            .eq("channel", "in_app")
+            .is("read_at", null),
+        ]);
+      if (activityUnreadError) {
+        console.warn(
+          "NotificationBell: fetch activity unread count failed",
+          getSupabaseErrorMessage(activityUnreadError, "Unread count failed")
+        );
+      }
+      if (inAppUnreadError) {
+        console.warn(
+          "NotificationBell: fetch in-app unread count failed",
+          getSupabaseErrorMessage(inAppUnreadError, "Unread count failed")
+        );
+      }
+      setUnreadCount(Number(activityUnreadCount || 0) + Number(inAppUnreadCount || 0));
+    } catch (err) {
+      console.warn("NotificationBell: unread count fetch failed", getSupabaseErrorMessage(err, "Unread count failed"));
+    }
+  }, [authUserId]);
 
   const fetchNotifications = useCallback(async () => {
+    if (!authUserId) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
     setFetchError(null);
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        const msg = getSupabaseErrorMessage(userError, "Get user failed");
-        if (!/session missing|not authenticated|invalid jwt/i.test(msg)) {
-          console.warn("NotificationBell: get user failed", msg);
-        }
-        return;
-      }
-      const user = userData?.user;
-      if (!user) return;
-      setCurrentUserId(String(user.id || ""));
       const { data, error } = await supabase
         .from("notifications")
         .select("id, message, created_at, read")
-        .eq("user_id", user.id)
+        .eq("user_id", authUserId)
         .order("created_at", { ascending: false })
         .limit(20);
       if (error) {
@@ -44,7 +80,7 @@ export default function NotificationBell() {
         .select(
           "id, message_id, status, sent_at, read_at, channel, admin_platform_messages(subject, content)"
         )
-        .eq("user_id", user.id)
+        .eq("user_id", authUserId)
         .eq("channel", "in_app")
         .order("sent_at", { ascending: false })
         .limit(20);
@@ -85,18 +121,41 @@ export default function NotificationBell() {
       console.warn("NotificationBell:", msg);
       setFetchError(msg);
     }
-  }, []);
+  }, [authUserId]);
 
   useEffect(() => {
-    fetchNotifications();
+    if (!authUserId) return undefined;
+    void fetchUnreadCount();
+    const scheduleRefresh = () => {
+      if (realtimeDebounceRef.current) {
+        window.clearTimeout(realtimeDebounceRef.current);
+      }
+      realtimeDebounceRef.current = window.setTimeout(() => {
+        void fetchUnreadCount();
+        if (open) void fetchNotifications();
+      }, REALTIME_REFRESH_DEBOUNCE_MS);
+    };
     const channel = supabase
-      .channel("notifications-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, fetchNotifications)
+      .channel(`notifications-changes-${authUserId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${authUserId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_deliveries", filter: `user_id=eq.${authUserId}` }, scheduleRefresh)
       .subscribe();
     return () => {
+      if (realtimeDebounceRef.current) {
+        window.clearTimeout(realtimeDebounceRef.current);
+        realtimeDebounceRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [fetchNotifications]);
+  }, [authUserId, fetchNotifications, fetchUnreadCount, open]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    void fetchUnreadCount();
+    if (open) {
+      void fetchNotifications();
+    }
+  }, [authUserId, open, fetchNotifications, fetchUnreadCount]);
 
   useEffect(() => {
     if (!open) return;
@@ -135,11 +194,11 @@ export default function NotificationBell() {
     const ok = await markAllNotificationsReadForCurrentUser();
     if (ok) {
       const nowIso = new Date().toISOString();
-      if (currentUserId) {
+      if (authUserId) {
         await supabase
           .from("message_deliveries")
           .update({ read_at: nowIso, status: "read" })
-          .eq("user_id", currentUserId)
+          .eq("user_id", authUserId)
           .eq("channel", "in_app")
           .is("read_at", null);
       }

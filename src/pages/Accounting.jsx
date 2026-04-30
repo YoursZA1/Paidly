@@ -1,26 +1,13 @@
-import { User } from '@/api/entities';
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import FeatureGate from '@/components/subscription/FeatureGate';
 import AccountingDashboard from '@/components/accounting/AccountingDashboard';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Accounting() {
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Error fetching user:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchUser();
-  }, []);
+  const { profile, loading: authLoading } = useAuth();
+  const user = useMemo(() => profile || null, [profile]);
+  const isLoading = authLoading;
 
   if (isLoading) {
     return (

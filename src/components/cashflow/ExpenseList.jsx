@@ -9,8 +9,8 @@ import { Edit, Trash2, Receipt, CheckCircle, XCircle, Clock } from "lucide-react
 import { formatCurrency } from "../CurrencySelector";
 import { format, parseISO } from "date-fns";
 import ConfirmationDialog from "../shared/ConfirmationDialog";
-import { User } from "@/api/entities";
 import { Expense } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ROW_HEIGHT = 56;
 const VIRTUAL_TABLE_MAX_HEIGHT = 480;
@@ -143,12 +143,8 @@ const VirtualizedExpenseTableBody = React.memo(function VirtualizedExpenseTableB
 
 function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", onActionSuccess }) {
     const [deleteExpenseId, setDeleteExpenseId] = useState(null);
-    const [currentUser, setCurrentUser] = useState(null);
     const tableScrollRef = useRef(null);
-
-    React.useEffect(() => {
-        User.me().then(setCurrentUser);
-    }, []);
+    const { profile: currentUser } = useAuth();
 
     const handleDelete = useCallback(async () => {
         if (deleteExpenseId) {

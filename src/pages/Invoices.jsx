@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Invoice, Client, Payment, InvoiceView } from "@/api/entities";
+import { Invoice, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -9,9 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { invoicesToCsv, parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
+import { Plus, FileText, LayoutGrid, List, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
+import { parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -20,19 +19,25 @@ import { runPaidConfetti } from '@/utils/confetti';
 import { motion } from "framer-motion";
 import InvoiceList from "../components/invoice/InvoiceList";
 import InvoiceGrid from "../components/invoice/InvoiceGrid";
-import InvoiceFilters, { applyInvoiceFilters } from "../components/filters/InvoiceFilters";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import InvoiceFilters from "../components/filters/InvoiceFilters";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useInvoiceSideData } from "@/hooks/useInvoiceSideData";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useAppContext } from "@/contexts/AppContext";
+import { useDocumentListController, buildLookupMap } from "@/hooks/useDocumentListController";
+import { invoiceListAdapter } from "@/services/documentListAdapters";
+import DocumentListPagination from "@/components/shared/DocumentListPagination";
+import { exportInvoicesCsvWithItems } from "@/services/DocumentExportService";
 
 export default function InvoicesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const { user: authUser } = useAuth();
+    const { user: authUser, authUserId } = useAuth();
+    const [filters, setFilters] = useState({});
+    const [sideDataEnabled, setSideDataEnabled] = useState(false);
     const {
         loading: invoicesLoading,
         invoices,
@@ -40,70 +45,34 @@ export default function InvoicesPage() {
         fetchNextPage,
         hasNextPage,
         isFetchingNextPage,
-    } = useInvoices(authUser);
+    } = useInvoices({ userId: authUser?.id ?? null, filters });
+    const {
+        payments,
+        invoiceViews,
+        isFetching: isRefreshing,
+        error: initialError,
+        refetch: refetchSideData,
+    } = useInvoiceSideData(authUserId, { enabled: sideDataEnabled, staleTime: 5 * 60 * 1000 });
     const { profile } = useUserProfileQuery();
     const { setLoading: setAppLoading } = useAppContext();
     const storeUpdateInvoice = useAppStore((s) => s.updateInvoice);
     const clientsFromStore = useAppStore((s) => s.clients);
-    const [payments, setPayments] = useState([]);
-    const [invoiceViews, setInvoiceViews] = useState([]);
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [initialError, setInitialError] = useState(null);
-
-    // On first mount, hydrate payments + invoice views best-effort, but don't block render.
-    useEffect(() => {
-        let cancelled = false;
-        const loadSideData = async () => {
-            setIsRefreshing(true);
-            try {
-                const [paymentsData, viewsData] = await Promise.all([
-                    Payment.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => []),
-                    InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 4000 }).catch(() => []),
-                ]);
-                if (cancelled) return;
-                setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-                setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
-                setInitialError(null);
-            } catch (err) {
-                if (cancelled) return;
-                console.warn("Failed to load invoice side data:", err);
-                setInitialError(err);
-            } finally {
-                if (!cancelled) setIsRefreshing(false);
-            }
-        };
-        loadSideData();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
 
     const clients = clientsFromStore ?? [];
-    const isLoading =
-        (invoicesLoading && invoices.length === 0) || (invoices.length === 0 && isRefreshing);
+    const isLoading = invoicesLoading && invoices.length === 0;
 
     const handleActionSuccess = useCallback(() => {
         void refetchInvoices();
     }, [refetchInvoices]);
 
     const handleRefresh = useCallback(async () => {
-        setIsRefreshing(true);
-        setInitialError(null);
         try {
-            await refetchInvoices();
-            const [paymentsData, viewsData] = await Promise.all([
-                Payment.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
-                InvoiceView.list("-created_date", { limit: 100, maxWaitMs: 12000 }).catch(() => []),
-            ]);
-            setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-            setInvoiceViews(Array.isArray(viewsData) ? viewsData : []);
+            setSideDataEnabled(true);
+            await Promise.all([refetchInvoices(), refetchSideData()]);
         } catch (err) {
             console.warn("Invoices refresh failed:", err);
-            setInitialError(err);
-        } finally {
-            setIsRefreshing(false);
         }
-    }, [refetchInvoices]);
+    }, [refetchInvoices, refetchSideData]);
 
     const handleOptimisticUpdate = useCallback(
         async (id, status) => {
@@ -122,7 +91,6 @@ export default function InvoicesPage() {
         { channelName: "invoices-page" }
     );
 
-    const [filters, setFilters] = useState({});
     const [viewMode, setViewMode] = useState('list');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -133,10 +101,7 @@ export default function InvoicesPage() {
     const invoiceViewsFileInputRef = useRef(null);
     const invoiceLoadMoreRef = useRef(null);
 
-    const getClientName = (clientId) => {
-        const client = clients.find((c) => c.id === clientId);
-        return client ? client.name : "N/A";
-    };
+    const clientMap = useMemo(() => buildLookupMap(clients), [clients]);
 
     const userCurrency = profile?.currency || authUser?.currency || "ZAR";
 
@@ -164,19 +129,21 @@ export default function InvoicesPage() {
         }
     }, [initialError, toast]);
 
-    const filteredInvoices = applyInvoiceFilters(invoices, filters, getClientName);
-    
-    // Pagination logic
-    const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
-    const paginatedInvoices = filteredInvoices.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
-    );
-
-    // Reset to page 1 when filters change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [filters]);
+    const listContext = useMemo(() => ({ filters, clientMap }), [filters, clientMap]);
+    const {
+        allRows: filteredInvoices,
+        paginatedRows: paginatedInvoices,
+        totalPages,
+        visiblePages,
+    } = useDocumentListController({
+        documents: invoices,
+        currentPage,
+        itemsPerPage,
+        resetPageDeps: [filters],
+        setCurrentPage,
+        adapter: invoiceListAdapter,
+        context: listContext,
+    });
 
     useEffect(() => {
         const el = invoiceLoadMoreRef.current;
@@ -192,6 +159,7 @@ export default function InvoicesPage() {
     }, [hasNextPage, fetchNextPage]);
 
     const handleExportInvoices = async () => {
+        setSideDataEnabled(true);
         const listToExport = filteredInvoices;
         if (listToExport.length === 0) {
             toast({ title: "No invoices to export", variant: "destructive" });
@@ -199,36 +167,8 @@ export default function InvoicesPage() {
         }
         setIsExporting(true);
         try {
-            const ids = listToExport.map((i) => i.id);
-            const { data: itemsData } = await supabase.from("invoice_items").select("id, invoice_id, service_name, description, quantity, unit_price, total_price").in("invoice_id", ids);
-            const itemsByInvoiceId = new Map();
-            if (Array.isArray(itemsData)) {
-                itemsData.forEach((row) => {
-                    if (!itemsByInvoiceId.has(row.invoice_id)) itemsByInvoiceId.set(row.invoice_id, []);
-                    itemsByInvoiceId.get(row.invoice_id).push({
-                        service_name: row.service_name,
-                        description: row.description || "",
-                        quantity: Number(row.quantity ?? 1),
-                        unit_price: Number(row.unit_price ?? 0),
-                        total_price: Number(row.total_price ?? 0),
-                    });
-                });
-            }
-            const invoicesWithItems = listToExport.map((inv) => ({
-                ...inv,
-                items: itemsByInvoiceId.get(inv.id) || [],
-            }));
-            const csvContent = invoicesToCsv(invoicesWithItems, paymentsMap);
-            const blob = new Blob([csvContent], { type: "text/csv" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `Invoice_export_${Date.now()}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            toast({ title: "Export complete", description: `${listToExport.length} invoice(s) exported.`, variant: "default" });
+            const { count } = await exportInvoicesCsvWithItems(listToExport, paymentsMap);
+            toast({ title: "Export complete", description: `${count} invoice(s) exported.`, variant: "default" });
         } catch (error) {
             console.error("Export invoices error:", error);
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
@@ -296,13 +236,19 @@ export default function InvoicesPage() {
         }
     };
 
-    const handleExportInvoiceViews = () => {
-        if (invoiceViews.length === 0) {
+    const handleExportInvoiceViews = async () => {
+        setSideDataEnabled(true);
+        let viewsToExport = invoiceViews;
+        if (!sideDataEnabled) {
+            const refreshed = await refetchSideData();
+            viewsToExport = refreshed?.data?.invoiceViews ?? [];
+        }
+        if (viewsToExport.length === 0) {
             toast({ title: "No invoice views to export", variant: "destructive" });
             return;
         }
         try {
-            const csvContent = invoiceViewsToCsv(invoiceViews);
+            const csvContent = invoiceViewsToCsv(viewsToExport);
             const blob = new Blob([csvContent], { type: "text/csv" });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -312,7 +258,7 @@ export default function InvoicesPage() {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            toast({ title: "Export complete", description: `${invoiceViews.length} view(s) exported.`, variant: "default" });
+            toast({ title: "Export complete", description: `${viewsToExport.length} view(s) exported.`, variant: "default" });
         } catch (error) {
             console.error("Export invoice views error:", error);
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
@@ -566,67 +512,19 @@ export default function InvoicesPage() {
                                     </div>
                                 )}
 
-                                {totalPages > 1 && (
-                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <span>Show</span>
-                                            <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                                                <SelectTrigger className="w-[70px] h-9 rounded-lg">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded-xl">
-                                                    <SelectItem value="10">10</SelectItem>
-                                                    <SelectItem value="25">25</SelectItem>
-                                                    <SelectItem value="50">50</SelectItem>
-                                                    <SelectItem value="100">100</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <span>of {filteredInvoices.length} invoices</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-lg"
-                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                                disabled={currentPage === 1}
-                                            >
-                                                <ChevronLeft className="w-4 h-4 mr-1" />
-                                                Previous
-                                            </Button>
-                                            <div className="flex items-center gap-1">
-                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                                    let pageNum;
-                                                    if (totalPages <= 5) pageNum = i + 1;
-                                                    else if (currentPage <= 3) pageNum = i + 1;
-                                                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                                    else pageNum = currentPage - 2 + i;
-                                                    return (
-                                                        <Button
-                                                            key={i}
-                                                            variant={currentPage === pageNum ? "default" : "outline"}
-                                                            size="sm"
-                                                            onClick={() => setCurrentPage(pageNum)}
-                                                            className="w-9 h-9 rounded-lg"
-                                                        >
-                                                            {pageNum}
-                                                        </Button>
-                                                    );
-                                                })}
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-lg"
-                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                                disabled={currentPage === totalPages}
-                                            >
-                                                Next
-                                                <ChevronRight className="w-4 h-4 ml-1" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
+                                <DocumentListPagination
+                                    totalPages={totalPages}
+                                    currentPage={currentPage}
+                                    visiblePages={visiblePages}
+                                    onPageChange={setCurrentPage}
+                                    itemsPerPage={itemsPerPage}
+                                    onItemsPerPageChange={(next) => {
+                                        setItemsPerPage(next);
+                                        setCurrentPage(1);
+                                    }}
+                                    totalItems={filteredInvoices.length}
+                                    itemLabel="invoices"
+                                />
                             </>
                         )}
                     </CardContent>

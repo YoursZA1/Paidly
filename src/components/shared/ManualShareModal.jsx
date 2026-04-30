@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy, Mail, CheckCircle, Send } from 'lucide-react';
 import { breakApi } from '@/api/apiClient';
-import { User } from '@/api/entities';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType = "invoice", onMarkAsSent, invoice }) {
+    const { profile } = useAuth();
     const [copied, setCopied] = useState(false);
     const [emailTo, setEmailTo] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
@@ -29,7 +30,6 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
 
         setIsSending(true);
         try {
-            const user = await User.me();
             const emailBody = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background-color: #f9fafb;">
                     <div style="text-align: center; padding: 20px 0;">
@@ -49,7 +49,7 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                         </p>
                     </div>
                     <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-                        <p>Sent from ${user.company_name || user.full_name}</p>
+                        <p>Sent from ${profile?.company_name || profile?.full_name || "Paidly"}</p>
                     </div>
                 </div>
             `;

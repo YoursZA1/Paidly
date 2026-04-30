@@ -47,6 +47,7 @@ function normalizeSessionFromClient(session) {
 
 /** Seconds of slack before expiry so clock skew / refresh races do not log users out spuriously. */
 const SESSION_EXPIRY_SKEW_SEC = 90;
+const SESSION_HEARTBEAT_MS = 60_000;
 
 function isSessionValid(sessionNorm) {
   if (!sessionNorm?.user?.id) return false;
@@ -163,6 +164,7 @@ export function AuthProvider({ children }) {
   const lastRefreshAttemptMsRef = useRef(0);
   const reconnectEscalationTimerRef = useRef(null);
   const authTabSyncRef = useRef(null);
+  const bootstrapOrgAttemptedUsersRef = useRef(new Set());
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -175,6 +177,29 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     sessionUserIdRef.current = session?.user?.id ?? null;
   }, [session?.user?.id]);
+
+  const bootstrapOrganizationAfterLogin = useCallback(async (sessionLike) => {
+    const userId = sessionLike?.user?.id || null;
+    const accessToken = sessionLike?.accessToken || sessionLike?.access_token || null;
+    if (!userId || !accessToken) return;
+    if (bootstrapOrgAttemptedUsersRef.current.has(userId)) return;
+    bootstrapOrgAttemptedUsersRef.current.add(userId);
+
+    try {
+      await fetch("/api/bootstrap-org", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ user_id: userId }),
+      });
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Auth] bootstrap-org:", e?.message || e);
+      }
+    }
+  }, []);
 
   // Drop legacy `breakapi_user` mirror when using Supabase — session + profiles are authoritative.
   useEffect(() => {
@@ -517,15 +542,6 @@ export function AuthProvider({ children }) {
           console.warn("Restore from session failed:", restoreErr);
         }
 
-        // 3) Fetch user data
-        if (!currentUser) {
-          try {
-            currentUser = await User.me();
-          } catch {
-            currentUser = null;
-          }
-        }
-
         if (cancelled) return;
         // 4) Render UI; profile/API may be slow — keep JWT-derived user so we don't bounce to login.
         if (!currentUser) {
@@ -705,6 +721,20 @@ export function AuthProvider({ children }) {
     };
   }, [scheduleSessionResync]);
 
+  // Single owner periodic session heartbeat.
+  // Other root components should subscribe to session/connection stores (no parallel polling loops).
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const id = window.setInterval(() => {
+      if (loadingRef.current) return;
+      if (document.visibilityState !== "visible") return;
+      if (navigator.onLine === false) return;
+      if (!sessionUserIdRef.current) return;
+      void refreshSession({ silent: true });
+    }, SESSION_HEARTBEAT_MS);
+    return () => window.clearInterval(id);
+  }, [refreshSession]);
+
   // Back/forward cache restore: session timers were frozen — same recovery path as visibility.
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -822,6 +852,7 @@ export function AuthProvider({ children }) {
       if (event === "SIGNED_IN" && norm) {
         setSessionHealthStatus(SESSION_STATUS.CONNECTED, "signed_in");
         patchAuthSession({ session: norm });
+        void bootstrapOrganizationAfterLogin(norm);
         await refreshUserRef.current();
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });
       } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
@@ -835,12 +866,13 @@ export function AuthProvider({ children }) {
       } else if (event === "INITIAL_SESSION" && norm?.user) {
         setSessionHealthStatus(SESSION_STATUS.CONNECTED, "initial_session");
         patchAuthSession({ session: norm });
+        void bootstrapOrganizationAfterLogin(norm);
         await refreshUserRef.current();
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "INITIAL_SESSION" });
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [bootstrapOrganizationAfterLogin]);
 
   // Attach pending ?ref= from localStorage once a session exists (OAuth, email link, or after refresh).
   useEffect(() => {
@@ -875,6 +907,7 @@ export function AuthProvider({ children }) {
       throw new Error("Email not verified. Please verify your email before signing in.");
     }
     patchAuthSession({ session, authLoadingTimedOut: false });
+    void bootstrapOrganizationAfterLogin(session);
 
     await User.login({ email: normalizedEmail, password, role: role || undefined });
 
@@ -894,7 +927,7 @@ export function AuthProvider({ children }) {
         console.warn("[Auth] updateMyUserData after login (non-blocking):", e?.message || e);
       });
     }
-  }, []);
+  }, [bootstrapOrganizationAfterLogin]);
 
   const purgeSupabaseAuthStorage = useCallback(() => {
     const shouldRemoveKey = (k) =>

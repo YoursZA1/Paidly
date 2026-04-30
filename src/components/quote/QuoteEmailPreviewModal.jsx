@@ -5,16 +5,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Mail, FileText, X, Send } from 'lucide-react';
-import { User } from '@/api/entities';
 import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
+import { useAuth } from '@/contexts/AuthContext';
 
 export { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 
 export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend, isSending, getTrackableLink }) {
+    const { profile } = useAuth();
     const [company, setCompany] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -24,14 +25,17 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
 
     const loadData = async () => {
         try {
-            const companyData = await User.me();
-            setCompany(companyData);
+            setCompany(profile || null);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
             setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        setCompany(profile || null);
+    }, [profile]);
 
     if (isLoading) {
         return (

@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Mail, FileText, X, Send } from 'lucide-react';
-import { User, BankingDetail } from '@/api/entities';
+import { BankingDetail } from '@/api/entities';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { format } from 'date-fns';
@@ -13,6 +13,7 @@ import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/Invo
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
+import { useAuth } from '@/contexts/AuthContext';
 
 /** ctaHref: use tracked URL from getTrackedLinkUrl when sending; pixelUrl for opens. */
 export const generateInvoiceEmailHtml = (invoice, client, company, ctaHref, pixelUrl = '') => {
@@ -64,6 +65,7 @@ export const generateInvoiceEmailHtml = (invoice, client, company, ctaHref, pixe
 };
 
 export default function EmailPreviewModal({ invoice, client, onClose, onSend, isSending, getTrackableLink }) {
+    const { profile } = useAuth();
     const [company, setCompany] = useState(null);
     const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -76,11 +78,8 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     const loadData = async () => {
         try {
             setError(null);
-            const [companyData, allBankingDetails] = await Promise.all([
-                User.me(),
-                BankingDetail.list()
-            ]);
-            setCompany(companyData);
+            const allBankingDetails = await BankingDetail.list();
+            setCompany(profile || null);
             const matchingDetail = allBankingDetails.find(b => b.id === invoice.banking_detail_id);
             setBankingDetail(matchingDetail);
         } catch (error) {
@@ -90,6 +89,10 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
             setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        setCompany(profile || null);
+    }, [profile]);
 
     if (isLoading) {
         return (

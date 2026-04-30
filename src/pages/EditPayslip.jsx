@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Payroll } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,13 +10,53 @@ import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { formatCurrency } from "../components/CurrencySelector";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAutoDraft } from "@/hooks/useAutoDraft";
+import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function EditPayslip() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { toast } = useToast();
+    const { authUserId } = useAuth();
+    const lastDraftNoticeIdRef = useRef(null);
     const [payslipData, setPayslipData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const payslipId = new URLSearchParams(location.search).get("id");
+    const {
+        hasConflict: draftHasConflict,
+        restoreNotice: draftRestoreNotice,
+        statusLabel: draftStatusLabel,
+        lastSavedAt: draftLastSavedAt,
+        clearDraft,
+    } = useAutoDraft({
+        enabled: Boolean(authUserId && payslipId && payslipData),
+        userId: authUserId,
+        documentType: "payslip",
+        draftKey: `edit-${payslipId || "unknown"}`,
+        formData: payslipData || {},
+        onRestore: (restored) => {
+            if (!restored || typeof restored !== "object") return;
+            setPayslipData((prev) => ({ ...prev, ...restored }));
+        },
+    });
+    const draftSavedAtLabel = draftLastSavedAt
+        ? `Last saved at ${new Date(draftLastSavedAt).toLocaleTimeString([], { hour12: false })}`
+        : "";
+
+    useEffect(() => {
+        if (!draftRestoreNotice?.id) return;
+        if (lastDraftNoticeIdRef.current === draftRestoreNotice.id) return;
+        lastDraftNoticeIdRef.current = draftRestoreNotice.id;
+        toast({
+            title: draftRestoreNotice.title || "Newer draft restored",
+            description:
+                draftRestoreNotice.description ||
+                "A newer draft was restored to avoid accidental overwrite.",
+            variant: "default",
+        });
+    }, [draftRestoreNotice, toast]);
 
     useEffect(() => {
         if (!payslipId) {
@@ -89,30 +129,53 @@ export default function EditPayslip() {
         }));
     };
 
-    const calculateTotals = () => {
-        if (!payslipData) return { grossPay: 0, uifDeduction: 0, totalDeductions: 0, netPay: 0 };
-        
+    const calculatedPayroll = useMemo(() => {
+        if (!payslipData) return null;
         const basicSalary = parseFloat(payslipData.basic_salary) || 0;
-        const overtimePay = (parseFloat(payslipData.overtime_hours) || 0) * (parseFloat(payslipData.overtime_rate) || 0);
-        const totalAllowances = payslipData.allowances.reduce((sum, allowance) => sum + (parseFloat(allowance.amount) || 0), 0);
-        
-        const grossPay = basicSalary + overtimePay + totalAllowances;
-        
-        const uifDeduction = Math.min(grossPay * 0.01, 177.12);
-        
-        const totalOtherDeductions = payslipData.other_deductions.reduce((sum, deduction) => sum + (parseFloat(deduction.amount) || 0), 0);
-        const totalDeductions = (parseFloat(payslipData.tax_deduction) || 0) + 
-                              uifDeduction + 
-                              (parseFloat(payslipData.pension_deduction) || 0) + 
-                              (parseFloat(payslipData.medical_aid_deduction) || 0) + 
-                              totalOtherDeductions;
-        
-        const netPay = grossPay - totalDeductions;
+        const overtimeHours = parseFloat(payslipData.overtime_hours) || 0;
+        const overtimeRate = parseFloat(payslipData.overtime_rate) || 0;
+        const medicalAidDeduction = parseFloat(payslipData.medical_aid_deduction) || 0;
+        const pensionDeduction = parseFloat(payslipData.pension_deduction) || 0;
+        const parsedAllowances = (payslipData.allowances || []).map((allowance) => ({
+            ...allowance,
+            amount: parseFloat(allowance.amount) || 0,
+        }));
+        if (basicSalary <= 0 && overtimeHours <= 0 && parsedAllowances.length === 0) return null;
+        return calculateFullPayroll(
+            basicSalary,
+            parsedAllowances,
+            overtimeHours,
+            overtimeRate,
+            medicalAidDeduction,
+            pensionDeduction
+        );
+    }, [
+        payslipData,
+        payslipData?.basic_salary,
+        payslipData?.allowances,
+        payslipData?.overtime_hours,
+        payslipData?.overtime_rate,
+        payslipData?.medical_aid_deduction,
+        payslipData?.pension_deduction,
+    ]);
 
-        return { grossPay, uifDeduction, totalDeductions, netPay };
-    };
-
-    const { grossPay, uifDeduction, totalDeductions, netPay } = calculateTotals();
+    const { grossPay, totalDeductions, netPay, payeDeduction, uifDeduction } = useMemo(() => {
+        if (!payslipData || !calculatedPayroll) {
+            return { grossPay: 0, totalDeductions: 0, netPay: 0, payeDeduction: 0, uifDeduction: 0 };
+        }
+        const totalOtherDeductions = (payslipData.other_deductions || []).reduce(
+            (sum, deduction) => sum + (parseFloat(deduction.amount) || 0),
+            0
+        );
+        const computedTotalDeductions = calculatedPayroll.totalDeductions + totalOtherDeductions;
+        return {
+            grossPay: calculatedPayroll.grossPay,
+            totalDeductions: computedTotalDeductions,
+            netPay: calculatedPayroll.grossPay - computedTotalDeductions,
+            payeDeduction: calculatedPayroll.payeDeduction || 0,
+            uifDeduction: calculatedPayroll.uifDeduction || 0,
+        };
+    }, [calculatedPayroll, payslipData]);
 
     const handleUpdatePayslip = async () => {
         try {
@@ -121,10 +184,12 @@ export default function EditPayslip() {
             await Payroll.update(payslipId, {
                 ...updateData,
                 gross_pay: grossPay,
+                tax_deduction: payeDeduction,
                 uif_deduction: uifDeduction,
                 total_deductions: totalDeductions,
                 net_pay: netPay
             });
+            await clearDraft();
 
             navigate(createPageUrl("Payslips"));
         } catch (error) {
@@ -357,13 +422,13 @@ export default function EditPayslip() {
                         <CardContent className="space-y-6">
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
-                                    <Label htmlFor="tax_deduction">PAYE Tax (ZAR)</Label>
+                                    <Label htmlFor="tax_deduction">PAYE Tax (Auto-calculated)</Label>
                                     <Input
                                         id="tax_deduction"
                                         type="number"
-                                        value={payslipData.tax_deduction}
-                                        onChange={(e) => setPayslipData({...payslipData, tax_deduction: e.target.value})}
-                                        placeholder="4500"
+                                        value={payeDeduction.toFixed(2)}
+                                        disabled
+                                        className="bg-muted"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -461,6 +526,15 @@ export default function EditPayslip() {
 
                     {/* Actions */}
                     <div className="flex justify-end">
+                        {draftStatusLabel ? (
+                            <span
+                                className={`self-center mr-3 text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
+                                role={draftHasConflict ? "alert" : undefined}
+                            >
+                                {draftStatusLabel}
+                                {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
+                            </span>
+                        ) : null}
                         <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90">
                             <Save className="w-4 h-4 mr-2" />
                             Update Payslip

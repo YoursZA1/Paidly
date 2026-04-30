@@ -18,6 +18,7 @@ export default function SessionExpiredModal() {
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState("");
   const [resumeNotice, setResumeNotice] = useState("");
+  const [inactivityNotice, setInactivityNotice] = useState("");
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -68,6 +69,20 @@ export default function SessionExpiredModal() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reasonFromQuery = new URLSearchParams(window.location.search).get("reason");
+    const reasonFromStorage = window.sessionStorage.getItem("paidly_session_expired_reason");
+    if (reasonFromQuery === "inactivity" || reasonFromStorage === "inactivity_timeout") {
+      setInactivityNotice("Session expired due to inactivity");
+      try {
+        window.sessionStorage.removeItem("paidly_session_expired_reason");
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (status !== SESSION_STATUS.EXPIRED) {
       setBusy(false);
       setFormError("");
@@ -82,6 +97,19 @@ export default function SessionExpiredModal() {
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
         <h2 className="text-lg font-semibold">Session expired</h2>
+        {inactivityNotice ? (
+          <div className="mt-2 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {inactivityNotice}
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => setInactivityNotice("")}
+              aria-label="Dismiss inactivity notice"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
           Your session needs to be reconnected. Sign in below to continue exactly where you left off.
         </p>

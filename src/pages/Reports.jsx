@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Invoice } from '@/api/entities';
-import { User } from '@/api/entities';
 import { Expense } from '@/api/entities';
 import { useAppStore } from '@/stores/useAppStore';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,11 +31,12 @@ export default function Reports() {
   const storeInvoices = useAppStore((s) => s.invoices);
   const storeExpenses = useAppStore((s) => s.expenses);
   const storeUser = useAppStore((s) => s.userProfile);
+  const { profile } = useAuth();
   const hasStoreData = (storeInvoices?.length > 0) || (storeExpenses?.length > 0) || storeUser != null;
   const hadDataOnMount = useRef(hasStoreData);
   const [invoices, setInvoices] = useState(storeInvoices ?? []);
   const [expenses, setExpenses] = useState(storeExpenses ?? []);
-  const [user, setUser] = useState(storeUser ?? null);
+  const [user, setUser] = useState(profile ?? storeUser ?? null);
   const [isLoading, setIsLoading] = useState(!hasStoreData);
 
   useEffect(() => {
@@ -46,13 +47,12 @@ export default function Reports() {
   const loadData = async () => {
     if (!hadDataOnMount.current) setIsLoading(true);
     try {
-      const [invoicesData, userData, expensesData] = await Promise.all([
+      const [invoicesData, expensesData] = await Promise.all([
         Invoice.list('-created_date', REPORTS_LIST_OPTS),
-        User.me(),
         Expense.list('-date', REPORTS_LIST_OPTS),
       ]);
       setInvoices(invoicesData || []);
-      setUser(userData);
+      setUser(profile ?? storeUser ?? null);
       setExpenses(expensesData || []);
     } catch (error) {
       console.error('Error loading reports data:', error);
@@ -65,6 +65,10 @@ export default function Reports() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    setUser(profile ?? storeUser ?? null);
+  }, [profile, storeUser]);
 
   const openReport = (params) => {
     const search = new URLSearchParams(params).toString();

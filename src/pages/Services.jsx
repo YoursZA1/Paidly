@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Service } from "@/api/entities";
-import { User } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
 import { useServicesCatalogQuery, invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { cn } from "@/lib/utils";
 import { createPageUrl } from "@/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Inventory = lazy(() => import("./Inventory"));
 
@@ -33,10 +33,11 @@ export default function Services() {
     const { toast } = useToast();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { profile: authProfile } = useAuth();
     const [searchParams] = useSearchParams();
     const userProfileFromStore = useAppStore((s) => s.userProfile);
     const { data: services = [], isLoading } = useServicesCatalogQuery();
-    const [user, setUser] = useState(userProfileFromStore ?? null);
+    const user = authProfile ?? userProfileFromStore ?? null;
     const qFromUrl = searchParams.get("q") ?? "";
     const [searchTerm, setSearchTerm] = useState(qFromUrl);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -51,12 +52,6 @@ export default function Services() {
 
     useEffect(() => {
         setIndustries(getIndustries());
-        // Avoid hitting auth.me when we already have cached profile data.
-        if (userProfileFromStore) {
-            setUser(userProfileFromStore);
-        } else {
-            loadUser();
-        }
     }, []);
 
     useEffect(() => {
@@ -65,19 +60,6 @@ export default function Services() {
             setSearchTerm(q);
         }
     }, [searchParams]);
-
-    useEffect(() => {
-        if (userProfileFromStore != null && user === null) setUser(userProfileFromStore);
-    }, [userProfileFromStore, user]);
-
-    const loadUser = async () => {
-        try {
-            const userData = await User.me();
-            setUser(userData);
-        } catch (error) {
-            console.error("Error loading user:", error);
-        }
-    };
 
     const goEditCatalogItem = (service) => {
         navigate(`${createPageUrl("EditCatalogItem")}?id=${encodeURIComponent(service.id)}`);

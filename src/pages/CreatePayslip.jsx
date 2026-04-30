@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Payroll } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,9 +11,15 @@ import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAutoDraft } from "@/hooks/useAutoDraft";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
+    const { toast } = useToast();
+    const { authUserId } = useAuth();
+    const lastDraftNoticeIdRef = useRef(null);
     const [payslipData, setPayslipData] = useState({
         employee_name: "",
         employee_id: "",
@@ -35,24 +41,53 @@ export default function CreatePayslip() {
         other_deductions: [],
         status: "draft"
     });
-    const [isFormValid, setIsFormValid] = useState(false);
-    const [calculatedPayroll, setCalculatedPayroll] = useState(null);
+    const {
+        hasConflict: draftHasConflict,
+        restoreNotice: draftRestoreNotice,
+        statusLabel: draftStatusLabel,
+        lastSavedAt: draftLastSavedAt,
+        clearDraft,
+    } = useAutoDraft({
+        enabled: Boolean(authUserId),
+        userId: authUserId,
+        documentType: "payslip",
+        draftKey: "create",
+        formData: payslipData,
+        onRestore: (restored) => {
+            if (!restored || typeof restored !== "object") return;
+            setPayslipData((prev) => ({ ...prev, ...restored }));
+        },
+    });
+    const draftSavedAtLabel = draftLastSavedAt
+        ? `Last saved at ${new Date(draftLastSavedAt).toLocaleTimeString([], { hour12: false })}`
+        : "";
 
     useEffect(() => {
+        if (!draftRestoreNotice?.id) return;
+        if (lastDraftNoticeIdRef.current === draftRestoreNotice.id) return;
+        lastDraftNoticeIdRef.current = draftRestoreNotice.id;
+        toast({
+            title: draftRestoreNotice.title || "Newer draft restored",
+            description:
+                draftRestoreNotice.description ||
+                "A newer draft was restored to avoid accidental overwrite.",
+            variant: "default",
+        });
+    }, [draftRestoreNotice, toast]);
+
+    const isFormValid = useMemo(() => {
         const { employee_name, employee_id, pay_period_start, pay_period_end, pay_date, basic_salary } = payslipData;
-        const isValid = 
+        return (
             employee_name.trim() !== "" &&
             employee_id.trim() !== "" &&
             pay_period_start !== "" &&
             pay_period_end !== "" &&
             pay_date !== "" &&
-            parseFloat(basic_salary) > 0;
-        setIsFormValid(isValid);
+            parseFloat(basic_salary) > 0
+        );
     }, [payslipData]);
 
-    // Recalculate payroll when relevant fields change
-    useEffect(() => {
-        // Ensure values are numbers before passing to calculation
+    const calculatedPayroll = useMemo(() => {
         const basicSalary = parseFloat(payslipData.basic_salary) || 0;
         const overtimeHours = parseFloat(payslipData.overtime_hours) || 0;
         const overtimeRate = parseFloat(payslipData.overtime_rate) || 0;
@@ -60,32 +95,16 @@ export default function CreatePayslip() {
         const pensionDeduction = parseFloat(payslipData.pension_deduction) || 0;
         const parsedAllowances = payslipData.allowances.map(a => ({...a, amount: parseFloat(a.amount) || 0}));
 
-        if (basicSalary > 0 || overtimeHours > 0 || parsedAllowances.length > 0) {
-            const calculation = calculateFullPayroll(
-                basicSalary,
-                parsedAllowances,
-                overtimeHours,
-                overtimeRate,
-                medicalAidDeduction,
-                pensionDeduction
-            );
-            setCalculatedPayroll(calculation);
-            
-            // Auto-update PAYE and UIF in payslipData state
-            setPayslipData(prev => ({
-                ...prev,
-                tax_deduction: calculation.payeDeduction,
-                uif_deduction: calculation.uifDeduction
-            }));
-        } else {
-            // Reset calculated payroll if basic salary is not entered
-            setCalculatedPayroll(null);
-            setPayslipData(prev => ({
-                ...prev,
-                tax_deduction: 0,
-                uif_deduction: 0
-            }));
-        }
+        if (basicSalary <= 0 && overtimeHours <= 0 && parsedAllowances.length === 0) return null;
+
+        return calculateFullPayroll(
+            basicSalary,
+            parsedAllowances,
+            overtimeHours,
+            overtimeRate,
+            medicalAidDeduction,
+            pensionDeduction
+        );
     }, [
         payslipData.basic_salary, 
         payslipData.allowances, 
@@ -141,24 +160,17 @@ export default function CreatePayslip() {
         }));
     };
 
-    const calculateFinalTotals = () => {
+    const { grossPay, totalDeductions, netPay } = useMemo(() => {
         if (!calculatedPayroll) return { grossPay: 0, totalDeductions: 0, netPay: 0 };
-        
-        // Add other deductions to the calculated totals
-        const otherDeductionsTotal = payslipData.other_deductions.reduce((sum, deduction) => 
+        const otherDeductionsTotal = payslipData.other_deductions.reduce((sum, deduction) =>
             sum + (parseFloat(deduction.amount) || 0), 0);
-        
-        const totalDeductions = calculatedPayroll.totalDeductions + otherDeductionsTotal;
-        const netPay = calculatedPayroll.grossPay - totalDeductions;
-
+        const computedTotalDeductions = calculatedPayroll.totalDeductions + otherDeductionsTotal;
         return {
             grossPay: calculatedPayroll.grossPay,
-            totalDeductions: totalDeductions,
-            netPay: netPay
+            totalDeductions: computedTotalDeductions,
+            netPay: calculatedPayroll.grossPay - computedTotalDeductions
         };
-    };
-
-    const { grossPay, totalDeductions, netPay } = calculateFinalTotals();
+    }, [calculatedPayroll, payslipData.other_deductions]);
 
     const handleCreatePayslip = async () => {
         try {
@@ -186,13 +198,14 @@ export default function CreatePayslip() {
                 basic_salary: parseFloat(payslipData.basic_salary) || 0,
                 overtime_hours: parseFloat(payslipData.overtime_hours) || 0,
                 overtime_rate: parseFloat(payslipData.overtime_rate) || 0,
-                tax_deduction: parseFloat(payslipData.tax_deduction) || 0, // Auto-calculated
-                uif_deduction: parseFloat(payslipData.uif_deduction) || 0, // Auto-calculated
+                tax_deduction: parseFloat(calculatedPayroll?.payeDeduction) || 0,
+                uif_deduction: parseFloat(calculatedPayroll?.uifDeduction) || 0,
                 pension_deduction: parseFloat(payslipData.pension_deduction) || 0,
                 medical_aid_deduction: parseFloat(payslipData.medical_aid_deduction) || 0,
                 allowances: payslipData.allowances.map(a => ({...a, amount: parseFloat(a.amount) || 0})),
                 other_deductions: payslipData.other_deductions.map(d => ({...d, amount: parseFloat(d.amount) || 0})),
             });
+            await clearDraft();
 
             navigate(createPageUrl("Payslips"));
         } catch (error) {
@@ -428,7 +441,7 @@ export default function CreatePayslip() {
                                     <Input
                                         id="tax_deduction"
                                         type="number"
-                                        value={payslipData.tax_deduction.toFixed(2)}
+                                        value={(calculatedPayroll?.payeDeduction || 0).toFixed(2)}
                                         disabled
                                         className="bg-muted"
                                     />
@@ -439,7 +452,7 @@ export default function CreatePayslip() {
                                     <Input
                                         id="uif_deduction"
                                         type="number"
-                                        value={payslipData.uif_deduction.toFixed(2)}
+                                        value={(calculatedPayroll?.uifDeduction || 0).toFixed(2)}
                                         disabled
                                         className="bg-muted"
                                     />
@@ -543,6 +556,15 @@ export default function CreatePayslip() {
 
                     {/* Actions */}
                     <div className="flex justify-end">
+                        {draftStatusLabel ? (
+                            <span
+                                className={`self-center mr-3 text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
+                                role={draftHasConflict ? "alert" : undefined}
+                            >
+                                {draftStatusLabel}
+                                {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
+                            </span>
+                        ) : null}
                         <Button
                             onClick={handleCreatePayslip}
                             size="lg"

@@ -1,12 +1,13 @@
-import { Quote, Client, QuoteReminder, User } from '@/api/entities';
+import { Quote, Client, QuoteReminder } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 
 class QuoteReminderService {
-    static async checkAndSendReminders() {
+    static async checkAndSendReminders(profileOverride = null) {
         try {
-            const user = await User.me();
+            const user = profileOverride || null;
+            if (!user?.id) return;
             const settings = user.quote_reminder_settings;
 
             if (!settings || !settings.enabled) {

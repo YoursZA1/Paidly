@@ -28,6 +28,7 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
 import { lineItemHasContent } from "@/utils/lineItemContent";
 import { normalizeDocumentType, DOCUMENT_TYPES } from "@/document-engine";
+import { useAutoDraft } from "@/hooks/useAutoDraft";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -126,7 +127,7 @@ function CreateDocumentCore({ docType }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, authUserId } = useAuth();
   const profileDefaultsApplied = useRef(false);
   const previewPdfRef = useRef(null);
   const documentLogoInputRef = useRef(null);
@@ -172,6 +173,24 @@ function CreateDocumentCore({ docType }) {
     terms_conditions: initialTerms,
     /** Public URL for logo on this document only; empty = use profile logo */
     document_logo_url: "",
+  });
+
+  const {
+    hasConflict: draftHasConflict,
+    restoreNotice: draftRestoreNotice,
+    statusLabel: draftStatusLabel,
+    lastSavedAt: draftLastSavedAt,
+    clearDraft: clearAutoDraft,
+  } = useAutoDraft({
+    enabled: docType === "invoice" && Boolean(authUserId),
+    userId: authUserId,
+    documentType: "invoice",
+    draftKey: "create",
+    formData: form,
+    onRestore: (restored) => {
+      if (!restored || typeof restored !== "object") return;
+      setForm((current) => ({ ...current, ...restored }));
+    },
   });
 
   useEffect(() => {
@@ -912,6 +931,7 @@ function CreateDocumentCore({ docType }) {
       }
 
       await persistInvoice(false);
+      await clearAutoDraft();
     } catch (err) {
       console.error("CreateDocument save:", err);
       const msg = err?.message || String(err);
@@ -940,6 +960,7 @@ function CreateDocumentCore({ docType }) {
     setSaving(true);
     try {
       await persistInvoice(true);
+      await clearAutoDraft();
     } catch (err) {
       console.error("CreateDocument send:", err);
       const msg = err?.message || String(err);
@@ -955,6 +976,23 @@ function CreateDocumentCore({ docType }) {
 
   const currencyCode = form.currency || "ZAR";
   const listHref = docType === "quote" ? createPageUrl("Quotes") : createPageUrl("Invoices");
+  const draftSavedAtLabel = draftLastSavedAt
+    ? `Last saved at ${new Date(draftLastSavedAt).toLocaleTimeString([], { hour12: false })}`
+    : "";
+  const lastDraftNoticeIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!draftRestoreNotice?.id) return;
+    if (lastDraftNoticeIdRef.current === draftRestoreNotice.id) return;
+    lastDraftNoticeIdRef.current = draftRestoreNotice.id;
+    toast({
+      title: draftRestoreNotice.title || "Newer draft restored",
+      description:
+        draftRestoreNotice.description ||
+        "A newer draft was restored to avoid accidental overwrite.",
+      variant: "default",
+    });
+  }, [draftRestoreNotice, toast]);
 
   const queuePdfDownload = useCallback(() => {
     const items = buildPaidLineItems(form.line_items, form.discount);
@@ -1045,6 +1083,15 @@ function CreateDocumentCore({ docType }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {docType === "invoice" && draftStatusLabel ? (
+            <span
+              className={`self-center text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
+              role={draftHasConflict ? "alert" : undefined}
+            >
+              {draftStatusLabel}
+              {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
+            </span>
+          ) : null}
           <Button variant="outline" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? "Edit" : "Preview"}
           </Button>

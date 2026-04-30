@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Client, Invoice, Quote, Payment, User } from "@/api/entities";
+import { Client, Invoice, Quote, Payment } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { buildClientTimelineEvents } from "@/services/ClientTimelineService";
 import ClientTimeline from "../components/clients/ClientTimeline";
+import { useAuth } from "@/contexts/AuthContext";
 
 const INVOICES_PER_PAGE = 5;
 
@@ -50,6 +51,7 @@ const isClientIdUuid = (id) =>
     id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id).trim());
 
 export default function ClientDetail() {
+    const { profile } = useAuth();
     const urlParams = new URLSearchParams(window.location.search);
     const clientId = urlParams.get('id');
 
@@ -82,17 +84,16 @@ export default function ClientDetail() {
             setInvoices([]);
             setQuotes([]);
             setPayments([]);
-            try { setUser(await User.me()); } catch { /* ignore */ }
+            setUser(profile || null);
             if (mountedRef.current) setIsLoading(false);
             return;
         }
         try {
-            const [clientData, invoicesData, userData, quotesData, paymentsRaw] = await withTimeoutRetry(
+            const [clientData, invoicesData, quotesData, paymentsRaw] = await withTimeoutRetry(
                 () =>
                     Promise.all([
                         Client.filter({ id: clientId }),
                         Invoice.filter({ client_id: clientId }, "-created_date"),
-                        User.me(),
                         Quote.filter({ client_id: clientId }, "-created_date"),
                         Payment.list("-paid_at", { limit: 300, maxWaitMs: 12000 }).catch(() => []),
                     ]),
@@ -105,7 +106,7 @@ export default function ClientDetail() {
             setQuotes(Array.isArray(quotesData) ? quotesData : []);
             const pr = Array.isArray(paymentsRaw) ? paymentsRaw : [];
             setPayments(pr.filter((p) => String(p?.client_id || "") === String(clientId)));
-            setUser(userData);
+            setUser(profile || null);
         } catch (error) {
             if (!mountedRef.current) return;
             console.error("Error loading client data:", error);
@@ -117,6 +118,10 @@ export default function ClientDetail() {
             if (mountedRef.current) setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        setUser(profile || null);
+    }, [profile]);
 
     const handleDeleteClient = async () => {
         if (!clientId) return;

@@ -206,15 +206,16 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
     );
 }
 
-export function applyInvoiceFilters(invoices, filters, getClientName) {
+export function applyInvoiceFilters(invoices, filters, clientMap = new Map()) {
     let filtered = invoices.filter(invoice => {
         // Search filter
         if (filters.search) {
             const searchLower = filters.search.toLowerCase();
+            const clientName = String(clientMap.get(invoice.client_id)?.name || "N/A");
             const matchesSearch = 
                 invoice.project_title?.toLowerCase().includes(searchLower) ||
                 invoice.invoice_number?.toLowerCase().includes(searchLower) ||
-                getClientName(invoice.client_id).toLowerCase().includes(searchLower);
+                clientName.toLowerCase().includes(searchLower);
             if (!matchesSearch) return false;
         }
 

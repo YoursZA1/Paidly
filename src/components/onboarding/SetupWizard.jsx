@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { User, BankingDetail } from "@/api/entities";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   uploadLogo,
   validateLogoFile,
@@ -17,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Logo from "@/components/shared/Logo";
 
 export default function SetupWizard({ isOpen, onComplete }) {
+    const { profile, authUserId } = useAuth();
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [logoFile, setLogoFile] = useState(null);
@@ -38,11 +40,12 @@ export default function SetupWizard({ isOpen, onComplete }) {
         if (isOpen) {
             loadInitialData();
         }
-    }, [isOpen]);
+    }, [isOpen, profile]);
 
     const loadInitialData = async () => {
         try {
-            const user = await User.me();
+            const user = profile;
+            if (!user) return;
             setFormData(prev => ({
                 ...prev,
                 full_name: user.full_name || user.display_name || "",
@@ -86,8 +89,8 @@ export default function SetupWizard({ isOpen, onComplete }) {
     const handleFinish = async () => {
         setIsLoading(true);
         try {
-            const user = await User.me();
-            const userId = user?.id;
+            const user = profile;
+            const userId = authUserId || profile?.id;
             if (!userId) {
                 console.error("Setup: no user id (not authenticated)");
                 return;
@@ -99,7 +102,7 @@ export default function SetupWizard({ isOpen, onComplete }) {
 
             // Save to Supabase profiles table (one row per user, keyed by auth user id)
             await User.updateMyUserData({
-                full_name: formData.full_name?.trim() || user.full_name || user.display_name,
+                full_name: formData.full_name?.trim() || user?.full_name || user?.display_name,
                 company_name: formData.company_name,
                 company_address: formData.company_address,
                 logo_url: finalLogoUrl,

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import PaymentReminderService from '@/components/reminders/PaymentReminderService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const STORAGE_KEY = 'paidly_payment_reminder_last_run';
 
@@ -8,6 +9,7 @@ const STORAGE_KEY = 'paidly_payment_reminder_last_run';
  * For server-side scheduling, see Vercel Cron + `/api/cron/payment-reminders` (docs/CRON_PAYMENT_REMINDERS.md).
  */
 export default function PaymentReminderScheduler() {
+  const { profile } = useAuth();
   useEffect(() => {
     const today = new Date().toDateString();
     try {
@@ -21,7 +23,7 @@ export default function PaymentReminderScheduler() {
     let cancelled = false;
     (async () => {
       try {
-        await PaymentReminderService.checkAndSendReminders();
+        await PaymentReminderService.checkAndSendReminders(profile || null);
       } catch {
         /* ignore */
       }
@@ -36,7 +38,7 @@ export default function PaymentReminderScheduler() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [profile]);
 
   return null;
 }

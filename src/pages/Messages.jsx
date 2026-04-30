@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Message, Client, Invoice, Quote, User, DocumentSend, MessageLog, InvoiceView, Payment } from '@/api/entities';
+import { Message, Client, Invoice, Quote, DocumentSend, MessageLog, InvoiceView, Payment } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,10 @@ import MessageComposer from '../components/messages/MessageComposer';
 import ConversationList from '../components/messages/ConversationList';
 import ConversationThread from '../components/messages/ConversationThread';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function MessagesPage() {
+    const { profile } = useAuth();
     const [messages, setMessages] = useState([]);
     const [clients, setClients] = useState([]);
     const [invoices, setInvoices] = useState([]);
@@ -124,7 +126,6 @@ export default function MessagesPage() {
                 safe(() => Client.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
                 safe(() => Invoice.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
                 safe(() => Quote.list('-created_date', { limit: 100, maxWaitMs: 12000 }), []),
-                safe(() => User.me(), null),
                 safe(() => DocumentSend.list('-sent_at', { limit: 100, maxWaitMs: 12000 }), []),
                 safe(() => MessageLog.list('-sent_at', { limit: 100, maxWaitMs: 12000 }), []),
                 safe(() => InvoiceView.list('-viewed_at', { limit: 100, maxWaitMs: 12000 }), []),
@@ -136,7 +137,6 @@ export default function MessagesPage() {
                 clientsData,
                 invoicesData,
                 quotesData,
-                userData,
                 sendsData,
                 logsData,
                 viewsData,
@@ -147,7 +147,7 @@ export default function MessagesPage() {
             setClients(clientsData || []);
             setInvoices(invoicesData || []);
             setQuotes(quotesData || []);
-            setUser(userData);
+            setUser(profile || null);
             setDocumentSends(sendsData || []);
             setMessageLogs(logsData || []);
             setInvoiceViews(viewsData || []);
@@ -159,6 +159,10 @@ export default function MessagesPage() {
             if (mountedRef.current) setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        setUser(profile || null);
+    }, [profile]);
 
     // Group messages into conversations by client and optionally invoice
     const getConversations = () => {

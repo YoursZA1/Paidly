@@ -20,11 +20,14 @@ import InvoiceStatusBadge from "../components/invoice/InvoiceStatusBadge";
 import { canEditInvoice } from "@/logic";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { Separator } from "@/components/ui/separator";
+import { useAutoDraft } from "@/hooks/useAutoDraft";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function EditInvoice() {
     const navigate = useNavigate();
     const location = useLocation();
     const { toast } = useToast();
+    const { authUserId } = useAuth();
     const [invoiceId, setInvoiceId] = useState(null);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
@@ -35,6 +38,40 @@ export default function EditInvoice() {
     const [originalInvoiceData, setOriginalInvoiceData] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const mountedRef = useRef(true);
+    const lastDraftNoticeIdRef = useRef(null);
+    const {
+        hasConflict: draftHasConflict,
+        restoreNotice: draftRestoreNotice,
+        statusLabel: draftStatusLabel,
+        lastSavedAt: draftLastSavedAt,
+        clearDraft,
+    } = useAutoDraft({
+        enabled: Boolean(authUserId && invoiceId && invoiceData),
+        userId: authUserId,
+        documentType: "invoice",
+        draftKey: `edit-${invoiceId || "unknown"}`,
+        formData: invoiceData || {},
+        onRestore: (restored) => {
+            if (!restored || typeof restored !== "object") return;
+            setInvoiceData((prev) => ({ ...prev, ...restored }));
+        },
+    });
+    const draftSavedAtLabel = draftLastSavedAt
+        ? `Last saved at ${new Date(draftLastSavedAt).toLocaleTimeString([], { hour12: false })}`
+        : "";
+
+    useEffect(() => {
+        if (!draftRestoreNotice?.id) return;
+        if (lastDraftNoticeIdRef.current === draftRestoreNotice.id) return;
+        lastDraftNoticeIdRef.current = draftRestoreNotice.id;
+        toast({
+            title: draftRestoreNotice.title || "Newer draft restored",
+            description:
+                draftRestoreNotice.description ||
+                "A newer draft was restored to avoid accidental overwrite.",
+            variant: "default",
+        });
+    }, [draftRestoreNotice, toast]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -172,13 +209,12 @@ export default function EditInvoice() {
 
             updatedInvoiceData.version_history = appendHistory(invoiceData.version_history, historyEntry);
 
-            const meForBrand = await User.me().catch(() => null);
-            const brandPatch = meForBrand ? snapshotDocumentBrandForPersist(meForBrand) : {};
+            const currentUser = await User.me().catch(() => null);
+            const brandPatch = currentUser ? snapshotDocumentBrandForPersist(currentUser) : {};
             await Invoice.update(invoiceId, { ...updatedInvoiceData, ...brandPatch });
 
             // Log the invoice update
             const clientName = clients.find(c => c.id === invoiceData.client_id)?.name || "Unknown";
-            const currentUser = await User.me();
             const changesDescription = changes.map(c => `${c.field}: ${c.before} → ${c.after}`).join(', ');
             logInvoiceUpdated(
               invoiceId,
@@ -234,6 +270,7 @@ export default function EditInvoice() {
                         : `Invoice ${invoiceData.invoice_number} was updated successfully.`,
                 variant: 'success',
             });
+            await clearDraft();
 
             setTimeout(() => {
                 navigate(createPageUrl("Invoices"));
@@ -398,6 +435,15 @@ export default function EditInvoice() {
                             </div>
 
                             <div className="flex flex-col gap-2 pt-1">
+                                {draftStatusLabel ? (
+                                    <p
+                                        className={`text-center text-[11px] ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
+                                        role={draftHasConflict ? "alert" : undefined}
+                                    >
+                                        {draftStatusLabel}
+                                        {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
+                                    </p>
+                                ) : null}
                                 {isDraft ? (
                                     <>
                                         <Button

@@ -1,28 +1,27 @@
-import { useSupabaseQuery } from "@/hooks/useSupabaseQuery";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAuthUserId } from "@/lib/authUserId";
 
 /**
- * Example reusable data hook: current user's profile row.
- * Returns a single profile object (or null) from react-query state.
+ * Canonical profile selector.
+ * Profile ownership lives in AuthContext session/bootstrap lifecycle.
+ * This hook intentionally avoids issuing its own network query to prevent
+ * duplicate profile reads on every page mount.
  */
 export function useUserProfileQuery() {
-  const { user, authReady } = useAuth();
-  const userId = getAuthUserId(user);
-
-  const query = useSupabaseQuery({
-    queryKey: ["profile", userId],
-    table: "profiles",
-    select: "*",
-    match: userId ? { id: userId } : undefined,
-    enabled: authReady && Boolean(userId),
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  });
+  const { profile, authReady, refreshUser } = useAuth();
+  const hasProfile = Boolean(profile?.id);
 
   return {
-    ...query,
-    profile: Array.isArray(query.data) ? query.data[0] || null : null,
+    profile: profile ?? null,
+    data: profile ? [profile] : [],
+    isLoading: !authReady,
+    isPending: !authReady,
+    isFetching: false,
+    isSuccess: hasProfile,
+    isError: false,
+    error: null,
+    async refetch() {
+      await refreshUser();
+      return { data: profile ? [profile] : [], error: null };
+    },
   };
 }

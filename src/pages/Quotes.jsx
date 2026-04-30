@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, LayoutGrid, List, ChevronLeft, ChevronRight, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { quotesToCsv, parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
+import { Plus, Search, FileText, LayoutGrid, List, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
+import { parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
@@ -23,6 +22,10 @@ import { hasFeature } from "@/data/paidlySubscriptionPlans";
 import UpgradePrompt from "@/components/subscription/UpgradePrompt";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { normalizePaidPackageKey, slugFromProfile } from "@/lib/subscriptionPlan";
+import { useDocumentListController, buildLookupMap } from "@/hooks/useDocumentListController";
+import { quoteListAdapter } from "@/services/documentListAdapters";
+import DocumentListPagination from "@/components/shared/DocumentListPagination";
+import { exportQuotesCsvWithItems } from "@/services/DocumentExportService";
 
 export default function QuotesPage() {
     const { toast } = useToast();
@@ -101,51 +104,28 @@ export default function QuotesPage() {
         return () => ob.disconnect();
     }, [hasNextPage, fetchNextPage]);
 
-    const getClientName = (clientId) => {
-        const client = clients.find(c => c.id === clientId);
-        return client ? client.name : "N/A";
-    };
+    const clientMap = useMemo(() => buildLookupMap(clients), [clients]);
 
     const userCurrency = userProfile?.currency || 'ZAR';
 
-    const filteredQuotes = quotes.filter((quote) => {
-        const title = (quote.project_title || "").toLowerCase();
-        const num = (quote.quote_number || "").toLowerCase();
-        const term = searchTerm.toLowerCase();
-        return (
-            title.includes(term) ||
-            num.includes(term) ||
-            getClientName(quote.client_id).toLowerCase().includes(term)
-        );
-    });
-
-    // Apply sorting
-    const sortedQuotes = [...filteredQuotes].sort((a, b) => {
-        switch (sortBy) {
-            case 'date_newest':
-                return new Date(b.created_date) - new Date(a.created_date);
-            case 'date_oldest':
-                return new Date(a.created_date) - new Date(b.created_date);
-            case 'amount_highest':
-                return (b.total_amount || 0) - (a.total_amount || 0);
-            case 'amount_lowest':
-                return (a.total_amount || 0) - (b.total_amount || 0);
-            default:
-                return new Date(b.created_date) - new Date(a.created_date);
-        }
-    });
-
-    // Pagination logic
-    const totalPages = Math.ceil(sortedQuotes.length / itemsPerPage);
-    const paginatedQuotes = sortedQuotes.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
+    const listContext = useMemo(
+        () => ({ searchTerm, sortBy, clientMap }),
+        [searchTerm, sortBy, clientMap]
     );
-
-    // Reset to page 1 when search/sort changes
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, sortBy]);
+    const {
+        allRows: sortedQuotes,
+        paginatedRows: paginatedQuotes,
+        totalPages,
+        visiblePages,
+    } = useDocumentListController({
+        documents: quotes,
+        currentPage,
+        itemsPerPage,
+        resetPageDeps: [searchTerm, sortBy],
+        setCurrentPage,
+        adapter: quoteListAdapter,
+        context: listContext,
+    });
 
     const handleExportQuotes = async () => {
         const listToExport = sortedQuotes;
@@ -154,36 +134,8 @@ export default function QuotesPage() {
             return;
         }
         try {
-            const ids = listToExport.map((q) => q.id);
-            const { data: itemsData } = await supabase.from("quote_items").select("id, quote_id, service_name, description, quantity, unit_price, total_price").in("quote_id", ids);
-            const itemsByQuoteId = new Map();
-            if (Array.isArray(itemsData)) {
-                itemsData.forEach((row) => {
-                    if (!itemsByQuoteId.has(row.quote_id)) itemsByQuoteId.set(row.quote_id, []);
-                    itemsByQuoteId.get(row.quote_id).push({
-                        service_name: row.service_name,
-                        description: row.description || "",
-                        quantity: Number(row.quantity ?? 1),
-                        unit_price: Number(row.unit_price ?? 0),
-                        total_price: Number(row.total_price ?? 0),
-                    });
-                });
-            }
-            const quotesWithItems = listToExport.map((q) => ({
-                ...q,
-                items: itemsByQuoteId.get(q.id) || [],
-            }));
-            const csvContent = quotesToCsv(quotesWithItems);
-            const blob = new Blob([csvContent], { type: "text/csv" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `Quote_export_${Date.now()}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            toast({ title: "Export complete", description: `${listToExport.length} quote(s) exported.`, variant: "default" });
+            const { count } = await exportQuotesCsvWithItems(listToExport);
+            toast({ title: "Export complete", description: `${count} quote(s) exported.`, variant: "default" });
         } catch (error) {
             console.error("Export quotes error:", error);
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
@@ -497,76 +449,19 @@ export default function QuotesPage() {
                                     </div>
                                 )}
 
-                                {/* Pagination Controls */}
-                                {totalPages > 1 && (
-                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-slate-600">Show</span>
-                                            <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                                                <SelectTrigger className="w-[70px] h-9">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="10">10</SelectItem>
-                                                    <SelectItem value="25">25</SelectItem>
-                                                    <SelectItem value="50">50</SelectItem>
-                                                    <SelectItem value="100">100</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <span className="text-sm text-slate-600">
-                                                of {sortedQuotes.length} quotes
-                                            </span>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                                disabled={currentPage === 1}
-                                            >
-                                                <ChevronLeft className="w-4 h-4 mr-1" />
-                                                Previous
-                                            </Button>
-                                            
-                                            <div className="flex items-center gap-1">
-                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                                    let pageNum;
-                                                    if (totalPages <= 5) {
-                                                        pageNum = i + 1;
-                                                    } else if (currentPage <= 3) {
-                                                        pageNum = i + 1;
-                                                    } else if (currentPage >= totalPages - 2) {
-                                                        pageNum = totalPages - 4 + i;
-                                                    } else {
-                                                        pageNum = currentPage - 2 + i;
-                                                    }
-                                                    return (
-                                                        <Button
-                                                            key={i}
-                                                            variant={currentPage === pageNum ? "default" : "outline"}
-                                                            size="sm"
-                                                            onClick={() => setCurrentPage(pageNum)}
-                                                            className="w-9 h-9"
-                                                        >
-                                                            {pageNum}
-                                                        </Button>
-                                                    );
-                                                })}
-                                            </div>
-                                            
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                                disabled={currentPage === totalPages}
-                                            >
-                                                Next
-                                                <ChevronRight className="w-4 h-4 ml-1" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
+                                <DocumentListPagination
+                                    totalPages={totalPages}
+                                    currentPage={currentPage}
+                                    visiblePages={visiblePages}
+                                    onPageChange={setCurrentPage}
+                                    itemsPerPage={itemsPerPage}
+                                    onItemsPerPageChange={(next) => {
+                                        setItemsPerPage(next);
+                                        setCurrentPage(1);
+                                    }}
+                                    totalItems={sortedQuotes.length}
+                                    itemLabel="quotes"
+                                />
                             </>
                         )}
                     </CardContent>

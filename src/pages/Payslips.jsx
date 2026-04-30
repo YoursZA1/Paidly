@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import { Plus, Search, Receipt, Download, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
@@ -12,6 +12,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { payslipsToCsv, parsePayslipCsv, csvRowToPayslipPayload } from "@/utils/payslipCsvMapping";
 import PayslipList from "../components/payslips/PayslipList";
 import { useAppStore } from "@/stores/useAppStore";
+import { useDocumentListController } from "@/hooks/useDocumentListController";
+import { payslipListAdapter } from "@/services/documentListAdapters";
+import DocumentListPagination from "@/components/shared/DocumentListPagination";
 
 export default function PayslipsPage() {
     const payslipsFromStore = useAppStore((s) => s.payslips);
@@ -117,22 +120,20 @@ export default function PayslipsPage() {
 
     const userCurrency = userProfile?.currency || "ZAR";
 
-    const filteredPayslips = payslips.filter(
-        (payslip) =>
-            payslip.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            payslip.payslip_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            payslip.position?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const totalPages = Math.ceil(filteredPayslips.length / itemsPerPage);
-    const paginatedPayslips = filteredPayslips.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
-    );
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm]);
+    const {
+        allRows: filteredPayslips,
+        paginatedRows: paginatedPayslips,
+        totalPages,
+        visiblePages,
+    } = useDocumentListController({
+        documents: payslips,
+        currentPage,
+        itemsPerPage,
+        resetPageDeps: [searchTerm],
+        setCurrentPage,
+        adapter: payslipListAdapter,
+        context: { searchTerm },
+    });
 
     return (
         <div className="min-h-screen bg-background w-full min-w-0 mobile-page px-4 sm:px-6">
@@ -251,73 +252,19 @@ export default function PayslipsPage() {
                                     onActionSuccess={loadData}
                                 />
 
-                                {totalPages > 1 && (
-                                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <span>Show</span>
-                                            <Select
-                                                value={itemsPerPage.toString()}
-                                                onValueChange={(v) => {
-                                                    setItemsPerPage(Number(v));
-                                                    setCurrentPage(1);
-                                                }}
-                                            >
-                                                <SelectTrigger className="w-[70px] h-9 rounded-lg">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded-xl">
-                                                    <SelectItem value="10">10</SelectItem>
-                                                    <SelectItem value="25">25</SelectItem>
-                                                    <SelectItem value="50">50</SelectItem>
-                                                    <SelectItem value="100">100</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <span>of {filteredPayslips.length} payslips</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-lg"
-                                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                                disabled={currentPage === 1}
-                                            >
-                                                <ChevronLeft className="w-4 h-4 mr-1" />
-                                                Previous
-                                            </Button>
-                                            <div className="flex items-center gap-1">
-                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                                    let pageNum;
-                                                    if (totalPages <= 5) pageNum = i + 1;
-                                                    else if (currentPage <= 3) pageNum = i + 1;
-                                                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                                    else pageNum = currentPage - 2 + i;
-                                                    return (
-                                                        <Button
-                                                            key={i}
-                                                            variant={currentPage === pageNum ? "default" : "outline"}
-                                                            size="sm"
-                                                            onClick={() => setCurrentPage(pageNum)}
-                                                            className="w-9 h-9 rounded-lg"
-                                                        >
-                                                            {pageNum}
-                                                        </Button>
-                                                    );
-                                                })}
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-lg"
-                                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                                disabled={currentPage === totalPages}
-                                            >
-                                                Next
-                                                <ChevronRight className="w-4 h-4 ml-1" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
+                                <DocumentListPagination
+                                    totalPages={totalPages}
+                                    currentPage={currentPage}
+                                    visiblePages={visiblePages}
+                                    onPageChange={setCurrentPage}
+                                    itemsPerPage={itemsPerPage}
+                                    onItemsPerPageChange={(next) => {
+                                        setItemsPerPage(next);
+                                        setCurrentPage(1);
+                                    }}
+                                    totalItems={filteredPayslips.length}
+                                    itemLabel="payslips"
+                                />
                             </>
                         )}
                     </CardContent>

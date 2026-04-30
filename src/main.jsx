@@ -1,7 +1,7 @@
 import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createAppQueryClient } from '@/lib/query-client'
+import { getOrCreateAppQueryClient } from '@/lib/query-client'
 import App from '@/App.jsx'
 import '@/index.css'
 import ErrorBoundary from '@/components/ErrorBoundary.jsx'
@@ -10,6 +10,7 @@ import { AppProvider } from "@/contexts/AppContext";
 import ConnectionMonitor from "@/components/connection/ConnectionMonitor.jsx";
 import SessionActivityBeacon from "@/components/activity/SessionActivityBeacon.jsx";
 import SessionExpiredModal from "@/components/session/SessionExpiredModal.jsx";
+import InactivitySessionGuard from "@/components/session/InactivitySessionGuard.jsx";
 import SyncEngine from "@/components/sync/SyncEngine.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -48,7 +49,7 @@ function recoverFromCorruptedStorage() {
 
 recoverFromCorruptedStorage()
 
-const queryClient = createAppQueryClient()
+const queryClient = getOrCreateAppQueryClient()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
@@ -60,6 +61,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <ConnectionMonitor />
                 <SyncEngine />
                 <SessionActivityBeacon />
+                <InactivitySessionGuard />
                 <SessionExpiredModal />
                 <App />
               </AppProvider>

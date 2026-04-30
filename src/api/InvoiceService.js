@@ -5,6 +5,7 @@
 import { breakApi } from './apiClient';
 import { isAbortError } from '@/utils/retryOnAbort';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
+import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 
 class InvoiceService {
   /**
@@ -103,6 +104,7 @@ class InvoiceService {
     customMessage = '',
     trackableViewUrl = ''
   ) {
+    beginCriticalSessionOperation();
     try {
       const baseUrl = window.location.origin;
       const publicViewUrl = trackableViewUrl || `${baseUrl}/view/${invoiceData.public_share_token || ''}` || `${baseUrl}/PublicInvoice?id=${invoiceData.id}`;
@@ -143,6 +145,8 @@ class InvoiceService {
         throw new Error('Could not reach the server. Ensure VITE_SERVER_URL is set to your backend URL (e.g. https://paidly.co.za).');
       }
       throw new Error(`Failed to send invoice email: ${error.message}`);
+    } finally {
+      endCriticalSessionOperation();
     }
   }
 

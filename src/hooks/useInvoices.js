@@ -1,21 +1,24 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   fetchInvoiceListPage,
+  getInvoiceListQueryKey,
   INVOICE_LIST_PAGE_SIZE,
+  normalizeInvoiceListFilters,
 } from "@/services/InvoiceListService";
 
 /**
  * Paginated invoice list for scale: loads in pages via TanStack Query infinite cache.
  * Replaces unbounded Supabase select("*") — grows with user scroll / explicit refetch only.
  */
-export function useInvoices(user) {
-  const userId = user?.id ?? null;
+export function useInvoices({ userId, filters }) {
+  const normalizedFilters = normalizeInvoiceListFilters(filters);
 
   const query = useInfiniteQuery({
-    queryKey: ["invoices", "list", userId],
+    queryKey: getInvoiceListQueryKey(normalizedFilters, userId),
     enabled: Boolean(userId),
     initialPageParam: 0,
-    queryFn: async ({ pageParam }) => fetchInvoiceListPage(pageParam),
+    queryFn: async ({ pageParam }) =>
+      fetchInvoiceListPage(pageParam, normalizedFilters, userId),
     getNextPageParam: (lastPage, allPages) => {
       if (!lastPage?.length || lastPage.length < INVOICE_LIST_PAGE_SIZE) return undefined;
       return allPages.reduce((sum, page) => sum + page.length, 0);

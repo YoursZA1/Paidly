@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
 
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 
@@ -30,6 +31,8 @@ const SupabaseStorageService = {
    * @returns {Promise<string>} public URL
    */
   async uploadProfileLogo(file, userId) {
+    beginCriticalSessionOperation();
+    try {
     const authUserId = await resolveAuthUserId(userId);
     const fileExt = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "png");
     const filePath = `${authUserId}/logo.${fileExt}`;
@@ -81,6 +84,9 @@ const SupabaseStorageService = {
       throw new Error("Upload succeeded but could not generate public logo URL.");
     }
     return publicData.publicUrl;
+    } finally {
+      endCriticalSessionOperation();
+    }
   },
 
   /** Returns a public URL for the provided path. */
