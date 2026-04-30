@@ -22,12 +22,14 @@ function viteEnvFlag(name) {
   return v === "1" || v === "true" || v === "yes";
 }
 
-function buildPlatformUserMessagesGetUrls(recipientId, threadLimit, listLimit, messageType) {
+function buildPlatformUserMessagesGetUrls(recipientId, threadLimit, listLimit, messageType, listCursor, threadCursor) {
   const params = new URLSearchParams();
   if (recipientId) params.set("recipient_id", recipientId);
   if (threadLimit != null) params.set("thread_limit", String(threadLimit));
   if (listLimit != null) params.set("list_limit", String(listLimit));
   if (messageType) params.set("message_type", String(messageType));
+  if (listCursor) params.set("list_cursor", String(listCursor));
+  if (threadCursor) params.set("thread_cursor", String(threadCursor));
   const q = params.toString() ? `?${params.toString()}` : "";
 
   const out = [];
@@ -100,9 +102,10 @@ function buildBroadcastUpdatePostUrls() {
   return out;
 }
 
-function buildBroadcastJobsGetUrls(limit = 100) {
+function buildBroadcastJobsGetUrls(limit = 100, cursor) {
   const params = new URLSearchParams();
   if (limit != null) params.set("limit", String(limit));
+  if (cursor) params.set("cursor", String(cursor));
   const q = params.toString() ? `?${params.toString()}` : "";
   const out = [];
   const seen = new Set();
@@ -146,7 +149,7 @@ async function getSessionToken() {
 }
 
 /**
- * @param {{ recipientId?: string, threadLimit?: number, listLimit?: number, messageType?: "direct" | "broadcast" }} opts
+ * @param {{ recipientId?: string, threadLimit?: number, listLimit?: number, messageType?: "direct" | "broadcast", listCursor?: string, threadCursor?: string }} opts
  * @returns {Promise<{ conversations?: Array<{ recipient_id: string, last_at: string, preview: string, subject: string }>, messages?: Array<Record<string, unknown>> }>}
  */
 export async function fetchAdminPlatformUserMessages(opts = {}) {
@@ -160,7 +163,9 @@ export async function fetchAdminPlatformUserMessages(opts = {}) {
     recipientId || undefined,
     opts.threadLimit,
     opts.listLimit,
-    opts.messageType
+    opts.messageType,
+    opts.listCursor,
+    opts.threadCursor
   );
 
   let lastError = null;
@@ -457,15 +462,15 @@ export async function postAdminBroadcastUpdate(body) {
 }
 
 /**
- * @param {{ limit?: number }} opts
- * @returns {Promise<{ jobs: Array<Record<string, unknown>> }>}
+ * @param {{ limit?: number, cursor?: string }} opts
+ * @returns {Promise<{ jobs: Array<Record<string, unknown>>, next_cursor?: string | null }>}
  */
 export async function fetchAdminBroadcastJobs(opts = {}) {
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
     throw new Error("Admin broadcast jobs API requires Node backend (VITE_SUPABASE_ONLY=1).");
   }
   const token = await getSessionToken();
-  const candidates = buildBroadcastJobsGetUrls(opts.limit ?? 100);
+  const candidates = buildBroadcastJobsGetUrls(opts.limit ?? 100, opts.cursor);
   let lastError = null;
   for (const url of candidates) {
     let res;
@@ -495,7 +500,7 @@ export async function fetchAdminBroadcastJobs(opts = {}) {
       lastError = "Invalid broadcast jobs response.";
       continue;
     }
-    return { jobs: payload.jobs };
+    return { jobs: payload.jobs, next_cursor: payload.next_cursor ?? null };
   }
   throw new Error(lastError || "Broadcast jobs fetch failed");
 }

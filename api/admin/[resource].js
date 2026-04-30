@@ -398,20 +398,48 @@ async function handleBroadcastJobs(req, res, supabase) {
     }
     limit = n;
   }
-  const { data, error } = await supabase
+  const cursor = String(req.query?.cursor || "").trim();
+  let cursorCreatedAt = "";
+  let cursorId = "";
+  if (cursor) {
+    const idx = cursor.lastIndexOf("::");
+    if (idx <= 0) {
+      return res.status(400).json({ error: "Invalid cursor" });
+    }
+    cursorCreatedAt = cursor.slice(0, idx).trim();
+    cursorId = cursor.slice(idx + 2).trim();
+    if (!cursorCreatedAt || !cursorId || !Number.isFinite(new Date(cursorCreatedAt).getTime())) {
+      return res.status(400).json({ error: "Invalid cursor" });
+    }
+  }
+  let query = supabase
     .from("admin_broadcast_jobs")
     .select(
       "id, idempotency_key, sender_id, subject, content, total_recipients, notifications_inserted, messages_inserted, email_sent, email_skipped, email_failed, status, error, created_at, updated_at, started_at, finished_at"
     )
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`
+    );
+  }
+  const { data, error } = await query;
   if (error) {
     if (String(error.code || "") === "42P01") {
       return res.status(200).json({ jobs: [] });
     }
     return res.status(500).json({ error: error.message || "Failed to load broadcast jobs" });
   }
-  return res.status(200).json({ jobs: data || [] });
+  const rows = data || [];
+  const hasMore = rows.length > limit;
+  const jobs = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor =
+    hasMore && jobs.length
+      ? `${String(jobs[jobs.length - 1]?.created_at || "").trim()}::${String(jobs[jobs.length - 1]?.id || "").trim()}`
+      : null;
+  return res.status(200).json({ jobs, next_cursor: nextCursor });
 }
 
 const DEFAULT_ADMIN_SETTINGS = {
@@ -1019,12 +1047,16 @@ export default async function handler(req, res) {
         }
         listLimit = n;
       }
+      const listCursor = String(req.query?.list_cursor || "").trim() || undefined;
+      const threadCursor = String(req.query?.thread_cursor || "").trim() || undefined;
       try {
         const data = await getAdminPlatformUserMessages(supabase, {
           recipientId: recipientId || undefined,
           messageType,
           threadLimit,
           listLimit,
+          listCursor,
+          threadCursor,
         });
         return res.status(200).json({ ok: true, ...data });
       } catch (e) {

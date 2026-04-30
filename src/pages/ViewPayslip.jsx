@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Payroll } from '@/api/entities';
+import { Payroll, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import ManualShareModal from '@/components/shared/ManualShareModal';
+import PayslipDocument from '@/components/payslips/PayslipDocument';
+import { format, isValid, parseISO } from 'date-fns';
 
 export default function ViewPayslip() {
     const location = useLocation();
     const navigate = useNavigate();
     const payslipId = new URLSearchParams(location.search).get('id');
     const [payslip, setPayslip] = useState(null);
+    const [user, setUser] = useState(null);
     const [showManualShare, setShowManualShare] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
 
@@ -22,16 +25,23 @@ export default function ViewPayslip() {
 
     const loadPayslip = async () => {
         try {
-            const payslipData = await Payroll.get(payslipId);
+            const [payslipData, userData] = await Promise.all([Payroll.get(payslipId), User.me()]);
             setPayslip(payslipData);
+            setUser(userData);
         } catch (error) {
             console.error('Error loading payslip:', error);
         }
     };
 
     const handleDownloadPDF = () => {
-        const pdfUrl = createPageUrl(`PayslipPDF?id=${payslipId}`);
-        window.location.href = pdfUrl;
+        const pdfUrl = createPageUrl(`PayslipPDF?id=${payslipId}&download=true`);
+        window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    const safeFormatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        const date = parseISO(dateStr);
+        return isValid(date) ? format(date, 'MMMM d, yyyy') : 'N/A';
     };
 
     const handleShare = async () => {
@@ -106,16 +116,22 @@ export default function ViewPayslip() {
                 </div>
             </div>
 
-            {/* PDF Preview */}
+            {/* Payslip Preview */}
             <div className="p-4">
                 <div className="max-w-7xl mx-auto">
-                    <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
-                        <iframe
-                            src={createPageUrl(`PayslipPDF?id=${payslipId}`)}
-                            title="Payslip Preview"
-                            className="w-full h-screen border-none"
-                            style={{ minHeight: '800px' }}
-                        />
+                    <div className="bg-slate-100 rounded-lg border border-border p-3 sm:p-6">
+                        {payslip ? (
+                            <PayslipDocument
+                                payslip={payslip}
+                                user={user}
+                                payDate={safeFormatDate(payslip.pay_date)}
+                                payPeriodLabel={`${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`}
+                            />
+                        ) : (
+                            <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                                Loading preview...
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

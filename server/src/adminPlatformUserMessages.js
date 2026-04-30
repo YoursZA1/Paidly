@@ -7,6 +7,7 @@ import { isValidUuid } from "./inputValidation.js";
 
 const MAX_LIST = 500;
 const MAX_THREAD = 150;
+const CURSOR_SEPARATOR = "::";
 
 /** Keep aligned with email + DB ergonomics (defense in depth vs oversized payloads). */
 export const ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT = 300;
@@ -16,9 +17,35 @@ const MESSAGE_TYPE_VALUES = new Set(["direct", "broadcast"]);
 
 /** Maps to HTTP 400 when thrown from list/send helpers (Express + Vercel). */
 export function isAdminPlatformMessageClientError(message) {
-  return /Invalid (recipient|sender|campaign)_id|Recipient not found|Sender profile not found|recipient_id and sender_id are required|content is required|subject too long|content too long|invalid channel|invalid status|invalid message_type/i.test(
+  return /Invalid (recipient|sender|campaign)_id|Recipient not found|Sender profile not found|recipient_id and sender_id are required|content is required|subject too long|content too long|invalid channel|invalid status|invalid message_type|invalid (list|thread)_cursor/i.test(
     String(message || "")
   );
+}
+
+function encodeCursor(createdAt, id) {
+  const ts = String(createdAt || "").trim();
+  const rowId = String(id || "").trim();
+  if (!ts || !rowId) return "";
+  return `${ts}${CURSOR_SEPARATOR}${rowId}`;
+}
+
+function decodeCursor(raw, kind) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const idx = value.lastIndexOf(CURSOR_SEPARATOR);
+  if (idx <= 0) {
+    throw new Error(`invalid ${kind}_cursor`);
+  }
+  const createdAt = value.slice(0, idx).trim();
+  const id = value.slice(idx + CURSOR_SEPARATOR.length).trim();
+  if (!createdAt || !id) {
+    throw new Error(`invalid ${kind}_cursor`);
+  }
+  const parsed = new Date(createdAt).getTime();
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`invalid ${kind}_cursor`);
+  }
+  return { createdAt, id };
 }
 
 /** Migration not applied: thrown message from insert when relation is missing. */
@@ -44,6 +71,8 @@ export function isMissingAdminPlatformMessagesRelation(error) {
 export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
   const recipientId = String(opts.recipientId || "").trim();
   const messageType = opts.messageType ? String(opts.messageType).trim().toLowerCase() : "";
+  const listCursor = decodeCursor(opts.listCursor, "list");
+  const threadCursor = decodeCursor(opts.threadCursor, "thread");
   const threadLimit = Math.min(MAX_THREAD, Math.max(1, Number(opts.threadLimit) || 100));
   const listLimit = Math.min(MAX_LIST, Math.max(1, Number(opts.listLimit) || 500));
 
@@ -62,8 +91,14 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
       )
       .eq("recipient_id", recipientId)
       .order("created_at", { ascending: false })
-      .limit(threadLimit);
+      .order("id", { ascending: false })
+      .limit(threadLimit + 1);
     if (messageType) query = query.eq("message_type", messageType);
+    if (threadCursor) {
+      query = query.or(
+        `created_at.lt.${threadCursor.createdAt},and(created_at.eq.${threadCursor.createdAt},id.lt.${threadCursor.id})`
+      );
+    }
     const { data, error } = await query;
 
     if (error) {
@@ -75,7 +110,9 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
       }
       throw new Error(error.message);
     }
-    const messages = data || [];
+    const pageRows = data || [];
+    const hasMore = pageRows.length > threadLimit;
+    const messages = hasMore ? pageRows.slice(0, threadLimit) : pageRows;
     const messageIds = messages.map((m) => String(m.id || "")).filter(Boolean);
     let deliveriesByMessage = new Map();
     if (messageIds.length) {
@@ -106,6 +143,7 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
         ...m,
         deliveries: deliveriesByMessage.get(String(m.id || "")) || null,
       })),
+      next_thread_cursor: hasMore ? encodeCursor(messages[messages.length - 1]?.created_at, messages[messages.length - 1]?.id) : null,
     };
   }
 
@@ -115,8 +153,14 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
       "id, recipient_id, sender_id, subject, content, is_read, send_email, send_in_app, channel, status, delivered_at, failed_reason, created_at"
     )
     .order("created_at", { ascending: false })
-    .limit(listLimit);
+    .order("id", { ascending: false })
+    .limit(listLimit + 1);
   if (messageType) listQuery = listQuery.eq("message_type", messageType);
+  if (listCursor) {
+    listQuery = listQuery.or(
+      `created_at.lt.${listCursor.createdAt},and(created_at.eq.${listCursor.createdAt},id.lt.${listCursor.id})`
+    );
+  }
   const { data, error } = await listQuery;
 
   if (error) {
@@ -129,7 +173,9 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
     throw new Error(error.message);
   }
 
-  const rows = data || [];
+  const pageRows = data || [];
+  const hasMore = pageRows.length > listLimit;
+  const rows = hasMore ? pageRows.slice(0, listLimit) : pageRows;
   const messageIds = rows.map((m) => String(m.id || "")).filter(Boolean);
   let deliveriesByMessage = new Map();
   if (messageIds.length) {
@@ -179,7 +225,10 @@ export async function getAdminPlatformUserMessages(supabaseAdmin, opts = {}) {
     });
   }
 
-  return { conversations };
+  return {
+    conversations,
+    next_list_cursor: hasMore ? encodeCursor(rows[rows.length - 1]?.created_at, rows[rows.length - 1]?.id) : null,
+  };
 }
 
 /**

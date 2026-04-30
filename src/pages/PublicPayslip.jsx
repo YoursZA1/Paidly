@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
-import DocumentLayout from '../components/shared/DocumentLayout';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { createPageUrl } from '@/utils';
 import {
@@ -16,23 +15,7 @@ import {
 import { AlertCircle, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-
-function PublicPayslipContent({ payslip, shareToken }) {
-    if (!payslip || !shareToken) {
-        return null;
-    }
-    const pdfSrc = `${createPageUrl(`PayslipPDF?id=${payslip.id}&token=${encodeURIComponent(shareToken)}`)}`;
-    return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <iframe
-                src={pdfSrc}
-                title="Payslip"
-                className="w-full border-none"
-                style={{ height: '1000px' }}
-            />
-        </div>
-    );
-}
+import PayslipDocument from '@/components/payslips/PayslipDocument';
 
 export default function PublicPayslip() {
     const location = useLocation();
@@ -220,15 +203,29 @@ export default function PublicPayslip() {
         ? `PayslipPDF?id=${payslip.id}&token=${encodeURIComponent(shareToken)}&download=true`
         : `PayslipPDF?id=${payslip.id}&download=true`;
 
+    const payDate = payslip.pay_date ? format(new Date(payslip.pay_date), 'MMMM d, yyyy') : 'N/A';
+    const payPeriod = `${payslip.pay_period_start ? format(new Date(payslip.pay_period_start), 'MMMM d, yyyy') : 'N/A'} - ${payslip.pay_period_end ? format(new Date(payslip.pay_period_end), 'MMMM d, yyyy') : 'N/A'}`;
+
     return (
-        <DocumentLayout
-            user={user}
-            title="PAYSLIP"
-            documentNumber={payslip.payslip_number}
-            date={payslip.pay_date ? format(new Date(payslip.pay_date), 'MMMM d, yyyy') : ''}
-            downloadUrl={createPageUrl(downloadPath)}
-        >
-            <PublicPayslipContent payslip={payslip} shareToken={shareToken} />
-        </DocumentLayout>
+        <div className="min-h-screen bg-slate-100 py-4 sm:py-8">
+            <div className="w-full px-page sm:px-6">
+                <div className="mb-4 flex justify-end max-w-[800px] mx-auto">
+                    <a
+                        href={createPageUrl(downloadPath)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6"
+                    >
+                        Download PDF
+                    </a>
+                </div>
+                <PayslipDocument
+                    payslip={payslip}
+                    user={user}
+                    payDate={payDate}
+                    payPeriodLabel={payPeriod}
+                />
+            </div>
+        </div>
     );
 }

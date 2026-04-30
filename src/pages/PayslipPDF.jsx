@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Payroll, User } from '@/api/entities';
 import { fetchPublicPayslipPayload } from '@/api/publicPayslipApiClient';
 import { getPublicPayslipViewerToken } from '@/lib/publicPayslipViewerStorage';
-import { formatCurrency } from '../components/CurrencySelector';
 import { format, isValid, parseISO } from 'date-fns';
-import DocumentLayout from '../components/shared/DocumentLayout';
+import { Button } from '@/components/ui/button';
+import generatePdfFromElement from '@/utils/generatePdfFromElement';
+import { isAbortError } from '@/utils/retryOnAbort';
+import PayslipDocument from '@/components/payslips/PayslipDocument';
 
 export default function PayslipPDF() {
     const location = useLocation();
+    const navigate = useNavigate();
     const urlParams = new URLSearchParams(location.search);
     const payslipId = urlParams.get('id');
     const shareToken = urlParams.get('token');
@@ -16,6 +19,8 @@ export default function PayslipPDF() {
     const [payslip, setPayslip] = useState(null);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const printRef = useRef(null);
 
     useEffect(() => {
         if (shareToken) {
@@ -32,8 +37,8 @@ export default function PayslipPDF() {
     useEffect(() => {
         if (autoDownload && !isLoading && payslip) {
             const timer = setTimeout(() => {
-                window.print();
-            }, 500);
+                void handleDownloadPDF();
+            }, 600);
             return () => clearTimeout(timer);
         }
     }, [autoDownload, isLoading, payslip]);
@@ -113,73 +118,60 @@ export default function PayslipPDF() {
     const payDate = safeFormatDate(payslip.pay_date);
     const userCurrency = user?.currency || 'ZAR';
 
+    const payPeriodLabel = `${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`;
+    const filename = `${payslip?.payslip_number || 'payslip'}.pdf`;
+
+    const handleDownloadPDF = async () => {
+        if (!printRef.current || isGeneratingPdf) return;
+        setIsGeneratingPdf(true);
+        try {
+            await generatePdfFromElement(printRef.current, filename);
+        } catch (error) {
+            if (isAbortError(error)) return;
+            console.error('Payslip PDF generation failed, falling back to print:', error);
+            window.print();
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
     return (
-        <DocumentLayout
-            user={user}
-            title="PAYSLIP"
-            documentNumber={payslip.payslip_number}
-            date={payDate}
-        >
-            {/* Employee Information */}
-            <section className="mb-4 sm:mb-6">
-                <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Employee Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-xs sm:text-sm">
-                    <div><strong>Employee Name:</strong> {payslip.employee_name}</div>
-                    <div><strong>Position:</strong> {payslip.position || 'N/A'}</div>
-                    <div><strong>Employee ID:</strong> {payslip.employee_id}</div>
-                    <div><strong>Department:</strong> {payslip.department || 'N/A'}</div>
-                    <div className="sm:col-span-2"><strong>Pay Period:</strong> {safeFormatDate(payslip.pay_period_start)} - {safeFormatDate(payslip.pay_period_end)}</div>
-                </div>
-            </section>
-            
-            {/* Earnings & Deductions Tables */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
-                {/* Earnings */}
-                <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Earnings</h3>
-                    <table className="w-full text-xs sm:text-sm">
-                        <tbody>
-                            <tr className="border-b"><td className="py-2">Basic Salary</td><td className="text-right">{formatCurrency(payslip.basic_salary, userCurrency)}</td></tr>
-                            {payslip.overtime_hours > 0 && <tr className="border-b"><td className="py-2">Overtime</td><td className="text-right">{formatCurrency(payslip.overtime_hours * payslip.overtime_rate, userCurrency)}</td></tr>}
-                            {payslip.allowances?.map((item, index) => (
-                                <tr key={`allowance-${index}`} className="border-b"><td className="py-2">{item.name}</td><td className="text-right">{formatCurrency(item.amount, userCurrency)}</td></tr>
-                            ))}
-                        </tbody>
-                        <tfoot>
-                            <tr className="bg-muted font-bold"><td className="p-2">Gross Pay</td><td className="p-2 text-right">{formatCurrency(payslip.gross_pay, userCurrency)}</td></tr>
-                        </tfoot>
-                    </table>
-                </div>
+        <>
+            <style>{`
+                @media print {
+                    .no-print { display: none !important; }
+                    body { margin: 0; background-color: white; }
+                    .print-container { box-shadow: none !important; margin: 0 !important; border: none !important; }
+                }
+                @page {
+                    margin: 0.5in;
+                    size: A4;
+                }
+            `}</style>
+            <div className="min-h-screen bg-slate-100 py-4 sm:py-6 print:bg-white print:py-0">
+                <div className="w-full px-page sm:px-6">
+                    <div className="no-print mb-4 flex flex-col sm:flex-row justify-end gap-2 max-w-[210mm] mx-auto">
+                        <Button variant="outline" onClick={() => navigate(-1)}>
+                            Back
+                        </Button>
+                        <Button onClick={() => void handleDownloadPDF()} disabled={isGeneratingPdf}>
+                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
+                        </Button>
+                    </div>
 
-                {/* Deductions */}
-                <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-foreground border-b border-border pb-2 mb-3">Deductions</h3>
-                    <table className="w-full text-xs sm:text-sm">
-                        <tbody>
-                            <tr className="border-b"><td className="py-2">PAYE Tax</td><td className="text-right">{formatCurrency(payslip.tax_deduction, userCurrency)}</td></tr>
-                            <tr className="border-b"><td className="py-2">UIF</td><td className="text-right">{formatCurrency(payslip.uif_deduction, userCurrency)}</td></tr>
-                            {payslip.pension_deduction > 0 && <tr className="border-b"><td className="py-2">Pension Fund</td><td className="text-right">{formatCurrency(payslip.pension_deduction, userCurrency)}</td></tr>}
-                            {payslip.medical_aid_deduction > 0 && <tr className="border-b"><td className="py-2">Medical Aid</td><td className="text-right">{formatCurrency(payslip.medical_aid_deduction, userCurrency)}</td></tr>}
-                            {payslip.other_deductions?.map((item, index) => (
-                                <tr key={`deduction-${index}`} className="border-b"><td className="py-2">{item.name}</td><td className="text-right">{formatCurrency(item.amount, userCurrency)}</td></tr>
-                            ))}
-                        </tbody>
-                        <tfoot>
-                            <tr className="bg-muted font-bold"><td className="p-2">Total Deductions</td><td className="p-2 text-right">{formatCurrency(payslip.total_deductions, userCurrency)}</td></tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </section>
-
-            {/* Summary */}
-            <section className="mt-6 sm:mt-8 pt-4 border-t-2 border-border">
-                 <div className="w-full sm:max-w-xs sm:ml-auto">
-                    <div className="flex justify-between py-3 text-lg sm:text-xl bg-primary/10 px-4 rounded-md mt-2">
-                        <span className="font-bold text-foreground">Net Pay</span>
-                        <span className="font-bold text-primary">{formatCurrency(payslip.net_pay, userCurrency)}</span>
+                    <div className="print-container max-w-[210mm] mx-auto">
+                        <div ref={printRef}>
+                            <PayslipDocument
+                                payslip={payslip}
+                                user={user}
+                                payDate={payDate}
+                                payPeriodLabel={payPeriodLabel}
+                                className="rounded-none sm:rounded-2xl"
+                            />
+                        </div>
                     </div>
                 </div>
-            </section>
-        </DocumentLayout>
+            </div>
+        </>
     );
 }
