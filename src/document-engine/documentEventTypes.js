@@ -1,5 +1,5 @@
 import { DOCUMENT_TYPES } from "./documentTypes";
-import { INVOICE_STATUSES, QUOTE_STATUSES } from "./documentStateMachine";
+import { INVOICE_STATUSES, QUOTE_STATUSES, PAYSLIP_STATUSES } from "./documentStateMachine";
 
 /**
  * Canonical `document_events.event_type` values — record user/system actions, not only row outcomes.

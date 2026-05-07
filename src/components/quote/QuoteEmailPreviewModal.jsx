@@ -11,6 +11,7 @@ import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency } from '@/utils/currencyCalculations';
 
 export { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 

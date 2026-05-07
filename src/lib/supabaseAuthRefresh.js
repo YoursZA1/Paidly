@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
 
 /** Seconds before JWT expiry to force a refresh (clock skew + network latency). */
-export const PROACTIVE_REFRESH_BUFFER_SEC = 150;
+export const PROACTIVE_REFRESH_BUFFER_SEC = 300;
 
 /**
  * @param {unknown} error — Supabase AuthError or similar
@@ -34,14 +34,80 @@ export function isRefreshTokenFatalError(error) {
 }
 
 let refreshInFlightPromise = null;
+const REFRESH_LOCK_KEY = "paidly_auth_refresh_lock_v1";
+const REFRESH_LOCK_TTL_MS = 12_000;
+const REFRESH_WAIT_SLICE_MS = 250;
 
-/**
- * Refresh the session using the stored refresh token.
- * @returns {Promise<{ ok: boolean, session?: import("@supabase/supabase-js").Session, error?: unknown, fatal?: boolean, reason?: string }>}
- */
-export async function refreshSupabaseSessionWithRecovery() {
-  if (refreshInFlightPromise) return refreshInFlightPromise;
-  refreshInFlightPromise = (async () => {
+function getTabRefreshOwnerId() {
+  if (typeof window === "undefined") return "server";
+  try {
+    const k = "paidly_auth_refresh_owner_v1";
+    const existing = window.sessionStorage.getItem(k);
+    if (existing) return existing;
+    const next = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `tab_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    window.sessionStorage.setItem(k, next);
+    return next;
+  } catch {
+    return `tab_${Date.now()}`;
+  }
+}
+
+function readLock() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(REFRESH_LOCK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.ownerId || typeof parsed?.expiresAt !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeLock(lock) {
+  if (typeof window === "undefined" || !window.localStorage) return false;
+  try {
+    window.localStorage.setItem(REFRESH_LOCK_KEY, JSON.stringify(lock));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearLock(ownerId) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const current = readLock();
+    if (!current || current.ownerId === ownerId) {
+      window.localStorage.removeItem(REFRESH_LOCK_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function waitForRefreshLockRelease(ownerId, maxWaitMs = REFRESH_LOCK_TTL_MS + 1000) {
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    const lock = readLock();
+    if (!lock) return true;
+    if (lock.ownerId === ownerId) return true;
+    if (lock.expiresAt <= Date.now()) return true;
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_SLICE_MS));
+  }
+  return false;
+}
+
+function isFreshEnough(session) {
+  const exp = Number(session?.expires_at || 0);
+  if (!exp) return false;
+  return exp * 1000 > Date.now() + 30_000;
+}
+
+async function performSingleRefreshAttempt() {
   const { data: before, error: readErr } = await supabase.auth.getSession();
   if (readErr) {
     return { ok: false, error: readErr, fatal: false, reason: "get_session_failed" };
@@ -93,6 +159,61 @@ export async function refreshSupabaseSessionWithRecovery() {
     return { ok: false, error, fatal: true };
   }
   return { ok: false, error, fatal: false };
+}
+
+/**
+ * Refresh the session using the stored refresh token.
+ * @returns {Promise<{ ok: boolean, session?: import("@supabase/supabase-js").Session, error?: unknown, fatal?: boolean, reason?: string }>}
+ */
+export async function refreshSupabaseSessionWithRecovery() {
+  if (refreshInFlightPromise) return refreshInFlightPromise;
+  refreshInFlightPromise = (async () => {
+  const ownerId = getTabRefreshOwnerId();
+  if (typeof window === "undefined" || !window.localStorage) {
+    return performSingleRefreshAttempt();
+  }
+
+  const existingLock = readLock();
+  if (existingLock && existingLock.ownerId !== ownerId && existingLock.expiresAt > Date.now()) {
+    await waitForRefreshLockRelease(ownerId);
+    const { data: afterWait } = await supabase.auth.getSession();
+    if (isFreshEnough(afterWait?.session)) {
+      return { ok: true, session: afterWait.session };
+    }
+  }
+
+  const lock = readLock();
+  if (lock && lock.ownerId !== ownerId && lock.expiresAt > Date.now()) {
+    // Another tab acquired lock while we were waiting; avoid parallel refresh.
+    const released = await waitForRefreshLockRelease(ownerId);
+    if (released) {
+      const { data: afterWait } = await supabase.auth.getSession();
+      if (isFreshEnough(afterWait?.session)) {
+        return { ok: true, session: afterWait.session };
+      }
+    }
+    return { ok: false, reason: "refresh_lock_waited" };
+  }
+
+  const acquired = writeLock({ ownerId, expiresAt: Date.now() + REFRESH_LOCK_TTL_MS });
+  if (!acquired) {
+    return performSingleRefreshAttempt();
+  }
+  const verify = readLock();
+  if (!verify || verify.ownerId !== ownerId) {
+    await waitForRefreshLockRelease(ownerId);
+    const { data: afterWait } = await supabase.auth.getSession();
+    if (isFreshEnough(afterWait?.session)) {
+      return { ok: true, session: afterWait.session };
+    }
+    return { ok: false, reason: "refresh_lock_contention" };
+  }
+
+  try {
+    return await performSingleRefreshAttempt();
+  } finally {
+    clearLock(ownerId);
+  }
   })();
   try {
     return await refreshInFlightPromise;

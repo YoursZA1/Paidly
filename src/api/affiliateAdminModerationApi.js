@@ -5,13 +5,14 @@
  * - Auth: `Authorization: Bearer <Supabase access_token>` (session refresh attempted if needed)
  * - Body: `{ applicationId, commissionRate? }` for approve; `{ applicationId }` for decline
  */
-import { supabase } from '@/lib/supabaseClient';
 import { resolveAffiliateAdminMutationUrl } from '@/api/fetchAdminAffiliateApplications';
-import { apiErrorFieldToString } from '@/utils/apiErrorText';
+import { apiErrorFieldToString, formatHttpStatusMessage } from '@/utils/apiErrorText';
 import { apiRequest } from '@/utils/apiRequest';
+import { getSessionAccessTokenOrHandleUnauthorized } from '@/lib/rpcSessionPolicy';
 
 export const AFFILIATE_ADMIN = {
   APPROVE: '/api/admin/approve',
+  UPDATE_COMMISSION: '/api/admin/affiliate-commission',
   DECLINE: '/api/admin/decline',
   RESEND_LINK: '/api/affiliates/resend-link',
 };
@@ -23,13 +24,7 @@ const AFFILIATE_ADMIN_MUTATION_METHOD = 'POST';
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function postAffiliateAdminAuthed(path, body = {}) {
-  let { data: sessionData } = await supabase.auth.getSession();
-  let session = sessionData?.session;
-  if (!session?.access_token) {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    session = refreshed?.session ?? null;
-  }
-  const token = session?.access_token;
+  const token = await getSessionAccessTokenOrHandleUnauthorized('affiliate-admin-missing-token');
   if (!token) {
     throw new Error('Not authenticated — sign in again (no access token for API).');
   }
@@ -61,17 +56,15 @@ export async function postAffiliateAdminAuthed(path, body = {}) {
       apiErrorFieldToString(json?.message) ||
       apiErrorFieldToString(json?.error) ||
       `Request failed (${res.status})`;
-    if (res.status === 401) {
-      throw new Error(msg.trim() ? msg : 'Session expired or invalid — please sign in again.');
-    }
-    if (res.status === 403) {
-      throw new Error(
-        msg.trim()
-          ? msg
-          : 'Admin access required — your account needs admin, management, or support role for this action.'
-      );
-    }
-    throw new Error(msg.trim() ? msg : `Request failed (${res.status})`);
+    throw new Error(
+      msg.trim()
+        ? msg
+        : formatHttpStatusMessage(res.status, {
+            forbidden:
+              'Admin access required — your account needs admin, management, or support role for this action.',
+            fallback: `Request failed (${res.status})`,
+          })
+    );
   }
   return json;
 }
@@ -85,6 +78,21 @@ export async function approveAffiliateApplication({ applicationId, commissionRat
   return postAffiliateAdminAuthed(AFFILIATE_ADMIN.APPROVE, {
     applicationId,
     ...(commissionRate != null ? { commissionRate: Number(commissionRate) } : {}),
+  });
+}
+
+/**
+ * @param {{ applicationId: string, commissionRate: number }} params
+ */
+export async function updateAffiliateCommissionRate({ applicationId, commissionRate }) {
+  if (!applicationId) throw new Error('applicationId is required');
+  const parsed = Number(commissionRate);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    throw new Error('commissionRate must be a number between 0 and 100');
+  }
+  return postAffiliateAdminAuthed(AFFILIATE_ADMIN.UPDATE_COMMISSION, {
+    applicationId,
+    commissionRate: parsed,
   });
 }
 

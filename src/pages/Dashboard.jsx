@@ -10,6 +10,7 @@ import { Client } from "@/api/entities";
 import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
+import { User } from "@/api/entities";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
@@ -1107,6 +1108,18 @@ export default function Dashboard() {
     [resolvedInvoices]
   );
 
+  const subscriptionBanner = useMemo(() => {
+    if (isAdmin) return null;
+    const profileSlug = slugFromProfile(profileFromQuery);
+    const authSlug = slugFromProfile(authUser) || authUser?.subscription_plan || authUser?.plan || "";
+    const source = profileSlug ? profileFromQuery : authUser;
+    if (!source) return null;
+    return {
+      sub: describeSubscriptionState(source),
+      badgePlan: profileSlug || authSlug || "none",
+    };
+  }, [isAdmin, profileFromQuery, authUser]);
+
   // ADMIN DASHBOARD
   if (isAdmin) {
     return (
@@ -1617,18 +1630,6 @@ export default function Dashboard() {
         </span>
       )
       : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`;
-
-  const subscriptionBanner = useMemo(() => {
-    if (isAdmin) return null;
-    const profileSlug = slugFromProfile(profileFromQuery);
-    const authSlug = slugFromProfile(authUser) || authUser?.subscription_plan || authUser?.plan || "";
-    const source = profileSlug ? profileFromQuery : authUser;
-    if (!source) return null;
-    return {
-      sub: describeSubscriptionState(source),
-      badgePlan: profileSlug || authSlug || "none",
-    };
-  }, [isAdmin, profileFromQuery, authUser]);
 
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">

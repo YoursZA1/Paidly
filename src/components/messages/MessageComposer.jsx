@@ -30,9 +30,14 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
 
     const templates = [
         { label: 'Follow Up', subject: 'Following up', content: 'Hi, just wanted to follow up on my previous message. Let me know if you need anything else.' },
-        { label: 'Payment Reminder', subject: 'Payment Reminder', content: 'Hi, this is a friendly reminder about the outstanding invoice. Please let us know if there are any issues.' },
-        { label: 'Quote Follow Up', subject: 'Regarding Quote', content: 'Hi, I wanted to check if you had a chance to review the quote I sent. I\'m happy to answer any questions.' },
-        { label: 'Thank You', subject: 'Thank You', content: 'Thank you for your business! We appreciate it.' }
+        { label: 'Circling back', subject: 'Circling back', content: 'Hi,\n\nCircling back in case my last note missed you. If now is not a good time, just let me know when works better.\n\nThanks.' },
+        { label: 'After our call', subject: 'Following our conversation', content: 'Hi,\n\nThank you for your time earlier. As discussed, here is a quick summary of next steps on my side. If I missed anything, reply and I will adjust.\n\nBest regards' },
+        { label: 'Quote follow-up', subject: 'Regarding Quote', content: 'Hi, I wanted to check if you had a chance to review the quote I sent. I\'m happy to answer any questions.' },
+        { label: 'Project check-in', subject: 'Quick check-in', content: 'Hi,\n\nI wanted to check in on how things are going with the project. Let me know if you need any changes from our side or if there is anything blocking you.\n\nThank you.' },
+        { label: 'Payment reminder', subject: 'Payment Reminder', content: 'Hi, this is a friendly reminder about the outstanding invoice. Please let us know if there are any issues.' },
+        { label: 'Invoice follow-up', subject: 'Following up on your invoice', content: 'Hi,\n\nI am following up on the invoice we sent. If you have already paid, please let me know so we can mark it received. If anything is unclear or blocking payment, reply here and we will help.\n\nThank you.' },
+        { label: 'Overdue invoice', subject: 'Overdue invoice', content: 'Hi,\n\nOur records show this invoice is now overdue. If payment is already on the way, please disregard. If there is a problem with the invoice or you need a copy resent, reply here and we will sort it out promptly.\n\nThank you.' },
+        { label: 'Thank you', subject: 'Thank You', content: 'Thank you for your business! We appreciate it.' },
     ];
 
     const applyTemplate = (template) => {
@@ -258,7 +263,7 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
                         <div className="flex justify-between items-center">
                             <Label>Subject</Label>
                             <Select onValueChange={(idx) => applyTemplate(templates[idx])}>
-                                <SelectTrigger className="w-[180px] h-8 text-xs">
+                                <SelectTrigger className="w-[220px] h-8 text-xs">
                                     <SelectValue placeholder="Use Template" />
                                 </SelectTrigger>
                                 <SelectContent>

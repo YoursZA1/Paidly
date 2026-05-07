@@ -21,7 +21,7 @@ import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
 import { hasFeature } from "@shared/plans.js";
 import { apiRequest } from "@/utils/apiRequest";
-import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
+import { runRpcUnauthorizedPolicy } from "@/lib/rpcSessionPolicy";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
 
 /**
@@ -185,7 +185,10 @@ const SUPABASE_SELECT_COLUMNS = {
   quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, sent_date",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
   quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
-  clients: "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at",
+  clients:
+    "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, " +
+    "payment_terms, payment_terms_days, follow_up_enabled, segment, total_spent, last_invoice_date, " +
+    "created_at, updated_at",
   // Keep in sync with ServiceForm — previously omitted columns meant list/get rows were incomplete for the editor.
   services:
     "id, org_id, name, description, item_type, default_unit, default_rate, tax_category, is_active, " +
@@ -196,7 +199,7 @@ const SUPABASE_SELECT_COLUMNS = {
     "created_at, updated_at",
   payments: "id, org_id, invoice_id, document_id, client_id, amount, currency, exchange_rate, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
-    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, created_at, updated_at",
+    "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, reminder_settings, quote_reminder_settings, created_at, updated_at",
   banking_details: "id, org_id, bank_name, account_name, account_number, routing_number, swift_code, payment_method, additional_info, is_default, created_at, updated_at",
   recurring_invoices: "id, org_id, profile_name, client_id, invoice_template, frequency, start_date, end_date, next_generation_date, status, last_generated_invoice_id, created_at, updated_at",
   packages: "id, org_id, name, price, currency, frequency, features, is_recommended, website_link, created_at, updated_at",
@@ -214,7 +217,7 @@ function getSelectColumns(table) {
 
 /** Full list minus optional jsonb (scripts/add-profiles-business-jsonb.sql). */
 const PROFILES_SELECT_WITHOUT_BUSINESS =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, invoice_template, invoice_header, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, invoice_template, invoice_header, reminder_settings, quote_reminder_settings, created_at, updated_at";
 
 /** Older DBs without invoice_template / invoice_header. */
 const PROFILES_SELECT_LEGACY =
@@ -269,6 +272,8 @@ export async function selectProfileByUserId(supabase, authUserId) {
         if (d.role === undefined) d.role = null;
         if (d.user_role === undefined) d.user_role = null;
         if (d.list_filter_prefs === undefined) d.list_filter_prefs = null;
+        if (d.reminder_settings === undefined) d.reminder_settings = null;
+        if (d.quote_reminder_settings === undefined) d.quote_reminder_settings = null;
       }
       return { data: d, error: null };
     }
@@ -2012,7 +2017,10 @@ class AuthManager {
     if (isSupabaseConfigured && !supabaseUserId) {
       this.isAuthenticated = false;
       this.user = null;
-      await triggerUnauthorizedSession("missing-supabase-session");
+      await runRpcUnauthorizedPolicy({
+        reason: "missing-supabase-session",
+        alreadyRetried: true,
+      });
       return null;
     }
 
@@ -2220,6 +2228,14 @@ class AuthManager {
               : profile.business === null
                 ? null
                 : this.user.business ?? null,
+          reminder_settings:
+            profile.reminder_settings !== undefined && profile.reminder_settings !== null
+              ? profile.reminder_settings
+              : this.user.reminder_settings ?? null,
+          quote_reminder_settings:
+            profile.quote_reminder_settings !== undefined && profile.quote_reminder_settings !== null
+              ? profile.quote_reminder_settings
+              : this.user.quote_reminder_settings ?? null,
         };
         this.saveUserToStorage();
       } else if (!error && !profile) {
@@ -2322,6 +2338,8 @@ class AuthManager {
         subscription_plan: normalizePaidlyPlan(profileData.subscription_plan || profileData.plan || plan),
         subscription_status: profileData.subscription_status ?? null,
         trial_ends_at: profileData.trial_ends_at ?? null,
+        reminder_settings: profileData.reminder_settings ?? null,
+        quote_reminder_settings: profileData.quote_reminder_settings ?? null,
       };
       this.isAuthenticated = true;
       this.saveUserToStorage();
@@ -2439,6 +2457,12 @@ class AuthManager {
       ...(safeData.document_brand_secondary !== undefined
         ? { document_brand_secondary: safeData.document_brand_secondary }
         : {}),
+      ...(safeData.reminder_settings !== undefined
+        ? { reminder_settings: safeData.reminder_settings }
+        : {}),
+      ...(safeData.quote_reminder_settings !== undefined
+        ? { quote_reminder_settings: safeData.quote_reminder_settings }
+        : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -2471,8 +2495,21 @@ class AuthManager {
         !!error &&
         Object.prototype.hasOwnProperty.call(profileData, "company_website") &&
         profileColumnMissing(errMsg, "company_website");
+      const stripReminderJson =
+        !!error &&
+        (Object.prototype.hasOwnProperty.call(profileData, "reminder_settings") ||
+          Object.prototype.hasOwnProperty.call(profileData, "quote_reminder_settings")) &&
+        (profileColumnMissing(errMsg, "reminder_settings") ||
+          profileColumnMissing(errMsg, "quote_reminder_settings"));
 
-      if (error && (stripBusiness || stripCompanyAddress || stripDocumentBrand || stripCompanyWebsite)) {
+      if (
+        error &&
+        (stripBusiness ||
+          stripCompanyAddress ||
+          stripDocumentBrand ||
+          stripCompanyWebsite ||
+          stripReminderJson)
+      ) {
         const fallback = { ...profileData };
         if (stripBusiness) delete fallback.business;
         if (stripCompanyAddress) delete fallback.company_address;
@@ -2481,6 +2518,10 @@ class AuthManager {
           delete fallback.document_brand_secondary;
         }
         if (stripCompanyWebsite) delete fallback.company_website;
+        if (stripReminderJson) {
+          delete fallback.reminder_settings;
+          delete fallback.quote_reminder_settings;
+        }
         Object.keys(fallback).forEach((key) => {
           if (fallback[key] === undefined) delete fallback[key];
         });
@@ -2507,6 +2548,11 @@ class AuthManager {
           if (stripCompanyWebsite) {
             console.warn(
               "Profile saved without company_website column. Run scripts/add-profiles-company-website.sql on your database."
+            );
+          }
+          if (stripReminderJson) {
+            console.warn(
+              "Profile saved without reminder_settings / quote_reminder_settings. Run scripts/add-profiles-reminder-settings-jsonb.sql on your database."
             );
           }
         }

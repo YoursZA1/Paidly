@@ -295,7 +295,7 @@ export default function QuoteDetails({
         if (matchedService) {
             const mapped = mapCatalogToLineItem(matchedService, parsed.quantity, {
                 existingTaxRate: 0,
-                userId: user?.id || null,
+                userId: authUser?.id || null,
             });
             nextItem = mapped?.success ? { ...mapped.lineItem } : null;
         }

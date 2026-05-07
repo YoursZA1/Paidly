@@ -35,6 +35,24 @@ function InvoicePreview({
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
 
+  const clientList = Array.isArray(clients) ? clients : [];
+  const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
+
+  const pack = useMemo(() => {
+    if (!invoiceData) return null;
+    return buildInvoiceTemplatePdfCaptureProps(
+      invoiceData,
+      clientProp ?? clientResolved ?? {},
+      user,
+      bankingDetail
+    );
+  }, [invoiceData, clientProp, clientResolved, user, bankingDetail]);
+
+  const previewDoc = useMemo(() => {
+    if (!invoiceData || !pack) return null;
+    return recordToStyledPreviewDoc(invoiceData, pack.clientForTemplate, "invoice", pack.resolvedUser);
+  }, [invoiceData, pack]);
+
   if (!invoiceData) {
     return (
       <Card className="gap-0 border-0 bg-white/80 p-0 shadow-xl backdrop-blur-sm">
@@ -44,25 +62,6 @@ function InvoicePreview({
       </Card>
     );
   }
-
-  const clientList = Array.isArray(clients) ? clients : [];
-  const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
-
-  const pack = useMemo(
-    () =>
-      buildInvoiceTemplatePdfCaptureProps(
-        invoiceData,
-        clientProp ?? clientResolved ?? {},
-        user,
-        bankingDetail
-      ),
-    [invoiceData, clientProp, clientResolved, user, bankingDetail]
-  );
-
-  const previewDoc = useMemo(
-    () => recordToStyledPreviewDoc(invoiceData, pack.clientForTemplate, "invoice", pack.resolvedUser),
-    [invoiceData, pack]
-  );
 
   const { clientForTemplate: client } = pack;
 

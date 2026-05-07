@@ -74,10 +74,12 @@ function normalizeLineItems(doc) {
       .map((it) => {
         const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
         const unit = Number(it.unit_price ?? it.rate ?? it.price ?? 0) || 0;
-        const total =
-          Number(it.total_price ?? it.total) != null && !Number.isNaN(Number(it.total_price ?? it.total))
-            ? Number(it.total_price ?? it.total)
-            : Math.round(qty * unit * 100) / 100;
+        const rawTotal = it.total_price ?? it.total;
+        const hasExplicitTotal =
+          rawTotal != null && rawTotal !== "" && !Number.isNaN(Number(rawTotal));
+        const total = hasExplicitTotal
+          ? Number(rawTotal)
+          : Math.round(qty * unit * 100) / 100;
         const desc = formatLineItemNameAndDescription(it) || "Item";
         return { description: desc, quantity: qty, unit_price: unit, total };
       });

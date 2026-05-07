@@ -135,6 +135,7 @@ export default function PaymentReminderSettings() {
                 </CardTitle>
                 <CardDescription>
                     Configure when and how your clients receive payment reminders.
+                    Clients with &quot;Automated follow-up reminders&quot; turned off in their record will not receive these emails.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

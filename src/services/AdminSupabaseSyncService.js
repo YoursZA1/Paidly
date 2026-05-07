@@ -1,8 +1,9 @@
-import { supabase } from "@/lib/supabaseClient";
 import { adminCacheGet, adminCacheSet } from "@/lib/adminLocalCache";
 import AdminDataService from "@/services/AdminDataService";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { getPublicApiBase } from "@/api/backendClient";
+import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
+import { formatHttpStatusMessage } from "@/utils/apiErrorText";
 
 const STORAGE_KEYS = {
   USERS: "breakapi_users",
@@ -156,21 +157,7 @@ export function getSyncStatus() {
 
 export const syncAdminData = async () => {
   try {
-    // Refresh session so the access token is valid (reduces 401 from expired token)
-    const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
-    let session = sessionData?.session;
-    let err = sessionError;
-    if (!session) {
-      const { data: getData, error: getError } = await supabase.auth.getSession();
-      session = getData?.session;
-      if (!err) err = getError;
-    }
-    if (err) {
-      const msg = getSupabaseErrorMessage(err, "Failed to get session");
-      console.error("[sync] Session error:", msg);
-      throw new Error(msg);
-    }
-    const accessToken = session?.access_token;
+    const accessToken = await getSessionAccessTokenOrHandleUnauthorized("admin-sync-missing-token");
     if (!accessToken) {
       console.warn("[sync] No Supabase session (not logged in?)");
       throw new Error("No Supabase session. Please log in and try again.");
@@ -206,7 +193,7 @@ export const syncAdminData = async () => {
     const payload = isJson ? await response.json().catch(() => ({})) : {};
 
     if (!response.ok) {
-      const errMsg = payload.error || (response.status === 401 ? "Session expired or invalid. Please log in again." : response.status === 403 ? "Admin access required." : `HTTP ${response.status}`);
+      const errMsg = payload.error || formatHttpStatusMessage(response.status);
       console.error("[sync] Server error:", response.status, errMsg);
       throw new Error(payload.error || errMsg);
     }

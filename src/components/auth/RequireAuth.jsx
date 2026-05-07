@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 import { getAuthUserId } from "@/lib/authUserId";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
+import { useSessionHealthStore, SESSION_STATUS } from "@/stores/sessionHealthStore";
 
 /**
  * Rare edge: Supabase session exists but the app user object has not hydrated yet.
@@ -45,6 +46,7 @@ function SessionProfileHydrating() {
 export default function RequireAuth({ children, roles }) {
   const { loading, user, session } = useAuth();
   const location = useLocation();
+  const sessionHealthStatus = useSessionHealthStore((s) => s.status);
   const authUserId = getAuthUserId(user);
   const sessionUserId = session?.user?.id ?? null;
 
@@ -59,6 +61,16 @@ export default function RequireAuth({ children, roles }) {
     if (sessionUserId) {
       return <SessionProfileHydrating />;
     }
+    return (
+      <Navigate
+        to={`${createPageUrl("Home")}#sign-in`}
+        replace
+        state={{ from: location }}
+      />
+    );
+  }
+
+  if (sessionHealthStatus === SESSION_STATUS.EXPIRED) {
     return (
       <Navigate
         to={`${createPageUrl("Home")}#sign-in`}

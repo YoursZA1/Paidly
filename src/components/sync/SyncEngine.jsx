@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useSyncQueueStore } from "@/stores/useSyncQueueStore";
 import { processSyncJob } from "@/lib/syncJobProcessor";
 import { useAppStore } from "@/stores/useAppStore";
+import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
+import { setSessionHealthStatus, SESSION_STATUS } from "@/stores/sessionHealthStore";
 
 const SYNC_INTERVAL_MS = 5000;
 const ENTITY_REALTIME_DEBOUNCE_MS = 400;
@@ -141,7 +143,22 @@ export default function SyncEngine() {
         { event: "*", schema: "public", table: "document_sends" },
         (payload) => scheduleEntityInvalidation("document_sends", payload)
       );
-    channel.subscribe();
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setSessionHealthStatus(SESSION_STATUS.CONNECTED, "sync_realtime_ready");
+        return;
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        const decision = decideSessionAction({
+          reason: "sync_realtime_unstable",
+          believedSignedIn: true,
+          online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
+        });
+        if (decision.action === SESSION_DECISION.RECONNECTING) {
+          setSessionHealthStatus(SESSION_STATUS.RECONNECTING, decision.reason);
+        }
+      }
+    });
 
     return () => {
       Object.keys(realtimeEntityDebounceRefs.current).forEach((k) => {

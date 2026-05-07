@@ -46,6 +46,7 @@ class QuoteReminderService {
                 if (diffDays >= daysAfterSent) {
                     const client = clients.find(c => c.id === quote.client_id);
                     if (!client) continue;
+                    if (client.follow_up_enabled === false) continue;
 
                     await this.processReminder(quote, client, daysAfterSent, user, settings);
                 }

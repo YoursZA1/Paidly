@@ -1,3 +1,5 @@
+import { navigateTo } from "@/lib/navigationService";
+
 /**
  * When Supabase session is cleared (sign-out, invalid refresh), only redirect to login
  * from routes that are not public/marketing/auth recovery.
@@ -42,5 +44,5 @@ export function isPathAllowedWithoutSession(pathname) {
 export function redirectToLoginIfProtectedPath() {
   if (typeof window === "undefined") return;
   if (isPathAllowedWithoutSession(window.location.pathname)) return;
-  window.location.assign("/login");
+  navigateTo("/login");
 }

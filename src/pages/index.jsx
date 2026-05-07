@@ -139,6 +139,8 @@ const MAIN_ROUTES = [
     { path: "/clients", element: <RequireAuth><Clients /></RequireAuth> },
     { path: "/Settings", element: <RequireAuth><Settings /></RequireAuth> },
     { path: "/settings", element: <RequireAuth><Settings /></RequireAuth> },
+    { path: "/Reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
+    { path: "/reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
     { path: "/BillingAndInvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
     { path: "/billingandinvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
     { path: "/Notes", element: <RequireAuth><Notes /></RequireAuth> },

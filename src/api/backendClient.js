@@ -6,18 +6,11 @@
 import axios from "axios";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { installBackendApiResilience } from "@/api/installBackendApiResilience";
-import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
-import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
-import { queuePendingAction } from "@/lib/pendingActionQueue";
+import { runRpcUnauthorizedPolicy, isReplaySafeHttpMethod } from "@/lib/rpcSessionPolicy";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
-}
-
-function isReplaySafeAxiosMethod(method) {
-  const m = String(method || "get").toLowerCase();
-  return m === "get" || m === "head" || m === "options";
 }
 
 const isDev = import.meta.env.DEV;
@@ -129,26 +122,28 @@ backendApi.interceptors.response.use(
     const status = error.response?.status;
     const cfg = error.config;
     if (status === 401 && cfg && !cfg.__paidlySkipAuthRedirect) {
-      if (!cfg.__paidlyAuthRetriedOnce) {
-        cfg.__paidlyAuthRetriedOnce = true;
-        try {
-          const refreshed = await refreshSupabaseSessionWithRecovery();
-          if (refreshed?.ok) {
-            return backendApi(cfg);
-          }
-        } catch {
-          // fall through to session handler
-        }
+      const handled = await runRpcUnauthorizedPolicy({
+        method: cfg.method,
+        reason: "axios-401",
+        alreadyRetried: Boolean(cfg.__paidlyAuthRetriedOnce),
+        retryRequest: async () => {
+          const retryCfg = { ...cfg, __paidlyAuthRetriedOnce: true };
+          return backendApi(retryCfg);
+        },
+        queueReplayRequest: isReplaySafeHttpMethod(cfg.method)
+          ? async () => {
+              const replayCfg = {
+                ...cfg,
+                headers: { ...(cfg.headers || {}), "x-paidly-auth-replay": "1" },
+                __paidlyAuthRetriedOnce: true,
+              };
+              return backendApi(replayCfg);
+            }
+          : null,
+      });
+      if (handled?.recovered && handled.response) {
+        return handled.response;
       }
-      if (isReplaySafeAxiosMethod(cfg.method)) {
-        const replayCfg = {
-          ...cfg,
-          headers: { ...(cfg.headers || {}), "x-paidly-auth-replay": "1" },
-          __paidlyAuthRetriedOnce: true,
-        };
-        queuePendingAction(async () => backendApi(replayCfg));
-      }
-      await triggerUnauthorizedSession("axios-401");
     }
     return Promise.reject(error);
   }

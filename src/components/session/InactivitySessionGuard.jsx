@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 import Button from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { setSessionHealthStatus, SESSION_STATUS } from "@/stores/sessionHealthStore";
+import { useSessionManager } from "@/contexts/SessionManagerContext";
 import { useInactivitySessionTimeout } from "@/hooks/useInactivitySessionTimeout";
+import { navigateTo } from "@/lib/navigationService";
 
 const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 5 * 60 * 1000);
 const WARNING_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_WARNING_TIMEOUT_MS || 2 * 60 * 1000);
@@ -10,6 +11,7 @@ const KEEP_ALIVE_INTERVAL_MS = Number(import.meta.env.VITE_SESSION_KEEPALIVE_MS 
 
 export default function InactivitySessionGuard() {
   const { isAuthenticated, authReady, session, logout } = useAuth();
+  const sessionManager = useSessionManager();
 
   const keepAlive = useCallback(async () => {
     const token = session?.accessToken || session?.access_token || null;
@@ -27,31 +29,43 @@ export default function InactivitySessionGuard() {
 
   const onTimeout = useCallback(async () => {
     try {
-      await logout();
+      await sessionManager?.AuthManager?.transitionToExpired("inactivity_timeout", {
+        signOutLocal: false,
+        clearAuthState: true,
+        broadcast: true,
+        redirect: false,
+        source: "inactivity_timeout",
+      });
+      await logout({ keepExpiredState: true });
     } finally {
-      setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
       if (typeof window !== "undefined") {
         try {
           window.sessionStorage.setItem("paidly_session_expired_reason", "inactivity_timeout");
         } catch {
           // ignore storage errors
         }
-        window.location.assign("/login?reason=inactivity");
+        navigateTo("/login?reason=inactivity");
       }
     }
-  }, [logout]);
+  }, [logout, sessionManager]);
 
   const onRemoteTimeout = useCallback(async () => {
-    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
+    await sessionManager?.AuthManager?.transitionToExpired("inactivity_timeout", {
+      signOutLocal: true,
+      clearAuthState: true,
+      broadcast: true,
+      redirect: false,
+      source: "inactivity_remote_timeout",
+    });
     if (typeof window !== "undefined") {
       try {
         window.sessionStorage.setItem("paidly_session_expired_reason", "inactivity_timeout");
       } catch {
         // ignore storage errors
       }
-      window.location.assign("/login?reason=inactivity");
+      navigateTo("/login?reason=inactivity");
     }
-  }, []);
+  }, [sessionManager]);
 
   const { warningOpen, countdownSeconds, stayLoggedIn } = useInactivitySessionTimeout({
     enabled: Boolean(authReady && isAuthenticated),

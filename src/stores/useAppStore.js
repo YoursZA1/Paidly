@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { Invoice, Client, User, Payment, InvoiceView, Expense, Quote, Payroll } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
@@ -22,7 +23,13 @@ import { dashboardInvoicesQueryKey, dashboardPayslipsQueryKey } from "@/services
 /** Bumps on each fetchAll start so overlapping runs do not clear `isLoading` while a newer fetch is still in flight. */
 let fetchAllGeneration = 0;
 
-export const useAppStore = create((set, get) => ({
+const appStorePersistStorage =
+  typeof window !== "undefined" && window.localStorage
+    ? createJSONStorage(() => window.localStorage)
+    : undefined;
+
+export const useAppStore = create(
+  persist((set, get) => ({
   invoices: [],
   quotes: [],
   clients: [],
@@ -298,4 +305,20 @@ export const useAppStore = create((set, get) => ({
       error: null,
       lastFetchedAt: null,
     }),
-}));
+}),
+  {
+    name: "paidly_app_store_v1",
+    storage: appStorePersistStorage,
+    partialize: (state) => ({
+      invoices: state.invoices,
+      quotes: state.quotes,
+      clients: state.clients,
+      payslips: state.payslips,
+      userProfile: state.userProfile,
+      payments: state.payments,
+      invoiceViews: state.invoiceViews,
+      expenses: state.expenses,
+      lastFetchedAt: state.lastFetchedAt,
+    }),
+  })
+);

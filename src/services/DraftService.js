@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { authedApiRequest } from "@/lib/authedApiRequest";
 
 const DRAFT_STORAGE_PREFIX = "paidly_autodraft_v1";
 
@@ -39,23 +39,15 @@ export function removeLocalDraft(userId, documentType, draftKey) {
   }
 }
 
-async function getAccessToken() {
-  const { data } = await supabase.auth.getSession();
-  return data?.session?.access_token || null;
-}
-
 async function callDraftApi(path, payload, signal) {
-  const token = await getAccessToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(path, {
+  const res = await authedApiRequest(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload || {}),
     signal,
-  });
+  }, { reason: "draft-api-missing-token", unauthorizedMessage: "Not authenticated" });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(json?.error || `Draft API failed (${res.status})`);

@@ -6,6 +6,7 @@ import {
   approveAffiliateApplication,
   declineAffiliateApplication,
   resendAffiliateReferralEmail,
+  updateAffiliateCommissionRate,
 } from '@/api/affiliateAdminModerationApi';
 import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
 import { Search, CheckCircle, XCircle, Eye, Filter, Calculator, Copy, Mail, Loader2 } from 'lucide-react';
@@ -91,10 +92,14 @@ export default function AffiliatesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => paidly.entities.AffiliateSubmission.update(id, data),
+    mutationFn: ({ id, data }) =>
+      updateAffiliateCommissionRate({
+        applicationId: id,
+        commissionRate: Number(data?.commission_rate),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['affiliates'] });
-      toast.success('Affiliate submission updated');
+      toast.success('Commission updated');
     },
   });
 

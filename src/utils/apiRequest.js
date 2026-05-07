@@ -1,11 +1,5 @@
-import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
-import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
-import { queuePendingAction } from "@/lib/pendingActionQueue";
-
-function isReplaySafeMethod(method) {
-  const m = String(method || "GET").toUpperCase();
-  return m === "GET" || m === "HEAD" || m === "OPTIONS";
-}
+import { runRpcUnauthorizedPolicy } from "@/lib/rpcSessionPolicy";
+import { formatHttpStatusMessage } from "@/utils/apiErrorText";
 
 /**
  * Low-level fetch for **authenticated / session-cookie** API calls.
@@ -23,28 +17,24 @@ export async function safeFetch(input, init) {
   const res = await fetch(input, init);
   if (res.status === 401) {
     const alreadyRetried = Boolean(init?.headers && new Headers(init.headers).get("x-paidly-auth-retry") === "1");
-    if (!alreadyRetried) {
-      try {
-        const refreshed = await refreshSupabaseSessionWithRecovery();
-        if (refreshed?.ok) {
-          const retryHeaders = new Headers(init?.headers || {});
-          retryHeaders.set("x-paidly-auth-retry", "1");
-          const retryRes = await fetch(input, { ...(init || {}), headers: retryHeaders });
-          if (retryRes.status !== 401) return retryRes;
-        }
-      } catch {
-        // fall through to re-auth prompt
-      }
+    const handled = await runRpcUnauthorizedPolicy({
+      method: init?.method,
+      alreadyRetried,
+      reason: "fetch-401",
+      retryRequest: async () => {
+        const retryHeaders = new Headers(init?.headers || {});
+        retryHeaders.set("x-paidly-auth-retry", "1");
+        return fetch(input, { ...(init || {}), headers: retryHeaders });
+      },
+      queueReplayRequest: async () => {
+        const replayHeaders = new Headers(init?.headers || {});
+        replayHeaders.set("x-paidly-auth-replay", "1");
+        return fetch(input, { ...(init || {}), headers: replayHeaders });
+      },
+    });
+    if (handled?.recovered && handled.response) {
+      return handled.response;
     }
-    if (isReplaySafeMethod(init?.method)) {
-      const replayInit = { ...(init || {}) };
-      queuePendingAction(async () => {
-        const headers = new Headers(replayInit.headers || {});
-        headers.set("x-paidly-auth-replay", "1");
-        return fetch(input, { ...replayInit, headers });
-      });
-    }
-    await triggerUnauthorizedSession("fetch-401");
   }
   return res;
 }
@@ -81,7 +71,7 @@ export async function apiRequestJson(input, init) {
     const msg =
       typeof data === "object" && data !== null && (data.error || data.message)
         ? String(data.error || data.message)
-        : `HTTP ${res.status}`;
+        : formatHttpStatusMessage(res.status);
     const err = new Error(msg);
     err.response = res;
     err.data = data;

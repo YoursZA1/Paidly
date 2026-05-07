@@ -75,7 +75,7 @@ function findDate(text) {
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(text);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   // dd/mm/yyyy or dd-mm-yyyy
-  const dmy = /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(text);
+  const dmy = /(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/.exec(text);
   if (dmy) {
     const [, d, m, y] = dmy;
     const year = y.length === 2 ? (parseInt(y, 10) < 50 ? "20" + y : "19" + y) : y;

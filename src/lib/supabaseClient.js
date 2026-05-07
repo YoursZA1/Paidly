@@ -71,7 +71,14 @@ export const supabase = createClient(effectiveUrl, effectiveKey, {
      */
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    flowType: "pkce",
+    storageKey: "paidly-auth",
     storage: authPersistStorage,
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
   },
 });
 

@@ -1,3 +1,5 @@
+import { formatHttpStatusMessage } from "@/utils/apiErrorText";
+
 /**
  * PayFast subscription / once-off checkout
  *
@@ -70,7 +72,7 @@ const PayfastService = {
       payload?.message ||
       fallbackMessage;
     const code = typeof payload?.code === "string" ? payload.code : null;
-    const msg = code ? `${base} (${code})` : `${base} (HTTP ${response.status})`;
+    const msg = code ? `${base} (${code})` : `${base} (${formatHttpStatusMessage(response.status)})`;
     return new Error(msg);
   },
 

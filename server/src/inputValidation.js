@@ -33,6 +33,8 @@ export function isValidEmail(value) {
   const t = value.trim().toLowerCase();
   if (t.length < 3 || t.length > EMAIL_MAX) return false;
   if (!EMAIL_RE.test(t)) return false;
+  // Strip ASCII controls from email local/domain — intentional; do not widen to Unicode \s.
+  // eslint-disable-next-line no-control-regex -- reject NUL/C1/control chars in email strings
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(t)) return false;
   return true;
 }
@@ -50,8 +52,9 @@ export function isValidTrackingToken(value) {
 export function sanitizeOneLine(value, maxLen = 500) {
   if (typeof value !== "string") return "";
   return value
-    .replace(/\0/g, "")
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+      .replace(/\0/g, "")
+      // eslint-disable-next-line no-control-regex -- strip ASCII controls from one-line inputs
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
     .trim()
     .slice(0, maxLen);
 }

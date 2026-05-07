@@ -477,6 +477,7 @@ Paidly is a **business operating system for SMBs**—not a narrow invoicing tool
 - `supabase/migrations/` — schema
 
 See **`docs/SUPABASE_DATA_MODEL.md`** for table ↔ entity detail.
+For runtime ownership and boundary rules (Browser/Supabase/Edge-Server), see **`docs/ARCHITECTURE_RUNTIME_MAP.md`**.
 
 ## B.5 Data flow (refined)
 

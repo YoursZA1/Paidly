@@ -1,9 +1,8 @@
-import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
-import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiErrorFieldToString, formatHttpStatusMessage } from "@/utils/apiErrorText";
 import { apiRequest } from "@/utils/apiRequest";
+import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -66,11 +65,7 @@ async function fetchPlatformUsersPayloadFromApi(token, lim) {
       }
       lastError =
         fromJson ||
-        (res.status === 401
-          ? "Session expired or invalid. Please log in again."
-          : res.status === 403
-            ? "Admin access required."
-            : `HTTP ${res.status}`);
+        formatHttpStatusMessage(res.status);
       continue;
     }
 
@@ -103,11 +98,7 @@ export async function fetchAdminPlatformUsers(limit = 500) {
     throw new Error("Admin platform user API requires Node backend (VITE_SUPABASE_ONLY=1).");
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) {
-    throw new Error(getSupabaseErrorMessage(sessionError, "Session error"));
-  }
-  const token = sessionData?.session?.access_token;
+  const token = await getSessionAccessTokenOrHandleUnauthorized("admin-platform-users-missing-token");
   if (!token) {
     throw new Error("Not authenticated");
   }

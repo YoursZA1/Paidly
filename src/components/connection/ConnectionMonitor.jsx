@@ -4,21 +4,9 @@ import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionSto
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSessionManager } from "@/contexts/SessionManagerContext";
 
 const CONNECTED_VISIBLE_MS = 3200;
-const RECONNECTING_GRACE_MS = 3000;
-const DISCONNECTED_AFTER_MS = 10000;
-
-function isTransientBackgroundError(errorMessage) {
-  const msg = String(errorMessage || "").toLowerCase();
-  return (
-    msg.includes("session_reconnecting") ||
-    msg.includes("profiles_timeout") ||
-    msg.includes("timeout") ||
-    msg.includes("aborted") ||
-    msg.includes("network")
-  );
-}
 
 /**
  * Mount once near the app root (under {@link AuthProvider}):
@@ -28,108 +16,45 @@ function isTransientBackgroundError(errorMessage) {
  */
 export default function ConnectionMonitor() {
   const { isAuthenticated } = useAuth();
+  const sessionManager = useSessionManager();
   const sessionStatus = useSessionHealthStore((s) => s.status);
+  const sessionReason = useSessionHealthStore((s) => s.reason);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
   const setSuppressConnectedIndicator = useConnectionStore((s) => s.setSuppressConnectedIndicator);
   const inFlightRef = useRef(false);
-  const reconnectTimerRef = useRef(null);
-  const disconnectedTimerRef = useRef(null);
-  const degradedSinceRef = useRef(null);
-  const hiddenStartedAtRef = useRef(null);
-  const visibilityRef = useRef(typeof document === "undefined" ? "visible" : document.visibilityState);
   const realtimeChannelRef = useRef(null);
-
-  const clearDegradedTimers = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (disconnectedTimerRef.current) {
-      window.clearTimeout(disconnectedTimerRef.current);
-      disconnectedTimerRef.current = null;
-    }
-  }, []);
+  const isVisible = useCallback(
+    () => (typeof document === "undefined" ? true : document.visibilityState === "visible"),
+    []
+  );
 
   const markConnected = useCallback(() => {
-    degradedSinceRef.current = null;
-    hiddenStartedAtRef.current = null;
-    clearDegradedTimers();
-    setConnectionState({
-      status: CONNECTION_STATUS.CONNECTED,
-      lastError: null,
-      lastCheckAt: Date.now(),
-    });
-  }, [clearDegradedTimers, setConnectionState]);
+    sessionManager?.ConnectionManager?.markConnected(setConnectionState);
+  }, [sessionManager, setConnectionState]);
 
   const scheduleDegradedTransition = useCallback(
     (errorMessage = null) => {
-      // Hidden tabs often suspend networking/realtime; do not degrade user-facing status while hidden.
-      if (visibilityRef.current !== "visible") {
-        clearDegradedTimers();
-        return;
-      }
-      if (degradedSinceRef.current == null) {
-        degradedSinceRef.current = Date.now();
-      }
-      const degradedForMs = Date.now() - degradedSinceRef.current;
-      const transient = isTransientBackgroundError(errorMessage);
-      if (degradedForMs >= DISCONNECTED_AFTER_MS) {
-        setConnectionState({
-          status: transient ? CONNECTION_STATUS.RECONNECTING : CONNECTION_STATUS.DISCONNECTED,
-          lastError: transient ? null : errorMessage || "Could not reach Paidly services.",
-          lastCheckAt: Date.now(),
-        });
-        return;
-      }
-      if (degradedForMs >= RECONNECTING_GRACE_MS) {
-        setConnectionState({
-          status: CONNECTION_STATUS.RECONNECTING,
-          lastError: null,
-          lastCheckAt: Date.now(),
-        });
-      }
-      if (!reconnectTimerRef.current) {
-        reconnectTimerRef.current = window.setTimeout(() => {
-          reconnectTimerRef.current = null;
-          if (degradedSinceRef.current == null) return;
-          if (visibilityRef.current !== "visible") return;
-          setConnectionState({
-            status: CONNECTION_STATUS.RECONNECTING,
-            lastError: null,
-            lastCheckAt: Date.now(),
-          });
-        }, RECONNECTING_GRACE_MS);
-      }
-      if (!disconnectedTimerRef.current) {
-        disconnectedTimerRef.current = window.setTimeout(() => {
-          disconnectedTimerRef.current = null;
-          if (degradedSinceRef.current == null) return;
-          if (visibilityRef.current !== "visible") return;
-          const transientNow = isTransientBackgroundError(errorMessage);
-          setConnectionState({
-            status: transientNow ? CONNECTION_STATUS.RECONNECTING : CONNECTION_STATUS.DISCONNECTED,
-            lastError: transientNow ? null : errorMessage || "Could not reach Paidly services.",
-            lastCheckAt: Date.now(),
-          });
-        }, DISCONNECTED_AFTER_MS);
-      }
+      sessionManager?.ConnectionManager?.scheduleDegradedTransition({
+        errorMessage,
+        isVisible,
+        getDecisionAction: (reason) => sessionManager?.AuthManager?.getDecision(reason)?.action,
+        setConnectionState,
+      });
     },
-    [setConnectionState]
+    [isVisible, sessionManager, setConnectionState]
   );
 
   const runCheck = useCallback(async () => {
     if (!isSupabaseConfigured || typeof window === "undefined") return;
-    if (visibilityRef.current !== "visible") return;
+    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
+    if (!isVisible()) return;
 
     if (!navigator.onLine) {
-      degradedSinceRef.current = Date.now();
-      clearDegradedTimers();
-      setConnectionState({
-        status: CONNECTION_STATUS.DISCONNECTED,
-        lastError: "You appear to be offline.",
-        lastCheckAt: Date.now(),
+      sessionManager?.ConnectionManager?.setOffline({
+        decisionAction: sessionManager?.AuthManager?.getDecision("offline")?.action,
+        setConnectionState,
       });
       return;
     }
@@ -147,7 +72,7 @@ export default function ConnectionMonitor() {
     } finally {
       inFlightRef.current = false;
     }
-  }, [clearDegradedTimers, markConnected, scheduleDegradedTransition, setConnectionState]);
+  }, [isVisible, markConnected, scheduleDegradedTransition, sessionManager, setConnectionState]);
 
   const stopRealtime = useCallback(() => {
     if (realtimeChannelRef.current) {
@@ -172,6 +97,7 @@ export default function ConnectionMonitor() {
   }, [markConnected, scheduleDegradedTransition, stopRealtime]);
 
   const startRealtime = useCallback(() => {
+    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
     const current = realtimeChannelRef.current;
     if (!current) {
       reconnectRealtime();
@@ -190,29 +116,21 @@ export default function ConnectionMonitor() {
 
     const onOnline = () => void runCheck();
     const onOffline = () => {
-      degradedSinceRef.current = Date.now();
-      clearDegradedTimers();
-      setConnectionState({
-        status: CONNECTION_STATUS.DISCONNECTED,
-        lastError: "You appear to be offline.",
-        lastCheckAt: Date.now(),
+      sessionManager?.VisibilityManager?.onOffline("offline");
+      sessionManager?.ConnectionManager?.setOffline({
+        decisionAction: sessionManager?.AuthManager?.getDecision("offline")?.action,
+        setConnectionState,
       });
     };
     const onVisibilityChange = () => {
-      visibilityRef.current = document.visibilityState;
-      if (visibilityRef.current === "hidden") {
-        hiddenStartedAtRef.current = Date.now();
-        clearDegradedTimers();
-        stopRealtime();
+      const currentVisibility = document.visibilityState;
+      if (currentVisibility === "hidden") {
+        sessionManager?.ConnectionManager?.onHidden();
+        // Keep realtime/auth state intact while hidden; browser may throttle/suspend naturally.
         return;
       }
-      if (hiddenStartedAtRef.current && degradedSinceRef.current != null) {
-        const hiddenDurationMs = Math.max(0, Date.now() - hiddenStartedAtRef.current);
-        // Pause degradation clock while hidden so short tab switches never become reconnect/disconnect states.
-        degradedSinceRef.current += hiddenDurationMs;
-      }
-      hiddenStartedAtRef.current = null;
-      if (visibilityRef.current === "visible") {
+      sessionManager?.ConnectionManager?.onVisible();
+      if (currentVisibility === "visible") {
         startRealtime();
         void runCheck();
       }
@@ -229,37 +147,23 @@ export default function ConnectionMonitor() {
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       stopRealtime();
-      clearDegradedTimers();
+      sessionManager?.ConnectionManager?.dispose();
     };
-  }, [clearDegradedTimers, runCheck, setConnectionState, startRealtime, stopRealtime]);
+  }, [runCheck, sessionManager, setConnectionState, startRealtime, stopRealtime]);
 
   // Read-only subscription: map centralized auth session health to connection UX state.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    if (sessionStatus === SESSION_STATUS.CONNECTED) {
-      setConnectionState({
-        status: CONNECTION_STATUS.CONNECTED,
-        lastError: null,
-        lastCheckAt: Date.now(),
-      });
-      return;
-    }
-    if (sessionStatus === SESSION_STATUS.RECONNECTING) {
-      setConnectionState({
-        status: CONNECTION_STATUS.RECONNECTING,
-        lastError: null,
-        lastCheckAt: Date.now(),
-      });
-      return;
-    }
-    if (sessionStatus === SESSION_STATUS.EXPIRED) {
-      setConnectionState({
-        status: CONNECTION_STATUS.DISCONNECTED,
-        lastError: "Session expired.",
-        lastCheckAt: Date.now(),
-      });
-    }
-  }, [sessionStatus, setConnectionState]);
+    const mapped = sessionManager?.ConnectionManager?.mapSessionHealthToConnection({
+      sessionStatus,
+      sessionReason,
+    });
+    if (!mapped) return;
+    setConnectionState({
+      ...mapped,
+      lastCheckAt: Date.now(),
+    });
+  }, [sessionManager, sessionReason, sessionStatus, setConnectionState]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;

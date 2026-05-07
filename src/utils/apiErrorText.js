@@ -66,3 +66,25 @@ export function formatQueryError(err, fallback = "Unknown error") {
   }
   return fallback;
 }
+
+/**
+ * Shared HTTP status -> user-facing message mapping for UI/API clients.
+ *
+ * @param {number} status
+ * @param {{
+ *   unauthorized?: string,
+ *   forbidden?: string,
+ *   notFound?: string,
+ *   serviceUnavailable?: string,
+ *   fallback?: string
+ * }} [overrides]
+ * @returns {string}
+ */
+export function formatHttpStatusMessage(status, overrides = {}) {
+  const code = Number(status) || 0;
+  if (code === 401) return overrides.unauthorized || "Authentication required. Please sign in again.";
+  if (code === 403) return overrides.forbidden || "Admin access required.";
+  if (code === 404) return overrides.notFound || "Not found.";
+  if (code === 503) return overrides.serviceUnavailable || "Service unavailable.";
+  return overrides.fallback || `HTTP ${code}`;
+}

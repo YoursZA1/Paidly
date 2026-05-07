@@ -551,6 +551,64 @@ async function handleAffiliateApprovePost(req, res, supabase) {
   return res.status(200).json(result.payload);
 }
 
+async function handleAffiliateCommissionPost(req, res, supabase) {
+  await ensureAffiliateApproveDeps();
+  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
+  if (!moderator) return;
+
+  const applicationId = parseAffiliateApplicationId(req.body || {});
+  if (!applicationId) {
+    return res.status(400).json({ error: "Missing applicationId" });
+  }
+
+  const commissionFraction = parseCommissionFractionFromBody(req.body || {});
+  if (commissionFraction == null) {
+    return res.status(400).json({ error: "Missing or invalid commissionRate" });
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: appRow, error: appErr } = await supabase
+    .from("affiliate_applications")
+    .update({
+      commission_rate: commissionFraction * 100,
+      updated_at: nowIso,
+    })
+    .eq("id", applicationId)
+    .select("id, user_id, commission_rate, status")
+    .single();
+
+  if (appErr) {
+    return res.status(500).json({ error: appErr.message || "Failed to update application commission" });
+  }
+  if (!appRow) {
+    return res.status(404).json({ error: "Affiliate application not found" });
+  }
+
+  const affiliatePatch = {
+    commission_rate: commissionFraction,
+    updated_at: nowIso,
+    application_id: appRow.id,
+  };
+  if (String(appRow.status || "").toLowerCase() === "approved") {
+    affiliatePatch.status = "approved";
+  }
+
+  if (appRow.user_id) {
+    const { error: affUpErr } = await supabase
+      .from("affiliates")
+      .upsert({ user_id: appRow.user_id, ...affiliatePatch }, { onConflict: "user_id" });
+    if (affUpErr) {
+      return res.status(500).json({ error: affUpErr.message || "Failed to update affiliate commission profile" });
+    }
+  }
+
+  return res.status(200).json({
+    ok: true,
+    applicationId: appRow.id,
+    commissionRate: Number(appRow.commission_rate ?? commissionFraction * 100),
+  });
+}
+
 function parseSystemWorkflowBody(req, res) {
   let body = req.body;
   if (typeof body === "string") {
@@ -823,6 +881,7 @@ export default async function handler(req, res) {
     ]);
     const postResources = new Set([
       "approve",
+      "affiliate-commission",
       "decline",
       "invite-user",
       "clean-orphaned-users",
@@ -871,6 +930,13 @@ export default async function handler(req, res) {
           const { client: supabase, configError } = getSupabaseAdmin();
           if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
           return handleAffiliateApprovePost(req, res, supabase);
+        }
+        if (resource === "affiliate-commission") {
+          await ensureGetDeps();
+          cors(res, req);
+          const { client: supabase, configError } = getSupabaseAdmin();
+          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
+          return handleAffiliateCommissionPost(req, res, supabase);
         }
         if (resource === "decline") {
           await ensureApproveDeclineDeps();

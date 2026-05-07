@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { setSessionHealthStatus, SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { useSessionManager } from "@/contexts/SessionManagerContext";
 
 /**
  * Subscribe to Supabase Realtime postgres_changes for the given tables.
@@ -13,6 +15,8 @@ import { supabase } from "@/lib/supabaseClient";
 export function useSupabaseRealtime(tables, onPayload, opts = {}) {
   const schema = opts.schema ?? "public";
   const channelName = opts.channelName ?? "realtime-db-changes";
+  const sessionManagerFromContext = useSessionManager();
+  const sessionManager = opts.sessionManager || sessionManagerFromContext;
   const onPayloadRef = useRef(onPayload);
   onPayloadRef.current = onPayload;
 
@@ -42,6 +46,24 @@ export function useSupabaseRealtime(tables, onPayload, opts = {}) {
     });
 
     channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        const current = useSessionHealthStore.getState().status;
+        if (current === SESSION_STATUS.RECONNECTING) {
+          if (sessionManager?.HealthMonitor?.setConnected) {
+            sessionManager.HealthMonitor.setConnected("realtime_recovered");
+          } else {
+            setSessionHealthStatus(SESSION_STATUS.CONNECTED, "realtime_recovered");
+          }
+        }
+        return;
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        if (sessionManager?.RealtimeManager?.onUnstable) {
+          sessionManager.RealtimeManager.onUnstable("realtime_channel_unstable");
+        } else {
+          setSessionHealthStatus(SESSION_STATUS.RECONNECTING, "realtime_channel_unstable");
+        }
+      }
       if (status === "CHANNEL_ERROR" && import.meta.env?.DEV) {
         console.debug("[useSupabaseRealtime] channel error (optional). To use Realtime, add tables to supabase_realtime publication.");
       }
@@ -50,5 +72,5 @@ export function useSupabaseRealtime(tables, onPayload, opts = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [schema, channelName, tables.join(",")]);
+  }, [schema, channelName, sessionManager, tables.join(",")]);
 }

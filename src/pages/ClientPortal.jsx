@@ -313,7 +313,7 @@ function ClientPortalShell() {
                                     <CardContent className="p-12 text-center">
                                         <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                         <h3 className="text-lg font-semibold text-slate-900 mb-2">No invoices yet</h3>
-                                        <p className="text-slate-600">You don't have any invoices at the moment</p>
+                                        <p className="text-slate-600">You don&apos;t have any invoices at the moment</p>
                                     </CardContent>
                                 </Card>
                             ) : (
@@ -389,7 +389,7 @@ function ClientPortalShell() {
                                     <CardContent className="p-12 text-center">
                                         <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                         <h3 className="text-lg font-semibold text-slate-900 mb-2">No quotes yet</h3>
-                                        <p className="text-slate-600">You don't have any quotes at the moment</p>
+                                        <p className="text-slate-600">You don&apos;t have any quotes at the moment</p>
                                     </CardContent>
                                 </Card>
                             ) : (

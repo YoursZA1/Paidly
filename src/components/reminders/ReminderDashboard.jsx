@@ -14,7 +14,7 @@ export default function ReminderDashboard() {
 
     useEffect(() => {
         loadPendingReminders();
-    }, []);
+    }, [profile?.id]);
 
     const loadPendingReminders = async () => {
         setIsLoading(true);
@@ -43,7 +43,7 @@ export default function ReminderDashboard() {
     const handleSendReminder = async (reminderId) => {
         setIsSending(true);
         try {
-            const success = await PaymentReminderService.sendPendingReminder(reminderId);
+            const success = await PaymentReminderService.sendPendingReminder(reminderId, profile || null);
             if (success) {
                 await loadPendingReminders();
             }

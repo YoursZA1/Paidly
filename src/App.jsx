@@ -8,12 +8,23 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { connectExcelDatabase } from "@/services/ExcelDatabaseService"
 import PaymentReminderScheduler from "@/components/reminders/PaymentReminderScheduler"
+import { installSessionTelemetryAdapter } from "@/lib/sessionTelemetryAdapter"
 
 function App() {
   useEffect(() => {
     connectExcelDatabase({ url: "/paidly_data.xlsx" }).catch(() => {
       // ignore bootstrap errors
     });
+  }, []);
+
+  useEffect(() => {
+    let cleanup = null;
+    void installSessionTelemetryAdapter().then((dispose) => {
+      cleanup = typeof dispose === "function" ? dispose : null;
+    });
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, []);
 
   return (

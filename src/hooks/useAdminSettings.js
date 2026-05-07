@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { authedApiRequest } from '@/lib/authedApiRequest';
 
 const DEFAULT_SETTINGS = {
   system: {
@@ -24,11 +24,8 @@ export function useAdminSettings() {
   const query = useQuery({
     queryKey: ['admin-settings'],
     queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetch('/api/admin/settings', {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await authedApiRequest('/api/admin/settings', {
+        method: 'GET',
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {

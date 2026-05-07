@@ -24,7 +24,7 @@ class DueDateNotificationService {
 
                     // Send notification 1 day before due
                     if (daysUntilDue === 1) {
-                        const lastSent = localStorage.getItem(`invoice_reminder_${invoice.id}`);
+                        const lastSent = localStorage.getItem(`paidly_due_date_invoice_${invoice.id}`);
                         const lastSentDate = lastSent ? new Date(lastSent) : null;
                         
                         // Only send once per day
@@ -35,7 +35,7 @@ class DueDateNotificationService {
                                 message: `Invoice #${invoice.invoice_number} is due tomorrow (${format(dueDate, 'MMM d, yyyy')})`,
                                 data: invoice
                             });
-                            localStorage.setItem(`invoice_reminder_${invoice.id}`, today.toISOString());
+                            localStorage.setItem(`paidly_due_date_invoice_${invoice.id}`, today.toISOString());
                         }
                     }
                     } catch (e) {
@@ -55,7 +55,7 @@ class DueDateNotificationService {
 
                     // Send notification 1 day before expiry
                     if (daysUntilExpiry === 1) {
-                        const lastSent = localStorage.getItem(`quote_reminder_${quote.id}`);
+                        const lastSent = localStorage.getItem(`paidly_due_date_quote_${quote.id}`);
                         const lastSentDate = lastSent ? new Date(lastSent) : null;
                         
                         // Only send once per day
@@ -66,7 +66,7 @@ class DueDateNotificationService {
                                 message: `Quote #${quote.quote_number} expires tomorrow (${format(validDate, 'MMM d, yyyy')})`,
                                 data: quote
                             });
-                            localStorage.setItem(`quote_reminder_${quote.id}`, today.toISOString());
+                            localStorage.setItem(`paidly_due_date_quote_${quote.id}`, today.toISOString());
                         }
                     }
                     } catch (e) {

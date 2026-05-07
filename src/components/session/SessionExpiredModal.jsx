@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   SESSION_STATUS,
   useSessionHealthStore,
-  setSessionHealthStatus,
 } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { isPathAllowedWithoutSession } from "@/utils/sessionGuard";
 import Button from "@/components/ui/button";
 import { consumePendingAction, hasPendingAction } from "@/lib/pendingActionQueue";
+import { navigateTo } from "@/lib/navigationService";
 
 export default function SessionExpiredModal() {
   const status = useSessionHealthStore((s) => s.status);
@@ -19,6 +19,15 @@ export default function SessionExpiredModal() {
   const [formError, setFormError] = useState("");
   const [resumeNotice, setResumeNotice] = useState("");
   const [inactivityNotice, setInactivityNotice] = useState("");
+  const reasonLabel = useMemo(() => {
+    if (!reason) return "Session expired";
+    const r = String(reason).toLowerCase();
+    if (r === "inactivity_timeout") return "Signed out due to inactivity";
+    if (r.includes("signed_out") || r.includes("revoked")) return "Signed out from another session";
+    if (r.includes("reconnect") || r.includes("session_missing")) return "Reconnect failed";
+    if (r.includes("auth_expired") || r.includes("fatal_refresh")) return "Session expired";
+    return "Session expired";
+  }, [reason]);
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -28,11 +37,10 @@ export default function SessionExpiredModal() {
 
   const handleReconnect = async () => {
     setBusy(true);
-    setSessionHealthStatus(SESSION_STATUS.RECONNECTING);
     try {
       const ok = await refreshSession();
       if (!ok) {
-        window.location.assign("/login");
+        navigateTo("/login");
       }
     } finally {
       setBusy(false);
@@ -48,7 +56,6 @@ export default function SessionExpiredModal() {
     setFormError("");
     try {
       await login({ email: email.trim().toLowerCase(), password });
-      setSessionHealthStatus(SESSION_STATUS.CONNECTED, "reauthenticated");
       if (hasPendingAction()) {
         try {
           await consumePendingAction();
@@ -62,7 +69,6 @@ export default function SessionExpiredModal() {
       setPassword("");
     } catch (err) {
       setFormError(err?.message || "Unable to sign in. Please try again.");
-      setSessionHealthStatus(SESSION_STATUS.EXPIRED, "reauth_failed");
     } finally {
       setBusy(false);
     }
@@ -73,7 +79,7 @@ export default function SessionExpiredModal() {
     const reasonFromQuery = new URLSearchParams(window.location.search).get("reason");
     const reasonFromStorage = window.sessionStorage.getItem("paidly_session_expired_reason");
     if (reasonFromQuery === "inactivity" || reasonFromStorage === "inactivity_timeout") {
-      setInactivityNotice("Session expired due to inactivity");
+      setInactivityNotice("You were signed out due to inactivity.");
       try {
         window.sessionStorage.removeItem("paidly_session_expired_reason");
       } catch {
@@ -96,7 +102,7 @@ export default function SessionExpiredModal() {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-        <h2 className="text-lg font-semibold">Session expired</h2>
+        <h2 className="text-lg font-semibold">{inactivityNotice ? "Signed out due to inactivity" : reasonLabel}</h2>
         {inactivityNotice ? (
           <div className="mt-2 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             {inactivityNotice}
@@ -135,7 +141,7 @@ export default function SessionExpiredModal() {
           {resumeNotice ? <p className="text-xs text-primary">{resumeNotice}</p> : null}
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => window.location.assign("/login")} disabled={busy}>
+          <Button variant="outline" onClick={() => navigateTo("/login")} disabled={busy}>
             Go to login
           </Button>
           <Button variant="outline" onClick={() => void handleReconnect()} disabled={busy}>

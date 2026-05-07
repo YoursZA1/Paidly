@@ -1,9 +1,8 @@
-import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
-import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiErrorFieldToString, formatHttpStatusMessage } from "@/utils/apiErrorText";
 import { apiRequest } from "@/utils/apiRequest";
+import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 
 /** Must match server/src/adminPlatformUserMessages.js */
 const ADMIN_PLATFORM_MESSAGE_MAX_SUBJECT = 300;
@@ -137,11 +136,7 @@ async function apiRequestWithTimeout(url, init, timeoutMs = ADMIN_MESSAGE_REQUES
 }
 
 async function getSessionToken() {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) {
-    throw new Error(getSupabaseErrorMessage(sessionError, "Session error"));
-  }
-  const token = sessionData?.session?.access_token;
+  const token = await getSessionAccessTokenOrHandleUnauthorized("admin-platform-messages-missing-token");
   if (!token) {
     throw new Error("Not authenticated");
   }
@@ -200,11 +195,7 @@ export async function fetchAdminPlatformUserMessages(opts = {}) {
       }
       lastError =
         fromJson ||
-        (res.status === 401
-          ? "Session expired or invalid. Please log in again."
-          : res.status === 403
-            ? "Admin access required."
-            : `HTTP ${res.status}`);
+        formatHttpStatusMessage(res.status);
       continue;
     }
 
@@ -291,13 +282,10 @@ export async function postAdminPlatformUserMessage(body) {
       const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
       lastError =
         fromJson ||
-        (res.status === 401
-          ? "Session expired or invalid. Please log in again."
-          : res.status === 403
-            ? "Admin access required."
-            : res.status === 503
-              ? "Database is missing the admin messages table. Apply migration 20260411180000_admin_platform_messages.sql (e.g. supabase db push), then retry."
-              : `HTTP ${res.status}`);
+        formatHttpStatusMessage(res.status, {
+          serviceUnavailable:
+            "Database is missing the admin messages table. Apply migration 20260411180000_admin_platform_messages.sql (e.g. supabase db push), then retry.",
+        });
       continue;
     }
 
@@ -371,7 +359,7 @@ export async function postAdminSendMessage(body) {
     if (!res.ok) {
       const raw = payload.error ?? payload.message;
       const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
-      lastError = fromJson || `HTTP ${res.status}`;
+      lastError = fromJson || formatHttpStatusMessage(res.status);
       continue;
     }
     if (!payload?.ok) {
@@ -432,11 +420,7 @@ export async function postAdminBroadcastUpdate(body) {
       const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
       lastError =
         fromJson ||
-        (res.status === 401
-          ? "Session expired or invalid. Please log in again."
-          : res.status === 403
-            ? "Admin access required."
-            : `HTTP ${res.status}`);
+        formatHttpStatusMessage(res.status);
       continue;
     }
 
@@ -493,7 +477,7 @@ export async function fetchAdminBroadcastJobs(opts = {}) {
     if (!res.ok) {
       const raw = payload.error ?? payload.message;
       const fromJson = raw != null && raw !== "" ? apiErrorFieldToString(raw) : "";
-      lastError = fromJson || `HTTP ${res.status}`;
+      lastError = fromJson || formatHttpStatusMessage(res.status);
       continue;
     }
     if (!Array.isArray(payload.jobs)) {

@@ -15,7 +15,7 @@ export default [
     ],
   },
   {
-    // Frontend (React) files only.
+    // Frontend (React) — browser globals.
     files: ['src/**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2020,
@@ -70,6 +70,23 @@ export default [
     },
   },
   {
+    // Vercel /api serverless (Node; JSX allowed for e.g. og image route).
+    files: ['api/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  {
     // Backend (Node) files.
     files: ['server/**/*.{js,jsx}'],
     languageOptions: {
@@ -77,6 +94,7 @@ export default [
       globals: globals.node,
       parserOptions: {
         ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
         sourceType: 'module',
       },
     },

@@ -20,15 +20,6 @@ async function runBatchExpiry(admin) {
   return { mode: "batch", rows: Number(data || 0) };
 }
 
-async function runSingleUserExpiry(admin, bearerToken) {
-  if (!bearerToken) return null;
-  const { data: authData, error: authErr } = await admin.auth.getUser(bearerToken);
-  if (authErr || !authData?.user?.id) return null;
-  const { data, error } = await admin.rpc("expire_trial_if_due");
-  if (error) throw error;
-  return { mode: "user", user_id: authData.user.id, result: data || null };
-}
-
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
@@ -41,14 +32,7 @@ export default async function handler(req, res) {
       const out = await runBatchExpiry(admin);
       return res.status(200).json({ ok: true, at: new Date().toISOString(), ...out });
     }
-
-    const authHeader = req.headers.authorization || req.headers.Authorization || "";
-    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    const out = await runSingleUserExpiry(admin, bearerToken);
-    if (!out) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    return res.status(200).json({ ok: true, at: new Date().toISOString(), ...out });
+    return res.status(401).json({ error: "Unauthorized. Cron secret required." });
   } catch (e) {
     console.error("[api/cron/expire-trials]", e);
     return res.status(500).json({ ok: false, error: e?.message || String(e) });

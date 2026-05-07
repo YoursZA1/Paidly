@@ -36,6 +36,7 @@ class PaymentReminderService {
             for (const invoice of invoices) {
                 const client = clients.find(c => c.id === invoice.client_id);
                 if (!client) continue;
+                if (client.follow_up_enabled === false) continue;
 
                 const dueDate = new Date(invoice.delivery_date);
                 dueDate.setHours(0, 0, 0, 0);
@@ -166,6 +167,78 @@ class PaymentReminderService {
             body: htmlBody,
             from_name: companyName
         });
+    }
+
+    /**
+     * Reminders created when auto_send is off (manual approval in Settings).
+     * @returns {Promise<Array<{ reminder: object, invoice: object, client: object }>>}
+     */
+    static async getPendingReminders() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return [];
+
+            const reminders = await PaymentReminder.filter({ email_sent: false });
+            if (!reminders.length) return [];
+
+            const [invoices, clients] = await Promise.all([Invoice.list(), Client.list()]);
+            const byId = (rows, id) => rows.find((r) => r.id === id);
+
+            const out = [];
+            for (const reminder of reminders) {
+                const invoice = byId(invoices, reminder.invoice_id);
+                if (!invoice) continue;
+                const client = byId(clients, invoice.client_id);
+                if (!client) continue;
+                if (client.follow_up_enabled === false) continue;
+                out.push({ reminder, invoice, client });
+            }
+            return out;
+        } catch (error) {
+            const msg = error?.message || String(error);
+            if (msg === 'Not authenticated' || /not authenticated/i.test(msg) || isAbortError(error)) {
+                return [];
+            }
+            console.error('Error loading pending reminders:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Send one draft reminder and mark it sent.
+     * @param {string} reminderId
+     * @param {object|null} user - profile row (reminder_rules, company_name, currency, …)
+     */
+    static async sendPendingReminder(reminderId, user) {
+        if (!user?.id) return false;
+        const settings = user.reminder_settings;
+        const rules = settings?.reminder_rules;
+        if (!rules?.length) return false;
+
+        const pending = await PaymentReminder.filter({ id: reminderId, email_sent: false });
+        const reminder = pending[0];
+        if (!reminder) return false;
+
+        const invoice = await Invoice.get(reminder.invoice_id);
+        if (!invoice) return false;
+        const client = await Client.get(invoice.client_id);
+        if (!client) return false;
+        if (client.follow_up_enabled === false) return false;
+
+        const rule = rules.find((r) => r.id === reminder.reminder_type);
+        if (!rule) return false;
+
+        try {
+            await this.sendEmail(invoice, client, rule, user);
+            if (rule.type === 'after' && rule.days > 0 && invoice.status !== 'overdue') {
+                await Invoice.update(invoice.id, { status: 'overdue' });
+            }
+            await PaymentReminder.update(reminder.id, { email_sent: true });
+            return true;
+        } catch (e) {
+            console.error('sendPendingReminder failed:', e);
+            return false;
+        }
     }
 }
 

@@ -4,14 +4,13 @@
  * 2) **Counts** come from the same payload as the list.
  * 3) **Approve / decline** are `POST /api/admin/approve` and `POST /api/admin/decline` (see AffiliatesPage).
  */
-import { supabase } from "@/lib/supabaseClient";
 import { getAdminDataApiBase } from "@/api/backendClient";
 import { shouldSkipAdminFetchAbsoluteUrl } from "@/lib/apiOrigin";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { countAffiliateApplicationsByStatus } from "@/utils/affiliateApplicationCounts";
 import { finalizeAffiliateApplicationsForAdmin } from "@/api/paidlyDataClient";
-import { apiErrorFieldToString } from "@/utils/apiErrorText";
+import { apiErrorFieldToString, formatHttpStatusMessage } from "@/utils/apiErrorText";
 import { apiRequest } from "@/utils/apiRequest";
+import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 
 /**
  * URL for admin affiliate POST routes. Prefer {@link getAdminDataApiBase} (apex/www-safe); otherwise same-origin
@@ -102,11 +101,7 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
       }
       lastError =
         fromJson ||
-        (res.status === 401
-          ? "Session expired or invalid. Please log in again."
-          : res.status === 403
-            ? "Admin access required."
-            : `HTTP ${res.status}`);
+        formatHttpStatusMessage(res.status);
       if (import.meta.env.DEV) {
         console.log(payload.applications ?? null, lastError);
       }
@@ -157,11 +152,7 @@ async function fetchAffiliateAdminPayloadFromApi(token, lim) {
  * Shape: `{ applications, counts: { pending, approved, declined, total } }`.
  */
 export async function fetchAdminAffiliateApplications(limit = 500) {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) {
-    throw new Error(getSupabaseErrorMessage(sessionError, "Session error"));
-  }
-  const token = sessionData?.session?.access_token;
+  const token = await getSessionAccessTokenOrHandleUnauthorized("admin-affiliates-missing-token");
   if (!token) {
     throw new Error("Not authenticated");
   }

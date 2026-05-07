@@ -1,9 +1,10 @@
 import { useSessionHealth } from "@/hooks/useSessionHealth";
-import { SESSION_STATUS } from "@/stores/sessionHealthStore";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { cn } from "@/lib/utils";
 
 export default function SessionIndicator({ className }) {
   const { status } = useSessionHealth();
+  const reason = useSessionHealthStore((s) => s.reason);
 
   if (status === SESSION_STATUS.CONNECTED) {
     return (
@@ -28,7 +29,7 @@ export default function SessionIndicator({ className }) {
         )}
       >
         <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-        Reconnecting…
+        Syncing…
       </div>
     );
   }
@@ -42,7 +43,7 @@ export default function SessionIndicator({ className }) {
         )}
       >
         <span className="w-2 h-2 bg-red-400 rounded-full" />
-        Session expired
+        {reason === "inactivity_timeout" ? "Signed out" : "Session expired"}
       </div>
     );
   }

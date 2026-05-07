@@ -312,7 +312,9 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                 <Label htmlFor="follow_up_enabled" className="text-sm font-semibold text-foreground">
                     Automated follow-up reminders
                 </Label>
-                <p className="mt-1 text-xs text-muted-foreground">Send reminders for overdue invoices</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    When off, this client will not receive automated invoice payment emails or quote follow-up emails from Paidly.
+                </p>
             </div>
             <Switch
                 id="follow_up_enabled"

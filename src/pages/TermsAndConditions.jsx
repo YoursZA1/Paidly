@@ -96,7 +96,7 @@ export default function TermsAndConditions() {
               <p>- Paidly and its software remain our intellectual property.</p>
               <p>- You retain ownership of your uploaded and generated business data.</p>
               <p>
-                To the extent permitted by law, Paidly is provided "as is" and we are not liable for
+                To the extent permitted by law, Paidly is provided &ldquo;as is&rdquo; and we are not liable for
                 indirect, incidental, or consequential losses arising from use of the platform.
               </p>
             </CardContent>

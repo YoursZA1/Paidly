@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
 
 /**
  * Top-bar status: subtle wifi icon when connected (briefly for signed-in users); soft pills for problems + retry.
@@ -25,7 +26,7 @@ export default function ConnectionStatusIndicator({ className }) {
   const normalizedError =
     String(lastError || "").toLowerCase().includes("session_reconnecting") ||
     String(lastError || "").toLowerCase().includes("profiles_timeout")
-      ? "Connection recovering"
+      ? "Syncing"
       : lastError;
 
   const onRetry = useCallback(async () => {
@@ -38,8 +39,16 @@ export default function ConnectionStatusIndicator({ className }) {
       if (ok) {
         setConnectionState({ status: CONNECTION_STATUS.CONNECTED, lastError: null, lastCheckAt: Date.now() });
       } else {
+        const decision = decideSessionAction({
+          reason: error?.message || "retry_unreachable",
+          believedSignedIn: isAuthenticated,
+          online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
+        });
         setConnectionState({
-          status: CONNECTION_STATUS.DISCONNECTED,
+          status:
+            decision.action === SESSION_DECISION.RECONNECTING
+              ? CONNECTION_STATUS.RECONNECTING
+              : CONNECTION_STATUS.DISCONNECTED,
           lastError: error?.message || "Still unreachable.",
           lastCheckAt: Date.now(),
         });
@@ -47,7 +56,7 @@ export default function ConnectionStatusIndicator({ className }) {
     } finally {
       setRetryBusy(false);
     }
-  }, [setConnectionState]);
+  }, [isAuthenticated, setConnectionState]);
 
   if (!isSupabaseConfigured) return null;
 
@@ -72,8 +81,8 @@ export default function ConnectionStatusIndicator({ className }) {
         status === CONNECTION_STATUS.CONNECTED
           ? "Connected to Paidly"
           : status === CONNECTION_STATUS.RECONNECTING
-            ? "Reconnecting to Paidly…"
-            : normalizedError || "Disconnected"
+            ? "Syncing data…"
+            : normalizedError || "Offline"
       }
       className={cn(
         "pointer-events-auto flex items-center gap-1.5 text-[10px] font-medium sm:gap-2 sm:text-xs",
@@ -107,8 +116,8 @@ export default function ConnectionStatusIndicator({ className }) {
       )}
       {status === CONNECTION_STATUS.CONNECTED ? null : (
         <span className="max-w-[4.5rem] truncate sm:max-w-[9rem] md:max-w-[13rem]">
-          {status === CONNECTION_STATUS.RECONNECTING && "Reconnecting…"}
-          {status === CONNECTION_STATUS.DISCONNECTED && (normalizedError || "Disconnected")}
+          {status === CONNECTION_STATUS.RECONNECTING && "Syncing…"}
+          {status === CONNECTION_STATUS.DISCONNECTED && (normalizedError || "Offline")}
         </span>
       )}
       {status === CONNECTION_STATUS.DISCONNECTED ? (

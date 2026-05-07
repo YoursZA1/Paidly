@@ -12,7 +12,7 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import { getPermissions } from '@/lib/permissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { supabase } from '@/lib/supabaseClient';
+import { authedApiRequest } from '@/lib/authedApiRequest';
 
 function readAdminSettingsForm() {
   const s = {
@@ -41,6 +41,15 @@ function readAdminSettingsForm() {
   };
 }
 
+async function authedJson(url, init = {}, reason = 'settings-auth-missing-token') {
+  const res = await authedApiRequest(url, init, { reason });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json?.error || json?.message || `Request failed (${res.status})`);
+  }
+  return json;
+}
+
 export default function SettingsPage() {
   const { user: currentUser } = useCurrentUser();
   const perms = getPermissions(currentUser?.role);
@@ -62,16 +71,7 @@ export default function SettingsPage() {
   const { data: adminSettingsFromServer, isLoading: adminSettingsLoading } = useQuery({
     queryKey: ['admin-settings'],
     queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetch('/api/admin/settings', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error || json?.message || `Settings load failed (${res.status})`);
-      }
+      const json = await authedJson('/api/admin/settings', { method: 'GET' }, 'admin-settings-load-missing-token');
       return json?.settings || null;
     },
     staleTime: 30000,
@@ -110,16 +110,11 @@ export default function SettingsPage() {
         setSystemHealthError(null);
       }
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data?.session?.access_token;
-        if (!token) throw new Error('Not authenticated');
-        const res = await fetch('/api/admin/system-health', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(json?.error || json?.message || `Health check failed (${res.status})`);
-        }
+        const json = await authedJson(
+          '/api/admin/system-health',
+          { method: 'GET' },
+          'admin-system-health-missing-token'
+        );
         if (!cancelled) {
           setSystemHealth(json?.summary || null);
         }
@@ -218,21 +213,13 @@ export default function SettingsPage() {
         };
       }
 
-      const { data } = await supabase.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetch('/api/admin/settings', {
+      await authedJson('/api/admin/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error || json?.message || `Settings save failed (${res.status})`);
-      }
+      }, 'admin-settings-save-missing-token');
 
       await queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
 
@@ -272,14 +259,10 @@ export default function SettingsPage() {
     void (async () => {
       setDangerAction('remove-affiliates');
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data?.session?.access_token;
-        if (!token) throw new Error('Not authenticated');
-        const res = await fetch('/api/admin/settings', {
+        await authedJson('/api/admin/settings', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             settings: {
@@ -289,11 +272,7 @@ export default function SettingsPage() {
               },
             },
           }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(json?.error || json?.message || `Settings save failed (${res.status})`);
-        }
+        }, 'admin-settings-remove-affiliates-missing-token');
         await queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
         toast.success('Saved successfully');
       } catch (e) {
@@ -307,24 +286,16 @@ export default function SettingsPage() {
   const runDangerWorkflow = async (action, payload, actionKey) => {
     setDangerAction(actionKey);
     try {
-      const { data } = await supabase.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetch(`/api/admin/system/${action}`, {
+      await authedJson(`/api/admin/system/${action}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           confirmation: 'CONFIRM',
           ...payload,
         }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error || json?.message || `Workflow failed (${res.status})`);
-      }
+      }, `admin-system-${action}-missing-token`);
 
       if (action === 'maintenance') {
         const enabled = Boolean(payload?.enabled);

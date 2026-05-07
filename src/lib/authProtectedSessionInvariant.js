@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { isPathAllowedWithoutSession } from "@/utils/sessionGuard";
+import { navigateTo } from "@/lib/navigationService";
 
 const INVARIANT_MISS_KEY = "paidly_protected_session_invariant_miss";
 const INVARIANT_MISS_WINDOW_MS = 30_000;
@@ -65,5 +66,5 @@ export async function enforceProtectedRouteSessionInvariant(pathname, { loading,
   const nextMissCount = now - miss.ts <= INVARIANT_MISS_WINDOW_MS ? miss.count + 1 : 1;
   writeMissState(nextMissCount);
   if (nextMissCount < INVARIANT_REQUIRED_MISSES) return;
-  window.location.assign("/login");
+  navigateTo("/login");
 }

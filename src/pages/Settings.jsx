@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
   uploadLogo,
@@ -41,6 +41,8 @@ import {
 import { deleteMyAccount } from "@/api/accountApi";
 import CurrencySelector from "@/components/CurrencySelector";
 import PaymentReminderSettings from "@/components/reminders/PaymentReminderSettings";
+import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings";
+import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
@@ -965,7 +967,7 @@ function DeleteAccountSection() {
             } = await supabase.auth.getSession();
             const token = session?.access_token;
             if (!token) {
-                throw new Error("Session expired. Sign in again.");
+                throw new Error("Authentication required. Sign in again.");
             }
             await deleteMyAccount(token);
             toast({
@@ -1481,10 +1483,35 @@ const SETTINGS_TABS = [
     { value: "subscription", label: "Subscription", icon: Award },
 ];
 
+const SETTINGS_TAB_IDS = new Set(SETTINGS_TABS.map((t) => t.value));
+
+function resolveSettingsTab(tabParam) {
+    if (!tabParam || !SETTINGS_TAB_IDS.has(tabParam)) return "profile";
+    return tabParam;
+}
+
 export default function Settings() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialTab = urlParams.get("tab") || "profile";
-    const [activeTab, setActiveTab] = useState(initialTab);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeTab = resolveSettingsTab(searchParams.get("tab"));
+
+    useEffect(() => {
+        const raw = searchParams.get("tab");
+        if (raw && !SETTINGS_TAB_IDS.has(raw)) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("tab");
+            setSearchParams(next, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
+
+    const setActiveTab = (value) => {
+        const next = new URLSearchParams(searchParams);
+        if (value === "profile") {
+            next.delete("tab");
+        } else {
+            next.set("tab", value);
+        }
+        setSearchParams(next, { replace: true });
+    };
 
     return (
         <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6 lg:p-8 overflow-x-hidden">
@@ -1539,9 +1566,13 @@ export default function Settings() {
                             <PaymentMethodsSettings />
                         </SettingsCard>
                     </TabsContent>
-                    <TabsContent value="reminders" className="mt-6">
+                    <TabsContent value="reminders" className="mt-6 space-y-8">
                         <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
-                            <PaymentReminderSettings />
+                            <div className="space-y-8">
+                                <PaymentReminderSettings />
+                                <QuoteReminderSettings />
+                                <ReminderDashboard />
+                            </div>
                         </SettingsCard>
                     </TabsContent>
                     <TabsContent value="subscription" className="mt-6">

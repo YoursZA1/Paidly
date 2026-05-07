@@ -1,18 +1,9 @@
 // User management API utilities (calls backend / Vercel /api/admin/*)
 import { backendApi } from "./backendClient";
-import { supabase } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getAuthBearerHeadersOrThrow } from "@/lib/rpcSessionPolicy";
 
 async function adminAuthHeaders() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    throw new Error(getSupabaseErrorMessage(error, "Session error"));
-  }
-  const token = data?.session?.access_token;
-  if (!token) {
-    throw new Error("Not authenticated");
-  }
-  return { Authorization: `Bearer ${token}` };
+  return getAuthBearerHeadersOrThrow("user-management-missing-token");
 }
 
 // Fetch all Supabase users (Dashboard admin block + sync)

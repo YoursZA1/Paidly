@@ -86,10 +86,12 @@ function buildPaidLineItems(lineItems, discount) {
     .map((row) => {
       const qty = Number(row.quantity) || 1;
       const unit = Number(row.unit_price) || 0;
-      const total =
-        Number(row.total) != null && !Number.isNaN(Number(row.total))
-          ? Number(row.total)
-          : Math.round(qty * unit * 100) / 100;
+      const rawTotal = row.total;
+      const hasExplicitTotal =
+        rawTotal != null && rawTotal !== "" && !Number.isNaN(Number(rawTotal));
+      const total = hasExplicitTotal
+        ? Number(rawTotal)
+        : Math.round(qty * unit * 100) / 100;
       const desc = (row.description || row.service_name || row.name || "").trim() || "Item";
       return {
         service_name: desc.split("\n")[0].slice(0, 200),
