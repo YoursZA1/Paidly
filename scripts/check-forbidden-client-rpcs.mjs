@@ -7,7 +7,7 @@ const srcRoot = path.join(repoRoot, "src");
 const forbiddenRpcNames = new Set(["expire_trial_if_due", "bootstrap_user_organization"]);
 const forbiddenPatterns = [
   {
-    name: "/api/bootstrap-org",
+    name: "/api/bootstrap-org (use /api/auth/bootstrap-user from the browser)",
     pattern: /["'`]\/api\/bootstrap-org["'`]/g,
   },
   {

@@ -15,7 +15,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
-import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { hasFeature } from "@/data/paidlySubscriptionPlans";
@@ -81,15 +80,6 @@ export default function QuotesPage() {
     const handleRefresh = useCallback(() => {
         void refetchQuotes();
     }, [refetchQuotes]);
-
-    useSupabaseRealtime(
-        ["quotes"],
-        async () => {
-            queryClient.invalidateQueries({ queryKey: ["quotes", "list"], exact: false });
-            await refetchQuotes();
-        },
-        { channelName: "quotes-page" }
-    );
 
     useEffect(() => {
         const el = quotesLoadMoreRef.current;

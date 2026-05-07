@@ -7,9 +7,18 @@ import { processSyncJob } from "@/lib/syncJobProcessor";
 import { useAppStore } from "@/stores/useAppStore";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
 import { setSessionHealthStatus, SESSION_STATUS } from "@/stores/sessionHealthStore";
+import {
+  dispatchAppFetchAllSettled,
+  notifyAdminDashboardRealtimeStale,
+} from "@/lib/realtimeStoreHydration";
 
 const SYNC_INTERVAL_MS = 5000;
-const ENTITY_REALTIME_DEBOUNCE_MS = 400;
+/** Per-table debounce; coalesces bursts. List pages rely on this (see Invoices/Quotes — no duplicate channels). */
+const ENTITY_REALTIME_DEBOUNCE_MS = 550;
+/** Match former Dashboard realtime: one heavy `fetchAll` / admin reload after burst settles. */
+const GLOBAL_STORE_REFRESH_DEBOUNCE_MS = 1500;
+/** Admin dashboard previously listened to these tables only (not `clients` / `document_sends`). */
+const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expenses", "quotes", "payslips"]);
 
 export default function SyncEngine() {
   const queryClient = useQueryClient();
@@ -20,11 +29,17 @@ export default function SyncEngine() {
   const markFailed = useSyncQueueStore((s) => s.markFailed);
   const retryAllFailed = useSyncQueueStore((s) => s.retryAllFailed);
   const replaceOptimisticInvoice = useAppStore((s) => s.replaceOptimisticInvoice);
+  const fetchAllFromStore = useAppStore((s) => s.fetchAll);
   const runningRef = useRef(false);
+  const globalStoreRefreshTimerRef = useRef(null);
   const realtimeEntityDebounceRefs = useRef({
     invoices: null,
     clients: null,
     document_sends: null,
+    quotes: null,
+    payments: null,
+    expenses: null,
+    payslips: null,
   });
 
   const invalidateForEntity = useCallback(
@@ -48,6 +63,24 @@ export default function SyncEngine() {
       }
       if (entity === "document_sends") {
         queryClient.invalidateQueries({ queryKey: ["admin-messages"], exact: false });
+        return;
+      }
+      if (entity === "quotes") {
+        queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        return;
+      }
+      if (entity === "payments") {
+        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        return;
+      }
+      if (entity === "expenses") {
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        return;
+      }
+      if (entity === "payslips") {
+        queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
       }
     },
     [queryClient]
@@ -66,6 +99,24 @@ export default function SyncEngine() {
     },
     [invalidateForEntity]
   );
+
+  const scheduleGlobalStoreRefresh = useCallback(() => {
+    if (!user?.id) return;
+    if (globalStoreRefreshTimerRef.current) {
+      window.clearTimeout(globalStoreRefreshTimerRef.current);
+    }
+    globalStoreRefreshTimerRef.current = window.setTimeout(() => {
+      globalStoreRefreshTimerRef.current = null;
+      const isAdmin = user?.role === "admin";
+      if (isAdmin) {
+        notifyAdminDashboardRealtimeStale();
+        return;
+      }
+      void fetchAllFromStore(user).finally(() => {
+        dispatchAppFetchAllSettled();
+      });
+    }, GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
+  }, [user, fetchAllFromStore]);
 
   const runOnce = useCallback(async () => {
     if (runningRef.current) return;
@@ -126,22 +177,50 @@ export default function SyncEngine() {
 
   useEffect(() => {
     if (!user?.id) return undefined;
+
+    const onEntityEvent = (entity, payload) => {
+      scheduleEntityInvalidation(entity, payload);
+      if (entity === "document_sends") return;
+      if (user?.role === "admin" && !ADMIN_STORE_HYDRATION_ENTITIES.has(entity)) return;
+      scheduleGlobalStoreRefresh();
+    };
+
     const channel = supabase
       .channel("paidly-sync-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "invoices" },
-        (payload) => scheduleEntityInvalidation("invoices", payload)
+        (payload) => onEntityEvent("invoices", payload)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "clients" },
-        (payload) => scheduleEntityInvalidation("clients", payload)
+        (payload) => onEntityEvent("clients", payload)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "document_sends" },
-        (payload) => scheduleEntityInvalidation("document_sends", payload)
+        (payload) => onEntityEvent("document_sends", payload)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "quotes" },
+        (payload) => onEntityEvent("quotes", payload)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "payments" },
+        (payload) => onEntityEvent("payments", payload)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "expenses" },
+        (payload) => onEntityEvent("expenses", payload)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "payslips" },
+        (payload) => onEntityEvent("payslips", payload)
       );
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
@@ -161,6 +240,10 @@ export default function SyncEngine() {
     });
 
     return () => {
+      if (globalStoreRefreshTimerRef.current) {
+        window.clearTimeout(globalStoreRefreshTimerRef.current);
+        globalStoreRefreshTimerRef.current = null;
+      }
       Object.keys(realtimeEntityDebounceRefs.current).forEach((k) => {
         const timer = realtimeEntityDebounceRefs.current[k];
         if (timer) window.clearTimeout(timer);
@@ -168,7 +251,7 @@ export default function SyncEngine() {
       });
       supabase.removeChannel(channel);
     };
-  }, [scheduleEntityInvalidation, user?.id]);
+  }, [scheduleEntityInvalidation, scheduleGlobalStoreRefresh, user?.id, user?.role]);
 
   return null;
 }

@@ -13,6 +13,10 @@ vi.mock("@/lib/supabaseClient", () => ({
   isSupabaseConfigured: true,
 }));
 
+vi.mock("@/utils/apiRequest", () => ({
+  apiRequestJson: vi.fn(),
+}));
+
 /** PostgREST-style fluent builder; each terminal resolves to `{ data, error }`. */
 function fluentQuery(terminalResult) {
   const chain = {};
@@ -87,9 +91,52 @@ describe("EntityManager org cache behavior", () => {
 
     expect(first).toBe("org-123");
     expect(second).toBe("org-123");
-    // Bootstrap API attempted once per session user; second call skips HTTP and re-queries membership.
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    // Membership present: server bootstrap is not called.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0);
     const membershipCalls = mockSupabase.from.mock.calls.filter((c) => c[0] === "memberships");
     expect(membershipCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("calls bootstrap API once when membership is missing, then uses org_id", async () => {
+    const sessionUserId = "33333333-3333-4333-8333-333333333333";
+
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: sessionUserId } },
+      error: null,
+    });
+    mockSupabase.auth.getSession.mockResolvedValue({
+      data: {
+        session: {
+          user: { id: sessionUserId },
+          access_token: "tok",
+        },
+      },
+      error: null,
+    });
+
+    let membershipPass = 0;
+    mockSupabase.from.mockImplementation((table) => {
+      if (table === "memberships") {
+        membershipPass += 1;
+        const orgId = membershipPass >= 3 ? "org-from-boot" : null;
+        return fluentQuery({
+          data: orgId ? { org_id: orgId } : null,
+          error: null,
+        });
+      }
+      return fluentQuery({ data: null, error: null });
+    });
+
+    const { apiRequestJson } = await import("@/utils/apiRequest");
+    apiRequestJson.mockResolvedValue({ ok: true, org_id: "org-from-boot" });
+
+    const { createClient } = await import("@/api/customClient");
+    const client = createClient({ appId: "test", requiresAuth: true });
+    const manager = client.entities.Client;
+
+    const orgId = await manager.ensureUserHasOrganization(sessionUserId);
+    expect(orgId).toBe("org-from-boot");
+    expect(apiRequestJson).toHaveBeenCalledTimes(1);
+    expect(String(apiRequestJson.mock.calls[0][0])).toContain("/api/auth/bootstrap-user");
   });
 });

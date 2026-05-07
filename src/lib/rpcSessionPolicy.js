@@ -45,7 +45,11 @@ export async function runRpcUnauthorizedPolicy({
         });
         const retried = await retryRequest();
         const retryStatus = getResponseStatus(retried);
-        if (retryStatus !== 401 && retryStatus !== 403) {
+        if (retryStatus === 403) {
+          trackSessionTelemetry("rpc_forbidden_not_auth", { reason, retry_status: 403 });
+          return { recovered: false, response: retried };
+        }
+        if (retryStatus !== 401) {
           trackSessionTelemetry("rpc_unauthorized_recovered", { reason, retry_status: retryStatus || 200 });
           return { recovered: true, response: retried };
         }
@@ -66,6 +70,10 @@ export async function runRpcUnauthorizedPolicy({
         result: "error",
       });
       const retryStatus = getResponseStatus(e);
+      if (retryStatus === 403) {
+        trackSessionTelemetry("rpc_forbidden_not_auth", { reason, retry_status: 403, from: "catch" });
+        return { recovered: false, response: null };
+      }
       if (retryStatus !== 401 && retryStatus !== 403) {
         throw e;
       }

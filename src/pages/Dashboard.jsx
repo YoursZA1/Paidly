@@ -11,7 +11,6 @@ import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
 import { User } from "@/api/entities";
-import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAppContext } from "@/contexts/AppContext";
@@ -59,6 +58,10 @@ import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPl
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { runPaidConfetti } from '@/utils/confetti';
+import {
+  registerAdminDashboardRealtimeRefresh,
+  PAIDLY_APP_FETCH_ALL_SETTLED_EVENT,
+} from "@/lib/realtimeStoreHydration";
 
 const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
@@ -71,7 +74,6 @@ const RECENT_INVOICES_PREVIEW_ROWS = 3;
 const TRANSACTION_PREVIEW_ROWS = 3;
 const TRANSACTIONS_SOURCE_EACH = 30;
 const TRANSACTIONS_MERGED_MAX = 60;
-const DASHBOARD_REALTIME_DEBOUNCE_MS = 1500;
 
 function getCachedDashboard(userId) {
   if (!userId) return null;
@@ -366,7 +368,6 @@ export default function Dashboard() {
   });
   const navigate = useNavigate();
   const mountedRef = useRef(true);
-  const realtimeRefreshTimeoutRef = useRef(null);
 
   // Non-admin: read from global store (filled by Layout fetchAll). Admin: use local state from loadAdminData.
   const storeInvoices = useAppStore((s) => s.invoices);
@@ -957,42 +958,26 @@ export default function Dashboard() {
       return;
     }
     await fetchAll(authUser || null);
-    await Promise.allSettled([dashboardInvoicesQuery.refetch(), dashboardPayslipsQuery.refetch()]);
     await refreshBusinessGoal();
-  }, [authUser, dashboardInvoicesQuery, dashboardPayslipsQuery, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
+  }, [authUser, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
 
-  // Real-time KPI updates: refetch when invoices, payments, or expenses change
+  /** Admin aggregate dashboard: SyncEngine debounces DB events → reload local admin state when this screen is mounted. */
   useEffect(() => {
-    return () => {
-      if (realtimeRefreshTimeoutRef.current) {
-        clearTimeout(realtimeRefreshTimeoutRef.current);
-        realtimeRefreshTimeoutRef.current = null;
-      }
+    if (!isAdmin) return undefined;
+    return registerAdminDashboardRealtimeRefresh(() => {
+      void loadAdminData();
+    });
+  }, [isAdmin, loadAdminData]);
+
+  /** After SyncEngine-driven `fetchAll` (realtime), refresh goal row without a second global fetch. */
+  useEffect(() => {
+    if (isAdmin) return undefined;
+    const onSettled = () => {
+      void refreshBusinessGoal();
     };
-  }, []);
-
-  const scheduleRealtimeRefresh = useCallback(() => {
-    if (realtimeRefreshTimeoutRef.current) {
-      clearTimeout(realtimeRefreshTimeoutRef.current);
-    }
-    realtimeRefreshTimeoutRef.current = setTimeout(() => {
-      realtimeRefreshTimeoutRef.current = null;
-      if (isAdmin) {
-        loadAdminData();
-      } else {
-        fetchAll(authUser || null);
-        dashboardInvoicesQuery.refetch();
-        dashboardPayslipsQuery.refetch();
-        refreshBusinessGoal();
-      }
-    }, DASHBOARD_REALTIME_DEBOUNCE_MS);
-  }, [authUser, dashboardInvoicesQuery, dashboardPayslipsQuery, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
-
-  useSupabaseRealtime(
-    ["invoices", "payments", "expenses", "quotes", "payslips"],
-    scheduleRealtimeRefresh,
-    { channelName: "dashboard-kpis" }
-  );
+    window.addEventListener(PAIDLY_APP_FETCH_ALL_SETTLED_EVENT, onSettled);
+    return () => window.removeEventListener(PAIDLY_APP_FETCH_ALL_SETTLED_EVENT, onSettled);
+  }, [isAdmin, refreshBusinessGoal]);
 
   const revenueTrendData = useMemo(() => {
     const now = new Date();

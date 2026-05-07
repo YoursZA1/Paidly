@@ -21,9 +21,15 @@ import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
 import { hasFeature } from "@shared/plans.js";
 import { apiRequest } from "@/utils/apiRequest";
-import { runRpcUnauthorizedPolicy } from "@/lib/rpcSessionPolicy";
+import {
+  runOrgBootstrapWithLock,
+  getOrgBootstrapCircuitOpenUntil,
+  clearOrgBootstrapInflight,
+  recordOrgBootstrapFailure,
+} from "@/lib/orgBootstrapApi";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
-import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
+import { SESSION_STATUS, setSessionHealthStatus, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -288,6 +294,23 @@ async function attachInvoiceCompany(record) {
 
 function clearOrgIdCache() {
   Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
+  clearOrgBootstrapInflight();
+}
+
+async function fetchPrimaryMembershipOrgId(userId) {
+  const effectiveUserId = String(userId || "");
+  if (!effectiveUserId) return null;
+  const { data: existingMembership, error: membershipCheckError } = await supabase
+    .from("memberships")
+    .select("org_id")
+    .eq("user_id", effectiveUserId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (membershipCheckError && !membershipCheckError.message?.includes("0 rows")) {
+    console.warn("Error checking membership:", membershipCheckError);
+  }
+  return existingMembership?.org_id ?? null;
 }
 
 /**
@@ -890,27 +913,43 @@ class EntityManager {
     }
 
     try {
-      // Check if user has a membership (same ordering as bootstrap_user_organization: oldest first)
-      const { data: existingMembership, error: membershipCheckError } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', effectiveUserId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      // If error is not "not found" (PGRST116), log it but continue
-      if (membershipCheckError && !membershipCheckError.message.includes('0 rows')) {
-        console.warn('Error checking membership:', membershipCheckError);
+      let orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
+      if (orgId) {
+        orgIdCache[effectiveUserId] = orgId;
+        return orgId;
       }
 
-      if (existingMembership?.org_id) {
-        orgIdCache[effectiveUserId] = existingMembership.org_id;
-        return existingMembership.org_id;
+      if (getOrgBootstrapCircuitOpenUntil(effectiveUserId) > Date.now()) {
+        throw new Error(
+          "Organization bootstrap is cooling down after repeated errors. Please retry in a moment or contact support."
+        );
       }
 
+      const { data: sessionForToken } = await getSessionWithRetry();
+      if (!sessionForToken?.session?.access_token) {
+        throw new Error("Organization setup requires an authenticated session.");
+      }
+
+      try {
+        await runOrgBootstrapWithLock(effectiveUserId, {
+          getExistingOrgId: () => fetchPrimaryMembershipOrgId(effectiveUserId),
+        });
+      } catch (err) {
+        console.warn("[Paidly] Organization bootstrap request failed:", err);
+        throw new Error(
+          `Failed to set up organization: ${err?.message || err}. Please try again or contact support.`
+        );
+      }
+
+      orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
+      if (orgId) {
+        orgIdCache[effectiveUserId] = orgId;
+        return orgId;
+      }
+
+      recordOrgBootstrapFailure(effectiveUserId);
       throw new Error(
-        "Organization membership missing. Frontend org bootstrap is disabled; use server bootstrap flows."
+        "Organization membership missing after server bootstrap. Please refresh the page or contact support."
       );
     } catch (error) {
       console.error('Error in ensureUserHasOrganization:', error);
@@ -1871,10 +1910,14 @@ class AuthManager {
     if (isSupabaseConfigured && !supabaseUserId) {
       this.isAuthenticated = false;
       this.user = null;
-      await runRpcUnauthorizedPolicy({
+      const decision = decideSessionAction({
         reason: "missing-supabase-session",
-        alreadyRetried: true,
+        believedSignedIn: true,
+        online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
       });
+      if (decision.action === SESSION_DECISION.RECONNECTING) {
+        setSessionHealthStatus(SESSION_STATUS.RECONNECTING, decision.reason || "session_reconnecting");
+      }
       return null;
     }
 
@@ -2475,23 +2518,34 @@ class IntegrationManager {
         throw new Error("Invalid user id for organization resolution.");
       }
 
-      const { data: existingMembership, error: membershipCheckError } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (membershipCheckError && !/0 rows|PGRST116/i.test(membershipCheckError.message || '')) {
-        console.warn('IntegrationManager: check membership failed', getSupabaseErrorMessage(membershipCheckError, 'Check failed'));
-      }
-      if (existingMembership?.org_id) {
-        return existingMembership.org_id;
+      let orgId = await fetchPrimaryMembershipOrgId(userId);
+      if (orgId) return orgId;
+
+      if (getOrgBootstrapCircuitOpenUntil(userId) > Date.now()) {
+        throw new Error(
+          "Organization bootstrap is cooling down after repeated errors. Please retry in a moment."
+        );
       }
 
-      throw new Error(
-        "Organization membership missing. Frontend org bootstrap is disabled; use server bootstrap flows."
-      );
+      const { data: sd } = await getSessionWithRetry();
+      if (!sd?.session?.access_token) {
+        throw new Error("Organization setup requires an authenticated session.");
+      }
+
+      try {
+        await runOrgBootstrapWithLock(userId, {
+          getExistingOrgId: () => fetchPrimaryMembershipOrgId(userId),
+        });
+      } catch (err) {
+        console.warn("IntegrationManager: bootstrap failed", err?.message || err);
+        throw new Error(`Failed to resolve organization: ${err?.message || err}`);
+      }
+
+      orgId = await fetchPrimaryMembershipOrgId(userId);
+      if (orgId) return orgId;
+
+      recordOrgBootstrapFailure(userId);
+      throw new Error("Organization membership missing after server bootstrap.");
     };
 
     const buildUploadPath = (orgId, file, folder = "uploads") => {

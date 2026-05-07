@@ -20,7 +20,6 @@ import { motion } from "framer-motion";
 import InvoiceList from "../components/invoice/InvoiceList";
 import InvoiceGrid from "../components/invoice/InvoiceGrid";
 import InvoiceFilters from "../components/filters/InvoiceFilters";
-import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInvoices } from "@/hooks/useInvoices";
@@ -80,15 +79,6 @@ export default function InvoicesPage() {
             void refetchInvoices();
         },
         [storeUpdateInvoice, refetchInvoices]
-    );
-
-    useSupabaseRealtime(
-        ["invoices", "payments"],
-        () => {
-            // Supabase changefeed: refresh list + side data without blocking page.
-            void refetchInvoices();
-        },
-        { channelName: "invoices-page" }
     );
 
     const [viewMode, setViewMode] = useState('list');
