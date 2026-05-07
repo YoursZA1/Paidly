@@ -82,6 +82,72 @@ function isSettledPayment(payment) {
   return false;
 }
 
+function sortDocumentEventsNewestFirst(events) {
+  return Array.isArray(events)
+    ? [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    : [];
+}
+
+function sortDocumentItemsByOrder(items) {
+  return Array.isArray(items) ? [...items].sort((a, b) => (a.line_order ?? 0) - (b.line_order ?? 0)) : [];
+}
+
+function buildLifecycleSummary(status, events) {
+  const terminalStatuses = new Set(["paid", "accepted", "converted", "cancelled", "rejected", "expired"]);
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  const phase = terminalStatuses.has(normalizedStatus) ? "closed" : "active";
+  return {
+    status: normalizedStatus || "unknown",
+    phase,
+    hasActivity: Array.isArray(events) && events.length > 0,
+    lastActivityAt: Array.isArray(events) && events.length > 0 ? events[0]?.created_at || null : null,
+    eventCount: Array.isArray(events) ? events.length : 0,
+  };
+}
+
+function buildTotalsFromDocument(doc) {
+  const subtotal = Number(doc?.subtotal || 0);
+  const taxAmount = Number(doc?.tax_amount || 0);
+  const discountAmount = Number(doc?.discount_amount || 0);
+  const totalAmount = Number(doc?.total_amount || 0);
+  const exchangeRate = asPositiveNumber(doc?.exchange_rate, 1);
+  return {
+    subtotal,
+    tax_amount: taxAmount,
+    discount_amount: discountAmount,
+    total_amount: totalAmount,
+    exchange_rate: exchangeRate,
+    currency: doc?.currency || DEFAULT_BASE_CURRENCY,
+    base_currency: doc?.base_currency || DEFAULT_BASE_CURRENCY,
+    subtotal_base_amount: Math.round(subtotal * exchangeRate * 100) / 100,
+    tax_base_amount: Math.round(taxAmount * exchangeRate * 100) / 100,
+    discount_base_amount: Math.round(discountAmount * exchangeRate * 100) / 100,
+    total_base_amount: Math.round(totalAmount * exchangeRate * 100) / 100,
+  };
+}
+
+async function hydrateFullDocumentData(doc, service, options = {}) {
+  if (!doc) return null;
+  const includePaymentSummary = options.includePaymentSummary !== false;
+  const items = sortDocumentItemsByOrder(doc.document_items);
+  const events = sortDocumentEventsNewestFirst(doc.document_events);
+  const totals = buildTotalsFromDocument(doc);
+  const lifecycle = buildLifecycleSummary(doc.status, events);
+  const paymentSummary =
+    includePaymentSummary && doc.type === DOCUMENT_TYPES.invoice
+      ? await service.getPaymentSummary(doc.id, doc.total_amount)
+      : null;
+  return {
+    ...doc,
+    document_items: items,
+    document_events: events,
+    totals,
+    lifecycle,
+    activity_log: events,
+    payment_summary: paymentSummary,
+  };
+}
+
 async function insertDocumentEvent({ orgId, documentId, userId, eventType, payload }) {
   const { error } = await supabase.from("document_events").insert({
     org_id: orgId,
@@ -277,14 +343,40 @@ export const DocumentService = {
       throw throwWithCause(getSupabaseErrorMessage(error, "Failed to load document"), error);
     }
     if (!data) return null;
-    const events = Array.isArray(data.document_events)
-      ? [...data.document_events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      : [];
-    const items = Array.isArray(data.document_items)
-      ? [...data.document_items].sort((a, b) => (a.line_order ?? 0) - (b.line_order ?? 0))
-      : [];
+    const events = sortDocumentEventsNewestFirst(data.document_events);
+    const items = sortDocumentItemsByOrder(data.document_items);
     const { document_events: _e, document_items: _i, ...doc } = data;
     return { ...doc, document_items: items, document_events: events };
+  },
+
+  /**
+   * Canonical full payload for a single document detail view.
+   * Includes line items, totals, lifecycle summary, and activity log for all document types.
+   * @param {string} documentId
+   * @param {{ includePaymentSummary?: boolean }} [options]
+   */
+  async getFull(documentId, options = {}) {
+    const doc = await this.get(documentId);
+    return hydrateFullDocumentData(doc, this, options);
+  },
+
+  /**
+   * Loads a page of documents and fully hydrates each row (items, totals, lifecycle, activity).
+   * Keep this for admin/reporting or migration surfaces; default table screens should still use `list()`.
+   * @param {{ type?: string, status?: string, limit?: number, includePaymentSummary?: boolean }} params
+   */
+  async listFull(params = {}) {
+    const { includePaymentSummary = false, ...listParams } = params;
+    const rows = await this.list(listParams);
+    if (!rows.length) return [];
+    const docs = await Promise.all(
+      rows.map((row) =>
+        this.getFull(row.id, {
+          includePaymentSummary,
+        })
+      )
+    );
+    return docs.filter(Boolean);
   },
 
   async create(payload) {

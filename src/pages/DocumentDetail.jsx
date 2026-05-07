@@ -79,7 +79,7 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setLoading(true);
     try {
-      const row = await DocumentService.get(documentId);
+      const row = await DocumentService.getFull(documentId);
       setDoc(row);
       if (row) {
         setTitle(row.title ?? "");
@@ -87,12 +87,7 @@ export default function DocumentDetailPage() {
         setDiscount(String(row.discount_amount ?? 0));
         setDocumentCurrency(row.currency || "ZAR");
         setLines((row.document_items || []).map(lineFromRow));
-        if (row.type === DOCUMENT_TYPES.invoice) {
-          const summary = await DocumentService.getPaymentSummary(row.id, row.total_amount);
-          setPaymentSummary(summary);
-        } else {
-          setPaymentSummary(null);
-        }
+        setPaymentSummary(row.payment_summary || null);
       }
     } catch (e) {
       toast({
@@ -137,8 +132,11 @@ export default function DocumentDetailPage() {
       setDocumentCurrency(updated.currency || "ZAR");
       setLines((updated.document_items || []).map(lineFromRow));
       if (updated.type === DOCUMENT_TYPES.invoice) {
-        const summary = await DocumentService.getPaymentSummary(updated.id, updated.total_amount);
-        setPaymentSummary(summary);
+        const refreshed = await DocumentService.getFull(updated.id);
+        setDoc(refreshed || updated);
+        setPaymentSummary(refreshed?.payment_summary || null);
+      } else {
+        setPaymentSummary(null);
       }
       toast({
         title: "Saved",
@@ -160,10 +158,12 @@ export default function DocumentDetailPage() {
     setSaving(true);
     try {
       const updated = await DocumentService.send(documentId);
-      setDoc(updated);
+      const refreshed = await DocumentService.getFull(updated.id);
+      setDoc(refreshed || updated);
       if (updated.type === DOCUMENT_TYPES.invoice) {
-        const summary = await DocumentService.getPaymentSummary(updated.id, updated.total_amount);
-        setPaymentSummary(summary);
+        setPaymentSummary(refreshed?.payment_summary || null);
+      } else {
+        setPaymentSummary(null);
       }
       toast({
         title: "Sent",
@@ -185,7 +185,8 @@ export default function DocumentDetailPage() {
     setSaving(true);
     try {
       const updated = await DocumentService.update(documentId, { status: QUOTE_STATUSES.accepted });
-      setDoc(updated);
+      const refreshed = await DocumentService.getFull(updated.id);
+      setDoc(refreshed || updated);
       toast({
         title: "Quote accepted",
         description: "You can convert this quote to a draft invoice when ready.",
@@ -207,10 +208,12 @@ export default function DocumentDetailPage() {
     try {
       const paidStatus = doc.type === DOCUMENT_TYPES.payslip ? PAYSLIP_STATUSES.paid : INVOICE_STATUSES.paid;
       const updated = await DocumentService.update(documentId, { status: paidStatus });
-      setDoc(updated);
+      const refreshed = await DocumentService.getFull(updated.id);
+      setDoc(refreshed || updated);
       if (updated.type === DOCUMENT_TYPES.invoice) {
-        const summary = await DocumentService.getPaymentSummary(updated.id, updated.total_amount);
-        setPaymentSummary(summary);
+        setPaymentSummary(refreshed?.payment_summary || null);
+      } else {
+        setPaymentSummary(null);
       }
       toast({
         title: "Marked as paid",

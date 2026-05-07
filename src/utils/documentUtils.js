@@ -152,6 +152,25 @@ export function getCurrentDocumentCount(userPlan, documentType) {
 }
 
 /**
+ * Async variant backed by unified document-engine analytics.
+ */
+export async function getCurrentDocumentCountAsync(userPlan, documentType) {
+  const perPlan = await DocumentActivityService.getDocumentsPerPlanAsync();
+  const planDocs = perPlan.find((p) => p.plan === userPlan);
+  if (!planDocs) return 0;
+  switch (documentType) {
+    case DOCUMENT_TYPES.INVOICE:
+      return planDocs.invoices || 0;
+    case DOCUMENT_TYPES.QUOTE:
+      return planDocs.quotes || 0;
+    case DOCUMENT_TYPES.RECEIPT:
+      return planDocs.receipts || 0;
+    default:
+      return 0;
+  }
+}
+
+/**
  * Get remaining documents in limit
  */
 export function getRemainingDocuments(userPlan, documentType) {
@@ -279,12 +298,34 @@ export function getDocumentsSummary() {
 }
 
 /**
+ * Async summary from unified `DocumentService.listFull` analytics source.
+ */
+export async function getDocumentsSummaryAsync() {
+  const stats = await DocumentActivityService.getSummaryStatsAsync();
+  return {
+    total: stats.totalDocuments,
+    invoices: stats.totalInvoices,
+    quotes: stats.totalQuotes,
+    payslips: stats.totalPayslips || 0,
+    receipts: stats.totalReceipts,
+    avgValue: stats.averageDocumentValue,
+    revenue: stats.totalAmount
+  };
+}
+
+/**
  * Get today's document count
  */
 export function getTodaysDocumentCount() {
   const log = DocumentActivityService.getDocumentLog();
   const today = new Date().toISOString().split('T')[0];
   return log.filter(doc => doc.createdAt.startsWith(today)).length;
+}
+
+export async function getTodaysDocumentCountAsync() {
+  const docs = await DocumentActivityService.getUnifiedDocuments();
+  const today = new Date().toISOString().split('T')[0];
+  return docs.filter((doc) => String(doc.created_at || "").startsWith(today)).length;
 }
 
 /**
@@ -295,6 +336,13 @@ export function getThisMonthsDocumentCount() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   return log.filter(doc => doc.createdAt >= monthStart).length;
+}
+
+export async function getThisMonthsDocumentCountAsync() {
+  const docs = await DocumentActivityService.getUnifiedDocuments();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  return docs.filter((doc) => String(doc.created_at || "") >= monthStart).length;
 }
 
 /**
@@ -323,6 +371,32 @@ export function getMonthOverMonthGrowth() {
   };
 }
 
+export async function getMonthOverMonthGrowthAsync() {
+  const docs = await DocumentActivityService.getUnifiedDocuments();
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+
+  const thisMonth = docs.filter((doc) => {
+    const createdAt = String(doc.created_at || "");
+    return createdAt >= thisMonthStart;
+  }).length;
+
+  const prevMonth = docs.filter((doc) => {
+    const createdAt = String(doc.created_at || "");
+    return createdAt >= prevMonthStart && createdAt <= prevMonthEnd;
+  }).length;
+
+  const growth = prevMonth > 0 ? Math.round(((thisMonth - prevMonth) / prevMonth) * 100) : 0;
+  return {
+    thisMonth,
+    prevMonth,
+    growth,
+    trend: growth > 0 ? 'up' : growth < 0 ? 'down' : 'stable'
+  };
+}
+
 export default {
   DOCUMENT_TYPES,
   DOCUMENT_STATUSES,
@@ -332,6 +406,7 @@ export default {
   recordReceiptCreation,
   isPlanLimitReached,
   getCurrentDocumentCount,
+  getCurrentDocumentCountAsync,
   getRemainingDocuments,
   getPlanUsagePercentage,
   getStatusColor,
@@ -340,7 +415,11 @@ export default {
   formatCurrency,
   checkUpgradeNeeds,
   getDocumentsSummary,
+  getDocumentsSummaryAsync,
   getTodaysDocumentCount,
+  getTodaysDocumentCountAsync,
   getThisMonthsDocumentCount,
-  getMonthOverMonthGrowth
+  getThisMonthsDocumentCountAsync,
+  getMonthOverMonthGrowth,
+  getMonthOverMonthGrowthAsync
 };

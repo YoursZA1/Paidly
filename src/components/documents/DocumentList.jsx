@@ -80,9 +80,10 @@ export function DocumentList() {
     setLoading(true);
     setError(null);
     try {
-      const data = await DocumentService.list({
+      const data = await DocumentService.listFull({
         type: type === "all" ? undefined : type,
         status: status === "all" ? undefined : status,
+        includePaymentSummary: false,
       });
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -167,6 +168,9 @@ export function DocumentList() {
                   Updated
                 </th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">
+                  Activity
+                </th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
@@ -177,7 +181,7 @@ export function DocumentList() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">
+                    <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                       No documents match these filters. Create one from the buttons above or adjust filters.
                     </td>
                   </tr>
@@ -224,6 +228,9 @@ export function DocumentList() {
                           ) : null}
                         </td>
                         <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{updatedLabel}</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">
+                          {Number(row?.lifecycle?.eventCount || 0)}
+                        </td>
                         <td className="px-3 py-2 text-right">
                           <Button variant="link" className="h-auto p-0 font-medium" asChild>
                             <Link to={`${createPageUrl("Documents")}/${encodeURIComponent(row.id)}`}>Open</Link>

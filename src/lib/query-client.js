@@ -80,13 +80,13 @@ export function createAppQueryClient() {
       queries: {
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
-        retry: 1,
+        retry: false,
         /** Tab / window visible again → refetch active queries (staleTime still applies). */
         refetchOnWindowFocus: true,
         refetchOnMount: false,
       },
       mutations: {
-        retry: 1,
+        retry: false,
         // Mutations should settle; avoid infinite retry loops that keep buttons “loading”.
       },
     },

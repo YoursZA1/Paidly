@@ -51,7 +51,7 @@ export function createSessionManager(deps) {
     },
   };
 
-  /** @typedef {"inactivity_timeout"|"fatal_refresh_token"|"session_missing_after_reconnect"|"signed_out"|"signed_out_in_another_tab"|"unauthorized"|"session_revoked"|"auth_expired"|"forced_sign_out"|"reconnect_failed"|"auth_corruption"|"storage_corruption"|"token_desync"|"app_version_mismatch"} SessionExpiredReason */
+  /** @typedef {"inactivity_timeout"|"fatal_refresh_token"|"refresh_token_invalid"|"session_missing_after_reconnect"|"signed_out"|"signed_out_in_another_tab"|"unauthorized"|"session_revoked"|"auth_expired"|"forced_sign_out"|"reconnect_failed"|"auth_corruption"|"storage_corruption"|"token_desync"|"app_version_mismatch"} SessionExpiredReason */
   async function transitionToExpired(reason = "session_expired", options = {}) {
     return authTransitionManager.transitionToExpired(reason, {
       ...options,

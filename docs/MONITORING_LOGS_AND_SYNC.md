@@ -2,6 +2,8 @@
 
 Use this guide to monitor admin and sync behaviour and to fix common data sync and permission issues.
 
+Session incident guardrails (auth vs transport boundaries): see `docs/SESSION_RUNTIME_GUARDS.md`.
+
 ---
 
 ## 1. Where to Look

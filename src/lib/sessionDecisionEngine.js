@@ -12,6 +12,39 @@ function normalizeReason(reason) {
   return String(reason || "").trim().toLowerCase();
 }
 
+function hasAnyToken(reason, tokens) {
+  return tokens.some((token) => reason.includes(token));
+}
+
+const TERMINAL_AUTH_REASON_TOKENS = Object.freeze([
+  "signed_out",
+  "reauth",
+  "auth_expired",
+  "session_revoked",
+  "refresh_token_invalid",
+  "fatal_refresh_token",
+  "forced_sign_out",
+  "token_desync",
+  "storage_corruption",
+  "auth_corruption",
+  "app_version_mismatch",
+  "401",
+]);
+
+const NETWORK_OR_TRANSPORT_REASON_TOKENS = Object.freeze([
+  "offline",
+  "network",
+  "timeout",
+  "timed out",
+  "failed to fetch",
+  "load failed",
+  "reconnect",
+  "refresh_failed",
+  "session_missing",
+  "background_sync",
+  "tab_visible",
+]);
+
 export function decideSessionAction({
   reason,
   believedSignedIn = false,
@@ -41,26 +74,17 @@ export function decideSessionAction({
     };
   }
 
-  if (
-    normalizedReason.includes("signed_out") ||
-    normalizedReason.includes("unauthorized") ||
-    normalizedReason.includes("401") ||
-    normalizedReason.includes("reauth")
-  ) {
-    return {
-      action: SESSION_DECISION.REAUTH_REQUIRED,
-      reason: normalizedReason || "reauth_required",
-    };
-  }
-
-  if (
-    normalizedReason.includes("reconnect") ||
-    normalizedReason.includes("refresh_failed") ||
-    normalizedReason.includes("session_missing")
-  ) {
+  if (hasAnyToken(normalizedReason, NETWORK_OR_TRANSPORT_REASON_TOKENS)) {
     return {
       action: SESSION_DECISION.RECONNECTING,
       reason: normalizedReason || "session_reconnecting",
+    };
+  }
+
+  if (hasAnyToken(normalizedReason, TERMINAL_AUTH_REASON_TOKENS)) {
+    return {
+      action: SESSION_DECISION.REAUTH_REQUIRED,
+      reason: normalizedReason || "reauth_required",
     };
   }
 

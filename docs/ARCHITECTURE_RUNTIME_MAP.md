@@ -2,6 +2,8 @@
 
 Purpose: lock Paidly runtime structure and ownership boundaries so product behavior stays consistent as the codebase evolves.
 
+Session incident guardrails (auth vs transport boundaries): see `docs/SESSION_RUNTIME_GUARDS.md`.
+
 ## Runtime Topology (Canonical)
 
 ### Browser

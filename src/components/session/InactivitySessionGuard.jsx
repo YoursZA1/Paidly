@@ -29,7 +29,7 @@ export default function InactivitySessionGuard() {
 
   const onTimeout = useCallback(async () => {
     try {
-      await sessionManager?.AuthManager?.transitionToExpired("inactivity_timeout", {
+      await sessionManager?.AuthStateMachine?.transitionToExpired("inactivity_timeout", {
         signOutLocal: false,
         clearAuthState: true,
         broadcast: true,
@@ -50,7 +50,7 @@ export default function InactivitySessionGuard() {
   }, [logout, sessionManager]);
 
   const onRemoteTimeout = useCallback(async () => {
-    await sessionManager?.AuthManager?.transitionToExpired("inactivity_timeout", {
+    await sessionManager?.AuthStateMachine?.transitionToExpired("inactivity_timeout", {
       signOutLocal: true,
       clearAuthState: true,
       broadcast: true,

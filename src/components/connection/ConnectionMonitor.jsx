@@ -7,6 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSessionManager } from "@/contexts/SessionManagerContext";
 
 const CONNECTED_VISIBLE_MS = 3200;
+const REALTIME_BASE_RECONNECT_MS = 1000;
+const REALTIME_MAX_RECONNECT_MS = 30000;
+const REALTIME_MAX_RECONNECT_ATTEMPTS = 6;
 
 /**
  * Mount once near the app root (under {@link AuthProvider}):
@@ -25,21 +28,23 @@ export default function ConnectionMonitor() {
   const setSuppressConnectedIndicator = useConnectionStore((s) => s.setSuppressConnectedIndicator);
   const inFlightRef = useRef(false);
   const realtimeChannelRef = useRef(null);
+  const realtimeReconnectAttemptsRef = useRef(0);
+  const realtimeReconnectTimerRef = useRef(null);
   const isVisible = useCallback(
     () => (typeof document === "undefined" ? true : document.visibilityState === "visible"),
     []
   );
 
   const markConnected = useCallback(() => {
-    sessionManager?.ConnectionManager?.markConnected(setConnectionState);
+    sessionManager?.ConnectionMonitor?.markConnected(setConnectionState);
   }, [sessionManager, setConnectionState]);
 
   const scheduleDegradedTransition = useCallback(
     (errorMessage = null) => {
-      sessionManager?.ConnectionManager?.scheduleDegradedTransition({
+      sessionManager?.ConnectionMonitor?.scheduleDegradedTransition({
         errorMessage,
         isVisible,
-        getDecisionAction: (reason) => sessionManager?.AuthManager?.getDecision(reason)?.action,
+        getDecisionAction: (reason) => sessionManager?.AuthStateMachine?.getDecision(reason)?.action,
         setConnectionState,
       });
     },
@@ -52,8 +57,8 @@ export default function ConnectionMonitor() {
     if (!isVisible()) return;
 
     if (!navigator.onLine) {
-      sessionManager?.ConnectionManager?.setOffline({
-        decisionAction: sessionManager?.AuthManager?.getDecision("offline")?.action,
+      sessionManager?.ConnectionMonitor?.setOffline({
+        decisionAction: sessionManager?.AuthStateMachine?.getDecision("offline")?.action,
         setConnectionState,
       });
       return;
@@ -75,10 +80,45 @@ export default function ConnectionMonitor() {
   }, [isVisible, markConnected, scheduleDegradedTransition, sessionManager, setConnectionState]);
 
   const stopRealtime = useCallback(() => {
+    if (realtimeReconnectTimerRef.current && typeof window !== "undefined") {
+      window.clearTimeout(realtimeReconnectTimerRef.current);
+      realtimeReconnectTimerRef.current = null;
+    }
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
     }
+  }, []);
+
+  const resetRealtimeBackoff = useCallback(() => {
+    realtimeReconnectAttemptsRef.current = 0;
+    if (realtimeReconnectTimerRef.current && typeof window !== "undefined") {
+      window.clearTimeout(realtimeReconnectTimerRef.current);
+      realtimeReconnectTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRealtimeReconnect = useCallback((doReconnect) => {
+    if (!isSupabaseConfigured || typeof window === "undefined") return;
+    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
+    if (document.visibilityState !== "visible") return;
+    if (realtimeReconnectTimerRef.current) return;
+
+    const nextAttempt = realtimeReconnectAttemptsRef.current + 1;
+    if (nextAttempt > REALTIME_MAX_RECONNECT_ATTEMPTS) {
+      console.warn("[Realtime] Max reconnect attempts reached; pausing retries.");
+      return;
+    }
+    realtimeReconnectAttemptsRef.current = nextAttempt;
+    const delayMs = Math.min(
+      REALTIME_MAX_RECONNECT_MS,
+      REALTIME_BASE_RECONNECT_MS * 2 ** (nextAttempt - 1)
+    );
+    console.info("[Realtime] Scheduling reconnect", { attempt: nextAttempt, delayMs });
+    realtimeReconnectTimerRef.current = window.setTimeout(() => {
+      realtimeReconnectTimerRef.current = null;
+      doReconnect?.();
+    }, delayMs);
   }, []);
 
   const reconnectRealtime = useCallback(() => {
@@ -86,15 +126,17 @@ export default function ConnectionMonitor() {
     const channel = supabase.channel("paidly-connection-monitor");
     channel.subscribe((evt) => {
       if (evt === "SUBSCRIBED") {
+        resetRealtimeBackoff();
         markConnected();
         return;
       }
       if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
         scheduleDegradedTransition("Realtime connection interrupted.");
+        scheduleRealtimeReconnect(reconnectRealtime);
       }
     });
     realtimeChannelRef.current = channel;
-  }, [markConnected, scheduleDegradedTransition, stopRealtime]);
+  }, [markConnected, resetRealtimeBackoff, scheduleDegradedTransition, scheduleRealtimeReconnect, stopRealtime]);
 
   const startRealtime = useCallback(() => {
     if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
@@ -106,9 +148,16 @@ export default function ConnectionMonitor() {
     // Keep realtime reconnect logic clean: only reconnect when not joined.
     const state = String(current.state || "").toLowerCase();
     if (state !== "joined") {
-      reconnectRealtime();
+      scheduleRealtimeReconnect(reconnectRealtime);
     }
-  }, [reconnectRealtime]);
+  }, [reconnectRealtime, scheduleRealtimeReconnect]);
+
+  useEffect(() => {
+    if (sessionStatus !== SESSION_STATUS.EXPIRED) return;
+    resetRealtimeBackoff();
+    stopRealtime();
+    console.info("[RetryController] Halted realtime recovery because auth is EXPIRED.");
+  }, [resetRealtimeBackoff, sessionStatus, stopRealtime]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
@@ -116,20 +165,20 @@ export default function ConnectionMonitor() {
 
     const onOnline = () => void runCheck();
     const onOffline = () => {
-      sessionManager?.VisibilityManager?.onOffline("offline");
-      sessionManager?.ConnectionManager?.setOffline({
-        decisionAction: sessionManager?.AuthManager?.getDecision("offline")?.action,
+      sessionManager?.VisibilityRecoveryManager?.onOffline("offline");
+      sessionManager?.ConnectionMonitor?.setOffline({
+        decisionAction: sessionManager?.AuthStateMachine?.getDecision("offline")?.action,
         setConnectionState,
       });
     };
     const onVisibilityChange = () => {
       const currentVisibility = document.visibilityState;
       if (currentVisibility === "hidden") {
-        sessionManager?.ConnectionManager?.onHidden();
+        sessionManager?.ConnectionMonitor?.onHidden();
         // Keep realtime/auth state intact while hidden; browser may throttle/suspend naturally.
         return;
       }
-      sessionManager?.ConnectionManager?.onVisible();
+      sessionManager?.ConnectionMonitor?.onVisible();
       if (currentVisibility === "visible") {
         startRealtime();
         void runCheck();
@@ -147,14 +196,14 @@ export default function ConnectionMonitor() {
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       stopRealtime();
-      sessionManager?.ConnectionManager?.dispose();
+      sessionManager?.ConnectionMonitor?.dispose();
     };
   }, [runCheck, sessionManager, setConnectionState, startRealtime, stopRealtime]);
 
   // Read-only subscription: map centralized auth session health to connection UX state.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    const mapped = sessionManager?.ConnectionManager?.mapSessionHealthToConnection({
+    const mapped = sessionManager?.ConnectionMonitor?.mapSessionHealthToConnection({
       sessionStatus,
       sessionReason,
     });

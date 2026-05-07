@@ -5,6 +5,20 @@ import process from "node:process";
 const repoRoot = process.cwd();
 const srcRoot = path.join(repoRoot, "src");
 const forbiddenRpcNames = new Set(["expire_trial_if_due", "bootstrap_user_organization"]);
+const forbiddenPatterns = [
+  {
+    name: "/api/bootstrap-org",
+    pattern: /["'`]\/api\/bootstrap-org["'`]/g,
+  },
+  {
+    name: "organizations.insert",
+    pattern: /\.from\s*\(\s*["'`]organizations["'`]\s*\)\s*\.insert\s*\(/g,
+  },
+  {
+    name: "memberships.insert",
+    pattern: /\.from\s*\(\s*["'`]memberships["'`]\s*\)\s*\.insert\s*\(/g,
+  },
+];
 const allowedFiles = new Set([
   "src/lib/supabaseClient.js", // allowed for browser-side blocklist declaration
 ]);
@@ -38,6 +52,13 @@ for (const file of files) {
     while ((match = pattern.exec(content))) {
       const line = content.slice(0, match.index).split("\n").length;
       violations.push({ file: relative, line, name });
+    }
+  }
+  for (const fp of forbiddenPatterns) {
+    let match;
+    while ((match = fp.pattern.exec(content))) {
+      const line = content.slice(0, match.index).split("\n").length;
+      violations.push({ file: relative, line, name: fp.name });
     }
   }
 }

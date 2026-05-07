@@ -23,6 +23,7 @@ import { hasFeature } from "@shared/plans.js";
 import { apiRequest } from "@/utils/apiRequest";
 import { runRpcUnauthorizedPolicy } from "@/lib/rpcSessionPolicy";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -36,42 +37,6 @@ import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/li
 // Cache org_id per user to avoid repeated membership/org lookups on every entity sync
 const orgIdCache = {};
 const entityListTimeoutWarnState = new Map();
-const orgBootstrapApiAttemptedUsers = new Set();
-
-async function bootstrapOrganizationViaApi({ accessToken, userId, orgName }) {
-  if (!accessToken || !userId || orgBootstrapApiAttemptedUsers.has(String(userId))) return null;
-  orgBootstrapApiAttemptedUsers.add(String(userId));
-  try {
-    const response = await fetch("/api/bootstrap-org", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        org_name: orgName || "My Organization",
-      }),
-    });
-    if (!response.ok) {
-      if (import.meta.env.DEV) {
-        console.warn("[org-bootstrap] /api/bootstrap-org failed:", response.status);
-      }
-      return null;
-    }
-    const payload = await response.json().catch(() => null);
-    const orgId = payload?.org_id ? String(payload.org_id) : null;
-    if (orgId) {
-      orgIdCache[String(userId)] = orgId;
-      return orgId;
-    }
-  } catch (e) {
-    if (import.meta.env.DEV) {
-      console.warn("[org-bootstrap] /api/bootstrap-org error:", e?.message || e);
-    }
-  }
-  return null;
-}
 
 /**
  * Mobile/webview networks can spuriously abort in-flight auth/session reads.
@@ -827,6 +792,9 @@ class EntityManager {
 
     this._listOptions = limit != null ? { limit, offset, orderBy: { column: orderColumn, ascending: orderAsc } } : {};
     try {
+      if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) {
+        return Object.values(this.data);
+      }
       const pull = this.pullFromSupabase();
       const useRace = maxWaitMs != null && maxWaitMs > 0;
       // Online: bounded wait for responsiveness, but log pull failures instead of swallowing them.
@@ -846,6 +814,7 @@ class EntityManager {
         });
         const timedOutWithEmptyCache =
           this.skipLocalPersistence &&
+          useSessionHealthStore.getState().status !== SESSION_STATUS.EXPIRED &&
           Object.keys(this.data).length === 0 &&
           shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs);
         if (timedOutWithEmptyCache) {
@@ -896,7 +865,6 @@ class EntityManager {
     if (orgIdCache[requestedUserId]) return orgIdCache[requestedUserId];
 
     let sessionUid = null;
-    let sessionAccessToken = null;
     try {
       const { data: gu } = await supabase.auth.getUser();
       sessionUid = gu?.user?.id ?? null;
@@ -906,11 +874,6 @@ class EntityManager {
     if (!sessionUid) {
       const { data: sd } = await getSessionWithRetry();
       sessionUid = sd?.session?.user?.id ?? null;
-      sessionAccessToken = sd?.session?.access_token ?? null;
-    }
-    if (!sessionAccessToken) {
-      const { data: sd } = await getSessionWithRetry();
-      sessionAccessToken = sd?.session?.access_token ?? null;
     }
 
     if (!sessionUid || !isSupabaseAuthUuid(String(sessionUid))) {
@@ -924,29 +887,6 @@ class EntityManager {
       );
       // Never keep cross-user cache aliases when identities differ.
       delete orgIdCache[requestedUserId];
-    }
-
-    let orgName = "My Organization";
-    try {
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("company_name, full_name")
-        .eq("id", effectiveUserId)
-        .maybeSingle();
-      if (userProfile) {
-        orgName = userProfile.company_name || userProfile.full_name || orgName;
-      }
-    } catch {
-      /* ignore */
-    }
-
-    const apiOrgId = await bootstrapOrganizationViaApi({
-      accessToken: sessionAccessToken,
-      userId: effectiveUserId,
-      orgName,
-    });
-    if (apiOrgId) {
-      return apiOrgId;
     }
 
     try {
@@ -969,95 +909,9 @@ class EntityManager {
         return existingMembership.org_id;
       }
 
-      // Check if user has an organization as owner
-      const { data: existingOrg, error: orgCheckError } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('owner_id', effectiveUserId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      // If error is not "not found", log it but continue
-      if (orgCheckError && !orgCheckError.message.includes('0 rows')) {
-        console.warn('Error checking organization:', orgCheckError);
-      }
-
-      let orgId = existingOrg?.id;
-
-      // Create organization if it doesn't exist
-      if (!orgId) {
-        const { data: newOrg, error: orgError } = await supabase
-          .from('organizations')
-          .insert({
-            name: orgName,
-            owner_id: effectiveUserId
-          })
-          .select('id')
-          .single();
-
-        if (orgError) {
-          const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
-          console.error("Failed to create organization:", msg);
-          alertSupabaseWriteFailure(orgError, "Create organization failed");
-          if (/permission|policy|RLS/i.test(msg)) {
-            throw new Error("Permission denied: Unable to create organization. Please ensure RLS policies allow organization creation.");
-          }
-          throw new Error(`Failed to create organization: ${msg}`);
-        }
-
-        if (!newOrg?.id) {
-          throw new Error('Organization was created but ID was not returned');
-        }
-
-        orgId = newOrg.id;
-      }
-
-      // Create membership if it doesn't exist
-      if (!existingMembership) {
-        const { error: membershipError } = await supabase
-          .from('memberships')
-          .insert({
-            org_id: orgId,
-            user_id: effectiveUserId,
-            role: 'owner'
-          });
-
-        if (membershipError) {
-          // If it's a unique constraint violation, membership already exists, which is fine
-          if (membershipError.code === '23505' || 
-              membershipError.message.includes('unique') || 
-              membershipError.message.includes('duplicate')) {
-            // Membership already exists, try to fetch it
-            const { data: existingMem } = await supabase
-              .from('memberships')
-              .select('org_id')
-              .eq('user_id', effectiveUserId)
-              .eq('org_id', orgId)
-              .maybeSingle();
-            
-            if (existingMem?.org_id) {
-              orgIdCache[effectiveUserId] = existingMem.org_id;
-              return existingMem.org_id;
-            }
-          } else {
-            const msg = getSupabaseErrorMessage(membershipError, "Create membership failed");
-            alertSupabaseWriteFailure(membershipError, "Create membership failed");
-            if (/permission|policy|RLS/i.test(msg)) {
-              throw new Error("Permission denied: Unable to create membership. Please ensure RLS policies allow membership creation.");
-            }
-            console.error("Failed to create membership:", msg);
-            throw new Error(`Failed to create membership: ${msg}`);
-          }
-        }
-      }
-
-      if (!orgId) {
-        throw new Error('Unable to determine organization ID');
-      }
-
-      orgIdCache[effectiveUserId] = orgId;
-      return orgId;
+      throw new Error(
+        "Organization membership missing. Frontend org bootstrap is disabled; use server bootstrap flows."
+      );
     } catch (error) {
       console.error('Error in ensureUserHasOrganization:', error);
       throw error;
@@ -2621,30 +2475,6 @@ class IntegrationManager {
         throw new Error("Invalid user id for organization resolution.");
       }
 
-      let orgName = "My Organization";
-      try {
-        const { data: userProfile } = await supabase
-          .from("profiles")
-          .select("company_name, full_name")
-          .eq("id", userId)
-          .maybeSingle();
-        if (userProfile) {
-          orgName = userProfile.company_name || userProfile.full_name || orgName;
-        }
-      } catch {
-        /* ignore */
-      }
-
-      const { data: sessionData } = await getSessionWithRetry();
-      const apiOrgId = await bootstrapOrganizationViaApi({
-        accessToken: sessionData?.session?.access_token ?? null,
-        userId: String(userId),
-        orgName,
-      });
-      if (apiOrgId) {
-        return apiOrgId;
-      }
-
       const { data: existingMembership, error: membershipCheckError } = await supabase
         .from('memberships')
         .select('org_id')
@@ -2659,64 +2489,9 @@ class IntegrationManager {
         return existingMembership.org_id;
       }
 
-      // Check if user has an organization as owner
-      const { data: existingOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('owner_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      let orgId = existingOrg?.id;
-
-      // Create organization if it doesn't exist
-      if (!orgId) {
-        const { data: newOrg, error: orgError } = await supabase
-          .from('organizations')
-          .insert({
-            name: orgName,
-            owner_id: userId
-          })
-          .select('id')
-          .single();
-
-        if (orgError) {
-          const msg = getSupabaseErrorMessage(orgError, "Create organization failed");
-          console.error("Failed to create organization:", msg);
-          alertSupabaseWriteFailure(orgError, "Create organization failed");
-          throw new Error(`Failed to create organization: ${msg}`);
-        }
-
-        orgId = newOrg?.id;
-      }
-
-      // Create membership if it doesn't exist
-      if (!existingMembership && orgId) {
-        const { error: membershipError } = await supabase
-          .from('memberships')
-          .insert({
-            org_id: orgId,
-            user_id: userId,
-            role: 'owner'
-          });
-
-        if (membershipError) {
-          const msg = getSupabaseErrorMessage(membershipError, "Create membership failed");
-          const isUnique = membershipError.code === "23505" || /unique|duplicate/i.test(msg);
-          if (!isUnique) {
-            console.error("Failed to create membership:", msg);
-            alertSupabaseWriteFailure(membershipError, "Create membership failed");
-            throw new Error(`Failed to create membership: ${msg}`);
-          }
-        }
-      }
-
-      if (!orgId) {
-        throw new Error("No organization found for user");
-      }
-
-      return orgId;
+      throw new Error(
+        "Organization membership missing. Frontend org bootstrap is disabled; use server bootstrap flows."
+      );
     };
 
     const buildUploadPath = (orgId, file, folder = "uploads") => {

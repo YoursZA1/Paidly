@@ -20,6 +20,7 @@ import {
 import {
   msUntilProactiveRefresh,
   refreshSupabaseSessionWithRecovery,
+  isRefreshTokenFatalError,
 } from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
 import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
@@ -33,7 +34,7 @@ import {
 } from "@/lib/authRefreshTelemetry";
 import { SESSION_STATUS, setSessionHealthStatus, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { createAuthTabSyncChannel } from "@/lib/authTabSync";
-import { createSessionManager } from "@/lib/session/SessionManager";
+import { createSessionOrchestrator } from "@/lib/session/SessionOrchestrator";
 import { SessionManagerContext } from "@/contexts/SessionManagerContext";
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
@@ -185,7 +186,7 @@ export function AuthProvider({ children }) {
   }, []);
   const sessionManager = useMemo(
     () =>
-      createSessionManager({
+      createSessionOrchestrator({
         getBelievedSignedIn: () => Boolean(userIdRef.current || sessionUserIdRef.current),
         getOnline: () => (typeof navigator !== "undefined" ? navigator.onLine !== false : true),
         setSessionHealth: (status, reason) => setSessionHealthStatus(status, reason),
@@ -212,6 +213,16 @@ export function AuthProvider({ children }) {
     [clearReconnectLoops]
   );
 
+  const isTerminalRefreshFailure = useCallback((errorLike) => {
+    if (isRefreshTokenFatalError(errorLike)) return true;
+    const msg = String(errorLike?.message || errorLike?.msg || errorLike || "").toLowerCase();
+    return (
+      msg.includes("invalid refresh token") ||
+      msg.includes("refresh token not found") ||
+      msg.includes("refresh token") && msg.includes("not found")
+    );
+  }, []);
+
   useEffect(() => {
     loadingRef.current = loading;
   }, [loading]);
@@ -226,25 +237,10 @@ export function AuthProvider({ children }) {
 
   const bootstrapOrganizationAfterLogin = useCallback(async (sessionLike) => {
     const userId = sessionLike?.user?.id || null;
-    const accessToken = sessionLike?.accessToken || sessionLike?.access_token || null;
-    if (!userId || !accessToken) return;
+    if (!userId) return;
     if (bootstrapOrgAttemptedUsersRef.current.has(userId)) return;
     bootstrapOrgAttemptedUsersRef.current.add(userId);
-
-    try {
-      await fetch("/api/bootstrap-org", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ user_id: userId }),
-      });
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn("[Auth] bootstrap-org:", e?.message || e);
-      }
-    }
+    // Server-owned bootstrap only. Do not trigger organization bootstrap from frontend auth flows.
   }, []);
 
   // Drop legacy `breakapi_user` mirror when using Supabase — session + profiles are authoritative.
@@ -313,6 +309,16 @@ export function AuthProvider({ children }) {
       } else {
         const { data, error: gsErr } = await supabase.auth.getSession();
         if (gsErr) {
+          if (isTerminalRefreshFailure(gsErr) && (userIdRef.current || sessionUserIdRef.current)) {
+            await sessionManager.AuthStateMachine.transitionToExpired("refresh_token_invalid", {
+              signOutLocal: true,
+              clearAuthState: true,
+              broadcast: true,
+              redirect: true,
+              source: "refresh_user_get_session_error",
+            });
+            return;
+          }
           reportSupabaseGetSessionFailure();
           setError("");
           return;
@@ -353,6 +359,16 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase.auth.getSession();
         if (error) reportSupabaseGetSessionFailure();
         else reportSupabaseGetSessionRecovered();
+        if (error && isTerminalRefreshFailure(error) && (userIdRef.current || sessionUserIdRef.current)) {
+          await sessionManager.AuthStateMachine.transitionToExpired("refresh_token_invalid", {
+            signOutLocal: true,
+            clearAuthState: true,
+            broadcast: true,
+            redirect: true,
+            source: "refresh_user_fallback_get_session_error",
+          });
+          return;
+        }
         const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
           const min = minimalUserFromJwtUser(su);
@@ -368,7 +384,7 @@ export function AuthProvider({ children }) {
     } finally {
       patchAuthSession({ loading: false });
     }
-  }, []);
+  }, [isTerminalRefreshFailure, sessionManager]);
 
   /** Coalesce TOKEN_REFRESHED + Realtime profile bursts so we don't stack profile restores after writes. */
   const scheduleRefreshUser = useCallback(() => {
@@ -417,15 +433,19 @@ export function AuthProvider({ children }) {
           setSessionHealthStatus(SESSION_STATUS.CONNECTED, "refresh_recovered");
           return;
         }
-      } catch {
-        // ignore and escalate to expired below
+      } catch (error) {
+        if (isTerminalRefreshFailure(error)) {
+          await sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
+          return;
+        }
+        // ignore transient errors and escalate based on missing-session policy below
       }
 
       const shouldEscalateTerminal = sessionManager.RefreshManager.handleMissingSession(
         "session_missing_after_reconnect"
       );
       if (!shouldEscalateTerminal) return;
-      await sessionManager.AuthManager.transitionToExpired("session_missing_after_reconnect", {
+      await sessionManager.AuthStateMachine.transitionToExpired("session_missing_after_reconnect", {
         signOutLocal: true,
         clearAuthState: true,
         broadcast: true,
@@ -433,22 +453,27 @@ export function AuthProvider({ children }) {
         source: "reconnect_escalation",
       });
     }, 3000);
-  }, [sessionManager]);
+  }, [isTerminalRefreshFailure, sessionManager]);
 
   const refreshSession = useCallback(async (opts = {}) => {
     const silent = Boolean(opts?.silent);
     if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) {
       return false;
     }
-    return sessionManager.RefreshQueue.enqueue(async () => {
+    return sessionManager.RetryController.enqueue(async () => {
       if (!silent) {
         setSessionHealthStatus(SESSION_STATUS.RECONNECTING, navigator.onLine ? "refreshing" : "offline");
       }
       try {
+        const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
         const refreshed = await refreshSupabaseSessionWithRecovery();
-        if (refreshed.fatal) {
-          recordAuthRefreshFatal({ source: "refresh_session", reason: "fatal_refresh_token" });
-          return sessionManager.RefreshManager.handleFatal("fatal_refresh_token");
+        if (
+          refreshed.fatal ||
+          (believedSignedIn &&
+            (refreshed.reason === "no_refresh_token" || isTerminalRefreshFailure(refreshed.error)))
+        ) {
+          recordAuthRefreshFatal({ source: "refresh_session", reason: "refresh_token_invalid" });
+          return sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
         }
         if (refreshed.ok) recordAuthRefreshSuccess({ source: "refresh_session" });
         else if (refreshed.error) recordAuthRefreshFailure({ source: "refresh_session", reason: "refresh_failed" });
@@ -465,7 +490,6 @@ export function AuthProvider({ children }) {
           authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { reason: "refresh_ok" });
           return true;
         }
-        const believedSignedIn = Boolean(userIdRef.current || sessionUserIdRef.current);
         if (!silent) {
           setSessionHealthStatus(
             SESSION_STATUS.RECONNECTING,
@@ -483,7 +507,7 @@ export function AuthProvider({ children }) {
         return false;
       }
     }, { source: "auth_context_refresh" });
-  }, [sessionManager, triggerReconnect]);
+  }, [isTerminalRefreshFailure, sessionManager, triggerReconnect]);
 
   /**
    * Proactive JWT refresh before expiry (tab timers can lag after sleep / backgrounding).
@@ -575,7 +599,7 @@ export function AuthProvider({ children }) {
             }),
           ]);
         } catch (restoreErr) {
-          console.warn("Restore from session failed:", restoreErr);
+          console.warn("[Auth] Restore from session failed:", restoreErr);
         }
 
         if (cancelled) return;
@@ -599,7 +623,7 @@ export function AuthProvider({ children }) {
         setError("");
       } catch (err) {
         if (!isAbortError(err)) {
-          console.warn("Auth init error:", err);
+          console.warn("[Auth] Auth init error:", err);
         }
         if (!cancelled) {
           try {
@@ -683,7 +707,7 @@ export function AuthProvider({ children }) {
     const unsubscribe = sync.subscribe((message) => {
       if (!message?.type) return;
       if (message.type === "AUTH_SIGNED_OUT") {
-        void sessionManager.AuthManager.transitionToExpired("signed_out_in_another_tab", {
+        void sessionManager.AuthStateMachine.transitionToExpired("signed_out_in_another_tab", {
           signOutLocal: false,
           clearAuthState: true,
           broadcast: false,
@@ -696,7 +720,7 @@ export function AuthProvider({ children }) {
         scheduleSessionResync({ silent: true });
       }
       if (message.type === "AUTH_REAUTH_REQUIRED") {
-        void sessionManager.AuthManager.transitionToExpired(
+        void sessionManager.AuthStateMachine.transitionToExpired(
           message?.payload?.reason || "session_expired",
           {
             signOutLocal: false,
@@ -738,11 +762,11 @@ export function AuthProvider({ children }) {
           setSessionHealthStatus(SESSION_STATUS.CONNECTED, "tab_visible");
         } else {
           // Hidden-tab wake recovery should be silent: avoid terminal escalation from visibility events.
-          sessionManager.BackgroundSyncManager.onReconnectReason("tab_visible_missing_session");
+          sessionManager.VisibilityRecoveryManager.onReconnectReason("tab_visible_missing_session");
         }
       } catch {
         // Visibility recovery failures are treated as transient until explicit fatal auth evidence appears.
-        sessionManager.BackgroundSyncManager.onReconnectReason("tab_visible_refresh_failed");
+        sessionManager.VisibilityRecoveryManager.onReconnectReason("tab_visible_refresh_failed");
       }
 
       scheduleSessionResync({ silent: true });
@@ -758,7 +782,7 @@ export function AuthProvider({ children }) {
     if (typeof window === "undefined") return undefined;
     const handleOnline = () => scheduleSessionResync({ silent: true });
     const handleOffline = () => {
-      sessionManager.VisibilityManager.onOffline("offline");
+      sessionManager.VisibilityRecoveryManager.onOffline("offline");
     };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -838,7 +862,7 @@ export function AuthProvider({ children }) {
           authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
           return;
         }
-        await sessionManager.AuthManager.transitionToExpired("signed_out", {
+        await sessionManager.AuthStateMachine.transitionToExpired("signed_out", {
           signOutLocal: false,
           clearAuthState: true,
           broadcast: true,
@@ -850,7 +874,7 @@ export function AuthProvider({ children }) {
       }
 
       if (event === "AUTH_EXPIRED") {
-        await sessionManager.AuthManager.transitionToExpired("auth_expired", {
+        await sessionManager.AuthStateMachine.transitionToExpired("auth_expired", {
           signOutLocal: true,
           clearAuthState: true,
           broadcast: true,
@@ -1068,11 +1092,11 @@ export function AuthProvider({ children }) {
 
   const handleUnauthorizedSession = useCallback(
     async (reason) => {
-      const shouldRequireReauth = sessionManager.AuthManager.shouldRequireReauth(
+      const shouldRequireReauth = sessionManager.AuthStateMachine.shouldRequireReauth(
         reason || "unauthorized"
       );
       if (!shouldRequireReauth) {
-        sessionManager.BackgroundSyncManager.onReconnectReason(reason || "session_reconnecting");
+        sessionManager.VisibilityRecoveryManager.onReconnectReason(reason || "session_reconnecting");
         return;
       }
 
@@ -1082,7 +1106,7 @@ export function AuthProvider({ children }) {
       } catch {
         // ignore
       }
-      await sessionManager.AuthManager.transitionToExpired(reason || "unauthorized", {
+      await sessionManager.AuthStateMachine.transitionToExpired(reason || "unauthorized", {
         signOutLocal: true,
         clearAuthState: true,
         broadcast: true,

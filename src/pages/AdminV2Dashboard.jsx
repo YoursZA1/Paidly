@@ -293,7 +293,7 @@ export default function AdminV2Dashboard() {
     staleTime: ADMIN_DASHBOARD_STALE_MS,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
-    retry: 1,
+    retry: false,
   });
 
   useEffect(() => {

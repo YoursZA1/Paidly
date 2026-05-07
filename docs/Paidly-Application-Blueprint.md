@@ -46,6 +46,8 @@ UI → Hooks → Services → Entity facades (EntityManager) → Supabase
 
 **Goal:** Evolve Paidly from an **invoicing tool** into a full **business operating system**—same story as **Positioning** below.
 
+On-call session/runtime guardrails: see `docs/SESSION_RUNTIME_GUARDS.md`.
+
 ---
 
 ## Positioning — real product advantage

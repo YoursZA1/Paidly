@@ -5,10 +5,126 @@
  */
 
 import { getAllUsersInvoices, getAllUsersQuotes, getAllUsersClients } from '@/utils/adminDataAggregator';
+import { DocumentService } from '@/services/DocumentService';
 
 const DOCUMENT_LOG_KEY = 'breakapi_document_log';
+const ANALYTICS_DOCUMENT_LIMIT = 500;
+
+function safeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeDocumentForAnalytics(doc) {
+  const amount = safeNumber(doc?.totals?.total_amount ?? doc?.total_amount ?? 0);
+  const status = String(doc?.status || "").trim().toLowerCase();
+  const createdAt = String(doc?.created_at || "");
+  const clientName =
+    doc?.metadata?.client_name || doc?.client_name || doc?.clientName || doc?.customer_name || "Unknown Client";
+  return {
+    ...doc,
+    amount,
+    status,
+    createdAt,
+    clientName,
+    type: String(doc?.type || "").trim().toLowerCase(),
+  };
+}
+
+function summarizeFromUnifiedDocuments(rawDocs = [], clients = []) {
+  const docs = rawDocs.map(normalizeDocumentForAnalytics);
+  const invoices = docs.filter((d) => d.type === "invoice");
+  const quotes = docs.filter((d) => d.type === "quote");
+  const payslips = docs.filter((d) => d.type === "payslip");
+
+  const totalAmount = invoices.reduce((sum, d) => sum + d.amount, 0);
+  const countByStatus = docs.reduce((acc, d) => {
+    acc[d.status] = (acc[d.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    docs,
+    invoices,
+    quotes,
+    payslips,
+    summary: {
+      totalDocuments: docs.length,
+      totalInvoices: invoices.length,
+      totalQuotes: quotes.length,
+      totalPayslips: payslips.length,
+      totalReceipts: 0,
+      totalClients: Array.isArray(clients) ? clients.length : 0,
+      totalAmount,
+      draftCount: countByStatus.draft || 0,
+      sentCount: countByStatus.sent || 0,
+      paidCount: countByStatus.paid || 0,
+      viewedCount: countByStatus.viewed || 0,
+      overdueCount: countByStatus.overdue || 0,
+      averageDocumentValue: invoices.length > 0 ? Math.round(totalAmount / invoices.length) : 0,
+    },
+  };
+}
 
 export class DocumentActivityService {
+  /**
+   * Unified document snapshot for analytics from the v2 document engine.
+   */
+  static async getUnifiedDocuments() {
+    try {
+      return await DocumentService.listFull({
+        limit: ANALYTICS_DOCUMENT_LIMIT,
+        includePaymentSummary: false,
+      });
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn("[DocumentActivityService] Falling back to legacy analytics source:", error?.message || error);
+      }
+      return [];
+    }
+  }
+
+  /**
+   * Async summary source backed by the unified document engine.
+   */
+  static async getSummaryStatsAsync() {
+    const docs = await this.getUnifiedDocuments();
+    const clients = this.getAllClients();
+    return summarizeFromUnifiedDocuments(docs, clients).summary;
+  }
+
+  /**
+   * Async plan distribution backed by unified documents.
+   */
+  static async getDocumentsPerPlanAsync() {
+    const docs = await this.getUnifiedDocuments();
+    const byPlan = {};
+    docs.forEach((raw) => {
+      const doc = normalizeDocumentForAnalytics(raw);
+      const plan = String(doc?.metadata?.user_plan || doc?.user_plan || "free");
+      if (!byPlan[plan]) {
+        byPlan[plan] = {
+          plan,
+          totalDocuments: 0,
+          invoices: 0,
+          quotes: 0,
+          payslips: 0,
+          receipts: 0,
+          totalAmount: 0,
+          avgValue: 0,
+        };
+      }
+      byPlan[plan].totalDocuments += 1;
+      if (doc.type === "invoice") byPlan[plan].invoices += 1;
+      if (doc.type === "quote") byPlan[plan].quotes += 1;
+      if (doc.type === "payslip") byPlan[plan].payslips += 1;
+      byPlan[plan].totalAmount += doc.amount;
+    });
+    return Object.values(byPlan).map((row) => ({
+      ...row,
+      avgValue: row.totalDocuments > 0 ? Math.round(row.totalAmount / row.totalDocuments) : 0,
+    }));
+  }
   /**
    * Get all invoices from all users in real-time
    */

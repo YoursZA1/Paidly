@@ -1,7 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
-import { queuePendingAction } from "@/lib/pendingActionQueue";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 
 function getResponseStatus(resultOrError) {
@@ -73,13 +72,8 @@ export async function runRpcUnauthorizedPolicy({
     }
   }
 
-  if (isReplaySafeHttpMethod(method) && typeof queueReplayRequest === "function") {
-    trackSessionTelemetry("rpc_replay_queued", {
-      reason,
-      method: String(method || "GET").toUpperCase(),
-    });
-    queuePendingAction(queueReplayRequest);
-  }
+  // Unauthorized responses are terminal for the current auth context.
+  // Do not queue replays here: it can create retry storms while auth is invalid.
 
   trackSessionTelemetry("rpc_reauth_required", { reason });
   await triggerUnauthorizedSession(reason, { source: "rpc" });
