@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { subscribePaidlyNotificationsRealtime } from "@/lib/realtime/paidlyRealtimeManager";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/services/ActivityNotificationService";
@@ -17,6 +18,8 @@ export default function NotificationBell() {
   const headingId = useId();
   const triggerRef = useRef(null);
   const realtimeDebounceRef = useRef(null);
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const fetchUnreadCount = useCallback(async () => {
     if (!authUserId) {
@@ -132,22 +135,18 @@ export default function NotificationBell() {
       }
       realtimeDebounceRef.current = window.setTimeout(() => {
         void fetchUnreadCount();
-        if (open) void fetchNotifications();
+        if (openRef.current) void fetchNotifications();
       }, REALTIME_REFRESH_DEBOUNCE_MS);
     };
-    const channel = supabase
-      .channel(`notifications-changes-${authUserId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${authUserId}` }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_deliveries", filter: `user_id=eq.${authUserId}` }, scheduleRefresh)
-      .subscribe();
+    const unsub = subscribePaidlyNotificationsRealtime(authUserId, scheduleRefresh);
     return () => {
       if (realtimeDebounceRef.current) {
         window.clearTimeout(realtimeDebounceRef.current);
         realtimeDebounceRef.current = null;
       }
-      supabase.removeChannel(channel);
+      unsub();
     };
-  }, [authUserId, fetchNotifications, fetchUnreadCount, open]);
+  }, [authUserId, fetchNotifications, fetchUnreadCount]);
 
   useEffect(() => {
     if (!authUserId) return;

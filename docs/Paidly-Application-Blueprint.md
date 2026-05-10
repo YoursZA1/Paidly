@@ -96,6 +96,14 @@ These are the **real** architecture—not the sidebar.
 
 **Auth + session stabilization (in flight):** one coherent story for **session read/write** (`getSession` vs `getUser` races, refresh in parallel tabs, AbortError handling), **profile restore** when local auth cache is cleared, **invite / password / org bootstrap** flows, and **no silent “logged in but empty user”** states. Client work touches **`customClient.js`** / `AuthManager`, **`RequireAuth`**, and Supabase Auth config—treat this as **foundation** before shipping net-new document features at scale.
 
+**Connection lifecycle (client OS):** `ConnectionLifecycleManager` (`src/lib/connection/ConnectionLifecycleManager.js`) is the single ingress for **auth, refresh, realtime, visibility, network, sleep/wake, and recovery** signals; it updates a read model store and delegates terminal decisions to `SessionOrchestrator` only through one adapter (`registerSessionAuthority(...toSessionAuthorityAdapter())`). Subsystems **report in**; they do not apply parallel session health policies. Transport events use semantic types (`LifecycleSignalType`, e.g. `REALTIME_DISCONNECTED`, `REFRESH_SKIPPED`) and **`lifecyclePolicy`** chooses effects (ignore vs recover vs reconnect) so realtime/visibility noise does not escalate to logout. **Session health** uses a degraded ladder (`sessionRecoveryEscalation.js` + `SESSION_STATUS`: `unstable` → `reconnecting` → `degraded` → `reauth_required`) before `transitionToExpired` for recoverable failures (reconnect, wake, reauth-class 401s); fatal refresh / explicit sign-out still expire immediately.
+
+**Sleep/wake app recovery lock:** **`AppRecoveryLock`** (`src/lib/recovery/appRecoveryLock.js`) + **`wakeRecoveryStore`** enforce phased recovery: **`wakeRecoveryGuard`** blocks **`customClient`** mutations, **`SyncEngine`** skips queue draining while `blockMutations` is set, **`paidlyRealtimeManager`** suppresses postgres_change delivery during the lock, and **`runWakeRecoverySequence`** restores the JWT/session first (`lockPhase: auth`), then **`awaitRealtimeRecoveryHandlers`** + **`waitForPaidlyMainChannelJoined`** (`lockPhase: realtime`) before unlocking the UI.
+
+**Realtime + JWT rotation:** On every successful refresh (`TOKEN_REFRESHED`, **`refreshSession`** success, optional **`USER_UPDATED`**), call **`reconcilePaidlyRealtimeAfterTokenRefresh`** (`paidlyRealtimeManager.js`): **`supabase.realtime.setAuth(access_token)`** then **force** a Paidly multiplex rebuild — do not rely on `channel.state === joined` alone, or postgres_changes can stay on a stale JWT after rotation. Use **`validatePaidlyRealtime()`** when you need a cheap health snapshot.
+
+**Background session resync:** **`sessionRefreshScheduler`** (`src/lib/session/sessionRefreshScheduler.js`) is the single coalescing entry for **refresh + profile + realtime hint** work driven by visibility, online, heartbeat, keep-alive, tab sync, wake follow-ups, etc.; initiators call **`requestSessionRefresh({ source })`** instead of invoking **`refreshSession`** directly (the executor is registered from **`AuthContext.impl.jsx`**).
+
 ---
 
 ### 2. Document Engine (the commerce core)
@@ -480,6 +488,7 @@ Paidly is a **business operating system for SMBs**—not a narrow invoicing tool
 
 See **`docs/SUPABASE_DATA_MODEL.md`** for table ↔ entity detail.
 For runtime ownership and boundary rules (Browser/Supabase/Edge-Server), see **`docs/ARCHITECTURE_RUNTIME_MAP.md`**.
+For the connection lifecycle coordinator, semantic events, and authority rules, see **`docs/CONNECTION_LIFECYCLE_ARCHITECTURE.md`**.
 
 ## B.5 Data flow (refined)
 

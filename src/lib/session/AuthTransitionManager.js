@@ -1,4 +1,5 @@
 import { SESSION_STATUS } from "@/stores/sessionHealthStore";
+import { resetSessionRecoveryEscalation } from "@/lib/session/sessionRecoveryEscalation";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 import { navigateTo } from "@/lib/navigationService";
 
@@ -92,6 +93,7 @@ export function createAuthTransitionManager(deps) {
     });
 
     deps.setSessionHealth?.(SESSION_STATUS.EXPIRED, reason);
+    resetSessionRecoveryEscalation();
     deps.clearError?.();
 
     if (redirect) {

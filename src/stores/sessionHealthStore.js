@@ -3,13 +3,25 @@ import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 
 /**
  * Session health state for UX visibility.
- * @typedef {'connected' | 'reconnecting' | 'expired'} SessionHealthStatus
+ * @typedef {'connected' | 'unstable' | 'reconnecting' | 'degraded' | 'reauth_required' | 'expired'} SessionHealthStatus
  */
 export const SESSION_STATUS = {
   CONNECTED: "connected",
+  UNSTABLE: "unstable",
   RECONNECTING: "reconnecting",
+  DEGRADED: "degraded",
+  REAUTH_REQUIRED: "reauth_required",
   EXPIRED: "expired",
 };
+
+/** Non-terminal states where realtime may still need a recovered hint after subscribe. */
+export function shouldHintRealtimeRecoveredFromSessionHealth(status) {
+  return (
+    status === SESSION_STATUS.UNSTABLE ||
+    status === SESSION_STATUS.RECONNECTING ||
+    status === SESSION_STATUS.DEGRADED
+  );
+}
 const EXPIRED_RECOVERY_REASONS = new Set(["signed_in", "initial_session"]);
 
 const RECONNECTING_DEBOUNCE_MS = 2000;
@@ -36,7 +48,11 @@ export const useSessionHealthStore = create((set) => ({
   reset: () => set({ status: SESSION_STATUS.CONNECTED, reason: null, lastTransitionAt: Date.now() }),
 }));
 
-export function setSessionHealthStatus(status, reason = null) {
+/**
+ * Applies a session health snapshot (debounced reconnecting, terminal EXPIRED lock, telemetry).
+ * Call only from {@link createSessionOrchestrator} via its injected `setSessionHealth` — not from feature code.
+ */
+export function applySessionHealthFromAuthority(status, reason = null) {
   const previous = useSessionHealthStore.getState().status;
   const normalizedReason = reason ? String(reason) : null;
   // EXPIRED is terminal/authoritative: only explicit re-auth reasons can recover.
@@ -63,6 +79,23 @@ export function setSessionHealthStatus(status, reason = null) {
     trackSessionTelemetry("session_health_transition", {
       from_status: previous,
       to_status: status,
+      reason: normalizedReason,
+    });
+    return;
+  }
+
+  // Recovery ladder (unstable → reconnecting → …): apply reconnecting immediately — debounce only from a stable CONNECTED flicker.
+  if (previous !== SESSION_STATUS.CONNECTED) {
+    clearReconnectingTimer();
+    reconnectingRequestId += 1;
+    useSessionHealthStore.setState({
+      status: SESSION_STATUS.RECONNECTING,
+      reason: normalizedReason,
+      lastTransitionAt: Date.now(),
+    });
+    trackSessionTelemetry("session_health_transition", {
+      from_status: previous,
+      to_status: SESSION_STATUS.RECONNECTING,
       reason: normalizedReason,
     });
     return;

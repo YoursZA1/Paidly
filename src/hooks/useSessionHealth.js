@@ -8,6 +8,9 @@ export function useSessionHealth() {
     status,
     isConnected: status === SESSION_STATUS.CONNECTED,
     isReconnecting: status === SESSION_STATUS.RECONNECTING,
+    isUnstable: status === SESSION_STATUS.UNSTABLE,
+    isDegraded: status === SESSION_STATUS.DEGRADED,
+    isReauthRequired: status === SESSION_STATUS.REAUTH_REQUIRED,
     isExpired: status === SESSION_STATUS.EXPIRED,
   };
 }

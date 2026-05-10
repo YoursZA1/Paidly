@@ -51,8 +51,23 @@ export function createConnectionManager() {
     if (sessionStatus === "connected") {
       return { status: CONNECTION_STATUS.CONNECTED, lastError: null };
     }
+    if (sessionStatus === "unstable") {
+      return { status: CONNECTION_STATUS.RECONNECTING, lastError: null };
+    }
     if (sessionStatus === "reconnecting") {
       return { status: CONNECTION_STATUS.RECONNECTING, lastError: null };
+    }
+    if (sessionStatus === "degraded") {
+      return {
+        status: CONNECTION_STATUS.RECONNECTING,
+        lastError: sessionReason ? String(sessionReason) : "Connection degraded — retrying.",
+      };
+    }
+    if (sessionStatus === "reauth_required") {
+      return {
+        status: CONNECTION_STATUS.DISCONNECTED,
+        lastError: "Sign in again to continue.",
+      };
     }
     if (sessionStatus === "expired") {
       return {

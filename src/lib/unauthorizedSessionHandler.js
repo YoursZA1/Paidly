@@ -1,7 +1,8 @@
 import { supabase } from "@/lib/supabaseClient";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
-import { SESSION_STATUS, setSessionHealthStatus } from "@/stores/sessionHealthStore";
+import { SESSION_STATUS, applySessionHealthFromAuthority } from "@/stores/sessionHealthStore";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
+import { getSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
 
 let handler = null;
 let inFlight = false;
@@ -32,7 +33,10 @@ export async function triggerUnauthorizedSession(_reason, context = {}) {
     });
 
     if (decision.action === SESSION_DECISION.RECONNECTING) {
-      setSessionHealthStatus(SESSION_STATUS.RECONNECTING, decision.reason || _reason || "session_reconnecting");
+      const authority = getSessionAuthority();
+      const r = decision.reason || _reason || "session_reconnecting";
+      if (authority) authority.markReconnecting(r);
+      else applySessionHealthFromAuthority(SESSION_STATUS.RECONNECTING, r);
       return;
     }
     if (decision.action === SESSION_DECISION.NONE) {
@@ -47,8 +51,20 @@ export async function triggerUnauthorizedSession(_reason, context = {}) {
       } catch {
         /* ignore */
       }
-      setSessionHealthStatus(SESSION_STATUS.EXPIRED, decision.reason || _reason || "unauthorized");
-      redirectToLoginIfProtectedPath();
+      const authority = getSessionAuthority();
+      const terminalReason = decision.reason || _reason || "unauthorized";
+      if (authority) {
+        await authority.transitionToExpired(terminalReason, {
+          signOutLocal: false,
+          clearAuthState: true,
+          broadcast: false,
+          redirect: true,
+          source: "unauthorized_no_handler",
+        });
+      } else {
+        applySessionHealthFromAuthority(SESSION_STATUS.EXPIRED, terminalReason);
+        redirectToLoginIfProtectedPath();
+      }
     }
   } finally {
     window.setTimeout(() => {
@@ -75,7 +91,9 @@ export async function hardSignOutUnauthorizedSession(reason = "unauthorized", op
   } catch {
     /* ignore */
   }
-  setSessionHealthStatus(SESSION_STATUS.EXPIRED, reason);
+  const authority = getSessionAuthority();
+  if (authority) authority.markExpiredSurface(reason);
+  else applySessionHealthFromAuthority(SESSION_STATUS.EXPIRED, reason);
   redirectToLoginIfProtectedPath();
   return true;
 }

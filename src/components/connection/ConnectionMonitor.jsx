@@ -1,10 +1,17 @@
 import { useEffect, useRef, useCallback } from "react";
-import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  hasPaidlyRealtimeWork,
+  isPaidlyRealtimeMainChannelJoined,
+  schedulePaidlyRealtimeRebuild,
+  subscribePaidlyMainChannelStatus,
+} from "@/lib/realtime/paidlyRealtimeManager";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSessionManager } from "@/contexts/SessionManagerContext";
+import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 
 const CONNECTED_VISIBLE_MS = 3200;
 const REALTIME_BASE_RECONNECT_MS = 1000;
@@ -20,6 +27,7 @@ const REALTIME_MAX_RECONNECT_ATTEMPTS = 6;
 export default function ConnectionMonitor() {
   const { isAuthenticated } = useAuth();
   const sessionManager = useSessionManager();
+  const connectionLifecycle = useConnectionLifecycle();
   const sessionStatus = useSessionHealthStore((s) => s.status);
   const sessionReason = useSessionHealthStore((s) => s.reason);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
@@ -27,7 +35,6 @@ export default function ConnectionMonitor() {
   const lastError = useConnectionStore((s) => s.lastError);
   const setSuppressConnectedIndicator = useConnectionStore((s) => s.setSuppressConnectedIndicator);
   const inFlightRef = useRef(false);
-  const realtimeChannelRef = useRef(null);
   const realtimeReconnectAttemptsRef = useRef(0);
   const realtimeReconnectTimerRef = useRef(null);
   const isVisible = useCallback(
@@ -44,11 +51,11 @@ export default function ConnectionMonitor() {
       sessionManager?.ConnectionMonitor?.scheduleDegradedTransition({
         errorMessage,
         isVisible,
-        getDecisionAction: (reason) => sessionManager?.AuthStateMachine?.getDecision(reason)?.action,
+        getDecisionAction: (reason) => connectionLifecycle?.getDecision(reason)?.action,
         setConnectionState,
       });
     },
-    [isVisible, sessionManager, setConnectionState]
+    [connectionLifecycle, isVisible, sessionManager, setConnectionState]
   );
 
   const runCheck = useCallback(async () => {
@@ -58,7 +65,7 @@ export default function ConnectionMonitor() {
 
     if (!navigator.onLine) {
       sessionManager?.ConnectionMonitor?.setOffline({
-        decisionAction: sessionManager?.AuthStateMachine?.getDecision("offline")?.action,
+        decisionAction: connectionLifecycle?.getDecision("offline")?.action,
         setConnectionState,
       });
       return;
@@ -77,26 +84,26 @@ export default function ConnectionMonitor() {
     } finally {
       inFlightRef.current = false;
     }
-  }, [isVisible, markConnected, scheduleDegradedTransition, sessionManager, setConnectionState]);
+  }, [
+    connectionLifecycle,
+    isVisible,
+    markConnected,
+    scheduleDegradedTransition,
+    sessionManager,
+    setConnectionState,
+  ]);
 
-  const stopRealtime = useCallback(() => {
+  const clearRealtimeReconnectTimer = useCallback(() => {
     if (realtimeReconnectTimerRef.current && typeof window !== "undefined") {
       window.clearTimeout(realtimeReconnectTimerRef.current);
       realtimeReconnectTimerRef.current = null;
-    }
-    if (realtimeChannelRef.current) {
-      supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null;
     }
   }, []);
 
   const resetRealtimeBackoff = useCallback(() => {
     realtimeReconnectAttemptsRef.current = 0;
-    if (realtimeReconnectTimerRef.current && typeof window !== "undefined") {
-      window.clearTimeout(realtimeReconnectTimerRef.current);
-      realtimeReconnectTimerRef.current = null;
-    }
-  }, []);
+    clearRealtimeReconnectTimer();
+  }, [clearRealtimeReconnectTimer]);
 
   const scheduleRealtimeReconnect = useCallback((doReconnect) => {
     if (!isSupabaseConfigured || typeof window === "undefined") return;
@@ -121,53 +128,51 @@ export default function ConnectionMonitor() {
     }, delayMs);
   }, []);
 
-  const reconnectRealtime = useCallback(() => {
-    stopRealtime();
-    const channel = supabase.channel("paidly-connection-monitor");
-    channel.subscribe((evt) => {
+  const nudgeMainRealtimeChannel = useCallback(() => {
+    schedulePaidlyRealtimeRebuild();
+  }, []);
+
+  const startRealtime = useCallback(() => {
+    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
+    if (!hasPaidlyRealtimeWork()) {
+      return;
+    }
+    if (isPaidlyRealtimeMainChannelJoined()) {
+      resetRealtimeBackoff();
+      return;
+    }
+    scheduleRealtimeReconnect(nudgeMainRealtimeChannel);
+  }, [nudgeMainRealtimeChannel, resetRealtimeBackoff, scheduleRealtimeReconnect]);
+
+  useEffect(() => {
+    if (sessionStatus !== SESSION_STATUS.EXPIRED) return;
+    resetRealtimeBackoff();
+    clearRealtimeReconnectTimer();
+    console.info("[RetryController] Halted realtime recovery because auth is EXPIRED.");
+  }, [clearRealtimeReconnectTimer, resetRealtimeBackoff, sessionStatus]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+    void runCheck();
+
+    const unsubMainStatus = subscribePaidlyMainChannelStatus((evt) => {
       if (evt === "SUBSCRIBED") {
         resetRealtimeBackoff();
         markConnected();
         return;
       }
       if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
+        if (!hasPaidlyRealtimeWork()) return;
         scheduleDegradedTransition("Realtime connection interrupted.");
-        scheduleRealtimeReconnect(reconnectRealtime);
+        scheduleRealtimeReconnect(nudgeMainRealtimeChannel);
       }
     });
-    realtimeChannelRef.current = channel;
-  }, [markConnected, resetRealtimeBackoff, scheduleDegradedTransition, scheduleRealtimeReconnect, stopRealtime]);
-
-  const startRealtime = useCallback(() => {
-    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
-    const current = realtimeChannelRef.current;
-    if (!current) {
-      reconnectRealtime();
-      return;
-    }
-    // Keep realtime reconnect logic clean: only reconnect when not joined.
-    const state = String(current.state || "").toLowerCase();
-    if (state !== "joined") {
-      scheduleRealtimeReconnect(reconnectRealtime);
-    }
-  }, [reconnectRealtime, scheduleRealtimeReconnect]);
-
-  useEffect(() => {
-    if (sessionStatus !== SESSION_STATUS.EXPIRED) return;
-    resetRealtimeBackoff();
-    stopRealtime();
-    console.info("[RetryController] Halted realtime recovery because auth is EXPIRED.");
-  }, [resetRealtimeBackoff, sessionStatus, stopRealtime]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return undefined;
-    void runCheck();
 
     const onOnline = () => void runCheck();
     const onOffline = () => {
-      sessionManager?.VisibilityRecoveryManager?.onOffline("offline");
+      connectionLifecycle?.reportNetworkState(false, "offline");
       sessionManager?.ConnectionMonitor?.setOffline({
-        decisionAction: sessionManager?.AuthStateMachine?.getDecision("offline")?.action,
+        decisionAction: connectionLifecycle?.getDecision("offline")?.action,
         setConnectionState,
       });
     };
@@ -192,13 +197,26 @@ export default function ConnectionMonitor() {
     startRealtime();
 
     return () => {
+      unsubMainStatus();
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      stopRealtime();
+      clearRealtimeReconnectTimer();
       sessionManager?.ConnectionMonitor?.dispose();
     };
-  }, [runCheck, sessionManager, setConnectionState, startRealtime, stopRealtime]);
+  }, [
+    clearRealtimeReconnectTimer,
+    connectionLifecycle,
+    markConnected,
+    nudgeMainRealtimeChannel,
+    resetRealtimeBackoff,
+    runCheck,
+    scheduleDegradedTransition,
+    scheduleRealtimeReconnect,
+    sessionManager,
+    setConnectionState,
+    startRealtime,
+  ]);
 
   // Read-only subscription: map centralized auth session health to connection UX state.
   useEffect(() => {

@@ -1,78 +1,46 @@
 import { useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { setSessionHealthStatus, SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
-import { useSessionManager } from "@/contexts/SessionManagerContext";
+import {
+  subscribePaidlyAuxPostgres,
+  subscribePaidlyProfilesRealtime,
+} from "@/lib/realtime/paidlyRealtimeManager";
 
 /**
  * Subscribe to Supabase Realtime postgres_changes for the given tables.
- * Use for live updates (e.g. invoice status changes, new payments).
- * RLS applies: you only receive events for rows you can select.
+ * All subscriptions share one app channel via {@link paidlyRealtimeManager}.
  *
- * @param {string[]} tables - Table names (e.g. ['invoices', 'quotes', 'payments', 'clients'])
- * @param {(payload: { table: string, eventType: string, new: object | null, old: object | null }) => void} onPayload - Called on INSERT/UPDATE/DELETE
- * @param {object} [opts] - Optional: { schema: 'public', channelName: string }
+ * @param {string[]} tables - Table names (e.g. ['invoices', 'quotes'] — avoid tables owned by SyncEngine; see PAIDLY_REALTIME_SYNC_TABLES)
+ * @param {(payload: { table: string, eventType: string, new: object | null, old: object | null }) => void} onPayload
+ * @param {object} [opts] - { schema?: string, filter?: string }
  */
 export function useSupabaseRealtime(tables, onPayload, opts = {}) {
   const schema = opts.schema ?? "public";
-  const channelName = opts.channelName ?? "realtime-db-changes";
-  const sessionManagerFromContext = useSessionManager();
-  const sessionManager = opts.sessionManager || sessionManagerFromContext;
+  const filter = opts.filter;
   const onPayloadRef = useRef(onPayload);
   onPayloadRef.current = onPayload;
 
   useEffect(() => {
     if (!Array.isArray(tables) || tables.length === 0) return () => {};
 
-    const channel = supabase.channel(channelName);
+    const isProfilesOnly = tables.length === 1 && tables[0] === "profiles" && schema === "public";
 
-    tables.forEach((table) => {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema,
+    if (isProfilesOnly) {
+      return subscribePaidlyProfilesRealtime((payload) => {
+        onPayloadRef.current?.(payload);
+      });
+    }
+
+    const unsubs = tables.map((table) =>
+      subscribePaidlyAuxPostgres({ schema, table, filter }, (payload) => {
+        onPayloadRef.current?.({
           table,
-        },
-        (payload) => {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          onPayloadRef.current?.({
-            table,
-            eventType,
-            new: newRecord ?? null,
-            old: oldRecord ?? null,
-          });
-        }
-      );
-    });
-
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        const current = useSessionHealthStore.getState().status;
-        if (current === SESSION_STATUS.RECONNECTING) {
-          if (sessionManager?.HealthMonitor?.setConnected) {
-            sessionManager.HealthMonitor.setConnected("realtime_recovered");
-          } else {
-            setSessionHealthStatus(SESSION_STATUS.CONNECTED, "realtime_recovered");
-          }
-        }
-        return;
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        if (sessionManager?.RealtimeManager?.onUnstable) {
-          sessionManager.RealtimeManager.onUnstable("realtime_channel_unstable");
-        } else {
-          setSessionHealthStatus(SESSION_STATUS.RECONNECTING, "realtime_channel_unstable");
-        }
-      }
-      if (status === "CHANNEL_ERROR" && import.meta.env?.DEV) {
-        console.debug(
-          "[Realtime] channel error (optional). To use Realtime, add tables to supabase_realtime publication."
-        );
-      }
-    });
-
+          eventType: payload.eventType,
+          new: payload.new ?? null,
+          old: payload.old ?? null,
+        });
+      })
+    );
     return () => {
-      supabase.removeChannel(channel);
+      unsubs.forEach((u) => u());
     };
-  }, [schema, channelName, sessionManager, tables.join(",")]);
+  }, [schema, tables.join(","), filter ?? ""]);
 }

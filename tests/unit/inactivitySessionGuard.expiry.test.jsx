@@ -23,11 +23,9 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
-vi.mock("@/contexts/SessionManagerContext", () => ({
-  useSessionManager: () => ({
-    AuthStateMachine: {
-      transitionToExpired: transitionToExpiredMock,
-    },
+vi.mock("@/contexts/ConnectionLifecycleContext", () => ({
+  useConnectionLifecycle: () => ({
+    transitionToExpired: transitionToExpiredMock,
   }),
 }));
 

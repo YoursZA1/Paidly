@@ -28,8 +28,10 @@ import {
   recordOrgBootstrapFailure,
 } from "@/lib/orgBootstrapApi";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
+import { assertWakeRecoveryAllowsMutations } from "@/lib/wakeRecoveryGuard";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
-import { SESSION_STATUS, setSessionHealthStatus, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { getSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -295,6 +297,11 @@ async function attachInvoiceCompany(record) {
 function clearOrgIdCache() {
   Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
   clearOrgBootstrapInflight();
+}
+
+/** Clears in-memory org resolution cache after session/wake resync so membership lookups re-fetch. */
+export function clearSessionOrgIdCache() {
+  clearOrgIdCache();
 }
 
 async function fetchPrimaryMembershipOrgId(userId) {
@@ -959,6 +966,7 @@ class EntityManager {
 
   async create(data) {
     try {
+      assertWakeRecoveryAllowsMutations();
       const userId = await getAuthUserIdForWrites();
       if (!userId) {
         throw new Error('Not authenticated');
@@ -1422,6 +1430,7 @@ class EntityManager {
     }
 
     try {
+      assertWakeRecoveryAllowsMutations();
       const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) {
         throw new Error('Not authenticated');
@@ -1748,6 +1757,7 @@ class EntityManager {
   }
 
   async delete(id) {
+    assertWakeRecoveryAllowsMutations();
     // Simulated delete method with persistence
     if (this.data[id]) {
       delete this.data[id];
@@ -1916,7 +1926,7 @@ class AuthManager {
         online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
       });
       if (decision.action === SESSION_DECISION.RECONNECTING) {
-        setSessionHealthStatus(SESSION_STATUS.RECONNECTING, decision.reason || "session_reconnecting");
+        getSessionAuthority()?.markReconnecting(decision.reason || "session_reconnecting");
       }
       return null;
     }

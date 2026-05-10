@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+
+const WAKE_RECOVERY_RESYNC = "paidly:wake-recovery-resync";
 import { useSyncQueueStore } from "@/stores/useSyncQueueStore";
 import { processSyncJob } from "@/lib/syncJobProcessor";
 import { useAppStore } from "@/stores/useAppStore";
-import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
-import { setSessionHealthStatus, SESSION_STATUS } from "@/stores/sessionHealthStore";
 import {
   dispatchAppFetchAllSettled,
   notifyAdminDashboardRealtimeStale,
 } from "@/lib/realtimeStoreHydration";
+import { setPaidlySyncRealtimeBridge } from "@/lib/realtime/paidlyRealtimeManager";
+import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
 
 const SYNC_INTERVAL_MS = 5000;
 /** Per-table debounce; coalesces bursts. List pages rely on this (see Invoices/Quotes — no duplicate channels). */
@@ -93,8 +95,12 @@ export default function SyncEngine() {
         window.clearTimeout(current);
       }
       realtimeEntityDebounceRefs.current[entity] = window.setTimeout(() => {
-        realtimeEntityDebounceRefs.current[entity] = null;
-        invalidateForEntity(entity, payload);
+        void (async () => {
+          realtimeEntityDebounceRefs.current[entity] = null;
+          const session = await supabase.auth.getSession();
+          if (!session?.data?.session) return;
+          invalidateForEntity(entity, payload);
+        })();
       }, ENTITY_REALTIME_DEBOUNCE_MS);
     },
     [invalidateForEntity]
@@ -106,20 +112,25 @@ export default function SyncEngine() {
       window.clearTimeout(globalStoreRefreshTimerRef.current);
     }
     globalStoreRefreshTimerRef.current = window.setTimeout(() => {
-      globalStoreRefreshTimerRef.current = null;
-      const isAdmin = user?.role === "admin";
-      if (isAdmin) {
-        notifyAdminDashboardRealtimeStale();
-        return;
-      }
-      void fetchAllFromStore(user).finally(() => {
-        dispatchAppFetchAllSettled();
-      });
+      void (async () => {
+        globalStoreRefreshTimerRef.current = null;
+        const session = await supabase.auth.getSession();
+        if (!session?.data?.session) return;
+        const isAdmin = user?.role === "admin";
+        if (isAdmin) {
+          notifyAdminDashboardRealtimeStale();
+          return;
+        }
+        void fetchAllFromStore(user).finally(() => {
+          dispatchAppFetchAllSettled();
+        });
+      })();
     }, GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
   }, [user, fetchAllFromStore]);
 
   const runOnce = useCallback(async () => {
     if (runningRef.current) return;
+    if (useWakeRecoveryStore.getState().blockMutations) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     runningRef.current = true;
     try {
@@ -128,6 +139,9 @@ export default function SyncEngine() {
         .filter((job) => (job.status === "pending" || job.status === "processing") && job.nextAttemptAt <= now)
         .sort((a, b) => a.createdAt - b.createdAt)[0];
       if (!nextJob) return;
+
+      const session = await supabase.auth.getSession();
+      if (!session?.data?.session) return;
 
       markProcessing(nextJob.id);
       try {
@@ -139,12 +153,15 @@ export default function SyncEngine() {
             sync_state: "synced",
           });
         }
-        if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
-          queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
-          queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        } else if (nextJob.type === "UPDATE_CLIENT") {
-          queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-          queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+        const postJobSession = await supabase.auth.getSession();
+        if (postJobSession?.data?.session) {
+          if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
+            queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+            queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+          } else if (nextJob.type === "UPDATE_CLIENT") {
+            queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
+            queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+          }
         }
       } catch (error) {
         markFailed(nextJob.id, error?.message || "Sync job failed", { retryable: true });
@@ -175,70 +192,34 @@ export default function SyncEngine() {
     };
   }, [retryAllFailed, runOnce]);
 
-  useEffect(() => {
-    if (!user?.id) return undefined;
-
-    const onEntityEvent = (entity, payload) => {
+  const onEntityEvent = useCallback(
+    (entity, payload) => {
+      const role = user?.role;
       scheduleEntityInvalidation(entity, payload);
       if (entity === "document_sends") return;
-      if (user?.role === "admin" && !ADMIN_STORE_HYDRATION_ENTITIES.has(entity)) return;
+      if (role === "admin" && !ADMIN_STORE_HYDRATION_ENTITIES.has(entity)) return;
       scheduleGlobalStoreRefresh();
-    };
+    },
+    [scheduleEntityInvalidation, scheduleGlobalStoreRefresh, user?.role]
+  );
 
-    const channel = supabase
-      .channel("paidly-sync-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "invoices" },
-        (payload) => onEntityEvent("invoices", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "clients" },
-        (payload) => onEntityEvent("clients", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "document_sends" },
-        (payload) => onEntityEvent("document_sends", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "quotes" },
-        (payload) => onEntityEvent("quotes", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "payments" },
-        (payload) => onEntityEvent("payments", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expenses" },
-        (payload) => onEntityEvent("expenses", payload)
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "payslips" },
-        (payload) => onEntityEvent("payslips", payload)
-      );
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        setSessionHealthStatus(SESSION_STATUS.CONNECTED, "sync_realtime_ready");
-        return;
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        const decision = decideSessionAction({
-          reason: "sync_realtime_unstable",
-          believedSignedIn: true,
-          online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
-        });
-        if (decision.action === SESSION_DECISION.RECONNECTING) {
-          setSessionHealthStatus(SESSION_STATUS.RECONNECTING, decision.reason);
+  useEffect(() => {
+    if (!user?.id) {
+      setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
+      return () => {
+        if (globalStoreRefreshTimerRef.current) {
+          window.clearTimeout(globalStoreRefreshTimerRef.current);
+          globalStoreRefreshTimerRef.current = null;
         }
-      }
-    });
-
+        Object.keys(realtimeEntityDebounceRefs.current).forEach((k) => {
+          const timer = realtimeEntityDebounceRefs.current[k];
+          if (timer) window.clearTimeout(timer);
+          realtimeEntityDebounceRefs.current[k] = null;
+        });
+        setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
+      };
+    }
+    setPaidlySyncRealtimeBridge({ userId: user.id, onEntityEvent });
     return () => {
       if (globalStoreRefreshTimerRef.current) {
         window.clearTimeout(globalStoreRefreshTimerRef.current);
@@ -249,9 +230,30 @@ export default function SyncEngine() {
         if (timer) window.clearTimeout(timer);
         realtimeEntityDebounceRefs.current[k] = null;
       });
-      supabase.removeChannel(channel);
+      setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
     };
-  }, [scheduleEntityInvalidation, scheduleGlobalStoreRefresh, user?.id, user?.role]);
+  }, [user?.id, onEntityEvent]);
+
+  /** Fires only after successful wake pipeline, from `finally` after unlock ({@link CustomEvent} `detail.ok`). */
+  useEffect(() => {
+    const onWakeResync = () => {
+      void (async () => {
+        if (!user?.id) return;
+        const session = await supabase.auth.getSession();
+        if (!session?.data?.session) return;
+        void fetchAllFromStore(user).finally(() => {
+          dispatchAppFetchAllSettled();
+        });
+        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
+      })();
+    };
+    window.addEventListener(WAKE_RECOVERY_RESYNC, onWakeResync);
+    return () => window.removeEventListener(WAKE_RECOVERY_RESYNC, onWakeResync);
+  }, [fetchAllFromStore, queryClient, user]);
 
   return null;
 }

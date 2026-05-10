@@ -84,4 +84,26 @@ describe("SessionManager transitionToExpired", () => {
       payload: { reason: "fatal_refresh_token" },
     });
   });
+
+  it("escalates recoverable session failures across degraded states before terminal", () => {
+    const { deps, calls } = makeDeps();
+    const manager = createSessionManager(deps);
+
+    expect(manager.RefreshManager.handleMissingSession("session_missing_after_reconnect")).toBe(false);
+    expect(calls.setSessionHealth.at(-1)).toEqual({
+      status: SESSION_STATUS.UNSTABLE,
+      reason: "session_missing_after_reconnect",
+    });
+
+    expect(manager.RefreshManager.handleMissingSession("session_missing_after_reconnect")).toBe(false);
+    expect(calls.setSessionHealth.at(-1)?.status).toBe(SESSION_STATUS.RECONNECTING);
+
+    expect(manager.RefreshManager.handleMissingSession("session_missing_after_reconnect")).toBe(false);
+    expect(calls.setSessionHealth.at(-1)?.status).toBe(SESSION_STATUS.DEGRADED);
+
+    expect(manager.RefreshManager.handleMissingSession("session_missing_after_reconnect")).toBe(false);
+    expect(calls.setSessionHealth.at(-1)?.status).toBe(SESSION_STATUS.REAUTH_REQUIRED);
+
+    expect(manager.RefreshManager.handleMissingSession("session_missing_after_reconnect")).toBe(true);
+  });
 });

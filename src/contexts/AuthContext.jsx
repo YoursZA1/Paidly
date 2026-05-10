@@ -4,3 +4,4 @@
  */
 export { AuthProvider, useAuth } from "@/contexts/AuthContext.impl";
 export { useAuthSessionStore, patchAuthSession } from "@/stores/authSessionStore";
+export { ConnectionLifecycleContext, useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";

@@ -71,13 +71,13 @@ for (const file of files) {
   }
 
   const expiredStatusRegex =
-    /setSessionHealthStatus\s*\(\s*SESSION_STATUS\s*\.\s*EXPIRED\s*,\s*["'`]([^"'`]+)["'`]/g;
+    /(?:setSessionHealthStatus|applySessionHealthFromAuthority)\s*\(\s*SESSION_STATUS\s*\.\s*EXPIRED\s*,\s*["'`]([^"'`]+)["'`]/g;
   while ((match = expiredStatusRegex.exec(content))) {
     const reason = match[1];
     if (isExplicitAllowedTerminal(reason)) continue;
     if (!isNetworkLike(reason)) continue;
     const line = content.slice(0, match.index).split("\n").length;
-    violations.push({ file: relative, line, kind: "setSessionHealthStatus(EXPIRED)", reason });
+    violations.push({ file: relative, line, kind: "sessionHealth EXPIRED", reason });
   }
 }
 

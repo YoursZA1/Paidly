@@ -8,6 +8,11 @@ const targetRoots = [
   "src/components/connection",
   "src/components/sync",
   "src/hooks/useSupabaseRealtime.js",
+  "src/lib/realtime/paidlyRealtimeManager.js",
+  "src/lib/connection/ConnectionLifecycleManager.js",
+  "src/lib/connection/connectionLifecycleStore.js",
+  "src/lib/connection/lifecyclePolicy.js",
+  "src/lib/connection/lifecycleSignalTypes.js",
 ];
 
 const allowedExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]);
@@ -15,7 +20,11 @@ const allowedExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]
 const forbiddenPatterns = [
   { label: "logout call", regex: /\blogout\s*\(/ },
   { label: "signOut call", regex: /\bsignOut\s*\(/ },
-  { label: "terminal session health", regex: /setSessionHealthStatus\s*\(\s*SESSION_STATUS\s*\.\s*EXPIRED/ },
+  {
+    label: "terminal session health",
+    regex:
+      /(?:setSessionHealthStatus|applySessionHealthFromAuthority)\s*\(\s*SESSION_STATUS\s*\.\s*EXPIRED/,
+  },
   { label: "direct auth session patch", regex: /\bpatchAuthSession\s*\(/ },
   { label: "direct unauthorized trigger", regex: /\btriggerUnauthorizedSession\s*\(/ },
 ];

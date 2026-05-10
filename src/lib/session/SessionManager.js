@@ -1,5 +1,6 @@
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
 import { SESSION_STATUS } from "@/stores/sessionHealthStore";
+import { bumpSessionRecoveryEscalation, resetSessionRecoveryEscalation } from "@/lib/session/sessionRecoveryEscalation";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 import { createRefreshQueue } from "@/lib/session/RefreshQueue";
 import { createConnectionManager } from "@/lib/session/ConnectionManager";
@@ -40,6 +41,7 @@ export function createSessionManager(deps) {
 
   const healthMonitor = {
     setConnected(reason = "connected") {
+      resetSessionRecoveryEscalation();
       refreshQueue.resume();
       deps.setSessionHealth(SESSION_STATUS.CONNECTED, reason);
     },
@@ -47,6 +49,7 @@ export function createSessionManager(deps) {
       deps.setSessionHealth(SESSION_STATUS.RECONNECTING, reason);
     },
     setExpired(reason = "expired") {
+      resetSessionRecoveryEscalation();
       deps.setSessionHealth(SESSION_STATUS.EXPIRED, reason);
     },
   };
@@ -57,6 +60,26 @@ export function createSessionManager(deps) {
       ...options,
       source: options?.source || "session_manager",
     });
+  }
+
+  function escalateRecoverableSession(reason = "session_recoverable_failure") {
+    const decision = evaluate(reason);
+    if (decision.action === SESSION_DECISION.NONE) {
+      return { forceTerminalLogout: false };
+    }
+    const { status, forceTerminalLogout } = bumpSessionRecoveryEscalation();
+    if (forceTerminalLogout) {
+      trackSessionTelemetry("session_recoverable_escalation_terminal", {
+        reason: decision.reason || reason || null,
+      });
+      return { forceTerminalLogout: true };
+    }
+    trackSessionTelemetry("session_recoverable_escalation_step", {
+      reason: decision.reason || reason || null,
+      to_status: status,
+    });
+    deps.setSessionHealth(status, decision.reason || reason);
+    return { forceTerminalLogout: false };
   }
 
   const authManager = {
@@ -82,19 +105,10 @@ export function createSessionManager(deps) {
       });
       return false;
     },
+    escalateRecoverableSession,
+
     handleMissingSession(reason = "session_missing_after_reconnect") {
-      const decision = evaluate(reason);
-      if (decision.action === SESSION_DECISION.RECONNECTING || decision.action === SESSION_DECISION.NONE) {
-        trackSessionTelemetry("session_missing_recovered_to_reconnecting", {
-          reason: decision.reason || reason || null,
-        });
-        healthMonitor.setReconnecting(decision.reason || reason);
-        return false;
-      }
-      trackSessionTelemetry("session_missing_terminal_escalation", {
-        reason: decision.reason || reason || null,
-      });
-      return true;
+      return escalateRecoverableSession(reason).forceTerminalLogout;
     },
   };
 

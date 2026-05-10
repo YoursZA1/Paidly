@@ -1,9 +1,10 @@
 import { useCallback } from "react";
 import Button from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSessionManager } from "@/contexts/SessionManagerContext";
+import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 import { useInactivitySessionTimeout } from "@/hooks/useInactivitySessionTimeout";
 import { navigateTo } from "@/lib/navigationService";
+import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
 
 const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 5 * 60 * 1000);
 const WARNING_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_WARNING_TIMEOUT_MS || 2 * 60 * 1000);
@@ -11,7 +12,7 @@ const KEEP_ALIVE_INTERVAL_MS = Number(import.meta.env.VITE_SESSION_KEEPALIVE_MS 
 
 export default function InactivitySessionGuard() {
   const { isAuthenticated, authReady, session, logout } = useAuth();
-  const sessionManager = useSessionManager();
+  const connectionLifecycle = useConnectionLifecycle();
 
   const keepAlive = useCallback(async () => {
     const token = session?.accessToken || session?.access_token || null;
@@ -25,11 +26,12 @@ export default function InactivitySessionGuard() {
     }).catch(() => {
       // Keep-alive is best-effort and should not disrupt UX.
     });
+    requestSessionRefresh({ source: "keep_alive", silent: true, debounceMs: 0 });
   }, [session?.accessToken, session?.access_token]);
 
   const onTimeout = useCallback(async () => {
     try {
-      await sessionManager?.AuthStateMachine?.transitionToExpired("inactivity_timeout", {
+      await connectionLifecycle?.transitionToExpired("inactivity_timeout", {
         signOutLocal: false,
         clearAuthState: true,
         broadcast: true,
@@ -47,10 +49,10 @@ export default function InactivitySessionGuard() {
         navigateTo("/login?reason=inactivity");
       }
     }
-  }, [logout, sessionManager]);
+  }, [connectionLifecycle, logout]);
 
   const onRemoteTimeout = useCallback(async () => {
-    await sessionManager?.AuthStateMachine?.transitionToExpired("inactivity_timeout", {
+    await connectionLifecycle?.transitionToExpired("inactivity_timeout", {
       signOutLocal: true,
       clearAuthState: true,
       broadcast: true,
@@ -65,7 +67,7 @@ export default function InactivitySessionGuard() {
       }
       navigateTo("/login?reason=inactivity");
     }
-  }, [sessionManager]);
+  }, [connectionLifecycle]);
 
   const { warningOpen, countdownSeconds, stayLoggedIn } = useInactivitySessionTimeout({
     enabled: Boolean(authReady && isAuthenticated),

@@ -1,4 +1,13 @@
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
+import { refreshRetrying, refreshSkipped } from "@/lib/session/refreshResult";
+
+/**
+ * @param {unknown} result
+ * @returns {boolean}
+ */
+function refreshTelemetryOk(result) {
+  return Boolean(result && typeof result === "object" && result.status === "success");
+}
 
 export function createRefreshQueue({ minGapMs = 3000 } = {}) {
   let inFlightPromise = null;
@@ -13,21 +22,26 @@ export function createRefreshQueue({ minGapMs = 3000 } = {}) {
       trackSessionTelemetry("refresh_queue_halted_skip", {
         source: meta.source || "unknown",
       });
-      return false;
+      return refreshSkipped("queue_halted");
     }
     if (inFlightPromise) {
       trackSessionTelemetry("refresh_queue_joined", {
         source: meta.source || "unknown",
+        return_retrying: Boolean(meta.returnRetryingOnJoin),
       });
+      if (meta.returnRetryingOnJoin) {
+        return refreshRetrying("joined_in_flight");
+      }
       return inFlightPromise;
     }
     const now = Date.now();
-    if (now - lastStartedAt < minGapMs) {
+    const bypassThrottle = Boolean(meta.bypassThrottle);
+    if (!bypassThrottle && now - lastStartedAt < minGapMs) {
       trackSessionTelemetry("refresh_queue_throttled", {
         source: meta.source || "unknown",
         min_gap_ms: minGapMs,
       });
-      return false;
+      return refreshSkipped("throttled");
     }
     lastStartedAt = now;
     trackSessionTelemetry("refresh_queue_started", {
@@ -38,7 +52,8 @@ export function createRefreshQueue({ minGapMs = 3000 } = {}) {
         const result = await task();
         trackSessionTelemetry("refresh_queue_finished", {
           source: meta.source || "unknown",
-          ok: Boolean(result),
+          ok: refreshTelemetryOk(result),
+          refresh_status: result && typeof result === "object" ? result.status : null,
         });
         return result;
       } finally {

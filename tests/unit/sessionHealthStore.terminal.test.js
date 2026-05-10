@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SESSION_STATUS, setSessionHealthStatus, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { SESSION_STATUS, applySessionHealthFromAuthority, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
 describe("sessionHealthStore terminal semantics", () => {
   afterEach(() => {
@@ -11,24 +11,24 @@ describe("sessionHealthStore terminal semantics", () => {
   });
 
   it("blocks silent reconnect after EXPIRED", () => {
-    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
-    setSessionHealthStatus(SESSION_STATUS.RECONNECTING, "refresh_failed");
+    applySessionHealthFromAuthority(SESSION_STATUS.EXPIRED, "inactivity_timeout");
+    applySessionHealthFromAuthority(SESSION_STATUS.RECONNECTING, "refresh_failed");
     const state = useSessionHealthStore.getState();
     expect(state.status).toBe(SESSION_STATUS.EXPIRED);
     expect(state.reason).toBe("inactivity_timeout");
   });
 
   it("blocks silent connected transition after EXPIRED", () => {
-    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "session_revoked");
-    setSessionHealthStatus(SESSION_STATUS.CONNECTED, "refresh_ok");
+    applySessionHealthFromAuthority(SESSION_STATUS.EXPIRED, "session_revoked");
+    applySessionHealthFromAuthority(SESSION_STATUS.CONNECTED, "refresh_ok");
     const state = useSessionHealthStore.getState();
     expect(state.status).toBe(SESSION_STATUS.EXPIRED);
     expect(state.reason).toBe("session_revoked");
   });
 
   it("allows explicit re-authentication to recover from EXPIRED", () => {
-    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
-    setSessionHealthStatus(SESSION_STATUS.CONNECTED, "signed_in");
+    applySessionHealthFromAuthority(SESSION_STATUS.EXPIRED, "inactivity_timeout");
+    applySessionHealthFromAuthority(SESSION_STATUS.CONNECTED, "signed_in");
     const state = useSessionHealthStore.getState();
     expect(state.status).toBe(SESSION_STATUS.CONNECTED);
     expect(state.reason).toBe("signed_in");

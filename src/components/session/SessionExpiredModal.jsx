@@ -31,15 +31,15 @@ export default function SessionExpiredModal() {
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
-    if (status !== SESSION_STATUS.EXPIRED) return false;
+    if (status !== SESSION_STATUS.EXPIRED && status !== SESSION_STATUS.REAUTH_REQUIRED) return false;
     return !isPathAllowedWithoutSession(window.location.pathname);
   }, [status]);
 
   const handleReconnect = async () => {
     setBusy(true);
     try {
-      const ok = await refreshSession();
-      if (!ok) {
+      const result = await refreshSession();
+      if (result.status !== "success") {
         navigateTo("/login");
       }
     } finally {
@@ -89,7 +89,7 @@ export default function SessionExpiredModal() {
   }, []);
 
   useEffect(() => {
-    if (status !== SESSION_STATUS.EXPIRED) {
+    if (status !== SESSION_STATUS.EXPIRED && status !== SESSION_STATUS.REAUTH_REQUIRED) {
       setBusy(false);
       setFormError("");
       setPassword("");
