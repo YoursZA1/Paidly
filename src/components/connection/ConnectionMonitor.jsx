@@ -12,6 +12,7 @@ import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthSto
 import { useAuth } from "@/contexts/AuthContext";
 import { useSessionManager } from "@/contexts/SessionManagerContext";
 import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
+import { useAuthGatedConnectedSignal } from "@/lib/connection/connectionLifecycleStore";
 
 const CONNECTED_VISIBLE_MS = 3200;
 const REALTIME_BASE_RECONNECT_MS = 1000;
@@ -34,6 +35,7 @@ export default function ConnectionMonitor() {
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
   const setSuppressConnectedIndicator = useConnectionStore((s) => s.setSuppressConnectedIndicator);
+  const canShowConnected = useAuthGatedConnectedSignal();
   const inFlightRef = useRef(false);
   const realtimeReconnectAttemptsRef = useRef(0);
   const realtimeReconnectTimerRef = useRef(null);
@@ -239,7 +241,7 @@ export default function ConnectionMonitor() {
       setSuppressConnectedIndicator(true);
       return;
     }
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !canShowConnected) {
       setSuppressConnectedIndicator(true);
       return;
     }
@@ -247,7 +249,7 @@ export default function ConnectionMonitor() {
     setSuppressConnectedIndicator(false);
     const t = window.setTimeout(() => setSuppressConnectedIndicator(true), CONNECTED_VISIBLE_MS);
     return () => window.clearTimeout(t);
-  }, [status, lastError, isAuthenticated, setSuppressConnectedIndicator]);
+  }, [status, lastError, isAuthenticated, canShowConnected, setSuppressConnectedIndicator]);
 
   return null;
 }

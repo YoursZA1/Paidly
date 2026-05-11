@@ -1,5 +1,6 @@
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequestJson } from "@/utils/apiRequest";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 const TAB_ID =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -113,6 +114,9 @@ async function withOrgBootstrapLock(userId, fn) {
  * }} [options]
  */
 export async function runOrgBootstrapWithLock(effectiveUserId, options = {}) {
+  if (isRecoveryCircuitOpen()) {
+    return { ok: false, skipped: true, reason: "terminal_auth_state" };
+  }
   const uid = String(effectiveUserId || "");
   if (!uid) throw new Error("Bootstrap requires user id");
 

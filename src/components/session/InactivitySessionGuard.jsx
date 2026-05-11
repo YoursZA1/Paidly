@@ -5,6 +5,7 @@ import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 import { useInactivitySessionTimeout } from "@/hooks/useInactivitySessionTimeout";
 import { navigateTo } from "@/lib/navigationService";
 import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 5 * 60 * 1000);
 const WARNING_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_WARNING_TIMEOUT_MS || 2 * 60 * 1000);
@@ -15,6 +16,7 @@ export default function InactivitySessionGuard() {
   const connectionLifecycle = useConnectionLifecycle();
 
   const keepAlive = useCallback(async () => {
+    if (isRecoveryCircuitOpen()) return;
     const token = session?.accessToken || session?.access_token || null;
     if (!token) return;
     await fetch("/api/keep-alive", {

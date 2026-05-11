@@ -96,11 +96,18 @@ export function createSessionManager(deps) {
     async handleFatal(reason = "fatal_refresh_token") {
       const decision = evaluate(reason, { refreshFatal: true });
       trackSessionTelemetry("session_refresh_fatal", { reason: decision.reason || reason || null });
-      await transitionToExpired(decision.reason || reason, {
+      // Critical: clear stale GoTrue session memory immediately after fatal refresh evidence.
+      await authTransitionManager.clearSession({
         signOutLocal: true,
         clearAuthState: true,
         broadcast: true,
-        redirect: true,
+        reason: decision.reason || reason,
+      });
+      deps.setSessionHealth(SESSION_STATUS.REAUTH_REQUIRED, decision.reason || reason);
+      resetSessionRecoveryEscalation();
+      deps.clearError?.();
+      trackSessionTelemetry("session_transition_reauth_required", {
+        reason: decision.reason || reason || null,
         source: "refresh_fatal",
       });
       return false;

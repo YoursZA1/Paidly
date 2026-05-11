@@ -16,6 +16,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { wrapStorageWithCorruptionGuard } from "@/lib/safeAuthStorage";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 // Normalize URL: Supabase project APIs use .supabase.co only. .supabase.com does not resolve → ERR_NAME_NOT_RESOLVED.
 let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
@@ -142,6 +143,7 @@ function isTransientSupabaseRpcError(err) {
   if (!err) return false;
   const code = String(err.code || "").toUpperCase();
   if (code === "BLOCKED_CLIENT_RPC" || code === "RPC_CIRCUIT_OPEN") return false;
+  if (code === "RPC_AUTH_TERMINAL") return false;
   if (code === "42501") return false;
   const status = Number(err.status ?? err.statusCode ?? NaN);
   if (Number.isFinite(status) && (status === 401 || status === 403)) return false;
@@ -155,8 +157,51 @@ function isTransientSupabaseRpcError(err) {
   return false;
 }
 
+function terminalMutationError(opName, tableName) {
+  const target = tableName ? `${opName}:${tableName}` : opName;
+  const error = new Error(`Session requires reauthentication before ${target}`);
+  error.code = "MUTATION_AUTH_TERMINAL";
+  return error;
+}
+
+function wrapMutationGuards(builder, tableName) {
+  if (!builder || typeof builder !== "object") return builder;
+  const guardedOps = new Set(["insert", "update", "upsert", "delete"]);
+  return new Proxy(builder, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof prop === "string" && guardedOps.has(prop) && typeof value === "function") {
+        return (...args) => {
+          if (isRecoveryCircuitOpen()) {
+            throw terminalMutationError(prop, tableName);
+          }
+          return value.apply(target, args);
+        };
+      }
+      return value;
+    },
+  });
+}
+
+const originalFrom = supabase.from.bind(supabase);
+supabase.from = (...args) => {
+  const tableName = String(args?.[0] || "");
+  const builder = originalFrom(...args);
+  return wrapMutationGuards(builder, tableName);
+};
+
 supabase.rpc = async (fnName, ...rest) => {
   const rpcName = String(fnName || "");
+  if (isRecoveryCircuitOpen()) {
+    openRpcBreaker(rpcName, { code: "RPC_AUTH_TERMINAL" });
+    return {
+      data: null,
+      error: {
+        message: `RPC blocked in terminal auth state: ${rpcName}`,
+        code: "RPC_AUTH_TERMINAL",
+      },
+    };
+  }
   if (BLOCKED_BROWSER_RPCS.has(rpcName)) {
     if (!warnedBlockedRpcNames.has(rpcName)) {
       warnedBlockedRpcNames.add(rpcName);

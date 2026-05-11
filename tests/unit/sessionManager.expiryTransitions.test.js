@@ -78,7 +78,7 @@ describe("SessionManager transitionToExpired", () => {
     const out = await manager.RefreshManager.handleFatal("fatal_refresh_token");
     expect(out).toBe(false);
     expect(calls.signOutLocalSafe).toBe(1);
-    expect(calls.setSessionHealth.at(-1)?.status).toBe(SESSION_STATUS.EXPIRED);
+    expect(calls.setSessionHealth.at(-1)?.status).toBe(SESSION_STATUS.REAUTH_REQUIRED);
     expect(calls.publish.at(-1)).toEqual({
       type: "AUTH_REAUTH_REQUIRED",
       payload: { reason: "fatal_refresh_token" },

@@ -1,12 +1,14 @@
 import { useSessionHealth } from "@/hooks/useSessionHealth";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { useAuthGatedConnectedSignal } from "@/lib/connection/connectionLifecycleStore";
 import { cn } from "@/lib/utils";
 
 export default function SessionIndicator({ className }) {
   const { status } = useSessionHealth();
   const reason = useSessionHealthStore((s) => s.reason);
+  const canShowConnected = useAuthGatedConnectedSignal();
 
-  if (status === SESSION_STATUS.CONNECTED) {
+  if (status === SESSION_STATUS.CONNECTED && canShowConnected) {
     return (
       <div
         className={cn(

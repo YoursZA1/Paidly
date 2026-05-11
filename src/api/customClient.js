@@ -32,6 +32,7 @@ import { assertWakeRecoveryAllowsMutations } from "@/lib/wakeRecoveryGuard";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { getSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 /**
  * Tenant isolation (authoritative enforcement: Postgres RLS in supabase/schema.postgres.sql):
@@ -129,6 +130,13 @@ function isBrowserOnline() {
   } catch {
     return true;
   }
+}
+
+function assertSessionAuthorityAllowsMutations() {
+  if (!isRecoveryCircuitOpen()) return;
+  const error = new Error("Session requires reauthentication before mutating data");
+  error.code = "AUTH_REAUTH_REQUIRED";
+  throw error;
 }
 
 function shouldLogEntityTimeoutWarning(entityName, maxWaitMs) {
@@ -888,6 +896,7 @@ class EntityManager {
   }
 
   async ensureUserHasOrganization(userId) {
+    assertSessionAuthorityAllowsMutations();
     const requestedUserId = String(userId || "");
     if (!requestedUserId || !isSupabaseAuthUuid(requestedUserId)) {
       throw new Error("Organization setup requires a valid signed-in user (Supabase auth id).");
@@ -967,6 +976,7 @@ class EntityManager {
   async create(data) {
     try {
       assertWakeRecoveryAllowsMutations();
+      assertSessionAuthorityAllowsMutations();
       const userId = await getAuthUserIdForWrites();
       if (!userId) {
         throw new Error('Not authenticated');
@@ -1431,6 +1441,7 @@ class EntityManager {
 
     try {
       assertWakeRecoveryAllowsMutations();
+      assertSessionAuthorityAllowsMutations();
       const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) {
         throw new Error('Not authenticated');
@@ -1758,6 +1769,7 @@ class EntityManager {
 
   async delete(id) {
     assertWakeRecoveryAllowsMutations();
+    assertSessionAuthorityAllowsMutations();
     // Simulated delete method with persistence
     if (this.data[id]) {
       delete this.data[id];

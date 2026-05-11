@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const refreshSupabaseSessionWithRecoveryMock = vi.fn();
 const supabaseRefreshSessionMock = vi.fn();
+const supabaseSignOutLocalMock = vi.fn(async () => ({ error: null }));
 
 vi.mock("@/api/entities", () => ({
   User: {
@@ -35,7 +36,7 @@ vi.mock("@/lib/supabaseClient", () => ({
       getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
       refreshSession: (...args) => supabaseRefreshSessionMock(...args),
       onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
-      signOut: vi.fn(async () => ({ error: null })),
+      signOut: (...args) => supabaseSignOutLocalMock(...args),
       exchangeCodeForSession: vi.fn(async () => ({ data: null, error: null })),
     },
   },
@@ -95,6 +96,7 @@ describe("AuthContext fatal refresh handling", () => {
     refreshSupabaseSessionWithRecoveryMock.mockResolvedValue({ fatal: true });
     supabaseRefreshSessionMock.mockReset();
     supabaseRefreshSessionMock.mockResolvedValue({ data: { session: null }, error: null });
+    supabaseSignOutLocalMock.mockClear();
     useSessionHealthStore.setState({
       status: SESSION_STATUS.CONNECTED,
       reason: null,
@@ -119,7 +121,7 @@ describe("AuthContext fatal refresh handling", () => {
     container.remove();
   });
 
-  it("transitions to EXPIRED one-way and does not attempt reconnect refresh", async () => {
+  it("transitions to REAUTH_REQUIRED immediately on fatal refresh and does not attempt reconnect refresh", async () => {
     await act(async () => {
       root.render(
         <AuthProvider>
@@ -131,9 +133,10 @@ describe("AuthContext fatal refresh handling", () => {
     });
 
     expect(refreshSupabaseSessionWithRecoveryMock).toHaveBeenCalled();
-    expect(useSessionHealthStore.getState().status).toBe(SESSION_STATUS.EXPIRED);
+    expect(useSessionHealthStore.getState().status).toBe(SESSION_STATUS.REAUTH_REQUIRED);
     expect(useSessionHealthStore.getState().reason).toBe("refresh_token_invalid");
     expect(supabaseRefreshSessionMock).not.toHaveBeenCalled();
+    expect(supabaseSignOutLocalMock).toHaveBeenCalledWith({ scope: "local" });
   });
 });
 

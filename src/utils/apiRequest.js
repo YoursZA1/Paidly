@@ -1,4 +1,6 @@
 import { runRpcUnauthorizedPolicy } from "@/lib/rpcSessionPolicy";
+import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 import { formatHttpStatusMessage } from "@/utils/apiErrorText";
 
 /**
@@ -14,6 +16,14 @@ import { formatHttpStatusMessage } from "@/utils/apiErrorText";
  * @see docs/AUTHENTICATED_FETCH.md
  */
 export async function safeFetch(input, init) {
+  if (isRecoveryCircuitOpen()) {
+    await triggerUnauthorizedSession("terminal_auth_state", {
+      source: "api_request",
+      refreshFatal: true,
+      believedSignedIn: true,
+    });
+    return new Response(null, { status: 401, statusText: "Unauthorized" });
+  }
   const res = await fetch(input, init);
   if (res.status === 401) {
     const alreadyRetried = Boolean(init?.headers && new Headers(init.headers).get("x-paidly-auth-retry") === "1");

@@ -1,7 +1,13 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 
+let recoveryCircuitOpen = false;
+
 vi.mock("@/lib/sessionTelemetry", () => ({
   trackSessionTelemetry: vi.fn(),
+}));
+
+vi.mock("@/lib/session/recoveryCircuit", () => ({
+  isRecoveryCircuitOpen: () => recoveryCircuitOpen,
 }));
 
 import {
@@ -19,6 +25,7 @@ async function flushMicrotasks() {
 describe("sessionRefreshScheduler", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    recoveryCircuitOpen = false;
   });
 
   afterEach(() => {
@@ -91,5 +98,18 @@ describe("sessionRefreshScheduler", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0].silent).toBe(false);
+  });
+
+  it("does not call executor when status is reauth_required (circuit open)", async () => {
+    const calls = [];
+    registerSessionRefreshExecutor(async (opts) => {
+      calls.push(opts);
+    });
+    recoveryCircuitOpen = true;
+
+    requestSessionRefresh({ source: "guard-test", silent: true, debounceMs: 0 });
+    await flushMicrotasks();
+
+    expect(calls).toHaveLength(0);
   });
 });

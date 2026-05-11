@@ -9,7 +9,7 @@ let inFlight = false;
 
 /**
  * Register the app logout handler (from AuthProvider). Cleared on unmount.
- * @param {((reason?: string) => void | Promise<void>) | null} fn
+ * @param {((reason?: string, context?: object) => void | Promise<void>) | null} fn
  */
 export function setUnauthorizedSessionHandler(fn) {
   handler = fn;
@@ -44,7 +44,7 @@ export async function triggerUnauthorizedSession(_reason, context = {}) {
     }
 
     if (typeof handler === "function") {
-      await handler(decision.reason || _reason);
+      await handler(decision.reason || _reason, context || {});
     } else {
       try {
         await supabase.auth.signOut({ scope: "local" });

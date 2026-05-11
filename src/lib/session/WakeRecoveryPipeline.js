@@ -75,6 +75,7 @@ export function invalidateWakeRecoveryWorkspaceQueries() {
  * @property {(reason: string, opts?: object) => Promise<void>} awaitRealtimeRecovery
  * @property {() => Promise<void>} refreshUser
  * @property {() => Promise<void>} enforceRouteInvariant
+ * @property {() => boolean} [isCircuitOpen]
  * @property {{ markConnected: (r?: string) => void, markReconnecting: (r?: string) => void, reportSessionMissingDuringReconnect: () => void }} connectionLifecycle
  * @property {(opts?: object) => void} requestSessionRefresh
  * @property {(sessionNorm: object) => void} touchHeartbeatIfValid
@@ -88,6 +89,7 @@ export function invalidateWakeRecoveryWorkspaceQueries() {
  */
 export async function runWakeRecoveryPipeline(ctx) {
   const reason = ctx.reason || "wake";
+  const circuitOpen = () => Boolean(ctx.isCircuitOpen?.());
   console.info("[Session] WakeRecoveryPipeline start", { reason });
 
   setPipelineState(WakeRecoveryState.RECOVERING);
@@ -109,6 +111,10 @@ export async function runWakeRecoveryPipeline(ctx) {
       setPipelineState(WakeRecoveryState.FAILED);
       return { ok: false, reason: WakeRecoveryFailureReason.REFRESH_FAILED };
     }
+    if (circuitOpen()) {
+      setPipelineState(WakeRecoveryState.FAILED);
+      return { ok: false, reason: WakeRecoveryFailureReason.REFRESH_FAILED };
+    }
 
     const s = await ctx.readSessionSafe(true);
     if (!s?.user || !ctx.isSessionValid(s)) {
@@ -118,12 +124,14 @@ export async function runWakeRecoveryPipeline(ctx) {
       });
       ctx.connectionLifecycle.markReconnecting("wake_recovery_session_missing");
       ctx.connectionLifecycle.reportSessionMissingDuringReconnect();
-      ctx.requestSessionRefresh?.({
-        source: "wake_recovery_followup",
-        silent: false,
-        debounceMs: 0,
-        bypassThrottle: true,
-      });
+      if (!circuitOpen()) {
+        ctx.requestSessionRefresh?.({
+          source: "wake_recovery_followup",
+          silent: false,
+          debounceMs: 0,
+          bypassThrottle: true,
+        });
+      }
       return { ok: false, reason: WakeRecoveryFailureReason.SESSION_INVALID };
     }
 
@@ -137,13 +145,19 @@ export async function runWakeRecoveryPipeline(ctx) {
     } catch (reErr) {
       console.warn("[Session] WakeRecoveryPipeline realtime step failed", reErr?.message || reErr);
       setPipelineState(WakeRecoveryState.FAILED);
-      ctx.requestSessionRefresh?.({
-        source: "wake_recovery_realtime_error",
-        silent: true,
-        debounceMs: 0,
-        bypassThrottle: true,
-      });
+      if (!circuitOpen()) {
+        ctx.requestSessionRefresh?.({
+          source: "wake_recovery_realtime_error",
+          silent: true,
+          debounceMs: 0,
+          bypassThrottle: true,
+        });
+      }
       return { ok: false, reason: WakeRecoveryFailureReason.REALTIME_FAILED };
+    }
+    if (circuitOpen()) {
+      setPipelineState(WakeRecoveryState.FAILED);
+      return { ok: false, reason: WakeRecoveryFailureReason.REFRESH_FAILED };
     }
 
     setPipelineState(WakeRecoveryState.RESYNCING);
@@ -161,12 +175,14 @@ export async function runWakeRecoveryPipeline(ctx) {
   } catch (e) {
     console.warn("[Session] WakeRecoveryPipeline failed", e?.message || e);
     setPipelineState(WakeRecoveryState.FAILED);
-    ctx.requestSessionRefresh?.({
-      source: "wake_recovery_error",
-      silent: true,
-      debounceMs: 0,
-      bypassThrottle: true,
-    });
+    if (!circuitOpen()) {
+      ctx.requestSessionRefresh?.({
+        source: "wake_recovery_error",
+        silent: true,
+        debounceMs: 0,
+        bypassThrottle: true,
+      });
+    }
     return { ok: false, reason: WakeRecoveryFailureReason.UNKNOWN };
   } finally {
     setPipelineState(WakeRecoveryState.IDLE);

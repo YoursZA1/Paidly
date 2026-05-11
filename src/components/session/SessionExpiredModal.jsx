@@ -28,6 +28,16 @@ export default function SessionExpiredModal() {
     if (r.includes("auth_expired") || r.includes("fatal_refresh")) return "Session expired";
     return "Session expired";
   }, [reason]);
+  const isSecureExpiry = useMemo(() => {
+    if (status === SESSION_STATUS.REAUTH_REQUIRED) return true;
+    const r = String(reason || "").toLowerCase();
+    return (
+      r.includes("refresh_token_invalid") ||
+      r.includes("fatal_refresh_token") ||
+      r.includes("auth_expired") ||
+      r.includes("session_revoked")
+    );
+  }, [reason, status]);
 
   const shouldShow = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -102,7 +112,13 @@ export default function SessionExpiredModal() {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-        <h2 className="text-lg font-semibold">{inactivityNotice ? "Signed out due to inactivity" : reasonLabel}</h2>
+        <h2 className="text-lg font-semibold">
+          {inactivityNotice
+            ? "Signed out due to inactivity"
+            : isSecureExpiry
+              ? "Your session expired securely."
+              : reasonLabel}
+        </h2>
         {inactivityNotice ? (
           <div className="mt-2 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             {inactivityNotice}
@@ -117,7 +133,9 @@ export default function SessionExpiredModal() {
           </div>
         ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
-          Your session needs to be reconnected. Sign in below to continue exactly where you left off.
+          {isSecureExpiry
+            ? "Please reconnect to continue."
+            : "Your session needs to be reconnected. Sign in below to continue exactly where you left off."}
         </p>
         {reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {reason}</p> : null}
         <div className="mt-4 space-y-2">

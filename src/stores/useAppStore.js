@@ -6,6 +6,7 @@ import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { withApiLogging } from "@/utils/apiLogger";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
 import { dashboardInvoicesQueryKey, dashboardPayslipsQueryKey } from "@/services/DashboardDataService";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 /**
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
@@ -47,6 +48,10 @@ export const useAppStore = create(
    * @param {object | null} authUser - Prefer `user` from AuthContext (Supabase-backed); avoids duplicate auth resolution.
    */
   fetchAll: async (authUser = null) => {
+    if (isRecoveryCircuitOpen()) {
+      set({ isLoading: false, error: "Session requires reauthentication" });
+      return;
+    }
     const gen = ++fetchAllGeneration;
     const clearLoadingIfLatest = () => {
       if (gen === fetchAllGeneration) set({ isLoading: false });
@@ -144,6 +149,7 @@ export const useAppStore = create(
       // Defer non-critical, heavier reads until after first paint.
       setTimeout(async () => {
         try {
+          if (isRecoveryCircuitOpen()) return;
           const [paymentsData, expensesData] = await Promise.all([
             safe("payments.list", () => Payment.list("-created_date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
             safe("expenses.list", () => Expense.list("-date", { limit: 50, maxWaitMs: 12000 }), [], 25000, 1),
@@ -172,6 +178,9 @@ export const useAppStore = create(
    * Reverts local state if the request fails.
    */
   updateInvoice: async (invoiceId, patch) => {
+    if (isRecoveryCircuitOpen()) {
+      throw new Error("Session requires reauthentication");
+    }
     const prev = get().invoices;
     const index = prev.findIndex((i) => i.id === invoiceId);
     if (index === -1) return;
@@ -248,6 +257,9 @@ export const useAppStore = create(
    * Create an expense and prepend it to the store.
    */
   addExpense: async (expenseData) => {
+    if (isRecoveryCircuitOpen()) {
+      throw new Error("Session requires reauthentication");
+    }
     const created = await Expense.create(expenseData);
     set((state) => ({
       expenses: [created, ...(state.expenses || [])],
@@ -259,6 +271,9 @@ export const useAppStore = create(
    * Optimistically update an expense in the store, then persist.
    */
   updateExpense: async (expenseId, patch) => {
+    if (isRecoveryCircuitOpen()) {
+      throw new Error("Session requires reauthentication");
+    }
     const prev = get().expenses;
     const index = prev.findIndex((e) => e.id === expenseId);
     if (index === -1) return;
@@ -276,6 +291,9 @@ export const useAppStore = create(
 
   /** Remove an expense from the store and delete on the server. */
   deleteExpense: async (expenseId) => {
+    if (isRecoveryCircuitOpen()) {
+      throw new Error("Session requires reauthentication");
+    }
     const prev = get().expenses;
     set({ expenses: prev.filter((e) => e.id !== expenseId) });
     try {

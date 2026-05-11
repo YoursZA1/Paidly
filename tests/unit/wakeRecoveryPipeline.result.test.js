@@ -70,4 +70,17 @@ describe("runWakeRecoveryPipeline WakeRecoveryResult", () => {
     const out = await runWakeRecoveryPipeline(ctx);
     expect(out).toEqual({ ok: false, reason: WakeRecoveryFailureReason.UNKNOWN });
   });
+
+  it("hard-stops follow-up refresh scheduling when circuit is open", async () => {
+    const requestSessionRefresh = vi.fn();
+    const ctx = baseCtx({
+      readSessionSafe: vi.fn(async () => null),
+      isSessionValid: vi.fn(() => false),
+      requestSessionRefresh,
+      isCircuitOpen: () => true,
+    });
+    const out = await runWakeRecoveryPipeline(ctx);
+    expect(out).toEqual({ ok: false, reason: WakeRecoveryFailureReason.REFRESH_FAILED });
+    expect(requestSessionRefresh).not.toHaveBeenCalled();
+  });
 });

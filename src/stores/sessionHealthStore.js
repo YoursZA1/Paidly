@@ -23,6 +23,7 @@ export function shouldHintRealtimeRecoveredFromSessionHealth(status) {
   );
 }
 const EXPIRED_RECOVERY_REASONS = new Set(["signed_in", "initial_session"]);
+const REAUTH_RECOVERY_REASONS = new Set(["signed_in", "initial_session"]);
 
 const RECONNECTING_DEBOUNCE_MS = 2000;
 let reconnectingTimer = null;
@@ -60,6 +61,18 @@ export function applySessionHealthFromAuthority(status, reason = null) {
     previous === SESSION_STATUS.EXPIRED &&
     status !== SESSION_STATUS.EXPIRED &&
     !EXPIRED_RECOVERY_REASONS.has(normalizedReason || "")
+  ) {
+    trackSessionTelemetry("session_health_transition_blocked", {
+      from_status: previous,
+      to_status: status,
+      reason: normalizedReason,
+    });
+    return;
+  }
+  if (
+    previous === SESSION_STATUS.REAUTH_REQUIRED &&
+    status === SESSION_STATUS.CONNECTED &&
+    !REAUTH_RECOVERY_REASONS.has(normalizedReason || "")
   ) {
     trackSessionTelemetry("session_health_transition_blocked", {
       from_status: previous,

@@ -8,6 +8,7 @@ import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
+import { useAuthGatedConnectedSignal } from "@/lib/connection/connectionLifecycleStore";
 
 /**
  * Top-bar status: subtle wifi icon when connected (briefly for signed-in users); soft pills for problems + retry.
@@ -21,6 +22,7 @@ export default function ConnectionStatusIndicator({ className }) {
   const lastError = useConnectionStore((s) => s.lastError);
   const suppressConnectedIndicator = useConnectionStore((s) => s.suppressConnectedIndicator);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
+  const canShowConnected = useAuthGatedConnectedSignal();
 
   const [retryBusy, setRetryBusy] = useState(false);
   const normalizedError =
@@ -61,7 +63,10 @@ export default function ConnectionStatusIndicator({ className }) {
   if (!isSupabaseConfigured) return null;
 
   const showConnectedIcon =
-    isAuthenticated && status === CONNECTION_STATUS.CONNECTED && !suppressConnectedIndicator;
+    isAuthenticated &&
+    canShowConnected &&
+    status === CONNECTION_STATUS.CONNECTED &&
+    !suppressConnectedIndicator;
   const showProblemPill =
     status === CONNECTION_STATUS.RECONNECTING || status === CONNECTION_STATUS.DISCONNECTED;
   const visible = showConnectedIcon || showProblemPill;

@@ -1,3 +1,5 @@
+import { isRefreshSuccess } from "@/lib/session/refreshResult";
+
 /**
  * Body registered with {@link registerSessionRefreshExecutor} in AuthProvider.
  *
@@ -14,7 +16,12 @@ export async function runSessionRefreshExecutorPipeline({
   refreshUser,
   afterProfileHydrated,
 }) {
-  await refreshSession({ silent, bypassThrottle });
+  const refreshResult = await refreshSession({ silent, bypassThrottle });
+  // Terminal or non-success refresh outcomes must not fan out into resync/bootstrap/entity work.
+  if (!isRefreshSuccess(refreshResult)) {
+    return refreshResult;
+  }
   await refreshUser();
   await afterProfileHydrated();
+  return refreshResult;
 }

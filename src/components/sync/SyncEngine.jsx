@@ -13,6 +13,7 @@ import {
 } from "@/lib/realtimeStoreHydration";
 import { setPaidlySyncRealtimeBridge } from "@/lib/realtime/paidlyRealtimeManager";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 const SYNC_INTERVAL_MS = 5000;
 /** Per-table debounce; coalesces bursts. List pages rely on this (see Invoices/Quotes — no duplicate channels). */
@@ -90,6 +91,7 @@ export default function SyncEngine() {
 
   const scheduleEntityInvalidation = useCallback(
     (entity, payload = null) => {
+      if (isRecoveryCircuitOpen()) return;
       const current = realtimeEntityDebounceRefs.current[entity];
       if (current) {
         window.clearTimeout(current);
@@ -107,6 +109,7 @@ export default function SyncEngine() {
   );
 
   const scheduleGlobalStoreRefresh = useCallback(() => {
+    if (isRecoveryCircuitOpen()) return;
     if (!user?.id) return;
     if (globalStoreRefreshTimerRef.current) {
       window.clearTimeout(globalStoreRefreshTimerRef.current);
@@ -129,6 +132,7 @@ export default function SyncEngine() {
   }, [user, fetchAllFromStore]);
 
   const runOnce = useCallback(async () => {
+    if (isRecoveryCircuitOpen()) return;
     if (runningRef.current) return;
     if (useWakeRecoveryStore.getState().blockMutations) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
@@ -180,10 +184,14 @@ export default function SyncEngine() {
 
   useEffect(() => {
     const onOnline = () => {
+      if (isRecoveryCircuitOpen()) return;
       retryAllFailed();
       void runOnce();
     };
-    const onFocus = () => void runOnce();
+    const onFocus = () => {
+      if (isRecoveryCircuitOpen()) return;
+      void runOnce();
+    };
     window.addEventListener("online", onOnline);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -194,6 +202,7 @@ export default function SyncEngine() {
 
   const onEntityEvent = useCallback(
     (entity, payload) => {
+      if (isRecoveryCircuitOpen()) return;
       const role = user?.role;
       scheduleEntityInvalidation(entity, payload);
       if (entity === "document_sends") return;
@@ -204,6 +213,10 @@ export default function SyncEngine() {
   );
 
   useEffect(() => {
+    if (isRecoveryCircuitOpen()) {
+      setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
+      return undefined;
+    }
     if (!user?.id) {
       setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
       return () => {

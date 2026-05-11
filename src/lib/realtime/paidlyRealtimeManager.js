@@ -11,6 +11,7 @@ import { getConnectionLifecycleManager } from "@/lib/connection/connectionLifecy
 import { LifecycleSignalType } from "@/lib/connection/lifecycleSignalTypes";
 import { getSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 import { useConnectionLifecycleStore } from "@/lib/connection/connectionLifecycleStore";
 import { SESSION_STATUS, shouldHintRealtimeRecoveredFromSessionHealth, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
@@ -127,6 +128,7 @@ function notifyMainChannelStatusListeners(status) {
 }
 
 function recoveryHandler() {
+  if (isRecoveryCircuitOpen()) return;
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
   if (!computePaidlyRealtimeWork()) return;
   const ch = channelInstance;
@@ -281,6 +283,7 @@ function runChannelRebuild() {
 }
 
 export function schedulePaidlyRealtimeRebuild() {
+  if (isRecoveryCircuitOpen()) return;
   if (rebuildQueued) return;
   rebuildQueued = true;
   queueMicrotask(runChannelRebuild);
@@ -308,6 +311,9 @@ export function validatePaidlyRealtime() {
  * @returns {Promise<{ ok: boolean, repaired: boolean }>}
  */
 export async function validateAndRepairPaidlyRealtimeForWake(reason = "wake_recovery") {
+  if (isRecoveryCircuitOpen()) {
+    return { ok: false, repaired: false };
+  }
   if (typeof window === "undefined" || !isSupabaseConfigured) {
     return { ok: true, repaired: false };
   }
@@ -332,6 +338,9 @@ export async function validateAndRepairPaidlyRealtimeForWake(reason = "wake_reco
  * @returns {Promise<{ ok: boolean, skipped?: boolean, repaired?: boolean, reason?: string }>}
  */
 export async function repairStalePaidlyRealtimeOnTabVisible(opts = {}) {
+  if (isRecoveryCircuitOpen()) {
+    return { ok: true, skipped: true, reason: "terminal_auth" };
+  }
   if (typeof window === "undefined" || !isSupabaseConfigured) {
     return { ok: true, skipped: true, reason: "no_window" };
   }

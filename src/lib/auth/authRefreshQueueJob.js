@@ -22,6 +22,7 @@ export async function runAuthRefreshQueueJob(ctx) {
     scheduleReconnectEscalation,
     publishAuthTabSync,
     reconcileRealtimeJwt,
+    enableTerminalMutationLock,
   } = ctx;
 
   if (!silent) {
@@ -35,6 +36,8 @@ export async function runAuthRefreshQueueJob(ctx) {
         (refreshed.reason === "no_refresh_token" || isTerminalRefreshFailure(refreshed.error)))
     ) {
       recordAuthRefreshFatal({ source: "refresh_session", reason: "refresh_token_invalid" });
+      cancelReconnectEscalation?.();
+      enableTerminalMutationLock?.("refresh_token_invalid");
       await sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
       return refreshFatal("refresh_token_invalid");
     }
@@ -59,7 +62,14 @@ export async function runAuthRefreshQueueJob(ctx) {
     }
     if (believedSignedIn) scheduleReconnectEscalation();
     return believedSignedIn ? refreshFailed("session_missing_after_refresh") : refreshSuccess();
-  } catch {
+  } catch (error) {
+    if (believedSignedIn && isTerminalRefreshFailure(error)) {
+      recordAuthRefreshFatal({ source: "refresh_session", reason: "refresh_token_invalid" });
+      cancelReconnectEscalation?.();
+      enableTerminalMutationLock?.("refresh_token_invalid");
+      await sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
+      return refreshFatal("refresh_token_invalid");
+    }
     if (!silent) {
       connectionLifecycle.markReconnecting(navigator.onLine ? "refresh_failed" : "offline");
     }

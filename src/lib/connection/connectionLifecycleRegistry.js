@@ -14,3 +14,8 @@ export function registerConnectionLifecycleManager(next) {
 export function getConnectionLifecycleManager() {
   return lifecycleRef;
 }
+
+/** Global auth-invalid guard for low-level modules that cannot depend on React context. */
+export function isConnectionLifecycleAuthInvalid() {
+  return Boolean(lifecycleRef?.isAuthInvalid?.());
+}

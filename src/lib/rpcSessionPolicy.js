@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 function getResponseStatus(resultOrError) {
   if (!resultOrError) return null;
@@ -29,6 +30,12 @@ export async function runRpcUnauthorizedPolicy({
   reason = "rpc-401",
   alreadyRetried = false,
 }) {
+  if (isRecoveryCircuitOpen()) {
+    trackSessionTelemetry("rpc_unauthorized_circuit_open", { reason });
+    await triggerUnauthorizedSession(reason, { source: "rpc", refreshFatal: true, believedSignedIn: true });
+    return { recovered: false, response: null };
+  }
+
   trackSessionTelemetry("rpc_unauthorized_detected", {
     reason,
     method: String(method || "GET").toUpperCase(),
@@ -58,6 +65,12 @@ export async function runRpcUnauthorizedPolicy({
           source: "rpc_unauthorized_policy",
           result: "fatal",
         });
+        await triggerUnauthorizedSession(reason, {
+          source: "rpc",
+          refreshFatal: true,
+          believedSignedIn: true,
+        });
+        return { recovered: false, response: null };
       } else {
         trackSessionTelemetry("session_refresh_result", {
           source: "rpc_unauthorized_policy",
@@ -84,7 +97,7 @@ export async function runRpcUnauthorizedPolicy({
   // Do not queue replays here: it can create retry storms while auth is invalid.
 
   trackSessionTelemetry("rpc_reauth_required", { reason });
-  await triggerUnauthorizedSession(reason, { source: "rpc" });
+  await triggerUnauthorizedSession(reason, { source: "rpc", believedSignedIn: true });
   return { recovered: false, response: null };
 }
 
@@ -95,6 +108,11 @@ export async function runRpcUnauthorizedPolicy({
  * 3) trigger centralized unauthorized policy if still missing
  */
 export async function getSessionAccessTokenOrHandleUnauthorized(reason = "missing_access_token") {
+  if (isRecoveryCircuitOpen()) {
+    trackSessionTelemetry("auth_token_blocked_circuit_open", { reason });
+    await triggerUnauthorizedSession(reason, { source: "rpc", refreshFatal: true, believedSignedIn: true });
+    return null;
+  }
   try {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
@@ -113,6 +131,12 @@ export async function getSessionAccessTokenOrHandleUnauthorized(reason = "missin
       if (token) return token;
     } else if (refreshed?.fatal) {
       trackSessionTelemetry("session_refresh_result", { source: "token_acquisition", result: "fatal" });
+      await triggerUnauthorizedSession(reason, {
+        source: "rpc",
+        refreshFatal: true,
+        believedSignedIn: true,
+      });
+      return null;
     } else {
       trackSessionTelemetry("session_refresh_result", { source: "token_acquisition", result: "failed" });
     }

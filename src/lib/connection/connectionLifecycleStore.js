@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
 /**
  * Read model for {@link createConnectionLifecycleManager} — observability and UI, not a second authority.
@@ -43,6 +44,27 @@ export const useConnectionLifecycleStore = create((set) => ({
     set(initial);
   },
 }));
+
+/**
+ * Single UI guard for "connected" badges/indicators.
+ * Connected visuals must not render while auth is terminal or lifecycle auth is not signed-in.
+ */
+export function selectAuthGatedConnectedSignal(lifecycleState, sessionStatus) {
+  const terminal =
+    sessionStatus === SESSION_STATUS.REAUTH_REQUIRED || sessionStatus === SESSION_STATUS.EXPIRED;
+  if (terminal) return false;
+  if (lifecycleState?.network?.online === false) return false;
+  const authPhase = String(lifecycleState?.auth?.phase || "unknown");
+  if (authPhase !== "signed_in") return false;
+  return sessionStatus === SESSION_STATUS.CONNECTED;
+}
+
+/** Hook wrapper so connected UI consumers share one canonical guard. */
+export function useAuthGatedConnectedSignal() {
+  const lifecycle = useConnectionLifecycleStore((s) => s);
+  const sessionStatus = useSessionHealthStore((s) => s.status);
+  return selectAuthGatedConnectedSignal(lifecycle, sessionStatus);
+}
 
 /** @internal */
 export function __resetConnectionLifecycleStoreForTests() {

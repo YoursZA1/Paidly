@@ -1,4 +1,5 @@
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 const DEFAULT_DEBOUNCE_MS = 400;
 
@@ -61,6 +62,13 @@ async function drainMergedOnce() {
 export function requestSessionRefresh(opts = {}) {
   const { source, silent = true, debounceMs = DEFAULT_DEBOUNCE_MS, bypassThrottle = false } = opts;
   if (!executor || !source) return;
+  if (isRecoveryCircuitOpen()) {
+    trackSessionTelemetry("session_refresh_scheduler_blocked_terminal", {
+      source,
+    });
+    cancelPendingSessionRefresh();
+    return;
+  }
 
   if (bypassThrottle) mergedBypassThrottle = true;
   mergedSilent = mergedSources.size === 0 ? silent : mergedSilent && silent;
@@ -91,6 +99,14 @@ export function requestSessionRefresh(opts = {}) {
 export async function runSessionRefreshNow(opts = {}) {
   const { source, silent = true, bypassThrottle = false } = opts;
   if (!executor || !source) return;
+  if (isRecoveryCircuitOpen()) {
+    trackSessionTelemetry("session_refresh_scheduler_blocked_terminal", {
+      source,
+      immediate: true,
+    });
+    cancelPendingSessionRefresh();
+    return;
+  }
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;

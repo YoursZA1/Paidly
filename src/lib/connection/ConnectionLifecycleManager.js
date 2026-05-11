@@ -1,7 +1,11 @@
 import { useConnectionLifecycleStore } from "@/lib/connection/connectionLifecycleStore";
 import { buildLifecyclePlan } from "@/lib/connection/lifecyclePolicy";
 import { LifecycleSignalType } from "@/lib/connection/lifecycleSignalTypes";
-import { shouldHintRealtimeRecoveredFromSessionHealth, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import {
+  SESSION_STATUS,
+  shouldHintRealtimeRecoveredFromSessionHealth,
+  useSessionHealthStore,
+} from "@/stores/sessionHealthStore";
 
 /**
  * Operating-system style coordinator: subsystems **report** signals here. Semantic signals run
@@ -210,6 +214,12 @@ export function createConnectionLifecycleManager({ sessionManager }) {
 
     getDecision: (reason, extra) => sink.getDecision(reason, extra),
     shouldRequireReauth: (reason, extra) => sink.shouldRequireReauth(reason, extra),
+    isAuthInvalid() {
+      const health = useSessionHealthStore.getState().status;
+      if (health === SESSION_STATUS.EXPIRED || health === SESSION_STATUS.REAUTH_REQUIRED) return true;
+      const authPhase = store.getState().auth?.phase;
+      return authPhase === "expired" || authPhase === "expired_surface";
+    },
 
     handleRefreshFatal(reason) {
       patch({ refresh: { phase: "fatal", lastReason: reason ?? null } });
@@ -260,6 +270,7 @@ export function createConnectionLifecycleManager({ sessionManager }) {
         transitionToExpired: api.transitionToExpired,
         getDecision: api.getDecision,
         shouldRequireReauth: api.shouldRequireReauth,
+        isAuthInvalid: api.isAuthInvalid,
         handleRefreshFatal: api.handleRefreshFatal,
         handleMissingSession: api.handleMissingSession,
         escalateRecoverableSession: api.escalateRecoverableSession,

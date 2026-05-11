@@ -7,6 +7,8 @@ import axios from "axios";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { installBackendApiResilience } from "@/api/installBackendApiResilience";
 import { runRpcUnauthorizedPolicy, isReplaySafeHttpMethod } from "@/lib/rpcSessionPolicy";
+import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -115,6 +117,28 @@ export const backendApi = axios.create({
  * (e.g. team invite, account delete, Node auth sign-in/sign-up/forgot-password, optional currency API).
  */
 installBackendApiResilience(backendApi);
+
+backendApi.interceptors.request.use(async (config) => {
+  if (!isRecoveryCircuitOpen()) return config;
+  await triggerUnauthorizedSession("terminal_auth_state", {
+    source: "backend_api",
+    refreshFatal: true,
+    believedSignedIn: true,
+  });
+  throw new axios.AxiosError(
+    "Session requires reauthentication",
+    "ERR_UNAUTHORIZED",
+    config,
+    null,
+    {
+      status: 401,
+      statusText: "Unauthorized",
+      headers: {},
+      config,
+      data: null,
+    }
+  );
+});
 
 backendApi.interceptors.response.use(
   (response) => response,
