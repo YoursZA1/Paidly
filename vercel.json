@@ -131,7 +131,7 @@
   "crons": [
     {
       "path": "/api/cron/expire-trials",
-      "schedule": "0 * * * *"
+      "schedule": "0 7 * * *"
     },
     {
       "path": "/api/cron/payment-reminders",
