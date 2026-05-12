@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-    ArrowLeft, Mail, Phone, MapPin, User as UserIcon, 
+import {
+    ArrowLeft, Mail, Phone, MapPin, User as UserIcon,
     FileText, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Globe, Smartphone, Building2, Lock, StickyNote, CreditCard
 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -460,29 +461,26 @@ export default function ClientDetail() {
                         </CardHeader>
                         <CardContent className="p-0">
                             {invoices.length === 0 ? (
-                                <div className="p-8 text-center">
-                                    <FileText className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                                    <p className="text-slate-600 mb-4">No invoices yet for this client</p>
-                                    <Link to={createPageUrl("CreateInvoice") + `?client_id=${clientId}`}>
-                                        <Button className="bg-primary hover:bg-primary/90">
-                                            <Plus className="w-4 h-4 mr-2" />
-                                            Create First Invoice
-                                        </Button>
-                                    </Link>
-                                </div>
+                                <EmptyState
+                                    icon={<FileText className="w-7 h-7 text-muted-foreground" />}
+                                    title="No invoices yet"
+                                    description="No invoices have been created for this client."
+                                    action={
+                                        <Link to={createPageUrl("CreateInvoice") + `?client_id=${clientId}`}>
+                                            <Button className="rounded-xl bg-primary hover:bg-primary/90">
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Create First Invoice
+                                            </Button>
+                                        </Link>
+                                    }
+                                />
                             ) : filteredInvoices.length === 0 ? (
-                                <div className="p-8 text-center">
-                                    <FileText className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                                    <p className="text-slate-600 mb-2">No {statusFilter} invoices found</p>
-                                    <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={() => setStatusFilter('all')}
-                                        className="mt-2"
-                                    >
-                                        Show All Invoices
-                                    </Button>
-                                </div>
+                                <EmptyState
+                                    icon={<FileText className="w-7 h-7 text-muted-foreground" />}
+                                    title={`No ${statusFilter} invoices found`}
+                                    description="Try clearing the filter to see all invoices."
+                                    action={<Button variant="outline" size="sm" className="rounded-xl" onClick={() => setStatusFilter('all')}>Show All Invoices</Button>}
+                                />
                             ) : (
                                 <>
                                     <div className="divide-y divide-slate-100">

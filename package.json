@@ -12,6 +12,7 @@
     "react:generate-quote-pdf": "npm --prefix server run react:generate-quote-pdf",
     "build": "npm run check:forbidden-ui-admin-writes && npm run check:forbidden-client-rpcs && npm run check:session-boundaries && npm run check:session-reason-matrix && vite build",
     "start": "vite preview",
+    "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "scan-secrets": "node scripts/scan-secrets.mjs",
     "check:session-boundaries": "node scripts/check-session-boundaries.mjs",
@@ -131,6 +132,7 @@
     "postcss": "^8.5.3",
     "supabase": "^2.92.1",
     "tailwindcss": "^3.4.17",
+    "typescript": "^6.0.3",
     "vite": "^6.1.0",
     "vitest": "^4.0.18"
   }

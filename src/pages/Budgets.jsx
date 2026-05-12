@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Plus, AlertCircle } from 'lucide-react';
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from '@/components/CurrencySelector';
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval, subMonths, format, addMonths } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -144,13 +145,12 @@ export default function BudgetsPage() {
                             {[1,2,3].map(i => <div key={i} className="h-32 bg-slate-200 rounded-xl animate-pulse" />)}
                         </div>
                     ) : budgets.length === 0 ? (
-                        <Card className="bg-slate-50 border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center py-10 text-slate-500">
-                                <DollarSign className="w-10 h-10 mb-2 opacity-20" />
-                                <p>No budgets set yet.</p>
-                                <Button variant="link" onClick={() => setShowBudgetForm(true)}>Create one now</Button>
-                            </CardContent>
-                        </Card>
+                        <EmptyState
+                            icon={<DollarSign className="w-7 h-7 text-muted-foreground" />}
+                            title="No budgets set yet"
+                            description="Track spending against targets by creating a budget."
+                            action={<Button variant="outline" className="rounded-xl" onClick={() => setShowBudgetForm(true)}>Create one now</Button>}
+                        />
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {budgets.map(budget => (

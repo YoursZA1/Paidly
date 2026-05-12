@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSessionInactivitySyncChannel } from "@/lib/sessionInactivitySync";
 
 const DEFAULTS = {
-  idleTimeoutMs: 5 * 60 * 1000,
+  idleTimeoutMs: 18 * 60 * 1000,      // 18 min idle → warning; +2 min warning = 20 min total
   warningTimeoutMs: 2 * 60 * 1000,
-  keepAliveIntervalMs: 90 * 1000,
+  keepAliveIntervalMs: 4 * 60 * 1000, // keep-alive every 4 min (Supabase JWTs last 1 h)
 };
+
+// Throttle interval for high-frequency DOM events (mousemove, scroll, touchstart).
+// Immediate events (click, keydown, input) bypass this throttle.
+const ACTIVITY_THROTTLE_MS = 800;
 
 export function applyHiddenPause(timestampMs, hiddenDurationMs) {
   const ts = Number(timestampMs || 0);
@@ -44,6 +48,11 @@ export function useInactivitySessionTimeout({
   const syncChannelRef = useRef(null);
   const hiddenSinceMsRef = useRef(null);
   const criticalOpsCountRef = useRef(0);
+  // Ref mirror of warningOpen so the visibility handler always reads the current value
+  // without needing to be re-registered every time the state changes.
+  const warningOpenRef = useRef(false);
+  // Throttle ref: prevents high-frequency events (mousemove/scroll) from hammering timers.
+  const lastThrottledActivityMs = useRef(0);
 
   const clearWarningDelayTimer = useCallback(() => {
     if (warningDelayTimerRef.current) {
@@ -66,8 +75,12 @@ export function useInactivitySessionTimeout({
     }
   }, []);
 
+  // Keep the ref in sync so the visibility handler never reads stale state.
+  useEffect(() => { warningOpenRef.current = warningOpen; }, [warningOpen]);
+
   const closeWarning = useCallback(() => {
     setWarningOpen(false);
+    warningOpenRef.current = false;
     setCountdownSeconds(Math.ceil(warningTimeoutMs / 1000));
     warningDeadlineRef.current = 0;
     clearCountdownTimer();
@@ -182,7 +195,18 @@ export function useInactivitySessionTimeout({
 
     scheduleWarning();
 
-    const onUserActivity = () => markActive("dom_event");
+    // Immediate activity: resets the timer without throttle (fast user response).
+    const onImmediateActivity = () => markActive("dom_event");
+
+    // Throttled activity: high-frequency events (mousemove, scroll, touchstart) capped at
+    // ACTIVITY_THROTTLE_MS so we don't call clearTimeout/setTimeout 60×/sec during movement.
+    const onThrottledActivity = () => {
+      const now = Date.now();
+      if (now - lastThrottledActivityMs.current < ACTIVITY_THROTTLE_MS) return;
+      lastThrottledActivityMs.current = now;
+      markActive("dom_event");
+    };
+
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
         hiddenSinceMsRef.current = Date.now();
@@ -197,7 +221,8 @@ export function useInactivitySessionTimeout({
         lastActivityMsRef.current = applyHiddenPause(lastActivityMsRef.current, hiddenDuration);
         warningDeadlineRef.current = applyHiddenPause(warningDeadlineRef.current, hiddenDuration);
       }
-      if (warningOpen && warningDeadlineRef.current > 0) {
+      // Use the ref (not the closure-captured state) to avoid stale warningOpen reads.
+      if (warningOpenRef.current && warningDeadlineRef.current > 0) {
         const tickMs = Math.max(0, warningDeadlineRef.current - Date.now());
         setCountdownSeconds(Math.ceil(tickMs / 1000));
         countdownTimerRef.current = setInterval(() => {
@@ -219,10 +244,13 @@ export function useInactivitySessionTimeout({
       criticalOpsCountRef.current = Math.max(0, criticalOpsCountRef.current - 1);
     };
 
-    const events = ["mousemove", "mousedown", "keydown", "touchstart", "click", "input"];
-    events.forEach((eventName) => {
-      window.addEventListener(eventName, onUserActivity, { passive: true });
-    });
+    // Immediate events: user intent is clear; no throttle needed.
+    const immediateEvents = ["click", "keydown", "input"];
+    // Throttled events: high-frequency or passive signals.
+    const throttledEvents = ["mousemove", "mousedown", "pointerdown", "touchstart", "scroll"];
+
+    immediateEvents.forEach((e) => window.addEventListener(e, onImmediateActivity, { passive: true }));
+    throttledEvents.forEach((e) => window.addEventListener(e, onThrottledActivity, { passive: true }));
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onVisibility);
     window.addEventListener("paidly:critical-op-start", onCriticalStart);
@@ -235,7 +263,8 @@ export function useInactivitySessionTimeout({
       clearWarningDelayTimer();
       clearCountdownTimer();
       clearKeepAliveTimer();
-      events.forEach((eventName) => window.removeEventListener(eventName, onUserActivity));
+      immediateEvents.forEach((e) => window.removeEventListener(e, onImmediateActivity));
+      throttledEvents.forEach((e) => window.removeEventListener(e, onThrottledActivity));
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onVisibility);
       window.removeEventListener("paidly:critical-op-start", onCriticalStart);

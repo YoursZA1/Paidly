@@ -15,8 +15,13 @@ import {
   ChevronRight,
   ScrollText,
   Lock,
+  Download,
+  X,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -152,9 +157,33 @@ function LogRow({ log }) {
 
 const PAGE_TITLE = 'Audit Log';
 
+function auditLogsToCsv(logs) {
+  const cols = ['date', 'category', 'action', 'description', 'target', 'actor_name', 'actor_email', 'actor_role'];
+  const header = cols.join(',');
+  const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = logs.map((l) =>
+    [
+      l.created_date ? format(new Date(l.created_date), 'yyyy-MM-dd HH:mm:ss') : '',
+      l.category || '',
+      l.action || '',
+      l.description || '',
+      l.target_label || '',
+      l.actor_name || '',
+      l.actor_email || '',
+      l.actor_role || '',
+    ]
+      .map(escape)
+      .join(',')
+  );
+  return [header, ...rows].join('\r\n');
+}
+
 export default function AuditLogPage() {
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     document.title = `${PAGE_TITLE} · Paidly`;
@@ -170,6 +199,7 @@ export default function AuditLogPage() {
 
   const logs = data?.logs ?? [];
   const supabaseTableMissing = data?.supabaseTableMissing ?? false;
+  const hasActiveFilters = search || categoryFilter !== 'all' || dateFrom || dateTo;
 
   const filtered = logs.filter((l) => {
     const matchCategory = categoryFilter === 'all' || l.category === categoryFilter;
@@ -181,19 +211,55 @@ export default function AuditLogPage() {
       (l.actor_name || '').toLowerCase().includes(q) ||
       (l.target_label || '').toLowerCase().includes(q) ||
       (l.action || '').toLowerCase().includes(q);
-    return matchCategory && matchSearch;
+    let matchDate = true;
+    if ((dateFrom || dateTo) && l.created_date) {
+      const ts = new Date(l.created_date).getTime();
+      if (dateFrom) matchDate = matchDate && ts >= new Date(dateFrom).getTime();
+      if (dateTo) matchDate = matchDate && ts <= new Date(dateTo + 'T23:59:59').getTime();
+    }
+    return matchCategory && matchSearch && matchDate;
   });
+
+  const clearFilters = () => {
+    setSearch('');
+    setCategoryFilter('all');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const handleExportCsv = () => {
+    const rows = filtered.length > 0 ? filtered : logs;
+    if (!rows.length) {
+      toast({ title: 'No entries to export', variant: 'destructive' });
+      return;
+    }
+    const csv = auditLogsToCsv(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_log_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: `${rows.length} audit entries exported.` });
+  };
 
   return (
     <div className="mx-auto max-w-7xl p-6 md:p-8">
-      <PageHeader
-        title={PAGE_TITLE}
-        icon={<Shield className="h-6 w-6 text-primary" aria-hidden />}
-        description="Full history of critical actions performed by internal team members."
-        descriptionClassName="mt-2 max-w-2xl text-sm leading-relaxed sm:text-base"
-        onRefresh={() => refetch()}
-        isRefreshing={isFetching}
-      />
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <PageHeader
+          title={PAGE_TITLE}
+          icon={<Shield className="h-6 w-6 text-primary" aria-hidden />}
+          description="Full history of critical actions performed by internal team members."
+          descriptionClassName="mt-2 max-w-2xl text-sm leading-relaxed sm:text-base"
+          onRefresh={() => refetch()}
+          isRefreshing={isFetching}
+        />
+        <Button variant="outline" size="sm" onClick={handleExportCsv} className="shrink-0 rounded-xl h-9 mt-1">
+          <Download className="w-4 h-4 mr-2" />
+          Export CSV
+        </Button>
+      </div>
 
       {supabaseTableMissing ? (
         <Alert variant="destructive" className="mb-4">
@@ -250,30 +316,58 @@ export default function AuditLogPage() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by description, actor, or target..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-card pl-10"
-          />
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by description, actor, or target..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-card pl-10"
+            />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-full bg-card sm:w-[180px]">
+              <Filter className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {Object.entries(CATEGORY_META).map(([k, v]) => (
+                <SelectItem key={k} value={k}>
+                  {v.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full bg-card sm:w-[180px]">
-            <Filter className="mr-2 h-4 w-4" />
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {Object.entries(CATEGORY_META).map(([k, v]) => (
-              <SelectItem key={k} value={k}>
-                {v.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 rounded-lg text-muted-foreground gap-1.5">
+              <X className="h-3.5 w-3.5" />
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -300,19 +394,23 @@ export default function AuditLogPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/40">
-              <Shield className="h-7 w-7 text-muted-foreground" aria-hidden />
-            </div>
-            <div className="max-w-md space-y-1">
-              <p className="text-sm font-medium text-foreground">No entries match your filters</p>
-              <p className="text-sm text-muted-foreground">
-                {logs.length === 0
-                  ? 'No internal audit events have been recorded yet, or your account cannot read the audit table. Try refreshing, or widen search and category filters.'
-                  : 'Try clearing search or setting category to “All categories” to see the full internal history.'}
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            icon={<Shield className="h-7 w-7 text-muted-foreground" />}
+            title={logs.length === 0 ? 'No audit events yet' : 'No entries match your filters'}
+            description={
+              logs.length === 0
+                ? 'No internal audit events have been recorded yet, or your account cannot read the audit table. Try refreshing.'
+                : 'Try clearing your filters to see all entries.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button variant="outline" size="sm" onClick={clearFilters} className="rounded-xl h-9 gap-1.5">
+                  <X className="h-3.5 w-3.5" />
+                  Clear all filters
+                </Button>
+              ) : null
+            }
+          />
         ) : (
           filtered.map((log) => <LogRow key={log.id} log={log} />)
         )}

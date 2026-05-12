@@ -3,7 +3,8 @@ import { QuoteTemplate } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, Edit, Save, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, X, FileText } from 'lucide-react';
+import { EmptyState } from "@/components/ui/empty-state";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { createPageUrl } from '@/utils';
@@ -200,8 +201,12 @@ export default function QuoteTemplates() {
                         </Card>
                     ))}
                     {templates.length === 0 && (
-                        <div className="col-span-full text-center py-12 text-slate-500">
-                            No templates found. Create one to get started!
+                        <div className="col-span-full">
+                            <EmptyState
+                                icon={<FileText className="w-7 h-7 text-muted-foreground" />}
+                                title="No templates yet"
+                                description="Create one to get started!"
+                            />
                         </div>
                     )}
                 </div>

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, FileText, LayoutGrid, List, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
 import { Link } from "react-router-dom";
@@ -446,21 +447,19 @@ export default function InvoicesPage() {
                                 <InvoiceGrid isLoading={true} />
                              )
                         ) : filteredInvoices.length === 0 ? (
-                            <div className="text-center py-12">
-                                <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">
-                                    <FileText className="h-7 w-7 text-muted-foreground" />
-                                </div>
-                                <h3 className="mt-2 text-base font-semibold text-foreground font-display">No invoices yet</h3>
-                                <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">Create and send invoices in ZAR or any currency. Get paid faster.</p>
-                                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
+                            <EmptyState
+                                icon={<FileText className="h-7 w-7 text-muted-foreground" />}
+                                title="No invoices yet"
+                                description="Create and send invoices in ZAR or any currency. Get paid faster."
+                                action={
                                     <Link to={createPageUrl("CreateInvoice")}>
                                         <Button className="w-full sm:w-auto rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />
                                             Create your first invoice
                                         </Button>
                                     </Link>
-                                </div>
-                            </div>
+                                }
+                            />
                         ) : (
                             <>
                                 {viewMode === 'list' ? (

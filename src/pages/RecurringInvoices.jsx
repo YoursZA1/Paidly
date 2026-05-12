@@ -4,6 +4,7 @@ import { RecurringInvoice, Client } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Plus, Repeat, AlertCircle, CheckCircle, Loader2, LayoutGrid, List, Zap, BarChart3, ArrowLeft, Download, Upload } from 'lucide-react';
+import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from '@/components/ui/use-toast';
 import { recurringInvoicesToCsv, parseRecurringInvoiceCsv, csvRowToRecurringInvoicePayload } from '@/utils/recurringInvoiceCsvMapping';
 import { Link, useNavigate } from 'react-router-dom';
@@ -265,24 +266,20 @@ export default function RecurringInvoices() {
                 )}
 
                 {recurringInvoices.length === 0 && !isLoading ? (
-                    <Card className="border-dashed border-border">
-                        <CardContent className="pt-12 pb-12">
-                            <div className="text-center">
-                                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                    <Repeat className="w-7 h-7 text-muted-foreground" />
-                                </div>
-                                <h3 className="text-lg font-semibold text-foreground mb-2 font-display">No recurring invoices yet</h3>
-                                <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">Set up a template once and we’ll generate invoices automatically. Supports ZAR and all major currencies.</p>
-                                <Button
-                                    onClick={() => setIsCreateDialogOpen(true)}
-                                    className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Create your first template
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <EmptyState
+                        icon={<Repeat className="w-7 h-7 text-muted-foreground" />}
+                        title="No recurring invoices yet"
+                        description="Set up a template once and we'll generate invoices automatically. Supports ZAR and all major currencies."
+                        action={
+                            <Button
+                                onClick={() => setIsCreateDialogOpen(true)}
+                                className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Create your first template
+                            </Button>
+                        }
+                    />
                 ) : (
                     <Tabs defaultValue="templates" className="space-y-6">
                         <TabsList className="grid w-full max-w-md grid-cols-3">

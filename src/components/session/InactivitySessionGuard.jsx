@@ -7,9 +7,12 @@ import { navigateTo } from "@/lib/navigationService";
 import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
-const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 5 * 60 * 1000);
+// 18 min of no activity triggers the warning; 2 min warning countdown → logout = 20 min total.
+const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 18 * 60 * 1000);
 const WARNING_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_WARNING_TIMEOUT_MS || 2 * 60 * 1000);
-const KEEP_ALIVE_INTERVAL_MS = Number(import.meta.env.VITE_SESSION_KEEPALIVE_MS || 90 * 1000);
+// 4-minute keep-alive interval: Supabase JWTs last 1 hour; autoRefreshToken handles routine refresh.
+// The server endpoint validates the token and the scheduler queues a Supabase refresh.
+const KEEP_ALIVE_INTERVAL_MS = Number(import.meta.env.VITE_SESSION_KEEPALIVE_MS || 4 * 60 * 1000);
 
 export default function InactivitySessionGuard() {
   const { isAuthenticated, authReady, session, logout } = useAuth();
@@ -19,15 +22,17 @@ export default function InactivitySessionGuard() {
     if (isRecoveryCircuitOpen()) return;
     const token = session?.accessToken || session?.access_token || null;
     if (!token) return;
-    await fetch("/api/keep-alive", {
+
+    // Fire-and-forget: server validates the JWT and returns a heartbeat.
+    // Non-blocking so a slow response never delays the Supabase refresh below.
+    fetch("/api/keep-alive", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {
-      // Keep-alive is best-effort and should not disrupt UX.
+      // Best-effort; network hiccups must not disrupt the UX.
     });
+
+    // Supabase token refresh is the authoritative keep-alive mechanism.
     requestSessionRefresh({ source: "keep_alive", silent: true, debounceMs: 0 });
   }, [session?.accessToken, session?.access_token]);
 

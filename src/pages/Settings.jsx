@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,6 +44,7 @@ import PaymentReminderSettings from "@/components/reminders/PaymentReminderSetti
 import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings";
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
+import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 import { createPageUrl } from "@/utils";
@@ -1481,6 +1482,7 @@ const SETTINGS_TABS = [
     { value: "payments", label: "Payment Methods", icon: CreditCard },
     { value: "reminders", label: "Reminders", icon: Bell },
     { value: "subscription", label: "Subscription", icon: Award },
+    { value: "security", label: "Security", icon: ShieldCheck },
 ];
 
 const SETTINGS_TAB_IDS = new Set(SETTINGS_TABS.map((t) => t.value));
@@ -1542,7 +1544,7 @@ export default function Settings() {
                     </div>
 
                     {/* Desktop: Horizontal tabs */}
-                    <TabsList className="hidden md:grid w-full grid-cols-5 gap-2">
+                    <TabsList className="hidden md:grid w-full grid-cols-6 gap-2">
                         {SETTINGS_TABS.map((tab) => {
                             const Icon = tab.icon;
                             return (
@@ -1578,6 +1580,11 @@ export default function Settings() {
                     <TabsContent value="subscription" className="mt-6">
                         <SettingsCard title="Subscription" description="Manage your plan and billing.">
                             <SubscriptionSettings />
+                        </SettingsCard>
+                    </TabsContent>
+                    <TabsContent value="security" className="mt-6">
+                        <SettingsCard title="Security" description="Manage authentication options and account security.">
+                            <TwoFactorSettings />
                         </SettingsCard>
                     </TabsContent>
                 </Tabs>

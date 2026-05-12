@@ -773,6 +773,15 @@ app.get("/api/security/events", async (req, res) => {
 });
 
 /**
+ * Session keep-alive — validates the caller's JWT and returns a heartbeat.
+ * Called by the frontend inactivity guard every few minutes while the user is active.
+ * Lightweight: no DB writes. Scales to many concurrent users.
+ */
+app.post("/api/keep-alive", requireAuthMiddleware, (req, res) => {
+  res.json({ ok: true, ts: Date.now(), uid: req.authUser?.id ?? null });
+});
+
+/**
  * Pre-launch waitlist (email + optional name). Inserts into `waitlist_signups`; duplicate email returns same success message.
  */
 app.post("/api/waitlist", async (req, res) => {

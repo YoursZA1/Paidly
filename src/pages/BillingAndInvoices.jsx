@@ -10,6 +10,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useMySubscriptionsQuery } from "@/hooks/useMySubscriptionsQuery";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
@@ -272,9 +273,11 @@ export default function BillingAndInvoices() {
                   policies applied.
                 </p>
               ) : subsRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No subscription records yet. When you subscribe via PayFast, your agreements will appear here.
-                </p>
+                <EmptyState
+                  icon={<CreditCard className="w-7 h-7 text-muted-foreground" />}
+                  title="No subscription records yet"
+                  description="When you subscribe via PayFast, your agreements will appear here."
+                />
               ) : (
                 <Table aria-label="Your Paidly subscription agreements">
                   <TableHeader>

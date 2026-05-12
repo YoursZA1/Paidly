@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, FileText, LayoutGrid, List, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { parseQuoteCsv, csvRowToQuotePayload } from "@/utils/quoteCsvMapping";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -384,21 +385,19 @@ export default function QuotesPage() {
                                 <QuoteGrid isLoading={true} />
                             )
                         ) : sortedQuotes.length === 0 ? (
-                            <div className="text-center py-12">
-                                <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">
-                                    <FileText className="h-7 w-7 text-muted-foreground" />
-                                </div>
-                                <h3 className="mt-2 text-base font-semibold text-foreground font-display">No quotes yet</h3>
-                                <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">Send professional quotes in ZAR or any currency. Convert to invoices when approved.</p>
-                                <div className="mt-6">
+                            <EmptyState
+                                icon={<FileText className="h-7 w-7 text-muted-foreground" />}
+                                title="No quotes yet"
+                                description="Send professional quotes in ZAR or any currency. Convert to invoices when approved."
+                                action={
                                     <Link to={createPageUrl("CreateQuote")}>
                                         <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />
                                             Create your first quote
                                         </Button>
                                     </Link>
-                                </div>
-                            </div>
+                                }
+                            />
                         ) : (
                             <>
                                 {viewMode === 'list' ? (
