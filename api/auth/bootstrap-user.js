@@ -1,3 +1,3 @@
-import bootstrapUserOrganizationHandler from "../lib/bootstrapUserOrganization.js";
+import bootstrapUserOrganizationHandler from "../../server/src/bootstrapUserOrganizationApi.js";
 
 export default bootstrapUserOrganizationHandler;

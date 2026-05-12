@@ -1,12 +1,11 @@
 /**
  * Vercel Serverless (Node.js) OG Image generator (1200x630).
- * Query params: num (invoice number), client (client name), total (e.g. "R 7,750.00").
- * Paidly brand: Orange #f97316, Slate #0f172a.
+ * Routed via /api/public-share?doc=og (see vercel.json rewrite from /api/og).
  */
 import React from "react";
 import { ImageResponse } from "@vercel/og";
 
-export default async function handler(req, res) {
+export default async function renderOgImageHandler(req, res) {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const searchParams = url.searchParams;
@@ -88,4 +87,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Failed to generate OG image" });
   }
 }
-

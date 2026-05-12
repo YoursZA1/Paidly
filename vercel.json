@@ -21,6 +21,38 @@
   ],
   "rewrites": [
     {
+      "source": "/api/bootstrap-org",
+      "destination": "/api/auth/bootstrap-user"
+    },
+    {
+      "source": "/api/cron/expire-trials",
+      "destination": "/api/cron?job=expire-trials"
+    },
+    {
+      "source": "/api/drafts/get",
+      "destination": "/api/drafts?op=get"
+    },
+    {
+      "source": "/api/drafts/save",
+      "destination": "/api/drafts?op=save"
+    },
+    {
+      "source": "/api/drafts/delete",
+      "destination": "/api/drafts?op=delete"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/system?op=health"
+    },
+    {
+      "source": "/api/keep-alive",
+      "destination": "/api/system?op=keep-alive"
+    },
+    {
+      "source": "/api/og",
+      "destination": "/api/public-share?doc=og"
+    },
+    {
       "source": "/affiliate/dashboard",
       "destination": "/api/affiliates?__affiliateDashboard=1"
     },

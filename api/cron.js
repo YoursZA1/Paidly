@@ -385,6 +385,18 @@ export default async function handler(req, res) {
         ...out,
       });
     }
+    if (job === "expire-trials") {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase.rpc("expire_all_overdue_trials");
+      if (error) throw error;
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "expire-trials",
+        mode: "batch",
+        rows: Number(data || 0),
+      });
+    }
     return res.status(404).json({ error: "Unknown cron job" });
   } catch (e) {
     console.error("[api/cron]", job, e);

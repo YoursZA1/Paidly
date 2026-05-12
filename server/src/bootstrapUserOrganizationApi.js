@@ -8,7 +8,7 @@ function getSupabaseAdmin() {
 }
 
 /**
- * POST /api/auth/bootstrap-user (and legacy /api/bootstrap-org).
+ * POST /api/auth/bootstrap-user (and legacy /api/bootstrap-org via rewrite).
  * Validates Bearer JWT, optionally checks body user_id, runs service-role bootstrap_user_organization.
  */
 export default async function bootstrapUserOrganizationHandler(req, res) {

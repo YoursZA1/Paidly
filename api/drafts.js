@@ -1,3 +1,6 @@
+/**
+ * Single function for /api/drafts/* (Hobby). Rewrites set ?op=get|save|delete.
+ */
 import { createClient } from "@supabase/supabase-js";
 
 function adminClient() {
@@ -8,7 +11,16 @@ function adminClient() {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const op = String(req.query?.op || "").trim();
+  if (!op || !["get", "save", "delete"].includes(op)) {
+    return res.status(400).json({ error: "Missing or invalid op" });
+  }
+
   const admin = adminClient();
   if (!admin) return res.status(503).json({ error: "Server configuration error" });
   const auth = req.headers.authorization || "";
@@ -22,6 +34,30 @@ export default async function handler(req, res) {
   const documentType = String(body.document_type || "");
   const draftKey = String(body.draft_key || "default");
   if (!userId || userId !== authData.user.id) return res.status(403).json({ error: "User mismatch" });
+
+  if (op === "get") {
+    const { data, error } = await admin
+      .from("drafts")
+      .select("user_id, document_type, draft_key, form_data, updated_at, version")
+      .eq("user_id", userId)
+      .eq("document_type", documentType)
+      .eq("draft_key", draftKey)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message || "Fetch failed" });
+    return res.status(200).json({ ok: true, draft: data || null });
+  }
+
+  if (op === "delete") {
+    const { error } = await admin
+      .from("drafts")
+      .delete()
+      .eq("user_id", userId)
+      .eq("document_type", documentType)
+      .eq("draft_key", draftKey);
+    if (error) return res.status(500).json({ error: error.message || "Delete failed" });
+    return res.status(200).json({ ok: true });
+  }
+
   if (!["invoice", "payslip"].includes(documentType)) {
     return res.status(400).json({ error: "Unsupported document type" });
   }
