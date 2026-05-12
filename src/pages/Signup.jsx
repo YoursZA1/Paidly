@@ -162,6 +162,7 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const turnstile = useTurnstileChallenge({
@@ -601,19 +602,23 @@ export default function Signup() {
               <Button
                 className="mt-4"
                 onClick={async () => {
+                  setResendStatus("");
                   try {
                     const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
                     await SupabaseAuthService.resendSignupEmail(email);
-                    alert(
-                      "If an account exists for this email, a confirmation message was sent. Please check your inbox."
-                    );
+                    setResendStatus("success:Confirmation email sent — please check your inbox.");
                   } catch (err) {
-                    alert(err?.message || "Failed to resend confirmation email.");
+                    setResendStatus("error:" + (err?.message || "Failed to resend confirmation email."));
                   }
                 }}
               >
                 Resend confirmation email
               </Button>
+              {resendStatus && (
+                <p className={`text-sm mt-2 ${resendStatus.startsWith("success:") ? "text-green-400" : "text-red-400"}`}>
+                  {resendStatus.replace(/^(success|error):/, "")}
+                </p>
+              )}
             </div>
           ) : step === 1 ? (
             <form onSubmit={handleStepOne} className="space-y-2.5">

@@ -10,7 +10,7 @@ function envTruthy(v) {
   return s === '1' || s === 'true' || s === 'yes'
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const envDir = '.';
   const env = loadEnv(mode, envDir, '');
   if (
@@ -27,7 +27,21 @@ export default defineConfig(({ mode }) => {
   const backendTarget = serverUrl.replace(/\/$/, '');
 
   return {
-    plugins: [react()],
+    plugins: await (async () => {
+      const plugins = [react()];
+      // Dynamically import the Sentry Vite plugin — only when SENTRY_AUTH_TOKEN is set.
+      // Static import causes Rollup build-import-analysis failures for plain .js Sentry consumers.
+      if (process.env.SENTRY_AUTH_TOKEN) {
+        const { sentryVitePlugin } = await import('@sentry/vite-plugin');
+        plugins.push(sentryVitePlugin({
+          authToken: process.env.SENTRY_AUTH_TOKEN,
+          org: process.env.SENTRY_ORG,
+          project: process.env.SENTRY_PROJECT || 'paidly-frontend',
+          telemetry: false,
+        }));
+      }
+      return plugins;
+    })(),
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
@@ -53,10 +67,12 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
-            // PDF stack must stay in `vendor` (not a dedicated `pdf` chunk): a separate pdf chunk
-            // caused "Circular chunk: pdf -> vendor -> pdf" and TDZ runtime errors.
+            // PDF stack (jspdf/html2canvas/html2pdf.js) is imported only via dynamic await import()
+            // in generatePdfFromElement.js — let Rollup create a natural lazy chunk for it.
+            // NOTE: if a future change adds a static import, re-add 'vendor' assignment here to
+            // avoid the "Circular chunk: pdf -> vendor -> pdf" TDZ that occurred previously.
             if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('html2pdf')) {
-              return 'vendor';
+              return 'pdf';
             }
             if (id.includes('@supabase/supabase-js')) return 'supabase';
             if (id.includes('recharts')) return 'recharts';
@@ -70,9 +86,11 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-      // Main `vendor` includes html2pdf/jspdf/html2canvas (~760kb min) — splitting them out caused
-      // Rollup circular chunks + TDZ; splitting React/Radix caused vendor↔chunk cycles too.
-      chunkSizeWarningLimit: 2800,
+      // `vendor` no longer includes the PDF stack — html2pdf/jspdf/html2canvas are in the lazy `pdf`
+      // chunk. chunkSizeWarningLimit reduced accordingly (vendor is now ~1,900 kB min).
+      chunkSizeWarningLimit: 2100,
+      // Generate source maps only when uploading to Sentry (keeps public build clean)
+      sourcemap: !!process.env.SENTRY_AUTH_TOKEN,
     },
   };
 });

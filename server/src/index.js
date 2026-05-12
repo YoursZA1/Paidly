@@ -1,3 +1,4 @@
+import { initSentry, Sentry } from "./sentry.js";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,6 +100,7 @@ import {
 import { sendUnexpectedError } from "./apiResponse.js";
 import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
 import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
+import { registerAffiliateUserRoutes } from "./affiliateUserRoutes.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
@@ -127,6 +129,9 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 // Repo root .env (Vite uses this; PayFast vars are often here if not duplicated in server/.env)
 dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
+// Must be called after dotenv so SENTRY_DSN is available
+initSentry();
+
 const app = express();
 const authRefreshInFlight = new Map();
 // So req.ip / X-Forwarded-For are correct behind a reverse proxy (e.g. nginx, Vercel, Railway).
@@ -141,6 +146,16 @@ const storageBucket = process.env.SUPABASE_STORAGE_BUCKET || "paidly";
 // Parse ADMIN_BYPASS_AUTH: accept "true", "1", "yes", "on" (case-insensitive)
 const adminBypassEnv = (process.env.ADMIN_BYPASS_AUTH || "").toLowerCase().trim();
 const adminBypassEnabled = ["true", "1", "yes", "on"].includes(adminBypassEnv);
+
+// Hard-stop: ADMIN_BYPASS_AUTH must never be enabled in production — it allows
+// any email in ADMIN_BYPASS_EMAILS to access admin routes without a proper role.
+if (adminBypassEnabled && process.env.NODE_ENV === "production") {
+  console.error(
+    "[FATAL] ADMIN_BYPASS_AUTH=true is not allowed in production. " +
+    "Unset the variable or set it to false, then redeploy."
+  );
+  process.exit(1);
+}
 
 function makeRequestId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -894,57 +909,8 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   }
 });
 
-/**
- * Attach referral attribution after signup/login. Validates JWT server-side; idempotent per referred user.
- */
-app.post("/api/referrals/create", async (req, res) => {
-  try {
-    const { user, error } = await getUserFromRequest(req);
-    if (error || !user?.id) {
-      return res.status(401).json({ error: error || "Unauthorized" });
-    }
-    const referralCode = req.body?.referral_code ?? req.body?.referralCode;
-    const result = await createReferralAttributionForUser(supabaseAdmin, {
-      referralCode: referralCode != null ? String(referralCode) : "",
-      userId: user.id,
-    });
-    if (!result.ok) {
-      const err = result.error;
-      if (err === "self_referral" || err === "invalid_affiliate" || err === "invalid_code") {
-        return res.status(400).json({ error: err });
-      }
-      return res.status(500).json({ error: err || "failed" });
-    }
-    return res.json({ ok: true, idempotent: result.idempotent === true });
-  } catch (err) {
-    console.error("[referrals/create]", err?.message || err);
-    return res.status(500).json({ error: "Unexpected error" });
-  }
-});
-
-/**
- * Affiliate dashboard: stats + commissions (JWT).
- * Canonical on API host: GET /affiliate/dashboard — alias: GET /api/affiliate/dashboard
- */
-async function handleAffiliateDashboardGet(req, res) {
-  try {
-    const { user, error } = await getUserFromRequest(req);
-    if (error || !user?.id) {
-      return res.status(401).json({ error: error || "Unauthorized" });
-    }
-    const payload = await buildAffiliateDashboardPayload(supabaseAdmin, user.id);
-    if (!payload.ok) {
-      return res.status(500).json({ error: payload.error || "failed" });
-    }
-    return res.json(payload);
-  } catch (err) {
-    console.error("[affiliate/dashboard]", err?.message || err);
-    return res.status(500).json({ error: "Unexpected error" });
-  }
-}
-
-app.get("/affiliate/dashboard", handleAffiliateDashboardGet);
-app.get("/api/affiliate/dashboard", handleAffiliateDashboardGet);
+// Affiliate user routes: POST /api/referrals/create, GET /affiliate/dashboard, GET /api/affiliate/dashboard
+registerAffiliateUserRoutes(app);
 
 /**
  * Password sign-in proxied through the API so we can rate-limit by IP before hitting Supabase.
@@ -3256,6 +3222,9 @@ if (!startupDeploymentHealth.ok) {
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+// Must come after all routes and before custom error handlers
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err, req, res, next) => {
   const ip = getClientIp(req);

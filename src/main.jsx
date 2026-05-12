@@ -1,3 +1,6 @@
+import { initSentry } from '@/lib/sentry'
+initSentry()
+
 import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider } from '@tanstack/react-query'

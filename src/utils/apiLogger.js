@@ -1,3 +1,5 @@
+import { captureException, captureMessage } from "@/lib/sentry";
+
 /**
  * Central API logging: failed requests, slow responses, and unhandled errors.
  * Logs include page/endpoint context for easier debugging.
@@ -23,6 +25,11 @@ export function logApiFailure(endpoint, error, page) {
   console.error(
     `[Paidly API] FAILED | page=${p} | endpoint=${endpoint} | error=${msg}`
   );
+  if (error instanceof Error) {
+    captureException(error, { endpoint, page: p });
+  } else {
+    captureMessage(`API failure: ${endpoint} — ${msg}`, "error");
+  }
 }
 
 /**
@@ -49,6 +56,7 @@ export function logUnhandledError(error, page) {
   console.error(
     `[Paidly UI] UNHANDLED | page=${p} | error=${error?.message ?? error}`
   );
+  captureException(error instanceof Error ? error : new Error(String(error ?? "Unknown error")), { page: p });
 }
 
 /**

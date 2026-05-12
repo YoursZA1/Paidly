@@ -2,6 +2,7 @@ import React from "react";
 import ApplicationErrorPage from "@/pages/ApplicationErrorPage.jsx";
 import { logUnhandledError, getCurrentPage } from "@/utils/apiLogger";
 import { PAIDLY_APPLICATION_ERROR_EVENT } from "@/utils/globalAsyncErrorHandlers";
+import { captureException } from "@/lib/sentry";
 
 /**
  * Root error boundary: React render errors + {@link PAIDLY_APPLICATION_ERROR_EVENT} from global async handlers.
@@ -32,6 +33,7 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     logUnhandledError(error, getCurrentPage());
+    captureException(error, { componentStack: info?.componentStack });
     console.error("App crash:", error, info);
   }
 

@@ -1,6 +1,12 @@
 /**
- * Custom API Client - BreakInvoice Backend
- * Provides a flexible API for managing business entities and integrations
+ * Custom API Client — data access layer for all Paidly entities.
+ *
+ * SPLIT PLAN (tracked): This file (2,800+ lines) should be split into:
+ *   src/api/entity/EntityManager.js        — CRUD base class (~355–1831)
+ *   src/api/auth/AuthManager.js            — session + profile writes (~1832–2518)
+ *   src/api/integration/IntegrationManager.js — external service helpers (~2519–2754)
+ *   src/api/customClient.js                — CustomAPIClient + createClient (thin orchestrator)
+ * Prerequisite: add unit tests covering each class before extracting.
  */
 
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
