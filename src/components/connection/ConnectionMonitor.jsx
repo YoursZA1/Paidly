@@ -228,11 +228,14 @@ export default function ConnectionMonitor() {
       sessionReason,
     });
     if (!mapped) return;
-    setConnectionState({
-      ...mapped,
-      lastCheckAt: Date.now(),
-    });
-  }, [sessionManager, sessionReason, sessionStatus, setConnectionState]);
+    if (mapped.status === CONNECTION_STATUS.CONNECTED) {
+      // Use markConnected so pending scheduleDegradedTransition timers are cleared and
+      // cannot fire later to override a healthy CONNECTED state back to DISCONNECTED.
+      markConnected();
+      return;
+    }
+    setConnectionState({ ...mapped, lastCheckAt: Date.now() });
+  }, [markConnected, sessionManager, sessionReason, sessionStatus, setConnectionState]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;

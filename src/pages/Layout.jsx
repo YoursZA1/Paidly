@@ -327,10 +327,10 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
 
   if (item.type === "section") {
     if (collapsed && !mobile) {
-      return <div className="my-2 h-px bg-sidebar-border" />;
+      return <div className="my-2.5 mx-2 h-px bg-sidebar-border/50" />;
     }
     return (
-      <div className={`px-3 py-1.5 mt-4 first:mt-2 text-[10px] font-medium uppercase tracking-widest ${mobile ? "text-muted-foreground/70" : "text-sidebar-foreground/45"}`}>
+      <div className={`px-3 py-1 mt-5 first:mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${mobile ? "text-muted-foreground/50" : "text-sidebar-foreground/28"}`}>
         {item.title}
       </div>
     );
@@ -342,20 +342,20 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
     const buttonEl = (
       <button
         type="button"
-        className={`group flex items-center w-full transition-all font-mono ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl hover:bg-white/10" : mobile ? "rounded-full" : "rounded-full hover:bg-sidebar-accent"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-full" : (!collapsed ? "py-2 gap-3 px-4" : "")}`}
+        className={`group flex items-center w-full transition-all duration-150 ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl hover:bg-white/[0.06]" : mobile ? "rounded-2xl" : "rounded-xl hover:bg-white/[0.06]"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-2xl" : (!collapsed ? "py-2 gap-3 px-3" : "")}`}
         style={{ cursor: 'pointer' }}
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-controls={`nav-children-${item.id}`}
       >
-        <span className={`sidebar-nav-icon inline-flex items-center justify-center h-10 w-10 rounded-xl transition-all bg-transparent [&_svg]:size-5 ${collapsed && !mobile ? "text-sidebar-foreground/80 group-hover:text-sidebar-foreground group-hover:bg-white/5" : mobile ? "text-foreground" : "text-sidebar-foreground"}`}>
-          <item.icon className="size-5" strokeWidth={2} />
+        <span className={`sidebar-nav-icon inline-flex items-center justify-center h-8 w-8 rounded-lg transition-all bg-transparent [&_svg]:size-[18px] ${collapsed && !mobile ? "text-sidebar-foreground/55 group-hover:text-sidebar-foreground/90" : mobile ? "text-foreground/70" : "text-sidebar-foreground/55 group-hover:text-sidebar-foreground/90"}`}>
+          <item.icon className="size-[18px]" strokeWidth={2} />
         </span>
         {!collapsed && (
-          <span className={`text-[13px] font-normal transition-colors ${mobile ? "text-foreground" : "text-sidebar-foreground"}`}>{item.title}</span>
+          <span className={`text-[13px] font-normal transition-colors ${mobile ? "text-foreground" : "text-sidebar-foreground/65 group-hover:text-sidebar-foreground/90"}`}>{item.title}</span>
         )}
         {!collapsed && (
-          <span className={`ml-auto transition-transform ${mobile ? "text-foreground" : "text-sidebar-foreground/80"} ${open ? "rotate-90" : "rotate-0"}`}>
+          <span className={`ml-auto transition-transform ${mobile ? "text-foreground/50" : "text-sidebar-foreground/30"} ${open ? "rotate-90" : "rotate-0"}`}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </span>
         )}
@@ -413,14 +413,14 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
               to={item.url}
               onClick={onClick}
               aria-label={item.title}
-              className={`relative z-10 group flex items-center transition-all justify-center px-2 py-2 rounded-lg border-l-[3px] ${isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-white/10"}`}
+              className={`relative z-10 group flex items-center transition-all duration-150 justify-center px-2 py-2 rounded-xl ${isActive ? "bg-white/[0.12]" : "hover:bg-white/[0.06]"}`}
             >
               <span
-                className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
-                  ${isActive ? "text-primary" : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"}
+                className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-[18px]
+                  ${isActive ? "text-orange-400" : "text-sidebar-foreground/55 group-hover:text-sidebar-foreground/90"}
                 `}
               >
-                <item.icon className="size-5" strokeWidth={2} />
+                <item.icon className="size-[18px]" strokeWidth={isActive ? 2.5 : 2} />
               </span>
             </Link>
           </TooltipTrigger>
@@ -433,16 +433,16 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
           id={item.id}
           to={item.url}
           onClick={onClick}
-          className={`relative z-10 group flex items-center transition-all rounded-lg border-l-[3px] ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2.5 gap-3 px-3 pl-4"} ${mobile ? (isActive ? "bg-orange-50 border-l-transparent" : "border-l-transparent hover:bg-muted/60") : (isActive ? "border-l-primary bg-transparent" : "border-l-transparent hover:bg-sidebar-accent")}`}
+          className={`relative z-10 group flex items-center transition-all duration-150 ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2 gap-3 px-3 rounded-xl"} ${mobile ? (isActive ? "bg-orange-50" : "hover:bg-muted/60") : (isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]")}`}
         >
           <span
-            className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors shrink-0 [&_svg]:size-5
-              ${mobile ? (isActive ? "text-primary" : "text-foreground group-hover:text-slate-600") : (isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-sidebar-foreground")}
+            className={`sidebar-nav-icon inline-flex items-center justify-center h-8 w-8 rounded-lg transition-colors shrink-0 [&_svg]:size-[18px]
+              ${mobile ? (isActive ? "text-primary" : "text-foreground/70 group-hover:text-foreground") : (isActive ? "text-orange-400" : "text-sidebar-foreground/55 group-hover:text-sidebar-foreground/90")}
             `}
           >
-            <item.icon className="size-5" strokeWidth={2} />
+            <item.icon className="size-[18px]" strokeWidth={isActive ? 2.5 : 2} />
           </span>
-          <span className={`text-[13px] transition-colors flex-1 text-left ${isActive ? "text-primary font-semibold" : mobile ? "text-foreground font-normal" : "text-sidebar-foreground font-normal"}`}>{item.title}</span>
+          <span className={`text-[13px] transition-colors flex-1 text-left ${isActive ? (mobile ? "text-primary font-semibold" : "text-white font-medium") : (mobile ? "text-foreground font-normal" : "text-sidebar-foreground/65 font-normal group-hover:text-sidebar-foreground/90")}`}>{item.title}</span>
           {mobile && isActive && (
             <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_8px_rgba(234,88,12,0.4)]" aria-hidden />
           )}
@@ -907,7 +907,7 @@ export default function Layout({ children, currentPageName }) {
                   />
                 </div>
                 {!isSidebarCollapsed && (
-                  <span className="text-[15px] font-semibold text-sidebar-foreground tracking-tight">
+                  <span className="text-[15px] font-bold text-sidebar-foreground tracking-tight">
                     Paidly
                   </span>
                 )}
@@ -967,19 +967,44 @@ export default function Layout({ children, currentPageName }) {
             </Link>
           </div>
 
-          {/* Logout — bottom, separated, muted with red hover */}
-          <div className={`mt-4 pt-4 border-t border-sidebar-border ${isSidebarCollapsed ? "px-2 pb-4" : "px-4 pb-4"}`}>
-            <button
-              onClick={handleLogout}
-              title={isSidebarCollapsed ? "Log out" : undefined}
-              aria-label={isSidebarCollapsed ? "Log out" : undefined}
-              className={`flex items-center text-slate-400 hover:text-red-500 transition-colors w-full py-2.5 text-[13px] rounded-lg ${
-                isSidebarCollapsed ? "justify-center" : "gap-3"
-              }`}
-            >
-              <LogOut className="size-5 shrink-0" />
-              {!isSidebarCollapsed && "Log out"}
-            </button>
+          {/* User identity + logout */}
+          <div className={`mt-4 pt-4 border-t border-sidebar-border/40 ${isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-4"}`}>
+            {isSidebarCollapsed ? (
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleLogout}
+                    aria-label="Log out"
+                    className="flex items-center justify-center w-full text-sidebar-foreground/35 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150 py-2.5 rounded-xl"
+                  >
+                    <LogOut className="size-4 shrink-0" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8} className="font-medium">Log out</TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/[0.06] transition-colors duration-150 group">
+                <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0 text-primary text-[11px] font-bold overflow-hidden border border-primary/20">
+                  {user?.logo_url ? (
+                    <Logo path={user.logo_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                  ) : (
+                    user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-sidebar-foreground/90 truncate leading-tight">{user?.company_name || user?.full_name || "My Business"}</p>
+                  <p className="text-[10px] text-sidebar-foreground/35 truncate leading-tight capitalize mt-px">{planForNavFeatures === "none" ? "Free plan" : `${planForNavFeatures} plan`}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Log out"
+                  aria-label="Log out"
+                  className="shrink-0 p-1.5 rounded-lg text-sidebar-foreground/25 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150 opacity-0 group-hover:opacity-100"
+                >
+                  <LogOut className="size-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>

@@ -57,10 +57,10 @@ import {
 } from "@/utils/documentBrandColors";
 
 const SettingsCard = ({ title, description, children }) => (
-    <section className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 sm:p-8 mb-4 sm:mb-6 shadow-sm min-w-0 overflow-x-hidden">
-        <div className="mb-6">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+    <section className="bg-card border border-border rounded-2xl p-4 sm:p-7 mb-4 sm:mb-5 shadow-sm min-w-0 overflow-x-hidden">
+        <div className="mb-5 pb-4 border-b border-border/60">
+            <h3 className="text-base font-semibold text-foreground">{title}</h3>
+            {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
         </div>
         {children}
     </section>
@@ -431,11 +431,11 @@ function CompanyProfileSettings() {
     if (isLoading) {
         return (
             <div className="animate-pulse space-y-6">
-                <div className="h-12 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
-                <div className="h-12 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
-                <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
-                <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
-                <div className="h-32 bg-slate-100 dark:bg-slate-800 rounded-xl w-full" />
+                <div className="h-12 bg-muted rounded-xl w-full" />
+                <div className="h-12 bg-muted rounded-xl w-full" />
+                <div className="h-28 bg-muted rounded-xl w-full" />
+                <div className="h-28 bg-muted rounded-xl w-full" />
+                <div className="h-32 bg-muted rounded-xl w-full" />
             </div>
         );
     }
@@ -503,15 +503,20 @@ function CompanyProfileSettings() {
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2 mb-5">
-                    <span className={`px-2.5 py-1 rounded-md text-xs ${formData.company_name ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" : "bg-slate-50 text-slate-400 dark:bg-slate-800/50 dark:text-slate-500"}`}>
-                        {formData.company_name ? "✓" : "○"} Company
-                    </span>
-                    <span className={`px-2.5 py-1 rounded-md text-xs ${formData.company_address ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" : "bg-slate-50 text-slate-400 dark:bg-slate-800/50 dark:text-slate-500"}`}>
-                        {formData.company_address ? "✓" : "○"} Address
-                    </span>
-                    <span className={`px-2.5 py-1 rounded-md text-xs ${formData.logo_url ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" : "bg-slate-50 text-slate-400 dark:bg-slate-800/50 dark:text-slate-500"}`}>
-                        {formData.logo_url ? "✓" : "○"} Logo
-                    </span>
+                    {[
+                        { label: "Company name", done: !!formData.company_name },
+                        { label: "Address", done: !!formData.company_address },
+                        { label: "Logo", done: !!formData.logo_url },
+                    ].map(({ label, done }) => (
+                        <span key={label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            done
+                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                                : "bg-muted text-muted-foreground border border-border"
+                        }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${done ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                            {label}
+                        </span>
+                    ))}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -522,9 +527,9 @@ function CompanyProfileSettings() {
                             value={formData.display_name}
                             onChange={(e) => handleInputChange("display_name", e.target.value)}
                             placeholder="e.g., Mando Mavelele"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Shown on your dashboard greeting.</p>
+                        <p className="text-xs text-muted-foreground">Shown on your dashboard greeting.</p>
                     </div>
                     <div className="space-y-1.5">
                         <Label htmlFor="company_name" className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -536,7 +541,7 @@ function CompanyProfileSettings() {
                             value={formData.company_name}
                             onChange={(e) => handleInputChange("company_name", e.target.value)}
                             placeholder="e.g., Brandcafe"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
                         {!formData.company_name && (
                             <p className="text-xs text-amber-600 dark:text-amber-500">Required for professional invoices.</p>
@@ -552,7 +557,7 @@ function CompanyProfileSettings() {
                             value={formData.company_address}
                             onChange={(e) => handleInputChange("company_address", e.target.value)}
                             placeholder="123 Anderson Street, Cape Town, 8001"
-                            className="min-h-24 rounded-lg resize-none text-sm border-slate-200 dark:border-slate-700"
+                            className="min-h-24 rounded-lg resize-none text-sm"
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -565,7 +570,7 @@ function CompanyProfileSettings() {
                             value={formData.phone}
                             onChange={(e) => handleInputChange("phone", e.target.value)}
                             placeholder="e.g., +27 21 123 4567"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                             inputMode="tel"
                             autoComplete="tel"
                         />
@@ -580,15 +585,15 @@ function CompanyProfileSettings() {
                             value={formData.company_website}
                             onChange={(e) => handleInputChange("company_website", e.target.value)}
                             placeholder="https://yourcompany.com"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                             inputMode="url"
                             autoComplete="url"
                         />
                     </div>
                     <div className="md:col-span-2 space-y-4 text-left">
                         <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Default bank details</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <p className="text-sm font-semibold text-foreground">Default bank details</p>
+                            <p className="text-xs text-muted-foreground mt-1">
                                 Shown on PDFs when an invoice does not use a saved bank account. Invoice-specific accounts still take priority.
                             </p>
                         </div>
@@ -600,7 +605,7 @@ function CompanyProfileSettings() {
                                     value={formData.business_bank_name}
                                     onChange={(e) => handleInputChange("business_bank_name", e.target.value)}
                                     placeholder="e.g., FNB"
-                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                    className="h-11 rounded-lg"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -610,7 +615,7 @@ function CompanyProfileSettings() {
                                     value={formData.business_account_name}
                                     onChange={(e) => handleInputChange("business_account_name", e.target.value)}
                                     placeholder="Business name on account"
-                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                    className="h-11 rounded-lg"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -620,7 +625,7 @@ function CompanyProfileSettings() {
                                     value={formData.business_account_number}
                                     onChange={(e) => handleInputChange("business_account_number", e.target.value)}
                                     placeholder="Account number"
-                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                    className="h-11 rounded-lg"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -630,7 +635,7 @@ function CompanyProfileSettings() {
                                     value={formData.business_branch_code}
                                     onChange={(e) => handleInputChange("business_branch_code", e.target.value)}
                                     placeholder="e.g., 250655"
-                                    className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                                    className="h-11 rounded-lg"
                                 />
                             </div>
                         </div>
@@ -644,7 +649,7 @@ function CompanyProfileSettings() {
                             onChange={(v) => handleInputChange("currency", v)}
                             className="h-11 rounded-lg"
                         />
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Used for new invoices.</p>
+                        <p className="text-xs text-muted-foreground">Used for new invoices.</p>
                     </div>
                 </div>
             </SettingsCard>
@@ -653,10 +658,10 @@ function CompanyProfileSettings() {
                 title="Logo & Branding"
                 description="Upload your high-res logo for professional document headers."
             >
-                <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-muted/50 rounded-2xl border border-dashed border-border">
                     <div className="flex gap-4">
                         <div className="text-center">
-                            <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                            <div className="w-20 h-20 rounded-full bg-background border border-border flex items-center justify-center overflow-hidden">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith("blob:") ? (
                                         <img
@@ -671,13 +676,13 @@ function CompanyProfileSettings() {
                                         <LogoImage src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
                                     )
                                 ) : (
-                                    <UserIcon className="w-10 h-10 text-slate-400" />
+                                    <UserIcon className="w-10 h-10 text-muted-foreground" />
                                 )}
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-1">Profile</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Profile</p>
                         </div>
                         <div className="text-center">
-                            <div className="w-20 h-20 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                            <div className="w-20 h-20 rounded-lg bg-background border border-border flex items-center justify-center overflow-hidden">
                                 {formData.logo_url ? (
                                     formData.logo_url.startsWith("blob:") ? (
                                         <img
@@ -692,17 +697,17 @@ function CompanyProfileSettings() {
                                         <LogoImage src={formData.logo_url} alt="Logo" className="object-contain w-12 h-12" />
                                     )
                                 ) : (
-                                    <ImageIcon className="w-6 h-6 text-slate-400" />
+                                    <ImageIcon className="w-6 h-6 text-muted-foreground" />
                                 )}
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-1">Invoice</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Invoice</p>
                         </div>
                     </div>
                     <div className="flex-1 space-y-2 text-center md:text-left">
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                             <label
                                 htmlFor="logo-upload"
-                                className="cursor-pointer inline-flex items-center justify-center gap-2 px-6 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                className="cursor-pointer inline-flex items-center justify-center gap-2 px-6 py-2 bg-background border border-border rounded-xl font-bold text-foreground hover:bg-muted/60 transition-colors"
                             >
                                 <UploadCloud className="w-4 h-4" />
                                 {logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}
@@ -721,7 +726,7 @@ function CompanyProfileSettings() {
                           className="hidden"
                           onChange={handleLogoChange}
                         />
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                             JPEG, PNG, or SVG (SVG scales best in PDFs). Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
                         {logoFile && (
@@ -748,7 +753,7 @@ function CompanyProfileSettings() {
                             value={formData.invoice_header}
                             onChange={(e) => handleInputChange("invoice_header", e.target.value)}
                             placeholder="e.g., Thank you for your business!"
-                            className="min-h-16 rounded-lg resize-none text-sm border-slate-200 dark:border-slate-700"
+                            className="min-h-16 rounded-lg resize-none text-sm border-border"
                         />
                     </div>
 
@@ -769,7 +774,7 @@ function CompanyProfileSettings() {
                                     className={`relative text-left rounded-xl border-2 p-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
                                         formData.invoice_template === template.id
                                             ? "border-orange-500 ring-2 ring-orange-500/30"
-                                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                                            : "border-border hover:border-primary/40"
                                     }`}
                                 >
                                     {formData.invoice_template === template.id && (
@@ -778,7 +783,7 @@ function CompanyProfileSettings() {
                                         </div>
                                     )}
                                     <div
-                                        className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-slate-200 dark:border-slate-700"
+                                        className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-border"
                                         style={{ backgroundColor: template.colors[1] }}
                                     >
                                         <div className="h-1/4 p-2" style={{ backgroundColor: template.colors[0] }}>
@@ -787,27 +792,27 @@ function CompanyProfileSettings() {
                                         </div>
                                         <div className="p-2 space-y-1.5">
                                             <div className="flex gap-1">
-                                                <div className="w-8 h-1 rounded-full bg-slate-200 dark:bg-slate-600" />
-                                                <div className="w-6 h-1 rounded-full bg-slate-200 dark:bg-slate-600" />
+                                                <div className="w-8 h-1 rounded-full bg-border" />
+                                                <div className="w-6 h-1 rounded-full bg-border" />
                                             </div>
-                                            <div className="w-full h-0.5 bg-slate-200 dark:bg-slate-600 rounded-full" />
-                                            <div className="w-full h-0.5 bg-slate-200 dark:bg-slate-600 rounded-full" />
-                                            <div className="w-3/4 h-0.5 bg-slate-200 dark:bg-slate-600 rounded-full" />
+                                            <div className="w-full h-0.5 bg-border rounded-full" />
+                                            <div className="w-full h-0.5 bg-border rounded-full" />
+                                            <div className="w-3/4 h-0.5 bg-border rounded-full" />
                                             <div className="mt-2 flex justify-end">
                                                 <div className="w-8 h-2 rounded" style={{ backgroundColor: template.colors[2] }} />
                                             </div>
                                         </div>
                                     </div>
                                     <p className="text-sm font-medium text-foreground text-center">{template.name}</p>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mt-0.5">{template.description}</p>
+                                    <p className="text-[11px] text-muted-foreground text-center mt-0.5">{template.description}</p>
                                 </button>
                             ))}
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4 space-y-3">
+                        <div className="rounded-xl border border-border bg-muted/50 p-4 space-y-3">
                             <div>
                                 <Label className="text-sm font-medium text-foreground">Document accent colours</Label>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                     Used for the Paidly Document layout (bars, highlights, totals). Leave as default for Paidly orange, or pick your brand hex colours.
                                 </p>
                             </div>
@@ -820,7 +825,7 @@ function CompanyProfileSettings() {
                                         <input
                                             id="document_brand_primary"
                                             type="color"
-                                            className="h-10 w-14 cursor-pointer rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 p-0.5"
+                                            className="h-10 w-14 cursor-pointer rounded-md border border-border bg-background p-0.5"
                                             value={
                                                 parseDocumentBrandHex(formData.document_brand_primary) ||
                                                 DEFAULT_DOCUMENT_BRAND_PRIMARY
@@ -847,7 +852,7 @@ function CompanyProfileSettings() {
                                         <input
                                             id="document_brand_secondary"
                                             type="color"
-                                            className="h-10 w-14 cursor-pointer rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 p-0.5"
+                                            className="h-10 w-14 cursor-pointer rounded-md border border-border bg-background p-0.5"
                                             value={
                                                 parseDocumentBrandHex(formData.document_brand_secondary) ||
                                                 DEFAULT_DOCUMENT_BRAND_SECONDARY
@@ -874,7 +879,7 @@ function CompanyProfileSettings() {
                             variant="outline"
                             size="sm"
                             onClick={handlePreviewTemplate}
-                            className="mt-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            className="mt-2 border-border text-muted-foreground hover:bg-muted/60"
                         >
                             <FileText className="w-4 h-4 mr-2" />
                             Preview with my data
@@ -913,14 +918,14 @@ function ResetAppSection() {
             title="This device"
             description="If Paidly acts strangely only in this browser, reset local data and sign in again."
         >
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-sm text-muted-foreground">
                 Supabase keeps auth in <span className="font-medium">session</span> storage for this tab (not mixed with
                 long-lived local storage used for things like theme). Reset clears{" "}
                 <span className="font-medium">all</span> site data in this browser and opens sign-in.
             </p>
             <AlertDialog open={open} onOpenChange={setOpen}>
                 <AlertDialogTrigger asChild>
-                    <Button type="button" variant="outline" className="mt-4 border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300">
+                    <Button type="button" variant="outline" className="mt-4 border-border text-foreground">
                         Reset app
                     </Button>
                 </AlertDialogTrigger>
@@ -998,7 +1003,7 @@ function DeleteAccountSection() {
             title="Danger zone"
             description="Permanently delete your Paidly account and data tied to it."
         >
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-sm text-muted-foreground">
                 Deletes your auth account, profile, and every organization you own (invoices, clients, quotes, services,
                 banking details, and related records). Uploaded logos in storage are removed. Platform subscription and
                 waitlist rows for your email are cleared. If you only belong to someone else&apos;s organization, that
@@ -1272,15 +1277,15 @@ function PaymentMethodsSettings() {
             {/* Header Actions */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100">Payment Methods</h2>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage where clients deposit your hard-earned money.</p>
+                    <h2 className="text-2xl font-black text-foreground">Payment Methods</h2>
+                    <p className="text-muted-foreground mt-1">Manage where clients deposit your hard-earned money.</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <Button variant="outline" onClick={handleImportBanking} disabled={isImporting} className="flex items-center gap-2 px-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <Button variant="outline" onClick={handleImportBanking} disabled={isImporting} className="flex items-center gap-2 px-4 py-2 border-border rounded-xl font-bold text-muted-foreground hover:bg-muted/60">
                         <Upload className="w-4 h-4" />
                         {isImporting ? "Importing…" : "Import CSV"}
                     </Button>
-                    <Button variant="outline" onClick={handleExportBanking} disabled={bankingDetails.length === 0} className="flex items-center gap-2 px-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <Button variant="outline" onClick={handleExportBanking} disabled={bankingDetails.length === 0} className="flex items-center gap-2 px-4 py-2 border-border rounded-xl font-bold text-muted-foreground hover:bg-muted/60">
                         <Download className="w-4 h-4" />
                         Export CSV
                     </Button>
@@ -1307,7 +1312,7 @@ function PaymentMethodsSettings() {
                             value={defaultBankForm.business_bank_name}
                             onChange={(e) => handleDefaultBankInputChange("business_bank_name", e.target.value)}
                             placeholder="e.g., FNB"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -1317,7 +1322,7 @@ function PaymentMethodsSettings() {
                             value={defaultBankForm.business_account_name}
                             onChange={(e) => handleDefaultBankInputChange("business_account_name", e.target.value)}
                             placeholder="Business name on account"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -1327,7 +1332,7 @@ function PaymentMethodsSettings() {
                             value={defaultBankForm.business_account_number}
                             onChange={(e) => handleDefaultBankInputChange("business_account_number", e.target.value)}
                             placeholder="Account number"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -1337,7 +1342,7 @@ function PaymentMethodsSettings() {
                             value={defaultBankForm.business_branch_code}
                             onChange={(e) => handleDefaultBankInputChange("business_branch_code", e.target.value)}
                             placeholder="e.g., 250655"
-                            className="h-11 rounded-lg border-slate-200 dark:border-slate-700"
+                            className="h-11 rounded-lg"
                         />
                     </div>
                 </div>
@@ -1365,16 +1370,16 @@ function PaymentMethodsSettings() {
             {isLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-[280px] rounded-[32px] bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                        <div key={i} className="h-[280px] rounded-[32px] bg-muted animate-pulse" />
                     ))}
                 </div>
             ) : bankingDetails.length === 0 && !showForm ? (
-                <div className="flex flex-col items-center justify-center py-16 px-4 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
-                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
-                        <CreditCard className="w-8 h-8 text-slate-400" />
+                <div className="flex flex-col items-center justify-center py-16 px-4 rounded-3xl border-2 border-dashed border-border bg-muted/30">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                        <CreditCard className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">No payment methods yet</h3>
-                    <p className="text-slate-500 dark:text-slate-400 mb-6 text-center">Add your banking details to get paid.</p>
+                    <h3 className="text-lg font-bold text-foreground mb-2">No payment methods yet</h3>
+                    <p className="text-muted-foreground mb-6 text-center">Add your banking details to get paid.</p>
                     <Button onClick={() => setShowForm(true)} data-testid="bank-add-method-empty" className="bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-100">
                         <Plus className="w-4 h-4 mr-2" />
                         Add Your First Payment Method
@@ -1385,7 +1390,7 @@ function PaymentMethodsSettings() {
                     {bankingDetails.map((detail) => (
                         <div
                             key={detail.id}
-                            className="group relative bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                            className="group relative bg-background border border-border rounded-[32px] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
                         >
                             {/* Top Row: Logo & Menu */}
                             <div className="flex justify-between items-start mb-8">
@@ -1402,7 +1407,7 @@ function PaymentMethodsSettings() {
                                     )}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="p-2 text-slate-300 hover:text-slate-600 dark:hover:text-slate-400">
+                                            <Button variant="ghost" size="icon" className="p-2 text-muted-foreground/40 hover:text-foreground">
                                                 <MoreVertical className="w-5 h-5" />
                                             </Button>
                                         </DropdownMenuTrigger>
@@ -1432,24 +1437,24 @@ function PaymentMethodsSettings() {
 
                             {/* Account Details */}
                             <div className="space-y-1">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Account Holder</p>
-                                <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 truncate">{detail.account_name || "—"}</h3>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Account Holder</p>
+                                <h3 className="text-lg font-black text-foreground truncate">{detail.account_name || "—"}</h3>
                             </div>
 
                             <div className="mt-6 flex justify-between items-end">
                                 <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Account Number</p>
-                                    <p className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tighter tabular-nums">{maskAccount(detail.account_number)}</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Account Number</p>
+                                    <p className="text-xl font-bold text-foreground tracking-tighter tabular-nums">{maskAccount(detail.account_number)}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bank</p>
-                                    <p className="text-sm font-bold text-slate-600 dark:text-slate-400">{detail.bank_name || "—"}</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bank</p>
+                                    <p className="text-sm font-bold text-muted-foreground">{detail.bank_name || "—"}</p>
                                 </div>
                             </div>
 
                             {/* Footer */}
-                            <div className="mt-8 pt-6 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-slate-400">ADDED {formatAddedDate(detail.created_date || detail.created_at)}</span>
+                            <div className="mt-8 pt-6 border-t border-border/50 flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-muted-foreground">ADDED {formatAddedDate(detail.created_date || detail.created_at)}</span>
                                 <button
                                     onClick={() => handleEditDetail(detail)}
                                     className="text-[10px] font-bold text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1463,9 +1468,9 @@ function PaymentMethodsSettings() {
                     {/* Add New Placeholder */}
                     <button
                         onClick={() => setShowForm(true)}
-                        className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-[32px] p-6 flex flex-col items-center justify-center gap-4 text-slate-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-500 transition-all min-h-[280px]"
+                        className="border-2 border-dashed border-border rounded-[32px] p-6 flex flex-col items-center justify-center gap-4 text-muted-foreground hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-500 transition-all min-h-[280px]"
                     >
-                        <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center border border-slate-100 dark:border-slate-700 group-hover:bg-orange-50 dark:group-hover:bg-orange-950/30">
+                        <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center border border-border group-hover:bg-orange-50 dark:group-hover:bg-orange-950/30">
                             <Plus className="w-6 h-6" />
                         </div>
                         <span className="font-bold text-sm">Add New Account</span>
@@ -1516,77 +1521,124 @@ export default function Settings() {
     };
 
     return (
-        <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6 lg:p-8 overflow-x-hidden">
-            <div className="max-w-4xl mx-auto py-6 sm:py-10 px-0 sm:px-6 min-w-0">
-                <header className="mb-6 sm:mb-10">
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100">Settings</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Tailor Paidly to your business needs.</p>
+        <div className="w-full min-w-0 mobile-page bg-background overflow-x-hidden">
+            <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0">
+                <header className="mb-6 sm:mb-8">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
+                    <p className="text-sm text-muted-foreground mt-1">Manage your account and business preferences.</p>
                 </header>
 
+                {/* Mobile: compact dropdown selector */}
+                <div className="md:hidden mb-4">
+                    <div className="relative">
+                        <select
+                            value={activeTab}
+                            onChange={(e) => setActiveTab(e.target.value)}
+                            className="w-full h-11 appearance-none rounded-xl border border-border bg-background pl-4 pr-10 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                            aria-label="Select settings section"
+                        >
+                            {SETTINGS_TABS.map((tab) => (
+                                <option key={tab.value} value={tab.value}>{tab.label}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    </div>
+                </div>
+
+                {/* Desktop: sidebar + content */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    {/* Mobile: Dropdown for quick section switching */}
-                    <div className="md:hidden mb-4">
-                        <div className="relative">
-                            <select
-                                value={activeTab}
-                                onChange={(e) => setActiveTab(e.target.value)}
-                                className="w-full h-12 appearance-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-4 pr-10 text-base font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                aria-label="Select settings section"
-                            >
-                                {SETTINGS_TABS.map((tab) => (
-                                    <option key={tab.value} value={tab.value}>
+                    <div className="hidden md:flex gap-8 items-start">
+                        {/* Vertical nav */}
+                        <TabsList className="w-44 shrink-0 flex flex-col h-auto gap-0.5 bg-transparent p-0 items-stretch justify-start" aria-label="Settings sections">
+                            {SETTINGS_TABS.map((tab) => {
+                                const Icon = tab.icon;
+                                return (
+                                    <TabsTrigger
+                                        key={tab.value}
+                                        value={tab.value}
+                                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 justify-start
+                                            data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=active]:ring-0
+                                            data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:hover:bg-muted/60"
+                                    >
+                                        <Icon className="w-4 h-4 shrink-0" />
                                         {tab.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                                    </TabsTrigger>
+                                );
+                            })}
+                        </TabsList>
+
+                        {/* Content pane */}
+                        <div className="flex-1 min-w-0">
+                            <TabsContent value="profile">
+                                <CompanyProfileSettings />
+                            </TabsContent>
+                            <TabsContent value="currency">
+                                <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
+                                    <CurrencyConfiguration />
+                                </SettingsCard>
+                            </TabsContent>
+                            <TabsContent value="payments">
+                                <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
+                                    <PaymentMethodsSettings />
+                                </SettingsCard>
+                            </TabsContent>
+                            <TabsContent value="reminders" className="space-y-8">
+                                <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
+                                    <div className="space-y-8">
+                                        <PaymentReminderSettings />
+                                        <QuoteReminderSettings />
+                                        <ReminderDashboard />
+                                    </div>
+                                </SettingsCard>
+                            </TabsContent>
+                            <TabsContent value="subscription">
+                                <SettingsCard title="Subscription" description="Manage your plan and billing.">
+                                    <SubscriptionSettings />
+                                </SettingsCard>
+                            </TabsContent>
+                            <TabsContent value="security">
+                                <SettingsCard title="Security" description="Manage authentication options and account security.">
+                                    <TwoFactorSettings />
+                                </SettingsCard>
+                            </TabsContent>
                         </div>
                     </div>
 
-                    {/* Desktop: Horizontal tabs */}
-                    <TabsList className="hidden md:grid w-full grid-cols-6 gap-2">
-                        {SETTINGS_TABS.map((tab) => {
-                            const Icon = tab.icon;
-                            return (
-                                <TabsTrigger key={tab.value} value={tab.value}>
-                                    <Icon className="w-4 h-4 mr-2" />
-                                    {tab.label}
-                                </TabsTrigger>
-                            );
-                        })}
-                    </TabsList>
-                    <TabsContent value="profile" className="mt-6">
-                        <CompanyProfileSettings />
-                    </TabsContent>
-                    <TabsContent value="currency" className="mt-6">
-                        <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
-                            <CurrencyConfiguration />
-                        </SettingsCard>
-                    </TabsContent>
-                    <TabsContent value="payments" className="mt-6">
-                        <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
-                            <PaymentMethodsSettings />
-                        </SettingsCard>
-                    </TabsContent>
-                    <TabsContent value="reminders" className="mt-6 space-y-8">
-                        <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
-                            <div className="space-y-8">
-                                <PaymentReminderSettings />
-                                <QuoteReminderSettings />
-                                <ReminderDashboard />
-                            </div>
-                        </SettingsCard>
-                    </TabsContent>
-                    <TabsContent value="subscription" className="mt-6">
-                        <SettingsCard title="Subscription" description="Manage your plan and billing.">
-                            <SubscriptionSettings />
-                        </SettingsCard>
-                    </TabsContent>
-                    <TabsContent value="security" className="mt-6">
-                        <SettingsCard title="Security" description="Manage authentication options and account security.">
-                            <TwoFactorSettings />
-                        </SettingsCard>
-                    </TabsContent>
+                    {/* Mobile: stacked content (no sidebar) */}
+                    <div className="md:hidden">
+                        <TabsContent value="profile">
+                            <CompanyProfileSettings />
+                        </TabsContent>
+                        <TabsContent value="currency">
+                            <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
+                                <CurrencyConfiguration />
+                            </SettingsCard>
+                        </TabsContent>
+                        <TabsContent value="payments">
+                            <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
+                                <PaymentMethodsSettings />
+                            </SettingsCard>
+                        </TabsContent>
+                        <TabsContent value="reminders" className="space-y-8">
+                            <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
+                                <div className="space-y-8">
+                                    <PaymentReminderSettings />
+                                    <QuoteReminderSettings />
+                                    <ReminderDashboard />
+                                </div>
+                            </SettingsCard>
+                        </TabsContent>
+                        <TabsContent value="subscription">
+                            <SettingsCard title="Subscription" description="Manage your plan and billing.">
+                                <SubscriptionSettings />
+                            </SettingsCard>
+                        </TabsContent>
+                        <TabsContent value="security">
+                            <SettingsCard title="Security" description="Manage authentication options and account security.">
+                                <TwoFactorSettings />
+                            </SettingsCard>
+                        </TabsContent>
+                    </div>
                 </Tabs>
             </div>
         </div>

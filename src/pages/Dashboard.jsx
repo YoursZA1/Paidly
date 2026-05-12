@@ -1258,18 +1258,20 @@ export default function Dashboard() {
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={revenueTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                      <YAxis stroke="#64748b" fontSize={10} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" vertical={false} />
+                      <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px'
+                          backgroundColor: 'hsl(var(--card))',
+                          color: 'hsl(var(--card-foreground))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          fontSize: '11px',
                         }}
                         formatter={(value) => formatCurrency(Number(value || 0), 'ZAR')}
                       />
-                      <Line type="monotone" dataKey="value" stroke="#0f172a" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="value" stroke="#f24e00" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#f24e00', stroke: '#fff', strokeWidth: 2 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -1392,17 +1394,19 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={timeBreakdown.usersPerWeek}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                        <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" vertical={false} />
+                        <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: '#fff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px'
+                            backgroundColor: 'hsl(var(--card))',
+                            color: 'hsl(var(--card-foreground))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            fontSize: '11px',
                           }}
                         />
-                        <Line type="monotone" dataKey="users" stroke="#0f172a" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="users" stroke="#94a3b8" strokeWidth={1.5} dot={false} />
                         <Line type="monotone" dataKey="invoices" stroke="#f24e00" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -1422,9 +1426,9 @@ export default function Dashboard() {
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
                       <LineChart data={timeBreakdown.revenuePerMonth}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
-                        <YAxis stroke="#64748b" fontSize={10} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" vertical={false} />
+                        <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: '#fff',
@@ -1555,6 +1559,8 @@ export default function Dashboard() {
 
   const userName = user?.display_name || user?.full_name || 'there';
   const userCurrency = userCurrencyPreference || 'ZAR';
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   const rawAnnualTarget =
     businessGoal?.annual_target != null ? Number(businessGoal.annual_target) : 0;
@@ -1626,10 +1632,11 @@ export default function Dashboard() {
           transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
           className="mb-2 sm:mb-6"
         >
-          <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-2 font-display leading-tight">
-            Hello, {user?.company_name || userName}
+          <p className="text-xs sm:text-[11px] font-semibold tracking-[0.1em] text-muted-foreground/70 uppercase mb-0.5 sm:mb-1 hidden sm:block">{timeGreeting}</p>
+          <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-1 font-display leading-tight">
+            {user?.company_name || userName}
           </h1>
-          <p className="finbank-body text-xs sm:text-sm text-foreground hidden sm:block">Track cash flow, get paid faster, and stay on top of your business.</p>
+          <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your business overview for today.</p>
         </motion.div>
 
         {!isAdmin && !profileLoading && profileLoadError && (
@@ -1643,7 +1650,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.3 }}
-              className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/60 px-3 py-2.5 sm:px-4 sm:py-3"
+              className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5 sm:px-4 sm:py-3 backdrop-blur-sm"
             >
               <span className="text-xs sm:text-sm font-medium text-muted-foreground">Subscription</span>
               <PlanBadge plan={subscriptionBanner.badgePlan} />
@@ -1786,24 +1793,28 @@ export default function Dashboard() {
         {/* Admin Roles Management Section (Visible to Admins Only) */}
         {isAdmin && (
           <div className="glass-card rounded-fintech p-6 mb-6 border border-border">
-            <h2 className="text-lg font-semibold mb-2 text-foreground">Admin Roles Management</h2>
-            <div className="mb-4">
-              <label htmlFor="dashboard-admin-role" className="font-semibold text-foreground mr-2">Select Admin Role:</label>
+            <h2 className="text-base font-semibold mb-4 text-foreground">Admin Roles Management</h2>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <label htmlFor="dashboard-admin-role" className="text-sm font-medium text-muted-foreground">Role:</label>
               <select
                 id="dashboard-admin-role"
                 value={selectedRole}
                 onChange={e => setSelectedRole(e.target.value)}
-                className="border rounded px-2 py-1"
+                className="h-8 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
               >
                 {ADMIN_ROLE_TIERS.map(role => (
                   <option key={role.key} value={role.key}>{role.label}</option>
                 ))}
               </select>
-              <span className="ml-4 text-xs text-muted-foreground">{roleInfo?.description}</span>
+              {roleInfo?.description && (
+                <span className="text-xs text-muted-foreground">{roleInfo.description}</span>
+              )}
             </div>
-            <div className="mb-4">
-              <button
-                className="bg-primary/100 text-white px-3 py-1 rounded mr-2"
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-lg text-xs font-medium"
                 onClick={async () => {
                   setLoadingAdmin(true);
                   const users = await syncAndCleanUsers();
@@ -1812,12 +1823,12 @@ export default function Dashboard() {
                 }}
                 disabled={loadingAdmin}
               >
-                Sync & Clean Users
-              </button>
-              <span className="text-xs text-muted-foreground">Best practice: sync and clean orphaned users</span>
+                Sync &amp; Clean Users
+              </Button>
+              <span className="text-xs text-muted-foreground">Removes orphaned users without profiles.</span>
             </div>
             <form
-              className="mb-4 flex gap-2"
+              className="mb-5 flex flex-wrap gap-2"
               onSubmit={async e => {
                 e.preventDefault();
                 setLoadingAdmin(true);
@@ -1835,7 +1846,7 @@ export default function Dashboard() {
                 placeholder="Email"
                 value={newUser.email}
                 onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                className="border px-2 py-1 rounded"
+                className="h-8 flex-1 min-w-[160px] rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50"
                 required
               />
               <input
@@ -1845,40 +1856,38 @@ export default function Dashboard() {
                 placeholder="Full Name"
                 value={newUser.fullName}
                 onChange={e => setNewUser({ ...newUser, fullName: e.target.value })}
-                className="border px-2 py-1 rounded"
+                className="h-8 flex-1 min-w-[140px] rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50"
                 required
               />
               <select
                 value={newUser.role}
                 onChange={e => setNewUser({ ...newUser, role: e.target.value })}
-                className="border px-2 py-1 rounded"
+                className="h-8 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
               >
                 {ADMIN_ROLE_TIERS.map(role => (
                   <option key={role.key} value={role.key}>{role.label}</option>
                 ))}
               </select>
-              <button
-                type="submit"
-                className="bg-green-500 text-white px-3 py-1 rounded"
-                disabled={loadingAdmin}
-              >Add User</button>
+              <Button type="submit" size="sm" className="h-8 rounded-lg text-xs font-medium" disabled={loadingAdmin}>
+                Add User
+              </Button>
             </form>
             {loadingAdmin ? (
-              <p className="text-muted-foreground">Loading...</p>
+              <p className="text-sm text-muted-foreground">Loading…</p>
             ) : supabaseUsers.length === 0 ? (
-              <p className="text-muted-foreground">No users found.</p>
+              <p className="text-sm text-muted-foreground">No users found.</p>
             ) : (
-              <ul className="divide-y">
+              <ul className="divide-y divide-border">
                 {supabaseUsers.map((user, idx) => (
-                  <li key={stableDirectoryRowKey(user, idx)} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                  <li key={stableDirectoryRowKey(user, idx)} className="py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
-                      <span className="font-medium text-foreground">{user.email}</span>
+                      <span className="text-sm font-medium text-foreground">{user.email}</span>
                       <span className="text-xs text-muted-foreground ml-2">ID: {user?.id ?? user?.supabase_id ?? "—"}</span>
                       {user.profile && (
-                        <span className="text-xs text-muted-foreground ml-2">Name: {user.profile.full_name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">· {user.profile.full_name}</span>
                       )}
                     </div>
-                    <div className="flex gap-2 mt-2 md:mt-0">
+                    <div className="flex items-center gap-2">
                       <select
                         value={user.memberships?.[0]?.role || ''}
                         onChange={async e => {
@@ -1890,14 +1899,16 @@ export default function Dashboard() {
                           setSupabaseUsers(users);
                           setLoadingAdmin(false);
                         }}
-                        className="border px-2 py-1 rounded"
+                        className="h-7 rounded-lg border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                       >
                         {ADMIN_ROLE_TIERS.map(role => (
                           <option key={role.key} value={role.key}>{role.label}</option>
                         ))}
                       </select>
-                      <button
-                        className="bg-red-500 text-white px-3 py-1 rounded"
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 rounded-lg text-xs px-3"
                         onClick={async () => {
                           const uid = adminRowPrimaryId(user);
                           if (!uid) return;
@@ -1908,7 +1919,7 @@ export default function Dashboard() {
                           setLoadingAdmin(false);
                         }}
                         disabled={loadingAdmin}
-                      >Delete</button>
+                      >Delete</Button>
                     </div>
                   </li>
                 ))}
@@ -1944,10 +1955,10 @@ export default function Dashboard() {
                       key={range}
                       type="button"
                       onClick={() => setRevenueRange(range)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                      className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all duration-150 ${
                         revenueRange === range
-                          ? "bg-primary text-primary-foreground border border-primary"
-                          : "bg-muted text-muted-foreground border border-border hover:border-primary/40"
+                          ? "bg-primary/15 text-primary border border-primary/30"
+                          : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"
                       }`}
                     >
                       {range}d

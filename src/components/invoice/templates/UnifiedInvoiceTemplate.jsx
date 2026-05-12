@@ -30,14 +30,18 @@ const VARIANT_CONFIG = {
     title: "text-black",
     rule: "border-black/25",
     logoFallback: "bg-black",
+    totalRowBorder: "border-t border-black/20",
+    totalRowText: "",
   },
   modern: {
     band: "bg-[#FFF5F0]",
     hatchBg: "#fde8dc",
     title: "text-[#f24e00]",
     rule: "border-[#f24e00]/35",
-    headerAccent: "border-b-4 border-[#f24e00] pb-4",
+    headerAccent: "border-b-[3px] border-[#f24e00] pb-5",
     logoFallback: "bg-[#f24e00]",
+    totalRowBorder: "border-t-2 border-[#f24e00]/50",
+    totalRowText: "text-[#f24e00]",
   },
   minimal: {
     band: "bg-neutral-50",
@@ -46,6 +50,8 @@ const VARIANT_CONFIG = {
     rule: "border-neutral-200",
     logoFallback: "bg-neutral-800",
     sparse: true,
+    totalRowBorder: "border-t border-neutral-300",
+    totalRowText: "",
   },
   bold: {
     band: "bg-neutral-200",
@@ -54,20 +60,25 @@ const VARIANT_CONFIG = {
     rule: "border-black",
     logoFallback: "bg-black",
     heavy: true,
+    totalRowBorder: "border-t-2 border-black",
+    totalRowText: "",
   },
   paidlypro: {
-    band: "bg-orange-50/90",
+    band: "bg-orange-50",
     hatchBg: "#fed7aa",
-    title: "text-orange-600",
+    title: "text-orange-700",
     rule: "border-orange-300",
     logoFallback: "bg-orange-600",
     font: "font-geist antialiased",
+    headerAccent: "border-b-[3px] border-orange-500 pb-5",
+    totalRowBorder: "border-t-2 border-orange-400",
+    totalRowText: "text-orange-700",
   },
 };
 
 function InvoiceDatesColumn({ issueDate, deliveryDate, dueLabel, heavy }) {
-  const labelCls = `text-[12px] uppercase tracking-wide mb-1 text-neutral-600 ${heavy ? "font-black" : "font-bold"}`;
-  const valueCls = `text-[13px] text-foreground ${heavy ? "font-bold" : "font-semibold"}`;
+  const labelCls = `text-[10px] uppercase tracking-[0.1em] mb-1 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`;
+  const valueCls = `text-[12px] text-gray-800 ${heavy ? "font-bold" : "font-semibold"}`;
   const dueHeading =
     dueLabel === "Valid until" ? "Valid Until:" : "Due date";
   return (
@@ -157,7 +168,7 @@ function ShipToBlock({
     return (
       <div>
         <h3
-          className={`text-[12px] uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
+          className={`text-[10px] uppercase tracking-[0.1em] mb-2 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`}
         >
           Ship to
         </h3>
@@ -194,7 +205,7 @@ function InvoiceToBlock({ client, heavy }) {
   return (
     <div>
       <h3
-        className={`text-[12px] uppercase tracking-wide mb-2 ${heavy ? "font-black" : "font-bold"}`}
+        className={`text-[10px] uppercase tracking-[0.1em] mb-2 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`}
       >
         Invoice to
       </h3>
@@ -391,32 +402,32 @@ export default function UnifiedInvoiceTemplate({
                   </colgroup>
                   <thead className="no-break">
                     <tr className={`border-b ${cfg.rule}`}>
-                      <th className={`py-[6px] px-0 text-left text-[12px] uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-semibold"}`}>Description</th>
-                      <th className={`py-[6px] px-0 text-center text-[12px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Quantity</th>
-                      <th className={`py-[6px] px-0 text-right text-[12px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Price</th>
-                      <th className={`py-[6px] px-0 text-right text-[12px] uppercase tracking-wide whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"}`}>Total</th>
+                      <th className={`py-2.5 px-0 text-left text-[11px] uppercase tracking-[0.08em] ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Description</th>
+                      <th className={`py-2.5 px-0 text-center text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Qty</th>
+                      <th className={`py-2.5 px-0 text-right text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Price</th>
+                      <th className={`py-2.5 px-0 text-right text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageRows.length > 0 ? pageRows.map((item, rowIndex) => {
                       const lineLabel = formatLineItemNameAndDescription(item);
                       return (
-                        <tr key={`${index}-${rowIndex}`} className={`border-b border-black/10 ${cfg.rule}`}>
-                          <td className="py-[6px] px-0 align-top min-w-0">
+                        <tr key={`${index}-${rowIndex}`} className="border-b border-black/[0.07]">
+                          <td className="py-2 px-0 align-top min-w-0">
                             <p
-                              className={`unified-invoice-line-description text-[12px] text-foreground leading-snug ${cfg.heavy ? "font-bold" : "font-semibold"}`}
+                              className={`unified-invoice-line-description text-[12px] text-gray-900 leading-snug ${cfg.heavy ? "font-bold" : "font-medium"}`}
                             >
                               {lineLabel}
                             </p>
                           </td>
-                          <td className="py-[6px] px-0 align-top text-center tabular-nums text-[12px] text-foreground">{item.quantity}</td>
-                          <td className="py-[6px] px-0 align-top text-right tabular-nums currency-value text-[12px] whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                          <td className="py-[6px] px-0 align-top text-right font-medium tabular-nums currency-value text-[12px] whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
+                          <td className="py-2 px-0 align-top text-center tabular-nums text-[12px] text-gray-700">{item.quantity}</td>
+                          <td className="py-2 px-0 align-top text-right tabular-nums currency-value text-[12px] text-gray-700 whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
+                          <td className="py-2 px-0 align-top text-right tabular-nums currency-value text-[12px] text-gray-900 font-semibold whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
                         </tr>
                       );
                     }) : (
                       <tr>
-                        <td colSpan={4} className="py-[6px] px-0 text-center text-neutral-500 text-[12px]">No items found</td>
+                        <td colSpan={4} className="py-3 px-0 text-center text-neutral-400 text-[12px]">No items found</td>
                       </tr>
                     )}
                   </tbody>
@@ -426,21 +437,21 @@ export default function UnifiedInvoiceTemplate({
               {isLast ? (
                 <>
                   <section
-                    className={`section no-break invoice-section unified-invoice-totals grid grid-cols-2 ${isQuote ? "gap-6" : "gap-8"} gap-y-6 border-t border-black/10 pt-6 mb-4 min-w-0 items-start text-[12px]`}
+                    className={`section no-break invoice-section unified-invoice-totals grid grid-cols-2 ${isQuote ? "gap-6" : "gap-8"} gap-y-6 border-t border-black/[0.08] pt-6 mb-4 min-w-0 items-start text-[12px]`}
                   >
                     <div className="min-w-0 no-break">
-                      <h3 className={`text-[12px] uppercase tracking-wide mb-2 ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                      <h3 className={`text-[11px] uppercase tracking-[0.08em] mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-semibold"}`}>
                         Payment details
                       </h3>
                       <div className="space-y-3 text-neutral-700">
                         {hasAccountDetailsSection ? (
                           accountBankRows.length > 0 ? (
-                            <dl className="unified-invoice-banking-details space-y-1">
+                            <dl className="unified-invoice-banking-details space-y-1.5">
                               {accountBankRows.map((row) => (
                                 <div key={row.key}>
-                                  <dt className="text-[7px] text-neutral-500 font-medium leading-snug">{row.label}</dt>
+                                  <dt className="text-[10px] text-neutral-400 font-medium leading-snug">{row.label}</dt>
                                   <dd
-                                    className={`font-medium text-foreground text-[8px] leading-[1.45] break-words ${row.multiline ? "whitespace-pre-line" : ""}`}
+                                    className={`font-semibold text-gray-800 text-[11px] leading-[1.45] break-words ${row.multiline ? "whitespace-pre-line" : ""}`}
                                   >
                                     {row.value}
                                   </dd>
@@ -448,24 +459,24 @@ export default function UnifiedInvoiceTemplate({
                               ))}
                             </dl>
                           ) : (
-                            <p className="text-neutral-500 text-[8px] leading-[1.45]">
+                            <p className="text-neutral-400 text-[10px] leading-[1.45]">
                               Add default bank details in Settings, or choose a bank account on the invoice.
                             </p>
                           )
                         ) : (
-                          <p className="text-neutral-500 text-[8px] leading-[1.45]">—</p>
+                          <p className="text-neutral-400 text-[10px] leading-[1.45]">—</p>
                         )}
                         <div>
-                          <p className="text-[11px] text-neutral-500 mb-2 font-medium">Payment structure</p>
-                          <ul className="space-y-1 text-[12px] leading-[1.4]">
+                          <p className="text-[10px] text-neutral-400 mb-1.5 font-medium uppercase tracking-[0.06em]">Payment structure</p>
+                          <ul className="space-y-1 text-[11px] leading-[1.4]">
                             {[
                               { pct: "25%", value: paymentStructureTotal * 0.25 },
                               { pct: "50%", value: paymentStructureTotal * 0.5 },
                               { pct: "100%", value: paymentStructureTotal },
                             ].map(({ pct, value }) => (
                               <li key={pct} className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums">
-                                <span className="text-neutral-600 shrink-0">{pct}</span>
-                                <span className="font-medium text-foreground currency-value">{formatCurrency(value, userCurrency)}</span>
+                                <span className="text-neutral-500 shrink-0 w-8">{pct}</span>
+                                <span className="font-semibold text-gray-800 currency-value">{formatCurrency(value, userCurrency)}</span>
                               </li>
                             ))}
                           </ul>
@@ -473,32 +484,32 @@ export default function UnifiedInvoiceTemplate({
                       </div>
                     </div>
                     <div className="min-w-0 w-full justify-self-end">
-                      <div className="ml-auto w-full max-w-xs space-y-1 text-[12px]">
+                      <div className="ml-auto w-full max-w-xs space-y-1.5 text-[12px]">
                         <div className="flex justify-between gap-4">
-                          <span className="text-neutral-600">Subtotal</span>
-                          <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                          <span className="text-neutral-500">Subtotal</span>
+                          <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.subtotal, userCurrency)}</span>
                         </div>
                         {discountAmt > 0 && (
                           <div className="flex justify-between gap-4">
-                            <span className="text-neutral-600">
+                            <span className="text-neutral-500">
                               Discount{invoice.discount_type === "percentage" ? ` (${invoice.discount_value}%)` : ""}
                             </span>
-                            <span className="font-medium tabular-nums currency-value text-red-600">-{formatCurrency(discountAmt, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value text-red-500">−{formatCurrency(discountAmt, userCurrency)}</span>
                           </div>
                         )}
                         {hasItemTax && (
                           <div className="flex justify-between gap-4">
-                            <span className="text-neutral-600">Item taxes</span>
-                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="text-neutral-500">Item taxes</span>
+                            <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
                           </div>
                         )}
                         {Number(invoice.tax_rate) > 0 && (
                           <div className="flex justify-between gap-4">
-                            <span className="text-neutral-600">Tax ({invoice.tax_rate}%)</span>
-                            <span className="font-medium tabular-nums currency-value">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="text-neutral-500">Tax ({invoice.tax_rate}%)</span>
+                            <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
                           </div>
                         )}
-                        <div className={`flex justify-between gap-4 mt-2 pt-2 border-t border-black/10 ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                        <div className={`flex justify-between gap-4 mt-3 pt-2.5 ${cfg.totalRowBorder} ${cfg.heavy ? "font-black" : "font-bold"} text-[13px] ${cfg.totalRowText}`}>
                           <span>{isQuote ? "Total" : "Total due"}</span>
                           <span className="tabular-nums currency-value">{formatCurrency(invoice.total_amount, userCurrency)}</span>
                         </div>
@@ -507,22 +518,22 @@ export default function UnifiedInvoiceTemplate({
                   </section>
 
                   <section className="section invoice-flow-section border-t border-black/10 pt-3 text-[12px]">
-                    <h3 className={`text-[12px] uppercase tracking-wide mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-bold"}`}>Notes</h3>
-                    <p className="text-neutral-600 text-[11px] leading-relaxed mb-3">{NOTES_PAYMENT_MILESTONES_COPY}</p>
+                    <h3 className={`text-[11px] uppercase tracking-[0.08em] mb-2 text-neutral-400 ${cfg.heavy ? "font-black" : "font-semibold"}`}>Notes</h3>
+                    <p className="text-neutral-500 text-[10.5px] leading-relaxed mb-3">{NOTES_PAYMENT_MILESTONES_COPY}</p>
                     {invoice.notes ? (
-                      <p className="text-neutral-700 text-[11px] leading-relaxed whitespace-pre-line border-t border-black/10 pt-3 mt-3 break-words">
+                      <p className="text-neutral-700 text-[11px] leading-relaxed whitespace-pre-line border-t border-black/[0.07] pt-3 mt-3 break-words">
                         {invoice.notes}
                       </p>
                     ) : null}
                   </section>
 
                   {invoice.terms_conditions ? (
-                    <section className="section invoice-flow-section border-t border-black/10 pt-2 min-w-0">
+                    <section className="section invoice-flow-section border-t border-black/10 pt-2.5 min-w-0">
                       <div className="invoice-terms-stack min-w-0">
                         <p
-                          className={`mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 ${cfg.heavy ? "font-black" : ""}`}
+                          className={`mb-1.5 text-[11px] uppercase tracking-[0.08em] text-neutral-400 ${cfg.heavy ? "font-black" : "font-semibold"}`}
                         >
-                          Terms
+                          Terms &amp; Conditions
                         </p>
                         <p className="invoice-terms-body" title={String(invoice.terms_conditions).trim()}>
                           {termsForDisplay(invoice.terms_conditions)}
@@ -531,16 +542,17 @@ export default function UnifiedInvoiceTemplate({
                     </section>
                   ) : null}
 
-                  <footer className="footer no-break invoice-section border-t border-black/20 pt-5 text-[11px] leading-snug text-neutral-600">
+                  <footer className="footer no-break invoice-section border-t border-black/15 pt-4 mt-4 text-[10.5px] leading-snug text-neutral-500">
                     <div className="flex justify-between items-end gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 space-y-0.5">
+                        {user?.company_name ? <p className="font-semibold text-neutral-700">{user.company_name}</p> : null}
                         {user?.company_address ? <p className="whitespace-pre-line">{user.company_address}</p> : null}
-                        {user?.website ? <p className="mt-1 text-neutral-500">{user.website}</p> : null}
+                        {user?.website ? <p className="mt-0.5">{user.website}</p> : null}
                       </div>
                       <div className="text-right shrink-0 space-y-0.5">
-                        {user?.phone ? <p>Tel: {user.phone}</p> : null}
-                        <p>Thank you for your business.</p>
-                        <p>Invoicing made easy with Paidly</p>
+                        {user?.phone ? <p>{user.phone}</p> : null}
+                        {user?.email ? <p>{user.email}</p> : null}
+                        <p className="mt-1 text-neutral-400 text-[10px]">Thank you for your business.</p>
                       </div>
                     </div>
                   </footer>

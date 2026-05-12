@@ -957,6 +957,7 @@ body {
   /* Sidebar: use theme tokens so light/dark stay consistent */
   .sidebar-panel {
     background: hsl(var(--sidebar-background));
+    background-image: radial-gradient(ellipse 80% 30% at 50% 0%, hsl(222 55% 20%) 0%, transparent 100%);
     border-right: 1px solid hsl(var(--sidebar-border));
     overflow-x: hidden;
   }

@@ -3,7 +3,9 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Wifi, WifiOff, Loader2, RefreshCw } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSessionManager } from "@/contexts/SessionManagerContext";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,14 +24,31 @@ export default function ConnectionStatusIndicator({ className }) {
   const lastError = useConnectionStore((s) => s.lastError);
   const suppressConnectedIndicator = useConnectionStore((s) => s.suppressConnectedIndicator);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
+  const sessionManager = useSessionManager();
   const canShowConnected = useAuthGatedConnectedSignal();
 
+  const sessionStatus = useSessionHealthStore((s) => s.status);
+  const sessionHealthy = sessionStatus === SESSION_STATUS.CONNECTED;
+
   const [retryBusy, setRetryBusy] = useState(false);
-  const normalizedError =
-    String(lastError || "").toLowerCase().includes("session_reconnecting") ||
-    String(lastError || "").toLowerCase().includes("profiles_timeout")
-      ? "Syncing"
-      : lastError;
+
+  // Sanitize internal snake_case reason codes that should never reach the UI.
+  const normalizedError = (() => {
+    const raw = String(lastError || "").toLowerCase();
+    if (!raw) return null;
+    if (
+      raw.includes("session_reconnecting") ||
+      raw.includes("profiles_timeout") ||
+      raw.includes("session_timeout") ||
+      raw.includes("inactivity_timeout") ||
+      raw.includes("keep_alive") ||
+      raw.includes("refreshing") ||
+      raw.includes("refresh_ok")
+    ) {
+      return "Connection interrupted";
+    }
+    return lastError;
+  })();
 
   const onRetry = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -39,7 +58,13 @@ export default function ConnectionStatusIndicator({ className }) {
       await supabase.auth.getSession();
       const { ok, error } = await runSupabaseHealthCheck();
       if (ok) {
-        setConnectionState({ status: CONNECTION_STATUS.CONNECTED, lastError: null, lastCheckAt: Date.now() });
+        // Route through ConnectionManager.markConnected so degradedSince + pending timers are
+        // cleared — prevents a stale timer overriding the recovered state on the next failure.
+        if (sessionManager?.ConnectionMonitor?.markConnected) {
+          sessionManager.ConnectionMonitor.markConnected(setConnectionState);
+        } else {
+          setConnectionState({ status: CONNECTION_STATUS.CONNECTED, lastError: null, lastCheckAt: Date.now() });
+        }
       } else {
         const decision = decideSessionAction({
           reason: error?.message || "retry_unreachable",
@@ -58,7 +83,7 @@ export default function ConnectionStatusIndicator({ className }) {
     } finally {
       setRetryBusy(false);
     }
-  }, [isAuthenticated, setConnectionState]);
+  }, [isAuthenticated, sessionManager, setConnectionState]);
 
   if (!isSupabaseConfigured) return null;
 
@@ -67,8 +92,11 @@ export default function ConnectionStatusIndicator({ className }) {
     canShowConnected &&
     status === CONNECTION_STATUS.CONNECTED &&
     !suppressConnectedIndicator;
+  // Never show DISCONNECTED when session health confirms we are connected — the two indicators
+  // would otherwise contradict each other due to stale connection-store state.
   const showProblemPill =
-    status === CONNECTION_STATUS.RECONNECTING || status === CONNECTION_STATUS.DISCONNECTED;
+    status === CONNECTION_STATUS.RECONNECTING ||
+    (status === CONNECTION_STATUS.DISCONNECTED && !sessionHealthy);
   const visible = showConnectedIcon || showProblemPill;
 
   const pill = (

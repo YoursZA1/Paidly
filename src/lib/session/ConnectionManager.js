@@ -60,7 +60,7 @@ export function createConnectionManager() {
     if (sessionStatus === "degraded") {
       return {
         status: CONNECTION_STATUS.RECONNECTING,
-        lastError: sessionReason ? String(sessionReason) : "Connection degraded — retrying.",
+        lastError: null, // Never expose internal reason codes; spinner is sufficient feedback
       };
     }
     if (sessionStatus === "reauth_required") {
