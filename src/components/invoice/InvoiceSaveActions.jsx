@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Button } from '@/components/ui/button';
-import { Save, Send, FileText, Mail } from 'lucide-react';
+import { Save, Send, FileText, Mail, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -57,8 +57,8 @@ export default function InvoiceSaveActions({
           disabled={disabled || loading}
           className="flex items-center gap-2 border-border hover:bg-muted"
         >
-          <Save className="w-4 h-4" />
-          <span>{draftButtonText}</span>
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          <span>{loading ? 'Saving...' : draftButtonText}</span>
         </Button>
 
         {/* Send Now Button */}
@@ -67,7 +67,7 @@ export default function InvoiceSaveActions({
           disabled={disabled || loading}
           className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
         >
-          <Send className="w-4 h-4" />
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           <span>{loading ? 'Sending...' : sendButtonText}</span>
         </Button>
       </div>

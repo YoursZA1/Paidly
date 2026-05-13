@@ -74,7 +74,7 @@ export function createAuthTransitionManager(deps) {
   ) {
     if (deps.getSessionHealthStatus?.() === SESSION_STATUS.EXPIRED) return false;
 
-    console.info("[SessionManager] Transition → EXPIRED", `reason=${reason}`);
+    if (import.meta.env?.DEV) console.info("[SessionManager] Transition → EXPIRED", `reason=${reason}`);
     trackSessionTelemetry("session_transition_expired", {
       reason: reason || null,
       source,

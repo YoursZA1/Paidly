@@ -4,6 +4,7 @@ import {
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
 import { getLogoUrl } from "@/lib/logoUrl";
+import AssetService from "@/services/AssetService";
 
 /**
  * Typography scale (print + PDF): title 20px, section headers 12px, body 12–13px,
@@ -349,6 +350,13 @@ export default function UnifiedInvoiceTemplate({
                             alt=""
                             className="h-auto w-auto object-contain object-left shrink-0 max-h-[64px] max-w-[180px]"
                             style={{ maxHeight: 64, maxWidth: 180 }}
+                            onError={(e) => {
+                              if (e.currentTarget.src !== AssetService.FALLBACK_LOGO) {
+                                e.currentTarget.src = AssetService.FALLBACK_LOGO;
+                              } else {
+                                e.currentTarget.style.display = "none";
+                              }
+                            }}
                           />
                         ) : (
                           <div className={`h-16 w-16 shrink-0 rounded-sm ${cfg.logoFallback}`} aria-hidden />

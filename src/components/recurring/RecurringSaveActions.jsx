@@ -18,7 +18,7 @@ export default function RecurringSaveActions({
                 onClick={onSaveDraft}
                 disabled={disabled || loading}
                 variant="outline"
-                className="px-6 py-3 rounded-xl border-slate-200 hover:bg-slate-50"
+                className="px-6 py-3 rounded-xl border-border hover:bg-muted"
             >
                 {loading ? (
                     <>
@@ -35,7 +35,7 @@ export default function RecurringSaveActions({
             <Button
                 onClick={onActivateNow}
                 disabled={disabled || loading}
-                className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white"
+                className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
             >
                 {loading ? (
                     <>

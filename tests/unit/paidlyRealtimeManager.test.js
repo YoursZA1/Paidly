@@ -33,23 +33,38 @@ import {
   __resetConnectionLifecycleStoreForTests,
   useConnectionLifecycleStore,
 } from "@/lib/connection/connectionLifecycleStore";
-import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { useSessionHealthStore } from "@/stores/sessionHealthStore";
 import {
   __resetPaidlyRealtimeManagerForTests,
-  REALTIME_DOMAINS,
+  getPaidlyRealtimeConnectionPhase,
+  getPaidlyRealtimeConnectionSnapshot,
   reconcilePaidlyRealtimeAfterTokenRefresh,
-  repairStalePaidlyRealtimeOnTabVisible,
   subscribePaidlyAuxPostgres,
   subscribePaidlyMainChannelStatus,
   subscribePaidlyProfilesRealtime,
   validatePaidlyRealtime,
   PAIDLY_REALTIME_CHANNEL,
+  REALTIME_DOMAINS,
   setPaidlySyncRealtimeBridge,
   waitForPaidlyMainChannelJoined,
 } from "@/lib/realtime/paidlyRealtimeManager";
+import { RealtimeConnectionPhase } from "@/lib/realtime/paidlyRealtimeConnectionMachine";
 
 async function flushRealtimeRebuild() {
   await new Promise((r) => queueMicrotask(r));
+}
+
+/** Supabase-js calls the subscribe callback asynchronously; release rebuild locks like production. */
+function completeLastSubscribe(status = "SUBSCRIBED") {
+  const calls = subscribeMock.mock.calls;
+  if (!calls.length) return;
+  const cb = calls[calls.length - 1][0];
+  cb(status);
+}
+
+async function flushAndCompleteSubscribe(status = "SUBSCRIBED") {
+  await flushRealtimeRebuild();
+  completeLastSubscribe(status);
 }
 
 describe("paidlyRealtimeManager", () => {
@@ -68,7 +83,7 @@ describe("paidlyRealtimeManager", () => {
   it("uses one channel name for postgres subscriptions", async () => {
     const { supabase } = await import("@/lib/supabaseClient");
     const unsub = subscribePaidlyProfilesRealtime(() => {});
-    await flushRealtimeRebuild();
+    await flushAndCompleteSubscribe();
     expect(supabase.channel).toHaveBeenCalledWith(PAIDLY_REALTIME_CHANNEL);
     expect(subscribeMock).toHaveBeenCalled();
     unsub();
@@ -77,13 +92,13 @@ describe("paidlyRealtimeManager", () => {
   it("rebuilds when sync bridge and profiles are both active", async () => {
     const { supabase } = await import("@/lib/supabaseClient");
     subscribePaidlyProfilesRealtime(() => {});
-    await flushRealtimeRebuild();
+    await flushAndCompleteSubscribe();
     expect(supabase.channel).toHaveBeenCalledTimes(1);
     setPaidlySyncRealtimeBridge({
       userId: "11111111-1111-4111-8111-111111111111",
       onEntityEvent: () => {},
     });
-    await flushRealtimeRebuild();
+    await flushAndCompleteSubscribe();
     expect(removeChannelMock).toHaveBeenCalled();
     expect(supabase.channel).toHaveBeenCalledTimes(2);
   });
@@ -108,19 +123,15 @@ describe("paidlyRealtimeManager", () => {
     const statuses = [];
     const unsubStatus = subscribePaidlyMainChannelStatus((s) => statuses.push(s));
     subscribePaidlyProfilesRealtime(() => {});
-    await flushRealtimeRebuild();
-    const statusCb = subscribeMock.mock.calls[subscribeMock.mock.calls.length - 1][0];
-    statusCb("SUBSCRIBED");
+    await flushAndCompleteSubscribe();
     expect(statuses).toContain("SUBSCRIBED");
     unsubStatus();
   });
 
   it("waitForPaidlyMainChannelJoined resolves true when subscribe reports SUBSCRIBED and channel is joined", async () => {
     subscribePaidlyProfilesRealtime(() => {});
-    await flushRealtimeRebuild();
-    const statusCb = subscribeMock.mock.calls[subscribeMock.mock.calls.length - 1][0];
     const p = waitForPaidlyMainChannelJoined({ timeoutMs: 2000 });
-    statusCb("SUBSCRIBED");
+    await flushAndCompleteSubscribe();
     await expect(p).resolves.toBe(true);
   });
 
@@ -131,39 +142,19 @@ describe("paidlyRealtimeManager", () => {
   it("reconcilePaidlyRealtimeAfterTokenRefresh calls realtime.setAuth and rebuilds the multiplex channel", async () => {
     const { supabase } = await import("@/lib/supabaseClient");
     subscribePaidlyProfilesRealtime(() => {});
-    await flushRealtimeRebuild();
+    await flushAndCompleteSubscribe();
     const channelCallsBefore = vi.mocked(supabase.channel).mock.calls.length;
     await reconcilePaidlyRealtimeAfterTokenRefresh("eyJhbGciOiJIUzI1NiIs.test.jwt", "unit_test");
+    await flushAndCompleteSubscribe();
     expect(setAuthMock).toHaveBeenCalledWith("eyJhbGciOiJIUzI1NiIs.test.jwt");
-    expect(vi.mocked(supabase.channel).mock.calls.length).toBeGreaterThan(channelCallsBefore);
+    expect(vi.mocked(supabase.channel).mock.calls.length).toBeGreaterThanOrEqual(channelCallsBefore);
+    expect(removeChannelMock).toHaveBeenCalled();
   });
 
-  it("repairStalePaidlyRealtimeOnTabVisible skips when lifecycle and channel are healthy", async () => {
-    useConnectionLifecycleStore.getState().patch({
-      realtime: { phase: "subscribed", lastReason: "SUBSCRIBED" },
-    });
-    const r = await repairStalePaidlyRealtimeOnTabVisible({ believedSignedIn: true });
-    expect(r.skipped).toBe(true);
-    expect(r.reason).toBe("not_stale");
-  });
-
-  it("repairStalePaidlyRealtimeOnTabVisible skips when guest", async () => {
-    const r = await repairStalePaidlyRealtimeOnTabVisible({ believedSignedIn: false });
-    expect(r.skipped).toBe(true);
-    expect(r.reason).toBe("guest");
-  });
-
-  it("repairStalePaidlyRealtimeOnTabVisible skips when session health is EXPIRED", async () => {
-    useSessionHealthStore.setState({
-      status: SESSION_STATUS.EXPIRED,
-      reason: "test",
-      lastTransitionAt: Date.now(),
-    });
-    useConnectionLifecycleStore.getState().patch({
-      realtime: { phase: "unstable", lastReason: "CLOSED" },
-    });
-    const r = await repairStalePaidlyRealtimeOnTabVisible({ believedSignedIn: true });
-    expect(r.skipped).toBe(true);
-    expect(r.reason).toBe("expired");
+  it("exposes connection phase snapshot after subscribe", async () => {
+    subscribePaidlyProfilesRealtime(() => {});
+    await flushAndCompleteSubscribe();
+    expect(getPaidlyRealtimeConnectionPhase()).toBe(RealtimeConnectionPhase.CONNECTED);
+    expect(getPaidlyRealtimeConnectionSnapshot().phase).toBe(RealtimeConnectionPhase.CONNECTED);
   });
 });

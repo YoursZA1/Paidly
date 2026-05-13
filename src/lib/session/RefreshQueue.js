@@ -69,13 +69,13 @@ export function createRefreshQueue({ minGapMs = 3000 } = {}) {
 
   function halt() {
     halted = true;
-    console.info("[RetryController] Refresh queue halted.");
+    if (import.meta.env?.DEV) console.info("[RetryController] Refresh queue halted.");
     trackSessionTelemetry("refresh_queue_halted", {});
   }
 
   function resume() {
     halted = false;
-    console.info("[RetryController] Refresh queue resumed.");
+    if (import.meta.env?.DEV) console.info("[RetryController] Refresh queue resumed.");
     trackSessionTelemetry("refresh_queue_resumed", {});
   }
 

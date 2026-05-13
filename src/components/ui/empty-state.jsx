@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
  */
 export function EmptyState({ icon, title, description, action, className }) {
   return (
-    <div className={cn("text-center py-12 px-4", className)}>
+    <div className={cn("text-center py-12 px-4 animate-in fade-in slide-in-from-bottom-2 duration-300", className)}>
       {icon && (
-        <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4">
+        <div className="mx-auto w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mb-4 ring-1 ring-border/60 shadow-sm">
           {icon}
         </div>
       )}

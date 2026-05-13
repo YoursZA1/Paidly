@@ -681,7 +681,6 @@ body {
     @apply text-foreground antialiased;
     font-family: var(--font-sans);
     min-height: 100vh;
-    letter-spacing: 0.01em;
     line-height: 1.5;
     background: hsl(var(--background));
   }
@@ -728,6 +727,14 @@ body {
     font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--text-main);
+  }
+  /* Overline labels: KPI labels, table headers, status tags */
+  .type-overline {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--muted-foreground) / 0.65);
   }
   /* FinBank body & captions — line-height in 1.4–1.6 range for readable blocks */
   .finbank-body {
@@ -995,6 +1002,29 @@ body {
   }
 }
 
+/* Page & list enter animations */
+@keyframes fade-in-up-sm {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Skeleton shimmer — travels right-to-left using the muted token so it adapts to dark mode */
+@keyframes skeleton-shimmer-anim {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted))          0%,
+    hsl(var(--primary) / 0.07) 50%,
+    hsl(var(--muted))          100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer-anim 1.6s ease-in-out infinite;
+}
+
 @layer components {
   /* Mirrors common Tailwind recipes: px-4 max-w-md mx-auto; pair with .tw-stack-6 for space-y-6 rhythm */
   .tw-mobile-column {
@@ -1002,5 +1032,34 @@ body {
   }
   .tw-stack-6 {
     @apply flex flex-col gap-6;
+  }
+
+  /* Page-level enter: use on the main content wrapper of a page */
+  .page-enter {
+    animation: fade-in-up-sm 0.35s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+
+  /* Stagger-in: wrap a grid or list with this class — children cascade in */
+  .stagger-in > * {
+    animation: fade-in-up-sm 0.32s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+  .stagger-in > *:nth-child(1)  { animation-delay:   0ms; }
+  .stagger-in > *:nth-child(2)  { animation-delay:  45ms; }
+  .stagger-in > *:nth-child(3)  { animation-delay:  90ms; }
+  .stagger-in > *:nth-child(4)  { animation-delay: 135ms; }
+  .stagger-in > *:nth-child(5)  { animation-delay: 175ms; }
+  .stagger-in > *:nth-child(6)  { animation-delay: 210ms; }
+  .stagger-in > *:nth-child(n+7){ animation-delay: 240ms; }
+
+  /* Interactive card hover lift — use on individually clickable/hoverable cards */
+  .interactive-card {
+    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+  }
+  .interactive-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px -4px rgba(0,0,0,0.09), 0 3px 8px -2px rgba(0,0,0,0.05);
+  }
+  .dark .interactive-card:hover {
+    box-shadow: 0 8px 24px -4px rgba(0,0,0,0.35), 0 3px 8px -2px rgba(0,0,0,0.22);
   }
 }

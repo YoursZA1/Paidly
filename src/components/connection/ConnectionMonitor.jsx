@@ -3,7 +3,9 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
   hasPaidlyRealtimeWork,
   isPaidlyRealtimeMainChannelJoined,
-  schedulePaidlyRealtimeRebuild,
+  kickPaidlyRealtimeIfNeededOnMonitorMount,
+  notifyPaidlyRealtimeNavigatorOnline,
+  requestPaidlyRealtimeErrorRecovery,
   subscribePaidlyMainChannelStatus,
 } from "@/lib/realtime/paidlyRealtimeManager";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
@@ -15,15 +17,15 @@ import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 import { useAuthGatedConnectedSignal } from "@/lib/connection/connectionLifecycleStore";
 
 const CONNECTED_VISIBLE_MS = 3200;
-const REALTIME_BASE_RECONNECT_MS = 1000;
-const REALTIME_MAX_RECONNECT_MS = 30000;
-const REALTIME_MAX_RECONNECT_ATTEMPTS = 6;
 
 /**
  * Mount once near the app root (under {@link AuthProvider}):
  * - Polls Supabase health + browser online/offline → {@link useConnectionStore} `status` / errors.
  * - Drives `suppressConnectedIndicator` so the brief “connected” header flash stays correct when
  *   {@link ConnectionStatusIndicator} is mounted twice (mobile + desktop rows).
+ *
+ * Realtime multiplex rebuilds and backoff are owned by {@link paidlyRealtimeManager} — this component
+ * only maps transport status to connection UX (no parallel reconnect timers).
  */
 export default function ConnectionMonitor() {
   const { isAuthenticated } = useAuth();
@@ -37,8 +39,6 @@ export default function ConnectionMonitor() {
   const setSuppressConnectedIndicator = useConnectionStore((s) => s.setSuppressConnectedIndicator);
   const canShowConnected = useAuthGatedConnectedSignal();
   const inFlightRef = useRef(false);
-  const realtimeReconnectAttemptsRef = useRef(0);
-  const realtimeReconnectTimerRef = useRef(null);
   const isVisible = useCallback(
     () => (typeof document === "undefined" ? true : document.visibilityState === "visible"),
     []
@@ -95,82 +95,28 @@ export default function ConnectionMonitor() {
     setConnectionState,
   ]);
 
-  const clearRealtimeReconnectTimer = useCallback(() => {
-    if (realtimeReconnectTimerRef.current && typeof window !== "undefined") {
-      window.clearTimeout(realtimeReconnectTimerRef.current);
-      realtimeReconnectTimerRef.current = null;
-    }
-  }, []);
-
-  const resetRealtimeBackoff = useCallback(() => {
-    realtimeReconnectAttemptsRef.current = 0;
-    clearRealtimeReconnectTimer();
-  }, [clearRealtimeReconnectTimer]);
-
-  const scheduleRealtimeReconnect = useCallback((doReconnect) => {
-    if (!isSupabaseConfigured || typeof window === "undefined") return;
-    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
-    if (document.visibilityState !== "visible") return;
-    if (realtimeReconnectTimerRef.current) return;
-
-    const nextAttempt = realtimeReconnectAttemptsRef.current + 1;
-    if (nextAttempt > REALTIME_MAX_RECONNECT_ATTEMPTS) {
-      console.warn("[Realtime] Max reconnect attempts reached; pausing retries.");
-      return;
-    }
-    realtimeReconnectAttemptsRef.current = nextAttempt;
-    const delayMs = Math.min(
-      REALTIME_MAX_RECONNECT_MS,
-      REALTIME_BASE_RECONNECT_MS * 2 ** (nextAttempt - 1)
-    );
-    console.info("[Realtime] Scheduling reconnect", { attempt: nextAttempt, delayMs });
-    realtimeReconnectTimerRef.current = window.setTimeout(() => {
-      realtimeReconnectTimerRef.current = null;
-      doReconnect?.();
-    }, delayMs);
-  }, []);
-
-  const nudgeMainRealtimeChannel = useCallback(() => {
-    schedulePaidlyRealtimeRebuild();
-  }, []);
-
-  const startRealtime = useCallback(() => {
-    if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) return;
-    if (!hasPaidlyRealtimeWork()) {
-      return;
-    }
-    if (isPaidlyRealtimeMainChannelJoined()) {
-      resetRealtimeBackoff();
-      return;
-    }
-    scheduleRealtimeReconnect(nudgeMainRealtimeChannel);
-  }, [nudgeMainRealtimeChannel, resetRealtimeBackoff, scheduleRealtimeReconnect]);
-
-  useEffect(() => {
-    if (sessionStatus !== SESSION_STATUS.EXPIRED) return;
-    resetRealtimeBackoff();
-    clearRealtimeReconnectTimer();
-    console.info("[RetryController] Halted realtime recovery because auth is EXPIRED.");
-  }, [clearRealtimeReconnectTimer, resetRealtimeBackoff, sessionStatus]);
-
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
     void runCheck();
 
     const unsubMainStatus = subscribePaidlyMainChannelStatus((evt) => {
       if (evt === "SUBSCRIBED") {
-        resetRealtimeBackoff();
-        markConnected();
+        if (isPaidlyRealtimeMainChannelJoined()) {
+          markConnected();
+        }
         return;
       }
       if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
         if (!hasPaidlyRealtimeWork()) return;
         scheduleDegradedTransition("Realtime connection interrupted.");
-        scheduleRealtimeReconnect(nudgeMainRealtimeChannel);
+        requestPaidlyRealtimeErrorRecovery(`connection_monitor:${evt}`);
       }
     });
 
-    const onOnline = () => void runCheck();
+    const onOnline = () => {
+      notifyPaidlyRealtimeNavigatorOnline();
+      void runCheck();
+    };
     const onOffline = () => {
       connectionLifecycle?.reportNetworkState(false, "offline");
       sessionManager?.ConnectionMonitor?.setOffline({
@@ -182,12 +128,10 @@ export default function ConnectionMonitor() {
       const currentVisibility = document.visibilityState;
       if (currentVisibility === "hidden") {
         sessionManager?.ConnectionMonitor?.onHidden();
-        // Keep realtime/auth state intact while hidden; browser may throttle/suspend naturally.
         return;
       }
       sessionManager?.ConnectionMonitor?.onVisible();
       if (currentVisibility === "visible") {
-        startRealtime();
         void runCheck();
       }
     };
@@ -196,57 +140,49 @@ export default function ConnectionMonitor() {
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    startRealtime();
+    kickPaidlyRealtimeIfNeededOnMonitorMount();
 
     return () => {
       unsubMainStatus();
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      clearRealtimeReconnectTimer();
       sessionManager?.ConnectionMonitor?.dispose();
     };
   }, [
-    clearRealtimeReconnectTimer,
     connectionLifecycle,
     markConnected,
-    nudgeMainRealtimeChannel,
-    resetRealtimeBackoff,
     runCheck,
     scheduleDegradedTransition,
-    scheduleRealtimeReconnect,
     sessionManager,
     setConnectionState,
-    startRealtime,
   ]);
 
-  // Read-only subscription: map centralized auth session health to connection UX state.
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) return undefined;
     const mapped = sessionManager?.ConnectionMonitor?.mapSessionHealthToConnection({
       sessionStatus,
       sessionReason,
     });
-    if (!mapped) return;
+    if (!mapped) return undefined;
     if (mapped.status === CONNECTION_STATUS.CONNECTED) {
-      // Use markConnected so pending scheduleDegradedTransition timers are cleared and
-      // cannot fire later to override a healthy CONNECTED state back to DISCONNECTED.
       markConnected();
-      return;
+      return undefined;
     }
     setConnectionState({ ...mapped, lastCheckAt: Date.now() });
+    return undefined;
   }, [markConnected, sessionManager, sessionReason, sessionStatus, setConnectionState]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) return undefined;
 
     if (status !== CONNECTION_STATUS.CONNECTED) {
       setSuppressConnectedIndicator(true);
-      return;
+      return undefined;
     }
     if (!isAuthenticated || !canShowConnected) {
       setSuppressConnectedIndicator(true);
-      return;
+      return undefined;
     }
 
     setSuppressConnectedIndicator(false);

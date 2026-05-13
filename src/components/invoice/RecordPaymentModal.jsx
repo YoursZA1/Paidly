@@ -158,7 +158,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-foreground">Remaining</p>
-                <p className="text-2xl font-bold text-orange-600">{formatCurrency(remainingBalance, invoice.currency || 'USD')}</p>
+                <p className="text-2xl font-bold text-primary">{formatCurrency(remainingBalance, invoice.currency || 'USD')}</p>
               </div>
             </div>
             
@@ -170,7 +170,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
                 </div>
                 <div className="h-2 bg-primary/20 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-primary to-[#ff7c00] transition-all duration-500"
+                    className="h-full bg-primary transition-all duration-500"
                     style={{ width: `${Math.min(paymentProgress, 100)}%` }}
                   />
                 </div>
@@ -178,16 +178,16 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
             )}
 
             {remainingBalance <= 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-md p-2 text-xs text-green-700">
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-md p-2 text-xs text-emerald-700 dark:text-emerald-300">
                 This invoice is fully paid. No additional payments can be recorded.
               </div>
             )}
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">{error}</p>
             </div>
           )}
 
@@ -225,7 +225,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
             )}
             
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="amount"
                 type="number"
@@ -242,10 +242,10 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
               />
             </div>
             {amount && !isAmountValid && (
-              <p className="text-xs text-red-600">Amount must be between 0 and {formatCurrency(remainingBalance, invoice.currency || 'USD')}</p>
+              <p className="text-xs text-destructive">Amount must be between 0 and {formatCurrency(remainingBalance, invoice.currency || 'USD')}</p>
             )}
             {amount && isAmountValid && parseFloat(amount) < remainingBalance && (
-              <p className="text-xs text-orange-600 flex items-center gap-1">
+              <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" />
                 This is a partial payment. Remaining after: {formatCurrency(remainingBalance - parseFloat(amount), invoice.currency || 'USD')}
               </p>
@@ -255,7 +255,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
           <div className="space-y-2">
             <Label htmlFor="date">Payment Date *</Label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="date"
                 type="date"

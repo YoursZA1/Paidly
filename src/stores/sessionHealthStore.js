@@ -3,15 +3,29 @@ import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 
 /**
  * Session health state for UX visibility.
- * @typedef {'connected' | 'unstable' | 'reconnecting' | 'degraded' | 'reauth_required' | 'expired'} SessionHealthStatus
+ *
+ * Canonical V2 states (Stripe/Notion/Linear/Slack model):
+ *   ACTIVE      — session valid, user authenticated
+ *   REFRESHING  — token refresh in progress
+ *   DEGRADED    — partial connectivity, backoff retrying
+ *   EXPIRED     — terminal; all paths that require re-auth
+ *
+ * Legacy keys are preserved as aliases so existing code compiles unchanged.
+ *
+ * @typedef {'connected' | 'reconnecting' | 'degraded' | 'reauth_required' | 'expired'} SessionHealthStatus
  */
 export const SESSION_STATUS = {
-  CONNECTED: "connected",
-  UNSTABLE: "unstable",
-  RECONNECTING: "reconnecting",
+  // V2 canonical 4-state model
+  ACTIVE: "connected",
+  REFRESHING: "reconnecting",
   DEGRADED: "degraded",
-  REAUTH_REQUIRED: "reauth_required",
   EXPIRED: "expired",
+
+  // Legacy aliases (same underlying string values — backward compatible)
+  CONNECTED: "connected",
+  UNSTABLE: "degraded",
+  RECONNECTING: "reconnecting",
+  REAUTH_REQUIRED: "reauth_required",
 };
 
 /** Non-terminal states where realtime may still need a recovered hint after subscribe. */
@@ -139,5 +153,25 @@ export function applySessionHealthFromAuthority(status, reason = null) {
     reason: null,
     lastTransitionAt: useSessionHealthStore.getState().lastTransitionAt || Date.now(),
   });
+}
+
+/**
+ * Public API for setting session health status.
+ * Preferred over calling `applySessionHealthFromAuthority` directly in feature code.
+ * Identical semantics — terminal-state guards, debounced reconnecting, and telemetry all apply.
+ *
+ * @param {SessionHealthStatus} status
+ * @param {string} [reason]
+ */
+export function setSessionHealthStatus(status, reason) {
+  applySessionHealthFromAuthority(status, reason);
+}
+
+/**
+ * Returns true when the session is in a terminal state requiring re-authentication.
+ * Covers both EXPIRED and REAUTH_REQUIRED to handle all terminal paths.
+ */
+export function isTerminalSessionStatus(status) {
+  return status === SESSION_STATUS.EXPIRED || status === SESSION_STATUS.REAUTH_REQUIRED;
 }
 

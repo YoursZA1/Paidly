@@ -6,6 +6,7 @@ import { useInactivitySessionTimeout } from "@/hooks/useInactivitySessionTimeout
 import { navigateTo } from "@/lib/navigationService";
 import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { SESSION_STATUS, setSessionHealthStatus } from "@/stores/sessionHealthStore";
 
 // 18 min of no activity triggers the warning; 2 min warning countdown → logout = 20 min total.
 const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS || 18 * 60 * 1000);
@@ -45,6 +46,10 @@ export default function InactivitySessionGuard() {
         redirect: false,
         source: "inactivity_timeout",
       });
+      // Safety net: ensure EXPIRED status is always set even if connectionLifecycle is null or
+      // its guard short-circuited (e.g. another path already set a non-EXPIRED terminal state).
+      // SessionExpiredModal and RequireAuth both rely on this status being terminal.
+      setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
       await logout({ keepExpiredState: true });
     } finally {
       if (typeof window !== "undefined") {
@@ -66,6 +71,8 @@ export default function InactivitySessionGuard() {
       redirect: false,
       source: "inactivity_remote_timeout",
     });
+    // Safety net: same guarantee as onTimeout — SessionExpiredModal relies on EXPIRED status.
+    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
     if (typeof window !== "undefined") {
       try {
         window.sessionStorage.setItem("paidly_session_expired_reason", "inactivity_timeout");

@@ -6,7 +6,7 @@ const segmentConfig = {
     vip: {
         label: "VIP",
         icon: Crown,
-        className: "bg-amber-100 text-amber-800 border-amber-200"
+        className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50"
     },
     regular: {
         label: "Regular",
@@ -16,12 +16,12 @@ const segmentConfig = {
     new: {
         label: "New",
         icon: Sparkles,
-        className: "bg-green-100 text-green-800 border-green-200"
+        className: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/50"
     },
     at_risk: {
         label: "At Risk",
         icon: AlertTriangle,
-        className: "bg-red-100 text-red-800 border-red-200"
+        className: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50"
     }
 };
 

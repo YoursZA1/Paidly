@@ -9,6 +9,9 @@ import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
 /** Seconds before JWT expiry to force a refresh (clock skew + network latency). */
 export const PROACTIVE_REFRESH_BUFFER_SEC = 300;
 
+/** Hard timeout on a single refresh attempt. Prevents indefinitely hung requests. */
+const REFRESH_ATTEMPT_TIMEOUT_MS = 15_000;
+
 /**
  * @param {unknown} error — Supabase AuthError or similar
  * @returns {boolean} true if the refresh token is no longer usable (user must sign in again)
@@ -116,6 +119,14 @@ async function performSingleRefreshAttempt() {
     return { ok: false, reason: "no_refresh_token" };
   }
 
+  // CRITICAL: If GoTrue's autoRefreshToken already rotated the token moments before this call,
+  // the session is already fresh and the old refresh token is consumed. Attempting another
+  // supabase.auth.refreshSession() would send that already-consumed token → "refresh_token_not_found".
+  // Returning early avoids the double-refresh race that causes forced logouts.
+  if (isFreshEnough(before.session)) {
+    return { ok: true, session: before.session };
+  }
+
   let data;
   let error;
   if (shouldUseNodeAuthApi()) {
@@ -210,7 +221,23 @@ export async function refreshSupabaseSessionWithRecovery() {
   }
 
   try {
-    return await performSingleRefreshAttempt();
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("refresh_attempt_timeout")),
+        REFRESH_ATTEMPT_TIMEOUT_MS
+      );
+    });
+    try {
+      return await Promise.race([performSingleRefreshAttempt(), timeoutPromise]);
+    } catch (e) {
+      if (String(e?.message || "").includes("refresh_attempt_timeout")) {
+        return { ok: false, reason: "refresh_timeout", fatal: false };
+      }
+      throw e;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } finally {
     clearLock(ownerId);
   }

@@ -43,8 +43,7 @@ export default function PayslipsPage() {
         try {
             const payslipsData = await Payroll.list("-created_date", {
                 limit: 100,
-                maxWaitMs: 4000,
-                errorOnEmptyTimeout: true,
+                maxWaitMs: 12000,
             });
             setPayslipsInStore(Array.isArray(payslipsData) ? payslipsData : []);
         } catch (error) {

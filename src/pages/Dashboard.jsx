@@ -136,7 +136,7 @@ const StatCard = memo(function StatCard({ title, value, icon: Icon, iconImageSrc
   <Card className={`group relative overflow-hidden transition-all duration-300 ${
     fintech
       ? `glass-card rounded-fintech border border-border/80 hover:-translate-y-[1px] ${accentShadow}`
-      : "bg-card rounded-xl border border-border shadow-sm"
+      : "bg-card rounded-xl border border-border shadow-sm hover:-translate-y-0.5 hover:shadow-elevation-md"
   }`}>
     {fintech && (
       <div className={`pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b ${accentTone}`} aria-hidden />

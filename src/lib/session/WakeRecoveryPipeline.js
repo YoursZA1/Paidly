@@ -1,6 +1,5 @@
 import { clearSessionOrgIdCache } from "@/api/customClient";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
-import { validateAndRepairPaidlyRealtimeForWake } from "@/lib/realtime/paidlyRealtimeManager";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
 
 /**
@@ -141,7 +140,6 @@ export async function runWakeRecoveryPipeline(ctx) {
     ctx.setRecoveryPhase?.("realtime");
     try {
       await ctx.awaitRealtimeRecovery(reason, { channelJoinTimeoutMs: 12_000 });
-      await validateAndRepairPaidlyRealtimeForWake(reason);
     } catch (reErr) {
       console.warn("[Session] WakeRecoveryPipeline realtime step failed", reErr?.message || reErr);
       setPipelineState(WakeRecoveryState.FAILED);

@@ -2,11 +2,13 @@ import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
 const statusStyles = {
-    active: "bg-emerald-100 text-emerald-700",
-    paused: "bg-amber-100 text-amber-700",
+    active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    paused: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
     ended: "bg-muted text-muted-foreground",
 };
 
@@ -45,11 +47,17 @@ export default function RecurringList({ profiles, clients, isLoading }) {
     }
 
     if (profiles.length === 0) {
-        return <p className="text-gray-500 text-center py-10">No recurring invoice profiles found.</p>;
+        return (
+            <EmptyState
+                icon={<RefreshCw className="w-6 h-6 text-muted-foreground" />}
+                title="No recurring profiles yet"
+                description="Set up recurring billing to automate repeat invoices."
+            />
+        );
     }
 
     return (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>

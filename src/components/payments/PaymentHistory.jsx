@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DollarSign, Calendar, CreditCard, FileText, Building2, Banknote, Smartphone } from "lucide-react";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { format, parseISO } from "date-fns";
@@ -28,18 +29,20 @@ const paymentMethodLabels = {
 export default function PaymentHistory({ payments = [], currency = 'USD' }) {
     if (!payments || payments.length === 0) {
         return (
-            <Card className="bg-white border-0 shadow-sm">
+            <Card className="bg-card border border-border shadow-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg">
-                        <DollarSign className="w-5 h-5 text-green-600" />
+                        <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                         Payment History
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="text-center py-8">
-                        <DollarSign className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                        <p className="text-slate-600">No payments recorded yet</p>
-                    </div>
+                    <EmptyState
+                        icon={<DollarSign className="w-6 h-6 text-muted-foreground" />}
+                        title="No payments yet"
+                        description="Recorded payments will appear here."
+                        className="py-6"
+                    />
                 </CardContent>
             </Card>
         );
@@ -48,46 +51,46 @@ export default function PaymentHistory({ payments = [], currency = 'USD' }) {
     const totalPaid = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
     return (
-        <Card className="bg-white border-0 shadow-sm">
-            <CardHeader className="border-b border-slate-100">
+        <Card className="bg-card border border-border shadow-sm">
+            <CardHeader className="border-b border-border">
                 <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-lg">
-                        <DollarSign className="w-5 h-5 text-green-600" />
+                        <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                         Payment History
                         <Badge variant="secondary">{payments.length}</Badge>
                     </CardTitle>
                     <div className="text-right">
-                        <p className="text-xs text-slate-500">Total Paid</p>
-                        <p className="text-lg font-bold text-green-600">
+                        <p className="text-xs text-muted-foreground">Total Paid</p>
+                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(totalPaid, currency)}
                         </p>
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="p-0">
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                     {payments.map((payment) => {
                         const methodKey = payment.payment_method || payment.method;
                         const Icon = paymentMethodIcons[methodKey] || DollarSign;
                         const methodLabel = paymentMethodLabels[methodKey] || methodKey || 'Other';
-                        
+
                         return (
-                            <div key={payment.id} className="p-4 hover:bg-slate-50 transition-colors">
+                            <div key={payment.id} className="p-4 hover:bg-muted/50 transition-colors">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-start gap-3">
-                                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                            <Icon className="w-5 h-5 text-green-600" />
+                                        <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                                            <Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2">
-                                                <p className="font-semibold text-slate-900">
+                                                <p className="font-semibold text-foreground">
                                                     {formatCurrency(payment.amount, currency)}
                                                 </p>
-                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/50">
                                                     {methodLabel}
                                                 </Badge>
                                             </div>
-                                            <div className="flex items-center gap-4 text-xs text-slate-500">
+                                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                                 <span className="flex items-center gap-1">
                                                     <Calendar className="w-3 h-3" />
                                                     {(payment.payment_date || payment.paid_at) ? format(parseISO(payment.payment_date || payment.paid_at), 'MMM d, yyyy') : '—'}
@@ -100,13 +103,13 @@ export default function PaymentHistory({ payments = [], currency = 'USD' }) {
                                                 )}
                                             </div>
                                             {payment.notes && (
-                                                <p className="text-sm text-slate-600 mt-2">
+                                                <p className="text-sm text-muted-foreground mt-2">
                                                     {payment.notes}
                                                 </p>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="text-right text-xs text-slate-400">
+                                    <div className="text-right text-xs text-muted-foreground">
                                         {(payment.created_date || payment.created_at) && (
                                             <p>Recorded {format(parseISO(payment.created_date || payment.created_at), 'MMM d')}</p>
                                         )}

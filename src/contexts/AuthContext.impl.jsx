@@ -17,7 +17,7 @@ import {
   reportSupabaseGetSessionFailure,
   reportSupabaseGetSessionRecovered,
 } from "@/lib/authSessionReconnectToast";
-import { msUntilProactiveRefresh, isRefreshTokenFatalError } from "@/lib/supabaseAuthRefresh";
+import { msUntilProactiveRefresh, isRefreshTokenFatalError, refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
 import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
@@ -37,8 +37,8 @@ import {
   reconcileRealtimeJwt,
   reconcileRealtimeJwtFromSupabaseAuthEvent,
   scheduleRealtimeRecoveryAfterAuth,
+  checkRealtimeOnVisibilityRestore,
 } from "@/lib/realtime/authRealtimeCoordinator";
-import { repairStalePaidlyRealtimeOnTabVisible } from "@/lib/realtime/paidlyRealtimeManager";
 import { createReconnectEscalationController } from "@/lib/auth/authReconnectEscalation";
 import { runAuthRefreshQueueJob } from "@/lib/auth/authRefreshQueueJob";
 import { runSessionRefreshExecutorPipeline } from "@/lib/auth/authSessionResyncPipeline";
@@ -309,7 +309,23 @@ export function AuthProvider({ children }) {
     normalizeSessionFromClient,
     isSessionValid,
     patchAuthSession,
-    supabaseRefreshSession: () => supabase.auth.refreshSession(),
+    // Route through refreshSupabaseSessionWithRecovery instead of the raw Supabase client so
+    // the escalation shares the in-memory mutex AND the isFreshEnough guard.
+    // Without this, a concurrent GoTrue autoRefreshToken rotation would already have consumed
+    // the refresh token; the direct call would get "refresh_token_not_found" → handleFatal → forced logout.
+    supabaseRefreshSession: async () => {
+      const result = await refreshSupabaseSessionWithRecovery();
+      const rawSession =
+        result.ok && result.session
+          ? {
+              access_token: result.session.accessToken,
+              refresh_token: result.session.refreshToken,
+              expires_at: result.session.expiresAt,
+              user: result.session.user,
+            }
+          : null;
+      return { data: { session: rawSession }, error: result.error ?? null };
+    },
     getSessionHealthStatus: () => useSessionHealthStore.getState().status,
   };
   if (reconnectEscalationCtlRef.current == null) {
@@ -918,18 +934,15 @@ export function AuthProvider({ children }) {
         });
       }
 
+      // Fast stale check: rebuilds realtime ONLY if the channel is not joined.
+      // Never forces a reconnect when the channel is healthy (requirement 11).
       if (signedIn) {
-        void repairStalePaidlyRealtimeOnTabVisible({
-          believedSignedIn: true,
-          reason: "visibility_stale_realtime",
-        }).then((r) => {
-          if (r && !r.skipped && r.repaired && r.ok) {
-            connectionLifecycle.reportRealtimeRecovered("visibility_stale_repair");
-          }
-        });
+        checkRealtimeOnVisibilityRestore();
       }
 
-      requestSessionRefreshGuarded({ source: "visibility", silent: true, bypassThrottle: true });
+      // Do NOT bypass the throttle here: rapid hide/show cycles must be subject to
+      // RefreshQueue's minGapMs guard to prevent successive refresh storms.
+      requestSessionRefreshGuarded({ source: "visibility", silent: true });
     };
 
     document.addEventListener("visibilitychange", handleVisibility);

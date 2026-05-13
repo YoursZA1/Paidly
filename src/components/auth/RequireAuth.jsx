@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 import { getAuthUserId } from "@/lib/authUserId";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
-import { useSessionHealthStore, SESSION_STATUS } from "@/stores/sessionHealthStore";
+import { useSessionHealthStore, SESSION_STATUS, isTerminalSessionStatus } from "@/stores/sessionHealthStore";
 
 /**
  * Rare edge: Supabase session exists but the app user object has not hydrated yet.
@@ -70,7 +70,10 @@ export default function RequireAuth({ children, roles }) {
     );
   }
 
-  if (sessionHealthStatus === SESSION_STATUS.EXPIRED) {
+  // Both EXPIRED and REAUTH_REQUIRED are terminal states that require re-authentication.
+  // EXPIRED covers inactivity, sign-out, and general session loss.
+  // REAUTH_REQUIRED covers fatal refresh-token invalidation (more secure expiry path).
+  if (isTerminalSessionStatus(sessionHealthStatus)) {
     return (
       <Navigate
         to={`${createPageUrl("Home")}#sign-in`}

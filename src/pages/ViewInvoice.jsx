@@ -289,7 +289,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
 
     if (isLoading) {
         return (
-            <div className="bg-slate-100 p-8 animate-fade-in min-h-[60vh]" role="status" aria-label="Loading invoice">
+            <div className="bg-muted p-8 animate-fade-in min-h-[60vh]" role="status" aria-label="Loading invoice">
                 <InvoicePreviewSkeleton />
             </div>
         )
@@ -357,13 +357,13 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
             )}
             {/* Action Bar — white rounded bar, fits + mobile-friendly */}
             <div className={`no-print pt-2 pb-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 ${embedded && embeddedFullWidth ? 'px-page sm:px-6' : 'px-4 sm:px-6'}`}>
-                <div className={`${embedded && embeddedFullWidth ? 'max-w-none w-full' : 'max-w-5xl mx-auto'} bg-white rounded-xl border border-slate-100 shadow-sm p-3 sm:p-4`}>
+                <div className={`${embedded && embeddedFullWidth ? 'max-w-none w-full' : 'max-w-5xl mx-auto'} bg-card rounded-xl border border-border shadow-sm p-3 sm:p-4`}>
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={embedded && onClose ? onClose : () => navigate(createPageUrl('Invoices'))}
-                            className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                            className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                         >
                             <ArrowLeft className="w-4 h-4 shrink-0" />
                             Back
@@ -374,7 +374,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 size="sm"
                                 onClick={() => setShowPaymentDialog(true)}
                                 disabled={!canRecordPayment(invoice)}
-                                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
                             >
                                 <DollarSign className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">Record Payment</span>
@@ -385,7 +385,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 variant="outline"
                                 size="sm"
                                 onClick={handlePreviewPDF}
-                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                                className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                             >
                                 <Eye className="w-4 h-4 shrink-0" />
                                 Preview
@@ -395,7 +395,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 variant="outline"
                                 size="sm"
                                 onClick={handlePrint}
-                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                                className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                             >
                                 <Printer className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">Print</span>
@@ -405,7 +405,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 variant="outline"
                                 size="sm"
                                 onClick={handleDownloadPDF}
-                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                                className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                             >
                                 <Download className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">Download PDF</span>
@@ -416,7 +416,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 size="sm"
                                 onClick={handleSendEmail}
                                 disabled={isSending || !invoice}
-                                className="bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 rounded-xl shrink-0 h-9 sm:h-10"
                             >
                                 <Mail className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Email Client'}</span>
@@ -428,7 +428,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 size="sm"
                                 onClick={handleShareViaWhatsApp}
                                 disabled={isSharing}
-                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                                className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                             >
                                 <Share2 className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">{isSharing ? 'Opening…' : 'Share'}</span>
@@ -440,7 +440,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                                 size="sm"
                                 onClick={() => navigate(createPageUrl(`EditInvoice?id=${invoice.id}`))}
                                 disabled={!canEditInvoice(invoice)}
-                                className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 h-9 sm:h-10"
+                                className="flex items-center gap-2 rounded-xl border-border hover:bg-muted/50 shrink-0 h-9 sm:h-10"
                             >
                                 <Edit className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline">Edit</span>
@@ -476,23 +476,23 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                         <Card className="gap-0 p-0 shadow-md">
                             <CardContent className="p-4 sm:p-6">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <Clock className="w-4 h-4 text-slate-600" />
-                                    <h3 className="font-semibold text-slate-800">Version History</h3>
+                                    <Clock className="w-4 h-4 text-muted-foreground" />
+                                    <h3 className="font-semibold text-foreground">Version History</h3>
                                 </div>
                                 {history.length === 0 ? (
-                                    <p className="text-sm text-slate-500">No changes recorded yet.</p>
+                                    <p className="text-sm text-muted-foreground">No changes recorded yet.</p>
                                 ) : (
                                     <ul className="space-y-4">
                                         {history.map((entry) => (
-                                            <li key={entry.id || entry.timestamp} className="border-l-2 border-slate-200 pl-3">
-                                                <p className="text-sm font-medium text-slate-800">
+                                            <li key={entry.id || entry.timestamp} className="border-l-2 border-border pl-3">
+                                                <p className="text-sm font-medium text-foreground">
                                                     {entry.summary || 'Invoice updated'}
                                                 </p>
-                                                <p className="text-xs text-slate-500 mt-1">
+                                                <p className="text-xs text-muted-foreground mt-1">
                                                     {entry.timestamp ? format(new Date(entry.timestamp), 'MMM d, yyyy h:mm a') : 'Unknown time'}
                                                 </p>
                                                 {Array.isArray(entry.changes) && entry.changes.length > 0 && (
-                                                    <p className="text-xs text-slate-600 mt-1">
+                                                    <p className="text-xs text-muted-foreground mt-1">
                                                         {entry.changes.length} change{entry.changes.length > 1 ? 's' : ''}
                                                     </p>
                                                 )}

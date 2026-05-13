@@ -51,13 +51,13 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-in">
             {invoices.map(invoice => (
-                <Card key={invoice.id} className="bg-white border border-slate-200 hover:shadow-md transition-shadow">
+                <Card key={invoice.id} className="bg-card border-border interactive-card group">
                     <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex-1 space-y-1">
-                                <p className="font-semibold text-slate-800 truncate" title={getClientName(invoice.client_id)}>
+                                <p className="font-semibold text-foreground truncate" title={getClientName(invoice.client_id)}>
                                     {getClientName(invoice.client_id)}
                                 </p>
                                 <div className="flex items-center gap-2">
@@ -81,13 +81,13 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                             />
                         </div>
                         
-                        <p className="text-sm text-slate-500 mb-4 line-clamp-2 min-h-[40px]">
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
                             {invoice.project_title || "No project title"}
                         </p>
 
-                        <div className="flex justify-between items-end pt-4 border-t border-slate-100">
+                        <div className="flex justify-between items-end pt-4 border-t border-border">
                             <div>
-                                <p className="text-sm font-bold text-slate-800 text-lg">
+                                <p className="text-sm font-bold text-foreground text-lg">
                                     {formatCurrency(invoice.total_amount, userCurrency)}
                                 </p>
                                 {paymentsMap && (() => {
@@ -95,31 +95,31 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                                     const remaining = invoice.total_amount - totalPaid;
                                     return totalPaid > 0 ? (
                                         <div className="mt-1 space-y-0.5">
-                                            <p className="text-xs text-green-600 font-medium">
+                                            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                                                 Paid: {formatCurrency(totalPaid, userCurrency)}
                                             </p>
                                             {remaining > 0 && (
-                                                <p className="text-xs text-slate-500">
+                                                <p className="text-xs text-muted-foreground">
                                                     Due: {formatCurrency(remaining, userCurrency)}
                                                 </p>
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-slate-400 mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1">
                                             Created: {invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : 'N/A'}
                                         </p>
                                     );
                                 })()}
                                 {!paymentsMap && (
-                                    <p className="text-xs text-slate-400 mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1">
                                         Created: {invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : 'N/A'}
                                     </p>
                                 )}
                             </div>
                             {invoice.delivery_date && (
                                 <div className="text-right">
-                                    <p className="text-xs text-slate-400">Due Date</p>
-                                    <p className="text-xs font-medium text-slate-600">
+                                    <p className="text-xs text-muted-foreground">Due Date</p>
+                                    <p className="text-xs font-medium text-foreground">
                                         {format(new Date(invoice.delivery_date), "MMM d, yyyy")}
                                     </p>
                                 </div>

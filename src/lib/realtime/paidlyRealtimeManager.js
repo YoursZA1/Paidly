@@ -12,11 +12,20 @@ import { LifecycleSignalType } from "@/lib/connection/lifecycleSignalTypes";
 import { getSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
-import { useConnectionLifecycleStore } from "@/lib/connection/connectionLifecycleStore";
-import { SESSION_STATUS, shouldHintRealtimeRecoveredFromSessionHealth, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import { shouldHintRealtimeRecoveredFromSessionHealth, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
+import {
+  RealtimeConnectionPhase,
+  __resetPaidlyRealtimeConnectionMachineForTests,
+  getPaidlyRealtimeConnectionPhase,
+  getPaidlyRealtimeConnectionSnapshot,
+  setPaidlyRealtimeConnectionPhase,
+} from "@/lib/realtime/paidlyRealtimeConnectionMachine";
+import { paidlyRealtimeLog } from "@/lib/realtime/paidlyRealtimeStructuredLog";
 
 export const PAIDLY_REALTIME_CHANNEL = "paidly-sync-realtime";
+
+export { getPaidlyRealtimeConnectionPhase, getPaidlyRealtimeConnectionSnapshot };
 
 /** Logical subscription families multiplexed on {@link PAIDLY_REALTIME_CHANNEL}. */
 export const REALTIME_DOMAINS = Object.freeze({
@@ -44,15 +53,39 @@ export const PAIDLY_REALTIME_SYNC_TABLES = [
 const SYNC_TABLES_SET = new Set(PAIDLY_REALTIME_SYNC_TABLES);
 
 let channelInstance = null;
+
+/** Queued rebuild while a subscribe handshake is still completing. */
 let rebuildQueued = false;
+let rebuildInFlight = false;
+let lastRebuildCompletedAtMs = 0;
+let rebuildDelayTimerId = null;
+const REBUILD_MIN_INTERVAL_MS = 600;
 
-/** Single-flight for {@link repairStalePaidlyRealtimeOnTabVisible}. */
-let visibleStaleRepairPromise = null;
+/** Coalesces multiple `schedulePaidlyRealtimeRebuild` calls into one microtask. */
+let pendingScheduleMicrotask = false;
 
-/** Dedupes multiplex rebuild storms when TOKEN_REFRESHED and refreshSession both land with the same JWT. */
-let lastReconciledAccessToken = null;
-let lastReconciledAtMs = 0;
-const REALTIME_JWT_RECONCILE_DEBOUNCE_MS = 400;
+/** Coalesces duplicate JWT rotation signals in one JS turn. */
+let authRotateCoalesce = false;
+
+/** Last access token pushed to Realtime via setAuth (for structured logs). */
+let lastRealtimeAuthToken = null;
+
+/** Error-path recovery: single timer + exponential backoff (replaces UI-layer reconnect storms). */
+let errorRecoveryTimerId = null;
+let errorRecoveryBackoffMs = 1000;
+const ERROR_RECOVERY_BACKOFF_MIN_MS = 1000;
+const ERROR_RECOVERY_BACKOFF_MAX_MS = 30_000;
+
+const HEARTBEAT_INTERVAL_MS = 22_000;
+let heartbeatTimerId = null;
+
+/**
+ * Watchdog: if the subscribe callback does not fire within this window the rebuild is considered
+ * hung (frozen network, server not responding). `rebuildInFlight` is reset and error-recovery backoff
+ * is triggered so future rebuilds are not permanently blocked.
+ */
+const SUBSCRIBE_WATCHDOG_MS = 20_000;
+let subscribeWatchdogId = null;
 
 const syncBridge = {
   userId: null,
@@ -78,6 +111,64 @@ function computePaidlyRealtimeWork() {
       (notificationUserId && notificationListeners.size > 0) ||
       auxTableListeners.size > 0
   );
+}
+
+function clearSubscribeWatchdog() {
+  if (subscribeWatchdogId != null) {
+    clearTimeout(subscribeWatchdogId);
+    subscribeWatchdogId = null;
+  }
+}
+
+function startSubscribeWatchdog(origin) {
+  clearSubscribeWatchdog();
+  subscribeWatchdogId = setTimeout(() => {
+    subscribeWatchdogId = null;
+    if (!rebuildInFlight) return; // subscribe already resolved — nothing to do
+    paidlyRealtimeLog("rebuild_failure", {
+      origin,
+      reason: "subscribe_watchdog_expired",
+      detail: `subscribe callback did not fire within ${SUBSCRIBE_WATCHDOG_MS}ms`,
+    });
+    setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.FAILED, "subscribe_watchdog_expired");
+    rebuildInFlight = false;
+    // The channel reference stays until destroyMainChannel runs on next rebuild so we do not
+    // double-remove it here — error recovery will schedule a fresh rebuild.
+    requestPaidlyRealtimeErrorRecovery("subscribe_watchdog_expired");
+  }, SUBSCRIBE_WATCHDOG_MS);
+}
+
+function startHeartbeatIfNeeded() {
+  if (typeof window === "undefined" || heartbeatTimerId) return;
+  heartbeatTimerId = window.setInterval(() => {
+    if (!computePaidlyRealtimeWork()) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (isRecoveryCircuitOpen()) return;
+    if (getPaidlyRealtimeConnectionPhase() === RealtimeConnectionPhase.REBUILDING) return;
+
+    const ch = channelInstance;
+    if (!ch) {
+      paidlyRealtimeLog("stale_channel_detected", { reason: "heartbeat_no_channel" });
+      setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.STALE, "heartbeat_no_channel");
+      schedulePaidlyRealtimeRebuild("heartbeat_no_channel");
+      return;
+    }
+    const st = String(ch.state || "").toLowerCase();
+    if (st !== "joined") {
+      paidlyRealtimeLog("stale_channel_detected", { reason: "heartbeat_not_joined", state: st });
+      setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.STALE, `heartbeat_not_joined:${st}`);
+      schedulePaidlyRealtimeRebuild("heartbeat_not_joined");
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeatIfIdle() {
+  if (computePaidlyRealtimeWork()) return;
+  if (heartbeatTimerId && typeof window !== "undefined") {
+    window.clearInterval(heartbeatTimerId);
+    heartbeatTimerId = null;
+  }
 }
 
 /**
@@ -127,21 +218,8 @@ function notifyMainChannelStatusListeners(status) {
   }
 }
 
-function recoveryHandler() {
-  if (isRecoveryCircuitOpen()) return;
-  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-  if (!computePaidlyRealtimeWork()) return;
-  const ch = channelInstance;
-  const st = ch ? String(ch.state || "").toLowerCase() : "";
-  if (st === "joined") return;
-  if (import.meta.env?.DEV) {
-    console.info("[PaidlyRealtime] rebuild channel (stale)", st || "no-channel");
-  }
-  runChannelRebuild();
-}
-
-function registerSyncRecoveryHandler() {
-  registerRealtimeRecoveryHandler(REALTIME_RECOVERY_IDS.SYNC_ENGINE, recoveryHandler);
+function recoveryLockBlocksRealtimeDelivery() {
+  return useWakeRecoveryStore.getState().blockMutations;
 }
 
 function auxConfigKey(schema, table, filter) {
@@ -163,19 +241,39 @@ function dispatchAux(schema, table, filter, payload) {
   }
 }
 
-function recoveryLockBlocksRealtimeDelivery() {
-  return useWakeRecoveryStore.getState().blockMutations;
+/**
+ * Fully remove the multiplex channel from the Supabase client (unsubscribe + teardown).
+ * @param {string} origin
+ */
+function destroyMainChannel(origin) {
+  const prev = channelInstance;
+  if (!prev) return;
+  paidlyRealtimeLog("channel_destroyed", { origin, channel: PAIDLY_REALTIME_CHANNEL });
+  try {
+    supabase.removeChannel(prev);
+  } catch (e) {
+    paidlyRealtimeLog("rebuild_failure", { step: "removeChannel", message: String(e?.message || e) });
+  }
+  channelInstance = null;
 }
 
-function runChannelRebuild() {
-  rebuildQueued = false;
-  registerSyncRecoveryHandler();
-
-  if (channelInstance) {
-    supabase.removeChannel(channelInstance);
-    channelInstance = null;
+/**
+ * @param {string} [reason]
+ */
+function flushRebuildDelayTimer(reason = "flush") {
+  if (rebuildDelayTimerId) {
+    clearTimeout(rebuildDelayTimerId);
+    rebuildDelayTimerId = null;
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "rebuild_timer_cleared", reason });
   }
+}
 
+/**
+ * Core (re)build: destroy any existing channel, attach postgres listeners once, subscribe.
+ * Caller owns phase transitions and debounce gates.
+ * @param {string} origin
+ */
+function createAndSubscribeMainChannel(origin) {
   const hasSync = Boolean(syncBridge.userId && syncBridge.onEntityEvent);
   const hasProfiles = profileListeners.size > 0;
   const hasNotifications = Boolean(notificationUserId && notificationListeners.size > 0);
@@ -183,10 +281,18 @@ function runChannelRebuild() {
 
   if (!hasSync && !hasProfiles && !hasNotifications && !hasAux) {
     lastMainChannelSubscribeStatus = null;
+    setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.IDLE, "no_listeners");
+    stopHeartbeatIfIdle();
+    rebuildInFlight = false;
+    paidlyRealtimeLog("rebuild_success", { origin, detail: "no_work_skipped_create" });
     return;
   }
 
+  startHeartbeatIfNeeded();
+  setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.CONNECTING, origin);
+
   const ch = supabase.channel(PAIDLY_REALTIME_CHANNEL);
+  paidlyRealtimeLog("channel_created", { origin, channel: PAIDLY_REALTIME_CHANNEL });
 
   if (hasSync) {
     for (const table of PAIDLY_REALTIME_SYNC_TABLES) {
@@ -268,31 +374,194 @@ function runChannelRebuild() {
     });
   }
 
+  startSubscribeWatchdog(origin);
   ch.subscribe((status) => {
+    // Watchdog must be cleared first — callback fired so no hung-subscribe risk.
+    clearSubscribeWatchdog();
+    rebuildInFlight = false;
     lastMainChannelSubscribeStatus = status;
     notifyMainChannelStatusListeners(status);
     applyMainChannelSubscribeStatus(status, Boolean(syncBridge.userId));
-    if (status === "CHANNEL_ERROR" && import.meta.env?.DEV) {
-      console.debug(
-        "[PaidlyRealtime] channel error (optional). Ensure tables are in supabase_realtime publication."
-      );
+
+    if (status === "SUBSCRIBED") {
+      errorRecoveryBackoffMs = ERROR_RECOVERY_BACKOFF_MIN_MS;
+      if (String(ch.state || "").toLowerCase() === "joined") {
+        setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.CONNECTED, origin);
+        lastRebuildCompletedAtMs = Date.now();
+        paidlyRealtimeLog("rebuild_success", { origin, status });
+      }
+    } else if (status === "TIMED_OUT") {
+      paidlyRealtimeLog("timed_out", { origin });
+      setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.FAILED, "timed_out");
+      paidlyRealtimeLog("rebuild_failure", { origin, status });
+      requestPaidlyRealtimeErrorRecovery(`subscribe_${status}`);
+    } else if (status === "CHANNEL_ERROR" || status === "CLOSED") {
+      setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.FAILED, String(status));
+      paidlyRealtimeLog("rebuild_failure", { origin, status });
+      requestPaidlyRealtimeErrorRecovery(`subscribe_${status}`);
+    }
+
+    if (rebuildQueued) {
+      rebuildQueued = false;
+      queueMicrotask(() => runChannelRebuild("queued_after_subscribe", { force: true }));
     }
   });
 
   channelInstance = ch;
 }
 
-export function schedulePaidlyRealtimeRebuild() {
-  if (isRecoveryCircuitOpen()) return;
-  if (rebuildQueued) return;
-  rebuildQueued = true;
-  queueMicrotask(runChannelRebuild);
+/** @param {{ force?: boolean }} [opts] — `force` skips min-interval debounce (JWT rotation, timer drain). */
+function runChannelRebuild(origin, opts = {}) {
+  const force = Boolean(
+    opts.force ||
+      origin.startsWith("jwt_refresh") ||
+      origin.startsWith("debounced_after_min_interval") ||
+      origin.startsWith("error_recovery") ||
+      origin.endsWith("_subscribe") ||
+      origin === "sync_bridge" ||
+      origin.endsWith("_unsubscribe")
+  );
+
+  if (isRecoveryCircuitOpen()) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "recovery_circuit_open", origin });
+    rebuildInFlight = false;
+    return;
+  }
+
+  if (rebuildInFlight) {
+    rebuildQueued = true;
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "rebuild_in_flight", origin });
+    return;
+  }
+
+  const now = Date.now();
+  if (!force && now - lastRebuildCompletedAtMs < REBUILD_MIN_INTERVAL_MS) {
+    if (!rebuildDelayTimerId) {
+      rebuildDelayTimerId = setTimeout(() => {
+        rebuildDelayTimerId = null;
+        runChannelRebuild("debounced_after_min_interval", { force: true });
+      }, REBUILD_MIN_INTERVAL_MS);
+    }
+    paidlyRealtimeLog("reconnect_suppressed", {
+      kind: "rebuild_min_interval",
+      origin,
+      waitMs: REBUILD_MIN_INTERVAL_MS,
+    });
+    return;
+  }
+
+  flushRebuildDelayTimer("entering_rebuild");
+  rebuildInFlight = true;
+  rebuildQueued = false;
+  setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.REBUILDING, origin);
+
+  destroyMainChannel(origin);
+  try {
+    createAndSubscribeMainChannel(origin);
+  } catch (e) {
+    rebuildInFlight = false;
+    setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.FAILED, "create_throw");
+    paidlyRealtimeLog("rebuild_failure", { origin, message: String(e?.message || e) });
+  }
 }
 
 /**
- * Read model for “is our multiplex channel actually joined?” — use after auth work, before trusting postgres_changes.
- * @returns {{ ok: boolean, hasWork: boolean, joined: boolean }}
+ * @param {string} [origin]
  */
+export function schedulePaidlyRealtimeRebuild(origin = "schedule") {
+  if (isRecoveryCircuitOpen()) return;
+  if (pendingScheduleMicrotask) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "schedule_coalesced", origin });
+    return;
+  }
+  pendingScheduleMicrotask = true;
+  queueMicrotask(() => {
+    pendingScheduleMicrotask = false;
+    runChannelRebuild(origin);
+  });
+}
+
+/**
+ * After subscribe errors / transport loss: one coalesced rebuild with exponential backoff.
+ * @param {string} source
+ */
+export function requestPaidlyRealtimeErrorRecovery(source = "error_recovery") {
+  if (typeof window === "undefined" || !isSupabaseConfigured) return;
+  if (isRecoveryCircuitOpen()) return;
+  if (!computePaidlyRealtimeWork()) return;
+  if (errorRecoveryTimerId) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "error_recovery_timer_active", source });
+    return;
+  }
+  errorRecoveryTimerId = window.setTimeout(() => {
+    errorRecoveryTimerId = null;
+    runChannelRebuild(`error_recovery:${source}`, { force: true });
+    errorRecoveryBackoffMs = Math.min(ERROR_RECOVERY_BACKOFF_MAX_MS, errorRecoveryBackoffMs * 2);
+  }, errorRecoveryBackoffMs);
+}
+
+/**
+ * Called when the tab becomes visible after a short hide (below wake-recovery threshold).
+ * Performs a fast stale-channel check and schedules a rebuild ONLY if the channel is not joined.
+ *
+ * Requirement 11: visibility changes MUST NOT force reconnects when the channel is healthy.
+ * The heartbeat (22 s) remains the primary stale detector; this is a faster supplemental check.
+ */
+export function checkPaidlyRealtimeOnVisibilityRestore() {
+  if (typeof window === "undefined" || !isSupabaseConfigured) return;
+  if (!computePaidlyRealtimeWork()) return;
+  if (isRecoveryCircuitOpen()) return;
+
+  // Channel is healthy — no action; log suppressed reconnect so it is observable.
+  if (isPaidlyRealtimeMainChannelJoined()) {
+    paidlyRealtimeLog("reconnect_suppressed", {
+      kind: "visibility_restore_channel_healthy",
+      phase: getPaidlyRealtimeConnectionPhase(),
+    });
+    return;
+  }
+
+  const currentPhase = getPaidlyRealtimeConnectionPhase();
+  // Already rebuilding or connecting — defer to the in-flight attempt.
+  if (
+    currentPhase === RealtimeConnectionPhase.REBUILDING ||
+    currentPhase === RealtimeConnectionPhase.CONNECTING
+  ) {
+    paidlyRealtimeLog("reconnect_suppressed", {
+      kind: "visibility_restore_rebuild_in_progress",
+      phase: currentPhase,
+    });
+    return;
+  }
+
+  // Channel is stale or missing — schedule a rebuild.
+  paidlyRealtimeLog("stale_channel_detected", {
+    reason: "visibility_restore",
+    phase: currentPhase,
+    channel: channelInstance ? String(channelInstance.state || "unknown") : "null",
+  });
+  setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.STALE, "visibility_restore");
+  schedulePaidlyRealtimeRebuild("visibility_restore");
+}
+
+/** Browser came back online — optional single rebuild if work exists and channel is not joined. */
+export function notifyPaidlyRealtimeNavigatorOnline() {
+  if (typeof window === "undefined" || !isSupabaseConfigured) return;
+  if (!computePaidlyRealtimeWork()) return;
+  if (isPaidlyRealtimeMainChannelJoined()) return;
+  schedulePaidlyRealtimeRebuild("navigator_online");
+}
+
+/**
+ * ConnectionMonitor mount: one-shot if subscriptions exist before the channel joined.
+ */
+export function kickPaidlyRealtimeIfNeededOnMonitorMount() {
+  if (typeof window === "undefined" || !isSupabaseConfigured) return;
+  if (!computePaidlyRealtimeWork()) return;
+  if (isPaidlyRealtimeMainChannelJoined()) return;
+  schedulePaidlyRealtimeRebuild("connection_monitor_mount");
+}
+
 export function validatePaidlyRealtime() {
   const hasWork = computePaidlyRealtimeWork();
   const joined = isPaidlyRealtimeMainChannelJoined();
@@ -304,94 +573,8 @@ export function validatePaidlyRealtime() {
 }
 
 /**
- * Wake / recovery: if multiplex work is registered but the main channel is not joined, rebuild once and wait.
- * Does not touch unrelated channels — Paidly uses a single multiplex channel.
- *
- * @param {string} [reason]
- * @returns {Promise<{ ok: boolean, repaired: boolean }>}
- */
-export async function validateAndRepairPaidlyRealtimeForWake(reason = "wake_recovery") {
-  if (isRecoveryCircuitOpen()) {
-    return { ok: false, repaired: false };
-  }
-  if (typeof window === "undefined" || !isSupabaseConfigured) {
-    return { ok: true, repaired: false };
-  }
-  const v = validatePaidlyRealtime();
-  if (!v.hasWork) return { ok: true, repaired: false };
-  if (v.joined) return { ok: true, repaired: false };
-
-  console.info("[Realtime] Multiplex channel not joined; scheduling rebuild", { reason });
-  schedulePaidlyRealtimeRebuild();
-  const joined = await waitForPaidlyMainChannelJoined({ timeoutMs: 12_000 });
-  if (!joined) {
-    console.warn("[Realtime] Multiplex channel still not joined after repair wait", { reason });
-  }
-  return { ok: joined, repaired: true };
-}
-
-/**
- * Light path when the tab becomes visible: lifecycle or channel state says realtime is stale, but we are not
- * running the full wake pipeline. No auth refresh, no mutation lock — multiplex rebuild + join wait only.
- *
- * @param {{ believedSignedIn?: boolean, reason?: string }} [opts]
- * @returns {Promise<{ ok: boolean, skipped?: boolean, repaired?: boolean, reason?: string }>}
- */
-export async function repairStalePaidlyRealtimeOnTabVisible(opts = {}) {
-  if (isRecoveryCircuitOpen()) {
-    return { ok: true, skipped: true, reason: "terminal_auth" };
-  }
-  if (typeof window === "undefined" || !isSupabaseConfigured) {
-    return { ok: true, skipped: true, reason: "no_window" };
-  }
-  if (document.visibilityState !== "visible") {
-    return { ok: true, skipped: true, reason: "not_visible" };
-  }
-
-  const { believedSignedIn = true, reason = "visibility_stale_realtime" } = opts;
-  if (!believedSignedIn) {
-    return { ok: true, skipped: true, reason: "guest" };
-  }
-  if (useSessionHealthStore.getState().status === SESSION_STATUS.EXPIRED) {
-    return { ok: true, skipped: true, reason: "expired" };
-  }
-  if (useWakeRecoveryStore.getState().blockMutations) {
-    return { ok: true, skipped: true, reason: "recovery_lock" };
-  }
-
-  const rt = useConnectionLifecycleStore.getState().realtime;
-  const v = validatePaidlyRealtime();
-  const lifecycleSaysStale = rt.phase === "unstable" || rt.phase === "unstable_background";
-  const channelDrift = v.hasWork && !v.joined;
-
-  if (!lifecycleSaysStale && !channelDrift) {
-    return { ok: true, skipped: true, reason: "not_stale" };
-  }
-
-  if (visibleStaleRepairPromise) {
-    return visibleStaleRepairPromise;
-  }
-
-  visibleStaleRepairPromise = (async () => {
-    try {
-      console.info("[Realtime] Light repair on tab visible (stale / drift)", {
-        reason,
-        lifecyclePhase: rt.phase,
-        channelDrift,
-      });
-      return await validateAndRepairPaidlyRealtimeForWake(reason);
-    } finally {
-      visibleStaleRepairPromise = null;
-    }
-  })();
-
-  return visibleStaleRepairPromise;
-}
-
-/**
- * After a successful JWT refresh: push the new access token into Supabase Realtime, then rebuild Paidly channels.
- * Realtime can stay authorized on an old JWT while PostgREST already uses the new one; `channel.state === joined`
- * is not sufficient. See {@link recoveryHandler} skip-when-joined path.
+ * After JWT rotation: push token into Realtime, **fully** tear down the multiplex channel, then recreate it.
+ * Coalesces duplicate refresh signals in the same synchronous burst.
  *
  * @param {string} accessToken
  * @param {string} [reason]
@@ -402,29 +585,28 @@ export async function reconcilePaidlyRealtimeAfterTokenRefresh(accessToken, reas
   if (!accessToken || typeof accessToken !== "string") return;
   if (!computePaidlyRealtimeWork()) return;
 
-  const now = Date.now();
-  const skipRebuild =
-    lastReconciledAccessToken === accessToken && now - lastReconciledAtMs < REALTIME_JWT_RECONCILE_DEBOUNCE_MS;
-
   try {
     await supabase.realtime.setAuth(accessToken);
   } catch (e) {
+    paidlyRealtimeLog("rebuild_failure", { step: "setAuth", message: String(e?.message || e), reason });
     if (import.meta.env?.DEV) {
       console.warn("[PaidlyRealtime] realtime.setAuth after token refresh failed:", e?.message || e);
     }
   }
 
-  if (skipRebuild) return;
+  const tokenChanged = lastRealtimeAuthToken !== accessToken;
+  lastRealtimeAuthToken = accessToken;
 
-  lastReconciledAccessToken = accessToken;
-  lastReconciledAtMs = now;
-
-  rebuildQueued = false;
-  runChannelRebuild();
-
-  if (import.meta.env?.DEV) {
-    console.info("[PaidlyRealtime] realtime reconciled after JWT rotation", reason);
+  if (authRotateCoalesce) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "auth_rotate_microtask_coalesce", reason, tokenChanged });
+    return;
   }
+  authRotateCoalesce = true;
+  queueMicrotask(() => {
+    authRotateCoalesce = false;
+    paidlyRealtimeLog("auth_rotated", { reason, tokenChanged });
+    runChannelRebuild(`jwt_refresh:${reason}`, { force: true });
+  });
 }
 
 /**
@@ -470,10 +652,6 @@ export function waitForPaidlyMainChannelJoined({ timeoutMs = 12_000 } = {}) {
   });
 }
 
-/**
- * Whether the app has any realtime domain active (main channel should exist after rebuild).
- * @see REALTIME_DOMAINS
- */
 export function hasPaidlyRealtimeWork() {
   return computePaidlyRealtimeWork();
 }
@@ -507,16 +685,16 @@ export function isPaidlyRealtimeMainChannelJoined() {
 export function setPaidlySyncRealtimeBridge(next) {
   syncBridge.userId = next?.userId ?? null;
   syncBridge.onEntityEvent = next?.onEntityEvent ?? null;
-  schedulePaidlyRealtimeRebuild();
+  schedulePaidlyRealtimeRebuild("sync_bridge");
 }
 
 /** @param {(payload: { table: string, eventType: string, new: object | null, old: object | null }) => void} listener */
 export function subscribePaidlyProfilesRealtime(listener) {
   profileListeners.add(listener);
-  schedulePaidlyRealtimeRebuild();
+  schedulePaidlyRealtimeRebuild("profiles_subscribe");
   return () => {
     profileListeners.delete(listener);
-    schedulePaidlyRealtimeRebuild();
+    schedulePaidlyRealtimeRebuild("profiles_unsubscribe");
   };
 }
 
@@ -527,11 +705,11 @@ export function subscribePaidlyProfilesRealtime(listener) {
 export function subscribePaidlyNotificationsRealtime(userId, listener) {
   notificationListeners.add(listener);
   notificationUserId = userId;
-  schedulePaidlyRealtimeRebuild();
+  schedulePaidlyRealtimeRebuild("notifications_subscribe");
   return () => {
     notificationListeners.delete(listener);
     if (notificationListeners.size === 0) notificationUserId = null;
-    schedulePaidlyRealtimeRebuild();
+    schedulePaidlyRealtimeRebuild("notifications_unsubscribe");
   };
 }
 
@@ -554,15 +732,20 @@ export function subscribePaidlyAuxPostgres(config, listener) {
   }
   const k = auxConfigKey(schema, table, filter);
   if (!auxTableListeners.has(k)) auxTableListeners.set(k, new Set());
-  auxTableListeners.get(k).add(listener);
-  schedulePaidlyRealtimeRebuild();
+  const bucket = auxTableListeners.get(k);
+  if (bucket.has(listener)) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "duplicate_aux_listener", table, schema });
+    return () => {};
+  }
+  bucket.add(listener);
+  schedulePaidlyRealtimeRebuild("aux_subscribe");
   return () => {
     const set = auxTableListeners.get(k);
     if (set) {
       set.delete(listener);
       if (set.size === 0) auxTableListeners.delete(k);
     }
-    schedulePaidlyRealtimeRebuild();
+    schedulePaidlyRealtimeRebuild("aux_unsubscribe");
   };
 }
 
@@ -582,9 +765,25 @@ export function __resetPaidlyRealtimeManagerForTests() {
   mainChannelStatusListeners.clear();
   lastMainChannelSubscribeStatus = null;
   rebuildQueued = false;
-  lastReconciledAccessToken = null;
-  lastReconciledAtMs = 0;
-  visibleStaleRepairPromise = null;
+  rebuildInFlight = false;
+  lastRebuildCompletedAtMs = 0;
+  pendingScheduleMicrotask = false;
+  lastRealtimeAuthToken = null;
+  authRotateCoalesce = false;
+  if (rebuildDelayTimerId) {
+    clearTimeout(rebuildDelayTimerId);
+    rebuildDelayTimerId = null;
+  }
+  if (errorRecoveryTimerId && typeof window !== "undefined") {
+    window.clearTimeout(errorRecoveryTimerId);
+    errorRecoveryTimerId = null;
+  }
+  errorRecoveryBackoffMs = ERROR_RECOVERY_BACKOFF_MIN_MS;
+  clearSubscribeWatchdog();
+  if (heartbeatTimerId && typeof window !== "undefined") {
+    window.clearInterval(heartbeatTimerId);
+    heartbeatTimerId = null;
+  }
   if (channelInstance) {
     try {
       supabase.removeChannel(channelInstance);
@@ -593,4 +792,14 @@ export function __resetPaidlyRealtimeManagerForTests() {
     }
     channelInstance = null;
   }
+  __resetPaidlyRealtimeConnectionMachineForTests();
 }
+
+function paidlyRealtimeRegistryRecovery(ctx) {
+  const r = ctx?.reason ?? "unknown";
+  if (isRecoveryCircuitOpen()) return;
+  if (!computePaidlyRealtimeWork()) return;
+  schedulePaidlyRealtimeRebuild(`recovery_registry:${r}`);
+}
+
+registerRealtimeRecoveryHandler(REALTIME_RECOVERY_IDS.SYNC_ENGINE, paidlyRealtimeRegistryRecovery);

@@ -96,6 +96,10 @@ export function createSessionManager(deps) {
     async handleFatal(reason = "fatal_refresh_token") {
       const decision = evaluate(reason, { refreshFatal: true });
       trackSessionTelemetry("session_refresh_fatal", { reason: decision.reason || reason || null });
+      console.warn("[SessionManager] session:expired", {
+        reason: decision.reason || reason,
+        source: "refresh_fatal",
+      });
       // Critical: clear stale GoTrue session memory immediately after fatal refresh evidence.
       await authTransitionManager.clearSession({
         signOutLocal: true,

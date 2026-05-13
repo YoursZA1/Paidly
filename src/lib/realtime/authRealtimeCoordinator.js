@@ -5,6 +5,7 @@
 import {
   reconcilePaidlyRealtimeAfterTokenRefresh,
   waitForPaidlyMainChannelJoined,
+  checkPaidlyRealtimeOnVisibilityRestore,
 } from "@/lib/realtime/paidlyRealtimeManager";
 import {
   awaitRealtimeRecoveryHandlers,
@@ -30,6 +31,14 @@ export async function awaitRealtimeRecoveryAndMainChannel(reason, opts = {}) {
   const { channelJoinTimeoutMs = 12_000, only } = opts;
   await awaitRealtimeRecoveryHandlers(reason, only != null ? { only } : {});
   await waitForPaidlyMainChannelJoined({ timeoutMs: channelJoinTimeoutMs });
+}
+
+/**
+ * Called when the tab becomes visible (non-wake-recovery path).
+ * Checks channel health and rebuilds ONLY if stale. Does NOT force a reconnect when healthy.
+ */
+export function checkRealtimeOnVisibilityRestore() {
+  checkPaidlyRealtimeOnVisibilityRestore();
 }
 
 /** Supabase `onAuthStateChange` branches that must reconcile Realtime JWT. */

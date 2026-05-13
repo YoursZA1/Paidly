@@ -113,18 +113,18 @@ function QuickBillCard({ client, balance, userCurrency, onSelectClient, onCreate
         style={{ x }}
         onDragEnd={handleDragEnd}
         onTap={handleTap}
-        className="relative w-full cursor-grab active:cursor-grabbing text-left bg-white dark:bg-slate-800 p-5 rounded-[28px] border border-slate-100 dark:border-slate-700 flex justify-between items-center active:scale-[0.97] transition-transform shadow-sm min-w-0"
+        className="relative w-full cursor-grab active:cursor-grabbing text-left bg-card p-5 rounded-[28px] border border-border flex justify-between items-center active:scale-[0.97] transition-transform shadow-sm min-w-0"
         whileTap={{ scale: 1 }}
       >
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{client.name}</span>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{client.email || client.company || "—"}</span>
+          <span className="font-semibold text-foreground truncate">{client.name}</span>
+          <span className="text-[11px] text-muted-foreground truncate">{client.email || client.company || "—"}</span>
         </div>
         <div className="text-right ml-4 shrink-0">
-          <p className={`font-black text-xs tabular-nums ${balance > 0 ? "text-orange-500" : "text-emerald-500"}`}>
+          <p className={`font-bold text-xs tabular-nums ${balance > 0 ? "text-orange-500" : "text-emerald-500"}`}>
             {formatCurrency(balance, userCurrency)}
           </p>
-          <span className="text-[9px] font-black uppercase tracking-widest opacity-40">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
             {balance > 0 ? "Overdue" : "Settled"}
           </span>
         </div>
@@ -365,23 +365,23 @@ export default function Clients() {
       <div className="lg:hidden flex flex-col w-full min-w-0">
         <div className="flex flex-col w-full px-4 pt-2 sm:pt-4 space-y-3 pb-4">
           <div className="flex justify-between items-center mb-2 shrink-0">
-            <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Clients</h2>
+            <h2 className="text-2xl font-bold text-foreground tracking-tight font-display">Clients</h2>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => loadData(true)}
                 disabled={isRefetching || showLoadingSkeleton}
-                className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl active:scale-95 transition-all disabled:opacity-50"
+                className="p-2 bg-muted rounded-xl active:scale-95 transition-all disabled:opacity-50 text-muted-foreground"
                 aria-label="Refresh clients"
               >
                 <ArrowPathIcon
-                  className={`w-5 h-5 text-slate-400 dark:text-slate-500 ${isRefetching ? "animate-spin" : ""}`}
+                  className={`w-5 h-5 text-muted-foreground ${isRefetching ? "animate-spin" : ""}`}
                 />
               </button>
               <button
                 type="button"
                 onClick={() => navigate(createPageUrl("EditClient"))}
-                className="p-2 bg-orange-500 rounded-xl active:scale-95 shadow-lg shadow-orange-100 dark:shadow-orange-900/30 transition-all text-white"
+                className="p-2 bg-primary rounded-xl active:scale-95 shadow-lg shadow-primary/20 transition-all text-primary-foreground"
                 aria-label="Add client"
                 data-testid="clients-add"
               >
@@ -395,7 +395,7 @@ export default function Clients() {
             placeholder="Search clients..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-base text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-orange-500/20 placeholder:text-slate-300 dark:placeholder:text-slate-500 outline-none min-w-0"
+            className="w-full bg-muted border-none rounded-2xl px-5 py-4 text-base text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/50 outline-none min-w-0"
             style={{ fontSize: "16px" }}
             data-testid="clients-search"
           />
@@ -422,7 +422,7 @@ export default function Clients() {
                 ))}
               </div>
             ) : searchFilteredClients.length === 0 ? (
-              <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+              <div className="py-8 text-center text-muted-foreground text-sm">
                 {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
               </div>
             ) : (
@@ -443,7 +443,7 @@ export default function Clients() {
                 {(hasNextClientsPage || isFetchingNextClientsPage) && (
                   <div
                     ref={clientsLoadMoreMobileRef}
-                    className="flex min-h-[48px] flex-col items-center justify-center py-3 text-xs text-slate-500 dark:text-slate-400"
+                    className="flex min-h-[48px] flex-col items-center justify-center py-3 text-xs text-muted-foreground"
                     aria-live="polite"
                   >
                     {isFetchingNextClientsPage
@@ -458,16 +458,16 @@ export default function Clients() {
       </div>
 
       {/* Desktop: sidebar list (≥ 1024px) */}
-      <aside className="hidden lg:flex w-72 sm:w-80 md:w-96 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 flex-col min-h-0 min-w-0">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <aside className="hidden lg:flex w-72 sm:w-80 md:w-96 shrink-0 bg-card border-r border-border flex-col min-h-0 min-w-0">
+        <div className="p-6 border-b border-border shrink-0">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">Clients</h1>
+            <h1 className="text-2xl font-bold text-foreground font-display">Clients</h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => loadData(true)}
                 disabled={isRefetching || showLoadingSkeleton}
-                className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
+                className="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
                 aria-label="Refresh clients"
                 title="Refresh"
               >
@@ -478,7 +478,7 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => navigate(createPageUrl("EditClient"))}
-                className="p-2 bg-orange-500 rounded-xl text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/30 hover:bg-orange-600 transition-colors"
+                className="p-2 bg-primary rounded-xl text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
                 aria-label="Add client"
                 data-testid="clients-add"
               >
@@ -490,7 +490,7 @@ export default function Clients() {
             placeholder="Search clients..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-3 text-base text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-500/30 outline-none min-w-0 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            className="w-full bg-muted border-none rounded-2xl p-3 text-base text-foreground focus:ring-2 focus:ring-ring/20 outline-none min-w-0 placeholder:text-muted-foreground/50"
             style={{ fontSize: "16px" }}
             data-testid="clients-search"
           />
@@ -518,7 +518,7 @@ export default function Clients() {
               ))}
             </div>
           ) : searchFilteredClients.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+            <div className="py-8 text-center text-muted-foreground text-sm">
               {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
             </div>
           ) : (
@@ -537,26 +537,26 @@ export default function Clients() {
                     className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
                       isActive
                         ? "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                        : "hover:bg-muted/50"
                     }`}
                   >
                     <div className="min-w-0">
-                      <h3 className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                      <h3 className="font-semibold text-foreground truncate">
                         {client.name}
                       </h3>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {client.company || client.email || "—"}
                       </p>
                     </div>
                     <div className="text-right shrink-0 ml-2">
                       <p
-                        className={`text-xs font-black ${
+                        className={`text-xs font-bold ${
                           balance > 0 ? "text-red-500" : "text-emerald-500"
                         }`}
                       >
                         {formatCurrency(balance, userCurrency)}
                       </p>
-                      <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                         {status}
                       </p>
                     </div>
@@ -566,7 +566,7 @@ export default function Clients() {
               {(hasNextClientsPage || isFetchingNextClientsPage) && (
                 <div
                   ref={clientsLoadMoreDesktopRef}
-                  className="flex min-h-[44px] flex-col items-center justify-center py-2 text-[11px] text-slate-500 dark:text-slate-400"
+                  className="flex min-h-[44px] flex-col items-center justify-center py-2 text-[11px] text-muted-foreground"
                   aria-live="polite"
                 >
                   {isFetchingNextClientsPage
@@ -582,7 +582,7 @@ export default function Clients() {
       {/* 2. CLIENT DETAIL VIEW */}
       <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6 md:p-10">
         {!activeClient ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             {loadError && (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md w-full text-center sm:text-left">
                 <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
@@ -608,12 +608,12 @@ export default function Clients() {
             <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-10">
               <div className="min-w-0">
                 <h2
-                  className="text-3xl md:text-4xl font-black text-slate-900 dark:text-slate-100 mb-2 truncate"
+                  className="text-3xl md:text-4xl font-bold text-foreground tracking-tight mb-2 truncate font-display"
                   data-testid="client-active-name"
                 >
                   {activeClient.name}
                 </h2>
-                <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400 font-medium">
+                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground font-medium">
                   <span className="flex items-center gap-1 min-w-0">
                     <EnvelopeIcon className="w-4 h-4 shrink-0" />
                     <span className="truncate">{activeClient.email}</span>
@@ -633,7 +633,7 @@ export default function Clients() {
                 >
                   <Button
                     variant="outline"
-                    className="rounded-2xl font-bold border-slate-200 dark:border-slate-600 dark:hover:bg-slate-800"
+                    className="rounded-2xl font-bold border-border hover:bg-muted"
                   >
                     <ArrowTopRightOnSquareIcon className="w-4 h-4 mr-2" />
                     Full profile
@@ -641,7 +641,7 @@ export default function Clients() {
                 </Link>
                 <Button
                   variant="outline"
-                  className="rounded-2xl font-bold border-slate-200 dark:border-slate-600 dark:hover:bg-slate-800"
+                  className="rounded-2xl font-bold border-border hover:bg-muted"
                   onClick={() => goEditClient(activeClient)}
                   data-testid="client-edit"
                 >
@@ -664,7 +664,7 @@ export default function Clients() {
                     encodeURIComponent(activeClient.id)
                   }
                 >
-                  <Button className="px-6 py-3 bg-orange-600 hover:bg-orange-700 rounded-2xl font-bold text-white shadow-lg shadow-orange-200 dark:shadow-orange-900/30">
+                  <Button className="px-6 py-3 bg-primary hover:bg-primary/90 rounded-2xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
                     Bill Client
                   </Button>
                 </Link>
@@ -672,7 +672,7 @@ export default function Clients() {
             </header>
 
             {hasNextInvoicesPage && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-2xl">
+              <p className="text-xs text-muted-foreground mb-4 max-w-2xl">
                 Balances use invoices loaded so far. Scroll down on this page to load older invoices for fuller totals.
               </p>
             )}
@@ -683,7 +683,7 @@ export default function Clients() {
                 {
                   label: "Total Revenue",
                   value: formatCurrency(activeStats.totalRevenue, userCurrency),
-                  color: "text-slate-900 dark:text-slate-100",
+                  color: "text-foreground",
                 },
                 {
                   label: "Outstanding",
@@ -698,12 +698,12 @@ export default function Clients() {
               ].map((stat, i) => (
                 <div
                   key={i}
-                  className="bg-white dark:bg-slate-800/80 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm"
+                  className="bg-card p-6 rounded-[32px] border border-border shadow-sm"
                 >
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest mb-1">
                     {stat.label}
                   </p>
-                  <p className={`text-2xl font-black ${stat.color}`}>
+                  <p className={`text-2xl font-bold ${stat.color}`}>
                     {stat.value}
                   </p>
                 </div>
@@ -711,15 +711,15 @@ export default function Clients() {
             </div>
 
             {/* Tabbed Content: Invoices */}
-            <section className="bg-white dark:bg-slate-800/80 rounded-[40px] border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
-              <div className="px-8 py-6 border-b border-slate-50 dark:border-slate-700 flex gap-8">
+            <section className="bg-card rounded-[40px] border border-border shadow-sm overflow-hidden">
+              <div className="px-8 py-6 border-b border-border flex gap-8">
                 <button
                   type="button"
                   onClick={() => setDetailTab("invoices")}
                   className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
                     detailTab === "invoices"
-                      ? "text-orange-600 dark:text-orange-400 border-orange-600 dark:border-orange-400"
-                      : "text-slate-400 dark:text-slate-500 border-transparent hover:text-slate-600 dark:hover:text-slate-300"
+                      ? "text-primary border-primary"
+                      : "text-muted-foreground border-transparent hover:text-foreground"
                   }`}
                 >
                   Invoices
@@ -729,8 +729,8 @@ export default function Clients() {
                   onClick={() => setDetailTab("quotations")}
                   className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
                     detailTab === "quotations"
-                      ? "text-orange-600 dark:text-orange-400 border-orange-600 dark:border-orange-400"
-                      : "text-slate-400 dark:text-slate-500 border-transparent hover:text-slate-600 dark:hover:text-slate-300"
+                      ? "text-primary border-primary"
+                      : "text-muted-foreground border-transparent hover:text-foreground"
                   }`}
                 >
                   Quotations
@@ -740,8 +740,8 @@ export default function Clients() {
                   onClick={() => setDetailTab("statement")}
                   className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
                     detailTab === "statement"
-                      ? "text-orange-600 dark:text-orange-400 border-orange-600 dark:border-orange-400"
-                      : "text-slate-400 dark:text-slate-500 border-transparent hover:text-slate-600 dark:hover:text-slate-300"
+                      ? "text-primary border-primary"
+                      : "text-muted-foreground border-transparent hover:text-foreground"
                   }`}
                 >
                   Statement
@@ -752,7 +752,7 @@ export default function Clients() {
                 {detailTab === "invoices" && (
                   <>
                     {activeInvoices.length === 0 ? (
-                      <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                      <div className="py-12 text-center text-muted-foreground">
                         <p className="font-medium">No invoices yet</p>
                         <p className="text-sm mt-1 mb-4">
                           Create an invoice for this client to see it here.
@@ -764,7 +764,7 @@ export default function Clients() {
                             encodeURIComponent(activeClient.id)
                           }
                         >
-                          <Button className="bg-orange-600 hover:bg-orange-700">
+                          <Button>
                             Bill Client
                           </Button>
                         </Link>
@@ -772,25 +772,25 @@ export default function Clients() {
                     ) : (
                       <table className="w-full text-left">
                         <thead>
-                          <tr className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-50 dark:border-slate-700">
+                          <tr className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest border-b border-border">
                             <th className="pb-4">Invoice #</th>
                             <th className="pb-4">Date</th>
                             <th className="pb-4 text-right">Amount</th>
                             <th className="pb-4 text-right">Status</th>
                           </tr>
                         </thead>
-                        <tbody className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                        <tbody className="text-sm font-medium text-muted-foreground">
                           {activeInvoices.slice(0, 20).map((inv) => (
                             <tr
                               key={inv.id}
-                              className="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/30"
+                              className="border-b border-border hover:bg-muted/50"
                             >
                               <td className="py-4">
                                 <Link
                                   to={
                                     createPageUrl("ViewInvoice") + "?id=" + inv.id
                                   }
-                                  className="text-slate-900 dark:text-slate-100 font-semibold hover:text-orange-600 dark:hover:text-orange-400"
+                                  className="text-foreground font-semibold hover:text-primary"
                                 >
                                   {inv.invoice_number || inv.id?.slice(0, 8)}
                                 </Link>
@@ -798,12 +798,12 @@ export default function Clients() {
                               <td className="py-4">
                                 {safeFormatDate(inv.issue_date || inv.created_date)}
                               </td>
-                              <td className="py-4 text-right font-bold text-slate-900 dark:text-slate-100">
+                              <td className="py-4 text-right font-semibold text-foreground">
                                 {formatCurrency(inv.total_amount, userCurrency)}
                               </td>
                               <td className="py-4 text-right">
                                 <span
-                                  className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                                  className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
                                     statusStyles[inv.status] || statusStyles.draft
                                   }`}
                                 >
@@ -818,7 +818,7 @@ export default function Clients() {
                   </>
                 )}
                 {detailTab === "quotations" && (
-                  <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                  <div className="py-12 text-center text-muted-foreground">
                     <p className="font-medium">Quotations</p>
                     <p className="text-sm mt-1">
                       Link to quotes for this client can be added here.
@@ -831,7 +831,7 @@ export default function Clients() {
                   </div>
                 )}
                 {detailTab === "statement" && (
-                  <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                  <div className="py-12 text-center text-muted-foreground">
                     <p className="font-medium">Statement</p>
                     <p className="text-sm mt-1">
                       Account statement view can be added here.
@@ -844,15 +844,15 @@ export default function Clients() {
             {(hasNextInvoicesPage || isFetchingNextInvoicesPage) && (
               <div
                 ref={invoicesLoadMoreRef}
-                className="mt-8 flex min-h-[52px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-600 px-4 py-4 text-center"
+                className="mt-8 flex min-h-[52px] flex-col items-center justify-center rounded-2xl border border-dashed border-border px-4 py-4 text-center"
                 aria-live="polite"
               >
                 {isFetchingNextInvoicesPage ? (
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                  <span className="text-sm text-muted-foreground">
                     Loading more invoices…
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-xs text-muted-foreground">
                     More invoices on file — scroll this area to load older rows for balances and lists.
                   </span>
                 )}

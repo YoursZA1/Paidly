@@ -353,7 +353,7 @@ export default function RecentActivity({
             <p className="text-sm text-muted-foreground">No recent activity yet</p>
           </div>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-0.5 stagger-in">
             {merged.map((item, idx) => {
               const Icon = item.icon;
               const rel = formatRelative(item.at);
@@ -374,14 +374,14 @@ export default function RecentActivity({
                 <li key={`${item.kind}-${rowKey}-${idx}`}>
                   <div
                     className={cn(
-                      'rounded-lg px-2 py-2 transition-colors',
+                      'group rounded-lg px-2 py-2 transition-colors duration-150',
                       'hover:bg-muted/50 dark:hover:bg-muted/25'
                     )}
                   >
                     <div className="flex gap-2.5">
                       <div
                         className={cn(
-                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110',
                           item.iconClass
                         )}
                       >

@@ -101,7 +101,7 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
     const issuedDate = invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "—";
     const amountLabel = formatCurrency(invoice.total_amount, userCurrency);
     return (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0 shadow-sm">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0 shadow-sm interactive-card">
             <Link
                 to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
                 className="flex-1 min-w-0 flex justify-between items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"
@@ -223,7 +223,7 @@ function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, 
     return (
         <div className="overflow-hidden rounded-lg border border-border/50 bg-transparent w-full min-w-0">
             {/* Mobile: vertical card list */}
-            <div className="block md:hidden p-3 sm:p-4 space-y-3">
+            <div className="block md:hidden p-3 sm:p-4">
                 {isLoading ? (
                     Array(6).fill(0).map((_, i) => (
                         <div
@@ -241,7 +241,8 @@ function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, 
                         </div>
                     ))
                 ) : (
-                    invoices.map((invoice) => (
+                    <div className="stagger-in space-y-3">
+                    {invoices.map((invoice) => (
                         <InvoiceMobileCard
                             key={invoice.id}
                             invoice={invoice}
@@ -253,7 +254,8 @@ function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, 
                             onPaymentFullyPaid={onPaymentFullyPaid}
                             onOptimisticUpdate={onOptimisticUpdate}
                         />
-                    ))
+                    ))}
+                    </div>
                 )}
             </div>
 
