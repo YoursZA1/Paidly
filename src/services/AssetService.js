@@ -1,8 +1,26 @@
 import { supabase } from "@/lib/supabaseClient";
+import {
+  isStorageAssetKnownFailed,
+  isValidLogoStorageObjectKey,
+  markStorageAssetFailed,
+} from "@/lib/paidlyStorageAssetGuard";
+import { readLogoUrlDiskCache, writeLogoUrlDiskCache } from "@/lib/logoUrlDiskCache";
 
 const LOGO_BUCKET = "paidly";
 const LEGACY_LOGO_BUCKET = "company-logos";
 const FALLBACK_LOGO = "/fallback-logo.png";
+
+/** In-memory resolved public URLs per profile path (session); avoids repeat getPublicUrl + disk reads). */
+const SESSION_LOGO_BY_INPUT = new Map();
+const SESSION_LOGO_MAX = 500;
+
+function touchSessionLogoMap(key, value) {
+  if (SESSION_LOGO_BY_INPUT.size >= SESSION_LOGO_MAX && !SESSION_LOGO_BY_INPUT.has(key)) {
+    const first = SESSION_LOGO_BY_INPUT.keys().next().value;
+    if (first != null) SESSION_LOGO_BY_INPUT.delete(first);
+  }
+  SESSION_LOGO_BY_INPUT.set(key, value);
+}
 
 function extractAfterBucket(url, bucket) {
   const marker = `/${bucket}/`;
@@ -75,11 +93,35 @@ function detectLogoBucket(path) {
 }
 
 function getLogo(path) {
+  const rawInput = String(path || "").trim();
   const { bucket, cleaned } = resolveLogoSource(path);
   if (!cleaned) return FALLBACK_LOGO;
   if (cleaned.startsWith("blob:") || cleaned.startsWith("data:")) return cleaned;
+  if (!isValidLogoStorageObjectKey(cleaned)) return FALLBACK_LOGO;
+
+  if (rawInput && !rawInput.startsWith("blob:") && !rawInput.startsWith("data:")) {
+    const mem = SESSION_LOGO_BY_INPUT.get(rawInput);
+    if (mem && mem !== FALLBACK_LOGO && !isStorageAssetKnownFailed(mem)) {
+      return mem;
+    }
+  }
+
+  if (rawInput && !rawInput.startsWith("blob:") && !rawInput.startsWith("data:")) {
+    const disk = readLogoUrlDiskCache(rawInput);
+    if (disk?.url && disk.url !== FALLBACK_LOGO && !isStorageAssetKnownFailed(disk.url)) {
+      touchSessionLogoMap(rawInput, disk.url);
+      return disk.url;
+    }
+  }
+
   const { data } = supabase.storage.from(bucket).getPublicUrl(cleaned);
-  return data?.publicUrl || FALLBACK_LOGO;
+  const url = data?.publicUrl || FALLBACK_LOGO;
+  if (url !== FALLBACK_LOGO && isStorageAssetKnownFailed(url)) return FALLBACK_LOGO;
+  if (url !== FALLBACK_LOGO && rawInput && !rawInput.startsWith("blob:") && !rawInput.startsWith("data:")) {
+    writeLogoUrlDiskCache(rawInput, url);
+    touchSessionLogoMap(rawInput, url);
+  }
+  return url;
 }
 
 async function listLogoAssets(limit = 100) {
@@ -94,7 +136,9 @@ const AssetService = {
   cleanPath,
   getLogo,
   listLogoAssets,
+  markStorageAssetFailed,
+  isValidLogoStorageObjectKey,
 };
 
 export default AssetService;
-export { cleanPath, getLogo };
+export { cleanPath, getLogo, markStorageAssetFailed, isValidLogoStorageObjectKey };

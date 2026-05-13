@@ -1,5 +1,6 @@
 import { Invoice, InvoiceView, Payment } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
+import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 
 /** Page size for infinite invoice lists (hooks + UI consume via service). */
@@ -37,31 +38,36 @@ export function getInvoiceListQueryKey(filters, userId) {
  * @param {string | null} userId
  */
 export async function fetchInvoiceListPage(offset, filters = {}, userId = null) {
-  void filters;
-  void userId;
-  const rows = await withTimeoutRetry(
-    () =>
-      Invoice.list("-created_date", {
-        ...LIST_OPTS,
-        limit: INVOICE_LIST_PAGE_SIZE,
-        offset,
-      }),
-    PER_PAGE_TIMEOUT_MS,
-    PER_PAGE_RETRIES
-  );
-  return Array.isArray(rows) ? rows : [];
+  const filterKey = JSON.stringify(normalizeInvoiceListFilters(filters));
+  const dedupeKey = `Invoice.list.page:${offset}:${filterKey}:${userId ?? ""}:${INVOICE_LIST_PAGE_SIZE}`;
+  return runDedupedAsync(dedupeKey, async () => {
+    const rows = await withTimeoutRetry(
+      () =>
+        Invoice.list("-created_date", {
+          ...LIST_OPTS,
+          limit: INVOICE_LIST_PAGE_SIZE,
+          offset,
+        }),
+      PER_PAGE_TIMEOUT_MS,
+      PER_PAGE_RETRIES
+    );
+    return Array.isArray(rows) ? rows : [];
+  });
 }
 
 export async function fetchInvoiceSideData({ onMount = false } = {}) {
-  const maxWaitMs = onMount ? SIDE_DATA_MOUNT_TIMEOUT_MS : SIDE_DATA_REFRESH_TIMEOUT_MS;
-  const [paymentsData, viewsData] = await Promise.all([
-    Payment.list("-created_date", { limit: SIDE_DATA_LIMIT, maxWaitMs }).catch(() => []),
-    InvoiceView.list("-created_date", { limit: SIDE_DATA_LIMIT, maxWaitMs }).catch(() => []),
-  ]);
-  return {
-    payments: Array.isArray(paymentsData) ? paymentsData : [],
-    invoiceViews: Array.isArray(viewsData) ? viewsData : [],
-  };
+  const mode = onMount ? "mount" : "refresh";
+  return runDedupedAsync(`InvoiceListService.sideData:${mode}`, async () => {
+    const maxWaitMs = onMount ? SIDE_DATA_MOUNT_TIMEOUT_MS : SIDE_DATA_REFRESH_TIMEOUT_MS;
+    const [paymentsData, viewsData] = await Promise.all([
+      Payment.list("-created_date", { limit: SIDE_DATA_LIMIT, maxWaitMs }).catch(() => []),
+      InvoiceView.list("-created_date", { limit: SIDE_DATA_LIMIT, maxWaitMs }).catch(() => []),
+    ]);
+    return {
+      payments: Array.isArray(paymentsData) ? paymentsData : [],
+      invoiceViews: Array.isArray(viewsData) ? viewsData : [],
+    };
+  });
 }
 
 export async function fetchInvoiceItemsByInvoiceIds(invoiceIds) {

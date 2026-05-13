@@ -54,7 +54,15 @@ recoverFromCorruptedStorage()
 
 const queryClient = getOrCreateAppQueryClient()
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+async function bootstrapAndRender() {
+  try {
+    const { hydrateQueryClientFromIdb } = await import("@/lib/paidlyIdbQueryPersistence");
+    await hydrateQueryClientFromIdb(queryClient);
+  } catch {
+    /* IDB unavailable (private mode, quota) — localStorage restore in createAppQueryClient still applies */
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" storageKey="theme" enableSystem>
         <TooltipProvider delayDuration={0} skipDelayDuration={0}>
@@ -73,4 +81,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
-)
+  );
+}
+
+void bootstrapAndRender()

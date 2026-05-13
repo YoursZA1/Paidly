@@ -103,6 +103,7 @@ import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
 import { registerAffiliateUserRoutes } from "./affiliateUserRoutes.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
+import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
 import {
@@ -118,6 +119,10 @@ import { registerPublicInvoiceRoutes } from "./publicInvoiceApi.js";
 import { registerPublicQuoteRoutes } from "./publicQuoteApi.js";
 import { registerPublicPayslipRoutes } from "./publicPayslipApi.js";
 import { runExpireOverdueTrialsBatch } from "./trialExpiryBatch.js";
+import {
+  handleHistoricalExchangeRates,
+  handleLatestExchangeRates,
+} from "../../api/_exchangeRatesShared.js";
 import {
   assertUserHasAnyFeature,
   assertUserHasFeature,
@@ -756,6 +761,25 @@ app.get("/api/health/observability", (req, res) => {
   };
   return res.status(200).json(payload);
 });
+
+/**
+ * Exchange rates — same handlers as Vercel `api/exchange-rates/[[...slug]].js`.
+ * Vite dev proxies `/api` here; without these routes, `DocumentService` / currency UI see 404 while production works.
+ */
+app.get("/api/exchange-rates/historical", (req, res) => handleHistoricalExchangeRates(req, res, null));
+app.get("/api/exchange-rates/:slug", (req, res) => {
+  const slug = String(req.params?.slug || "");
+  if (slug === "historical") {
+    return handleHistoricalExchangeRates(req, res, null);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(slug)) {
+    return handleHistoricalExchangeRates(req, res, slug);
+  }
+  return res.status(404).json({ error: "Not found" });
+});
+app.get("/api/exchange-rates", (req, res) => handleLatestExchangeRates(req, res));
+
+app.get("/api/dashboard/bootstrap", dashboardBootstrapHandler);
 
 app.get("/api/security/events", async (req, res) => {
   try {

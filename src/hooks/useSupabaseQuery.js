@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 
 /**
  * Reusable Supabase query hook.
@@ -12,7 +13,7 @@ export function useSupabaseQuery({
   match,
   order,
   enabled = true,
-  staleTime = 60_000,
+  staleTime = PAIDLY_STALE_MS.invoices,
   retry = 1,
 }) {
   return useQuery({

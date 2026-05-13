@@ -6,12 +6,15 @@ import { getAutoStatusUpdate } from "@/utils/invoiceStatus";
 import { withApiLogging } from "@/utils/apiLogger";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
 import { dashboardInvoicesQueryKey, dashboardPayslipsQueryKey } from "@/services/DashboardDataService";
+import { fetchDashboardBootstrap } from "@/services/dashboardBootstrapService";
+import { mapDashboardInvoiceSummaryRow } from "@/schemas/dashboardInvoiceSummary";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 
 /**
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
- * Fetched in parallel once when the app loads (Layout). Dashboard and Invoices read from here
- * so navigation feels instant and we avoid redundant requests.
+ * Hydrated from `/api/dashboard/bootstrap` (when JWT present) or parallel entity lists; persisted via Zustand
+ * so return visits are not cold loads. TanStack Query keys are seeded from the same payload.
+ * Layout skips full `fetchAll` while data is younger than `PAIDLY_STALE_MS.appStoreBootstrap` (`paidlyClientCachePolicy.js`).
  *
  * Performance: Use selective selectors to avoid re-renders when unrelated state changes.
  * @example
@@ -45,9 +48,12 @@ export const useAppStore = create(
 
   /**
    * Fetch all dashboard/invoices data in parallel. Call once when user is present (e.g. in Layout).
+   * When `options.accessToken` is set, prefers GET /api/dashboard/bootstrap (single HTTP round-trip).
    * @param {object | null} authUser - Prefer `user` from AuthContext (Supabase-backed); avoids duplicate auth resolution.
+   * @param {{ accessToken?: string | null }} [options]
    */
-  fetchAll: async (authUser = null) => {
+  fetchAll: async (authUser = null, options = null) => {
+    const accessToken = options?.accessToken ?? null;
     if (isRecoveryCircuitOpen()) {
       set({ isLoading: false, error: "Session requires reauthentication" });
       return;
@@ -93,6 +99,83 @@ export const useAppStore = create(
 
       if (!userData) {
         if (gen === fetchAllGeneration) set({ error: "Not authenticated" });
+        return;
+      }
+
+      const uid = userData?.id || userData?.supabase_id || null;
+      const calendarYear = new Date().getFullYear();
+
+      let usedBootstrap = false;
+      if (accessToken && typeof accessToken === "string") {
+        try {
+          const boot = await withApiLogging("dashboard.bootstrap", () =>
+            withTimeoutRetry(
+              () => fetchDashboardBootstrap({ accessToken, calendarYear }),
+              45000,
+              0
+            )
+          );
+          if (
+            boot &&
+            typeof boot === "object" &&
+            boot.dashboard &&
+            typeof boot.dashboard === "object" &&
+            Array.isArray(boot.recentInvoices)
+          ) {
+            const mergedUser =
+              boot.user && typeof boot.user === "object" ? { ...userData, ...boot.user } : userData;
+            userData = mergedUser;
+
+            const dash = boot.dashboard;
+            let invoicesData = Array.isArray(boot.recentInvoices) ? boot.recentInvoices : [];
+            const clientsData = Array.isArray(dash.clients) ? dash.clients : [];
+            const quotesData = Array.isArray(dash.quotes) ? dash.quotes : [];
+            const payslipsData = Array.isArray(dash.payslips) ? dash.payslips : [];
+            const expensesData = Array.isArray(dash.expenses) ? dash.expenses : [];
+            const paymentsData = Array.isArray(dash.payments) ? dash.payments : [];
+
+            const updates = (invoicesData || [])
+              .map((inv) => ({ inv, update: getAutoStatusUpdate(inv) }))
+              .filter(({ update }) => update);
+
+            let resolvedInvoices = invoicesData;
+            if (updates.length > 0) {
+              await Promise.all(updates.map(({ inv, update }) => Invoice.update(inv.id, update)));
+              const updatedMap = new Map(updates.map(({ inv, update }) => [inv.id, update]));
+              resolvedInvoices = resolvedInvoices.map((inv) => ({ ...inv, ...(updatedMap.get(inv.id) || {}) }));
+            }
+
+            if (gen !== fetchAllGeneration) return;
+
+            usedBootstrap = true;
+            const queryClient = getOrCreateAppQueryClient();
+            queryClient.setQueryData(
+              dashboardInvoicesQueryKey(uid),
+              resolvedInvoices.slice(0, 40).map((row) => mapDashboardInvoiceSummaryRow(row))
+            );
+            queryClient.setQueryData(dashboardPayslipsQueryKey(uid), Array.isArray(payslipsData) ? payslipsData : []);
+
+            set({
+              invoices: resolvedInvoices,
+              quotes: Array.isArray(quotesData) ? quotesData : [],
+              clients: Array.isArray(clientsData) ? clientsData : [],
+              payslips: Array.isArray(payslipsData) ? payslipsData : [],
+              userProfile: userData,
+              payments: Array.isArray(paymentsData) ? paymentsData : [],
+              invoiceViews: get().invoiceViews || [],
+              expenses: Array.isArray(expensesData) ? expensesData : [],
+              error: null,
+              lastFetchedAt: Date.now(),
+            });
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn("[fetchAll] dashboard bootstrap failed, falling back to entity lists:", e?.message || e);
+          }
+        }
+      }
+
+      if (usedBootstrap) {
         return;
       }
 
@@ -208,6 +291,37 @@ export const useAppStore = create(
     }));
   },
 
+  /** Merge or insert from Supabase realtime (no network). */
+  upsertInvoiceFromRemote: (invoice) =>
+    set((state) => {
+      const list = state.invoices || [];
+      const idx = list.findIndex((i) => i.id === invoice.id);
+      let nextInvoices;
+      if (idx === -1) {
+        nextInvoices = [invoice, ...list];
+      } else {
+        nextInvoices = [...list];
+        nextInvoices[idx] = { ...nextInvoices[idx], ...invoice };
+      }
+      const currentUserId = state.userProfile?.id || state.userProfile?.supabase_id || null;
+      if (currentUserId) {
+        const queryClient = getOrCreateAppQueryClient();
+        queryClient.setQueryData(dashboardInvoicesQueryKey(currentUserId), nextInvoices.slice(0, 40));
+      }
+      return { invoices: nextInvoices };
+    }),
+
+  removeInvoiceFromRemote: (invoiceId) =>
+    set((state) => {
+      const nextInvoices = (state.invoices || []).filter((i) => i.id !== invoiceId);
+      const currentUserId = state.userProfile?.id || state.userProfile?.supabase_id || null;
+      if (currentUserId) {
+        const queryClient = getOrCreateAppQueryClient();
+        queryClient.setQueryData(dashboardInvoicesQueryKey(currentUserId), nextInvoices.slice(0, 40));
+      }
+      return { invoices: nextInvoices };
+    }),
+
   upsertClient: (clientId, patch) =>
     set((state) => {
       const existing = (state.clients || []).find((c) => c.id === clientId);
@@ -218,6 +332,26 @@ export const useAppStore = create(
         ),
       };
     }),
+
+  /** Merge or insert from Supabase realtime (no network). */
+  upsertClientFromRemote: (client) =>
+    set((state) => {
+      const list = state.clients || [];
+      const idx = list.findIndex((c) => c.id === client.id);
+      let nextClients;
+      if (idx === -1) {
+        nextClients = [client, ...list];
+      } else {
+        nextClients = [...list];
+        nextClients[idx] = { ...nextClients[idx], ...client };
+      }
+      return { clients: nextClients };
+    }),
+
+  removeClientFromRemote: (clientId) =>
+    set((state) => ({
+      clients: (state.clients || []).filter((c) => c.id !== clientId),
+    })),
 
   prependOptimisticInvoice: (invoice) =>
     set((state) => {

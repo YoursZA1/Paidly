@@ -3,14 +3,15 @@
  * When {@link hasPaidlyRealtimeWork} is false, phase is {@link RealtimeConnectionPhase.IDLE}.
  */
 
-/** @typedef {'IDLE'|'CONNECTING'|'CONNECTED'|'STALE'|'REBUILDING'|'FAILED'} RealtimeConnectionPhaseValue */
+/** @typedef {'IDLE'|'CONNECTING'|'CONNECTED'|'STALE'|'RECONNECTING'|'FAILED'} RealtimeConnectionPhaseValue */
 
 export const RealtimeConnectionPhase = Object.freeze({
   IDLE: "IDLE",
   CONNECTING: "CONNECTING",
   CONNECTED: "CONNECTED",
   STALE: "STALE",
-  REBUILDING: "REBUILDING",
+  /** Multiplex channel is being torn down and recreated (retry / JWT / recovery). */
+  RECONNECTING: "RECONNECTING",
   FAILED: "FAILED",
 });
 

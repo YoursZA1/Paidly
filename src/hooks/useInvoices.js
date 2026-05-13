@@ -5,6 +5,7 @@ import {
   INVOICE_LIST_PAGE_SIZE,
   normalizeInvoiceListFilters,
 } from "@/services/InvoiceListService";
+import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 
 /**
  * Paginated invoice list for scale: loads in pages via TanStack Query infinite cache.
@@ -23,14 +24,16 @@ export function useInvoices({ userId, filters }) {
       if (!lastPage?.length || lastPage.length < INVOICE_LIST_PAGE_SIZE) return undefined;
       return allPages.reduce((sum, page) => sum + page.length, 0);
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: PAIDLY_STALE_MS.invoices,
+    /** Keep previous pages visible while filters / user change triggers a new fetch (SWR). */
+    placeholderData: (previousData) => previousData,
   });
 
   const invoices = query.data?.pages.flat() ?? [];
 
   return {
     invoices,
-    loading: query.isPending,
+    loading: query.isPending && !query.data,
     isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,

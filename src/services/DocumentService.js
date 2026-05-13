@@ -10,6 +10,7 @@ import {
 import { aggregateFromItems } from "@/document-engine/documentTotals";
 import { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "@/document-engine/documentEventTypes";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { getExchangeRateForDocument } from "@/lib/exchangeRatesClientPolicy";
 
 const DEFAULT_BASE_CURRENCY = "ZAR";
 
@@ -57,15 +58,7 @@ async function fetchExchangeRate({ documentCurrency, baseCurrency }) {
   const base = normalizeCurrencyCode(baseCurrency, DEFAULT_BASE_CURRENCY);
   if (docCurrency === base) return 1;
 
-  const response = await fetch(`/api/exchange-rates?base=${encodeURIComponent(docCurrency)}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(`Exchange rate request failed (${response.status})`);
-  }
-  const payload = await response.json();
-  const rate = asPositiveNumber(payload?.rates?.[base], 0);
+  const rate = await getExchangeRateForDocument(docCurrency, base);
   if (rate <= 0) {
     throw new Error(`No exchange rate returned for ${docCurrency}->${base}`);
   }

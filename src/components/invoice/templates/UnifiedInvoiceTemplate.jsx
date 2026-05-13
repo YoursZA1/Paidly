@@ -3,8 +3,7 @@ import {
   formatLineItemNameAndDescription,
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
-import { getLogoUrl } from "@/lib/logoUrl";
-import AssetService from "@/services/AssetService";
+import LogoImage from "@/components/shared/LogoImage";
 
 /**
  * Typography scale (print + PDF): title 20px, section headers 12px, body 12–13px,
@@ -304,13 +303,12 @@ export default function UnifiedInvoiceTemplate({
     ? invoice.quote_number ?? invoice.number ?? "—"
     : invoice.invoice_number ?? invoice.number ?? "—";
 
-  const logoSrc = getLogoUrl(
+  const logoPath =
     user?.logo_url ||
-      user?.company_logo_url ||
-      invoice?.owner_logo_url ||
-      invoice?.company?.logo_url ||
-      null
-  );
+    user?.company_logo_url ||
+    invoice?.owner_logo_url ||
+    invoice?.company?.logo_url ||
+    null;
   const businessContactRows = accountInfoRowsFromUser(user);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
   const hasAccountDetailsSection =
@@ -344,19 +342,12 @@ export default function UnifiedInvoiceTemplate({
                   >
                     <div className={`flex flex-row justify-between items-start ${isQuote ? "gap-2" : "gap-3"}`}>
                       <div className="flex min-w-0 items-start">
-                        {logoSrc ? (
-                          <img
-                            src={logoSrc}
+                        {logoPath ? (
+                          <LogoImage
+                            src={logoPath}
                             alt=""
                             className="h-auto w-auto object-contain object-left shrink-0 max-h-[64px] max-w-[180px]"
                             style={{ maxHeight: 64, maxWidth: 180 }}
-                            onError={(e) => {
-                              if (e.currentTarget.src !== AssetService.FALLBACK_LOGO) {
-                                e.currentTarget.src = AssetService.FALLBACK_LOGO;
-                              } else {
-                                e.currentTarget.style.display = "none";
-                              }
-                            }}
                           />
                         ) : (
                           <div className={`h-16 w-16 shrink-0 rounded-sm ${cfg.logoFallback}`} aria-hidden />

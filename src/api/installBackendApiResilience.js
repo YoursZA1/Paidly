@@ -34,7 +34,17 @@ function backoffMs(attempt) {
   return Math.min(2500, 400 * 2 ** attempt);
 }
 
+function backoffMsWithJitter(attempt) {
+  const base = backoffMs(attempt);
+  const cap = Math.min(500, Math.max(40, Math.floor(base * 0.35)));
+  return base + Math.floor(Math.random() * cap);
+}
+
 function shouldRetry(config, error) {
+  const url = String(config?.url || "");
+  if (url.includes("/api/exchange-rates")) {
+    return false;
+  }
   const count = config.__paidlyRetryCount ?? 0;
   const status = error.response?.status;
   const network = isNetworkOrTimeoutError(error);
@@ -89,7 +99,7 @@ export function installBackendApiResilience(api) {
       }
 
       config.__paidlyRetryCount = (config.__paidlyRetryCount ?? 0) + 1;
-      await sleep(backoffMs(config.__paidlyRetryCount - 1));
+      await sleep(backoffMsWithJitter(config.__paidlyRetryCount - 1));
 
       return api.request(config);
     }

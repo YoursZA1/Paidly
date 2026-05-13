@@ -1,27 +1,21 @@
 import { QueryClient } from '@tanstack/react-query';
+import {
+  PAIDLY_PERSISTED_QUERY_ROOT_KEYS,
+  shouldPersistReactQueryKey,
+} from '@/lib/paidlyPersistedQueryRootKeys';
+import { saveReactQuerySnapshotsToIdb } from '@/lib/paidlyIdbQueryPersistence';
+import { PAIDLY_STALE_MS } from '@/lib/paidlyClientCachePolicy';
+import { paidlyDataLayerLog } from '@/lib/paidlyDataLayerInstrumentation';
 
 const QUERY_CACHE_STORAGE_KEY = "paidly_query_cache_v1";
 const QUERY_CACHE_WRITE_DEBOUNCE_MS = 1200;
-const PERSISTED_QUERY_ROOT_KEYS = new Set([
-  "invoices",
-  "invoice",
-  "clients",
-  "quotes",
-  "cashflow-page",
-  "dashboard",
-  "dashboard-invoices",
-  "dashboard-payslips",
-  "admin-settings",
-]);
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
 function shouldPersistQueryKey(queryKey) {
-  if (!Array.isArray(queryKey) || queryKey.length === 0) return false;
-  const root = String(queryKey[0] || "");
-  return PERSISTED_QUERY_ROOT_KEYS.has(root);
+  return shouldPersistReactQueryKey(queryKey);
 }
 
 function restorePersistedQueryCache(queryClient) {
@@ -31,9 +25,15 @@ function restorePersistedQueryCache(queryClient) {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     const queries = Array.isArray(parsed?.queries) ? parsed.queries : [];
+    let restored = 0;
     for (const q of queries) {
       if (!Array.isArray(q?.queryKey)) continue;
+      if (!shouldPersistQueryKey(q.queryKey)) continue;
       queryClient.setQueryData(q.queryKey, q.data, { updatedAt: Number(q.updatedAt) || Date.now() });
+      restored += 1;
+    }
+    if (restored > 0) {
+      paidlyDataLayerLog("cache_restore_ls", { queries: restored });
     }
   } catch {
     // ignore malformed cache payloads
@@ -59,6 +59,7 @@ function attachQueryCachePersistence(queryClient) {
         QUERY_CACHE_STORAGE_KEY,
         JSON.stringify({ savedAt: Date.now(), queries: snapshot })
       );
+      void saveReactQuerySnapshotsToIdb(snapshot);
     } catch {
       // ignore storage quota/serialization failures
     }
@@ -73,17 +74,27 @@ function attachQueryCachePersistence(queryClient) {
 /**
  * Single factory for the app QueryClient — same defaults everywhere (dev entry, tests, future SSR).
  * Keeps stale/gc windows aligned with navigation patterns (cache hits when moving between main screens).
+ * Domain-specific overrides use `PAIDLY_STALE_MS` from `paidlyClientCachePolicy.js`.
  */
 export function createAppQueryClient() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
+        staleTime: PAIDLY_STALE_MS.invoices,
+        gcTime: Math.max(PAIDLY_STALE_MS.clients * 3, 30 * 60 * 1000),
         retry: false,
-        /** Tab / window visible again → refetch active queries (staleTime still applies). */
+        /** Tab / window visible again → refetch active queries when stale (`staleTime`). */
         refetchOnWindowFocus: true,
-        refetchOnMount: false,
+        /**
+         * Stale-while-revalidate: keep previous successful data visible while a refetch runs
+         * (reduces layout thrash / blocking spinners on navigation).
+         */
+        placeholderData: (previousData) => previousData,
+        /**
+         * When a mounted query has cached but stale data, refetch in the background while
+         * `placeholderData` keeps the last snapshot on screen.
+         */
+        refetchOnMount: true,
       },
       mutations: {
         retry: false,
@@ -105,3 +116,5 @@ export function getOrCreateAppQueryClient() {
   }
   return appQueryClient;
 }
+
+export { PAIDLY_PERSISTED_QUERY_ROOT_KEYS, shouldPersistReactQueryKey };

@@ -13,6 +13,7 @@ import { Payment } from "@/api/entities";
 import { User } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
+import { useShallow } from "zustand/shallow";
 import { useAppContext } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,9 +66,6 @@ import {
 
 const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
-const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || 'anon'}`;
-const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes - still refresh in background
-
 /** Recent Invoices preview on the user dashboard; full list is on Invoices. */
 const RECENT_INVOICES_PREVIEW_ROWS = 3;
 /** Transactions lists (mobile + desktop): ~3 rows visible, then scroll. */
@@ -75,18 +73,7 @@ const TRANSACTION_PREVIEW_ROWS = 3;
 const TRANSACTIONS_SOURCE_EACH = 30;
 const TRANSACTIONS_MERGED_MAX = 60;
 
-function getCachedDashboard(userId) {
-  if (!userId) return null;
-  try {
-    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY(userId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    // Return cache regardless of age so refresh shows last data immediately while fresh data loads
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+const DASHBOARD_CACHE_KEY = (userId) => `paidly_dashboard_cache_${userId || "anon"}`;
 
 function setCachedDashboard(userId, data) {
   if (!userId || !data) return;
@@ -259,7 +246,7 @@ StatCard.propTypes = {
 };
 
 export default function Dashboard() {
-  const { user: authUser } = useAuth();
+  const { user: authUser, session } = useAuth();
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
   const {
     profile: profileFromQuery,
@@ -370,16 +357,29 @@ export default function Dashboard() {
   const mountedRef = useRef(true);
 
   // Non-admin: read from global store (filled by Layout fetchAll). Admin: use local state from loadAdminData.
-  const storeInvoices = useAppStore((s) => s.invoices);
-  const storeClients = useAppStore((s) => s.clients);
-  const storeExpenses = useAppStore((s) => s.expenses);
-  const storePayments = useAppStore((s) => s.payments);
-  const storeIsLoading = useAppStore((s) => s.isLoading);
-  const fetchAll = useAppStore((s) => s.fetchAll);
+  const {
+    storeInvoices,
+    storeClients,
+    storeExpenses,
+    storePayments,
+    storeIsLoading,
+    fetchAll,
+    payslips,
+  } = useAppStore(
+    useShallow((s) => ({
+      storeInvoices: s.invoices,
+      storeClients: s.clients,
+      storeExpenses: s.expenses,
+      storePayments: s.payments,
+      storeIsLoading: s.isLoading,
+      fetchAll: s.fetchAll,
+      payslips: s.payslips,
+    }))
+  );
+
   const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id);
   const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id);
   const invoices = isAdmin ? invoicesState : storeInvoices;
-  const payslips = useAppStore((s) => s.payslips);
   const resolvedInvoices = isAdmin
     ? invoices
     : (dashboardInvoicesQuery.data && dashboardInvoicesQuery.data.length > 0 ? dashboardInvoicesQuery.data : invoices);
@@ -957,9 +957,9 @@ export default function Dashboard() {
       await loadAdminData();
       return;
     }
-    await fetchAll(authUser || null);
+    await fetchAll(authUser || null, { accessToken: session?.accessToken ?? null });
     await refreshBusinessGoal();
-  }, [authUser, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal]);
+  }, [authUser, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal, session?.accessToken]);
 
   /** Admin aggregate dashboard: SyncEngine debounces DB events → reload local admin state when this screen is mounted. */
   useEffect(() => {

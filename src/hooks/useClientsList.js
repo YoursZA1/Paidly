@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Client } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 
 const PAGE_SIZE = 40;
 const LIST_OPTS = { maxWaitMs: 60000 };
@@ -31,14 +32,15 @@ export function useClientsList(user) {
       if (!lastPage?.length || lastPage.length < PAGE_SIZE) return undefined;
       return allPages.reduce((sum, page) => sum + page.length, 0);
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: PAIDLY_STALE_MS.clients,
+    placeholderData: (previousData) => previousData,
   });
 
   const clients = query.data?.pages.flat() ?? [];
 
   return {
     clients,
-    loading: query.isPending,
+    loading: query.isPending && !query.data,
     isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,

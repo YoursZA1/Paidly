@@ -669,6 +669,11 @@ function CompanyProfileSettings() {
                                             alt="Profile"
                                             className="object-cover w-full h-full"
                                             onError={(e) => {
+                                                if (e.currentTarget.dataset.paidlyLogoFallback === "1") {
+                                                    e.currentTarget.removeAttribute("src");
+                                                    return;
+                                                }
+                                                e.currentTarget.dataset.paidlyLogoFallback = "1";
                                                 e.currentTarget.src = "/fallback-logo.png";
                                             }}
                                         />
@@ -690,6 +695,11 @@ function CompanyProfileSettings() {
                                             alt="Logo"
                                             className="object-contain w-12 h-12"
                                             onError={(e) => {
+                                                if (e.currentTarget.dataset.paidlyLogoFallback === "1") {
+                                                    e.currentTarget.removeAttribute("src");
+                                                    return;
+                                                }
+                                                e.currentTarget.dataset.paidlyLogoFallback = "1";
                                                 e.currentTarget.src = "/fallback-logo.png";
                                             }}
                                         />

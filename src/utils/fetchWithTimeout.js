@@ -4,6 +4,30 @@ export const ENTITY_GET_TIMEOUT_MS = 60_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Single attempt with a hard timeout (no retries). Use when retries would amplify client errors (e.g. HTTP 400).
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @param {number} timeoutMs
+ * @returns {Promise<T>}
+ */
+export function promiseWithTimeout(fn, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    Promise.resolve(fn())
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+/**
  * Wraps an async operation with a timeout and optional retry.
  * Use for data fetches to avoid long hangs (e.g. cold Supabase) and surface errors.
  * @param {() => Promise<T>} fn - Function that returns the promise (e.g. () => Promise.all([...]))
@@ -35,6 +59,12 @@ export async function withTimeoutRetry(fn, timeoutMs = 10000, retries = 2) {
       return await run();
     } catch (err) {
       lastError = err;
+      const status = Number(err?.status ?? err?.statusCode ?? NaN);
+      const nonRetryableHttp =
+        Number.isFinite(status) && (status === 400 || status === 404 || status === 422);
+      if (nonRetryableHttp) {
+        throw err;
+      }
       if (attempt < retries) {
         const backoffMs = Math.min(2500, 400 * 2 ** attempt);
         if (import.meta.env?.DEV) {

@@ -52,6 +52,7 @@ import { RealtimeConnectionPhase } from "@/lib/realtime/paidlyRealtimeConnection
 
 async function flushRealtimeRebuild() {
   await new Promise((r) => queueMicrotask(r));
+  await new Promise((r) => setTimeout(r, 0));
 }
 
 /** Supabase-js calls the subscribe callback asynchronously; release rebuild locks like production. */

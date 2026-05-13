@@ -12,14 +12,17 @@ import {
   notifyAdminDashboardRealtimeStale,
 } from "@/lib/realtimeStoreHydration";
 import { setPaidlySyncRealtimeBridge } from "@/lib/realtime/paidlyRealtimeManager";
+import { reconcileInvoiceRealtimeEvent } from "@/lib/realtimeInvoiceReconciliation";
+import { reconcileClientRealtimeEvent } from "@/lib/realtimeClientReconciliation";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import {
+  REALTIME_ENTITY_DEBOUNCE_MS,
+  REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS,
+  whenDocumentVisible,
+} from "@/lib/paidlyRealtimeReconciliationEngine";
 
 const SYNC_INTERVAL_MS = 5000;
-/** Per-table debounce; coalesces bursts. List pages rely on this (see Invoices/Quotes — no duplicate channels). */
-const ENTITY_REALTIME_DEBOUNCE_MS = 550;
-/** Match former Dashboard realtime: one heavy `fetchAll` / admin reload after burst settles. */
-const GLOBAL_STORE_REFRESH_DEBOUNCE_MS = 1500;
 /** Admin dashboard previously listened to these tables only (not `clients` / `document_sends`). */
 const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expenses", "quotes", "payslips"]);
 
@@ -48,7 +51,15 @@ export default function SyncEngine() {
   const invalidateForEntity = useCallback(
     (entity, payload = null) => {
       if (entity === "invoices") {
-        // Keep invoice updates scoped to invoice-related caches only.
+        const patched = reconcileInvoiceRealtimeEvent(
+          queryClient,
+          {
+            upsertFromRemote: (row) => useAppStore.getState().upsertInvoiceFromRemote(row),
+            removeFromRemote: (id) => useAppStore.getState().removeInvoiceFromRemote(id),
+          },
+          payload || {}
+        );
+        if (patched) return true;
         queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
         queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
         const id = payload?.new?.id || payload?.old?.id || null;
@@ -56,56 +67,46 @@ export default function SyncEngine() {
           queryClient.invalidateQueries({ queryKey: ["invoice", id], exact: false });
           queryClient.invalidateQueries({ queryKey: ["invoices", "detail", id], exact: false });
         }
-        return;
+        return false;
       }
       if (entity === "clients") {
+        const patched = reconcileClientRealtimeEvent(
+          queryClient,
+          {
+            upsertFromRemote: (row) => useAppStore.getState().upsertClientFromRemote(row),
+            removeFromRemote: (id) => useAppStore.getState().removeClientFromRemote(id),
+          },
+          payload || {}
+        );
+        if (patched) return true;
         queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-        // `useInvoicesQuery` includes client data for filters.
         queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
-        return;
+        return false;
       }
       if (entity === "document_sends") {
         queryClient.invalidateQueries({ queryKey: ["admin-messages"], exact: false });
-        return;
+        return false;
       }
       if (entity === "quotes") {
         queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
         queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        return;
+        return false;
       }
       if (entity === "payments") {
         queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
         queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        return;
+        return false;
       }
       if (entity === "expenses") {
         queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        return;
+        return false;
       }
       if (entity === "payslips") {
         queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
       }
+      return false;
     },
     [queryClient]
-  );
-
-  const scheduleEntityInvalidation = useCallback(
-    (entity, payload = null) => {
-      if (isRecoveryCircuitOpen()) return;
-      const current = realtimeEntityDebounceRefs.current[entity];
-      if (current) {
-        window.clearTimeout(current);
-      }
-      realtimeEntityDebounceRefs.current[entity] = window.setTimeout(() => {
-        void (async () => {
-          realtimeEntityDebounceRefs.current[entity] = null;
-          const session = await supabase.auth.getSession();
-          if (!session?.data?.session) return;
-          invalidateForEntity(entity, payload);
-        })();
-      }, ENTITY_REALTIME_DEBOUNCE_MS);
-    },
-    [invalidateForEntity]
   );
 
   const scheduleGlobalStoreRefresh = useCallback(() => {
@@ -117,6 +118,7 @@ export default function SyncEngine() {
     globalStoreRefreshTimerRef.current = window.setTimeout(() => {
       void (async () => {
         globalStoreRefreshTimerRef.current = null;
+        await whenDocumentVisible();
         const session = await supabase.auth.getSession();
         if (!session?.data?.session) return;
         const isAdmin = user?.role === "admin";
@@ -128,8 +130,31 @@ export default function SyncEngine() {
           dispatchAppFetchAllSettled();
         });
       })();
-    }, GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
+    }, REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
   }, [user, fetchAllFromStore]);
+
+  const scheduleEntityInvalidation = useCallback(
+    (entity, payload = null, role = null) => {
+      if (isRecoveryCircuitOpen()) return;
+      const current = realtimeEntityDebounceRefs.current[entity];
+      if (current) {
+        window.clearTimeout(current);
+      }
+      realtimeEntityDebounceRefs.current[entity] = window.setTimeout(() => {
+        void (async () => {
+          realtimeEntityDebounceRefs.current[entity] = null;
+          await whenDocumentVisible();
+          const session = await supabase.auth.getSession();
+          if (!session?.data?.session) return;
+          const skipGlobalFetchAll = invalidateForEntity(entity, payload);
+          if (role !== "admin" && !skipGlobalFetchAll) {
+            scheduleGlobalStoreRefresh();
+          }
+        })();
+      }, REALTIME_ENTITY_DEBOUNCE_MS);
+    },
+    [invalidateForEntity, scheduleGlobalStoreRefresh]
+  );
 
   const runOnce = useCallback(async () => {
     if (isRecoveryCircuitOpen()) return;
@@ -190,6 +215,7 @@ export default function SyncEngine() {
     };
     const onFocus = () => {
       if (isRecoveryCircuitOpen()) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void runOnce();
     };
     window.addEventListener("online", onOnline);
@@ -204,12 +230,13 @@ export default function SyncEngine() {
     (entity, payload) => {
       if (isRecoveryCircuitOpen()) return;
       const role = user?.role;
-      scheduleEntityInvalidation(entity, payload);
+      scheduleEntityInvalidation(entity, payload, role);
       if (entity === "document_sends") return;
-      if (role === "admin" && !ADMIN_STORE_HYDRATION_ENTITIES.has(entity)) return;
-      scheduleGlobalStoreRefresh();
+      if (role === "admin" && ADMIN_STORE_HYDRATION_ENTITIES.has(entity)) {
+        notifyAdminDashboardRealtimeStale();
+      }
     },
-    [scheduleEntityInvalidation, scheduleGlobalStoreRefresh, user?.role]
+    [scheduleEntityInvalidation, user?.role]
   );
 
   useEffect(() => {
@@ -251,6 +278,7 @@ export default function SyncEngine() {
   useEffect(() => {
     const onWakeResync = () => {
       void (async () => {
+        await whenDocumentVisible();
         if (!user?.id) return;
         const session = await supabase.auth.getSession();
         if (!session?.data?.session) return;

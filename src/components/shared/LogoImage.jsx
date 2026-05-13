@@ -1,73 +1,117 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import AssetService from "@/services/AssetService";
+import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
+import { markStorageAssetFailed, verifyPublicStorageUrlOnce } from "@/lib/paidlyStorageAssetGuard";
 
 const DEFAULT_LOGO_SRC = AssetService.FALLBACK_LOGO;
 
+function normalizeUrlKey(url) {
+  return String(url || "").split("?")[0].split("#")[0];
+}
+
 /**
- * LogoImage component that resolves paths through AssetService.getLogo().
- * @param {string} src - The logo URL or stored logo path
- * @param {string} alt - Alt text for the image
- * @param {string} className - CSS classes
- * @param {object} style - Inline styles
+ * LogoImage — resolves paths via {@link AssetService.getLogo} (includes path validation + failed-URL cache).
+ *
+ * @param {string} src - Stored path or full URL
+ * @param {boolean} [preflightStorage] — If true, runs a one-shot HEAD before assigning `src` (extra latency; stricter).
  */
-export default function LogoImage({ 
-  src, 
-  alt = "Logo", 
-  className = "", 
-  style = {}
+function LogoImage({
+  src,
+  alt = "Logo",
+  className = "",
+  style = {},
+  preflightStorage = false,
 }) {
-  const [imageSrc, setImageSrc] = useState(src);
+  /** `null` = not resolved yet; `""` = missing `src` prop */
+  const [imageSrc, setImageSrc] = useState(/** @type {string | null} */ (null));
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  /** After the fallback asset also errors, ignore further `error` events (browser may repeat). */
+  const terminalRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!src) {
       setHasError(true);
       setIsLoading(false);
       setImageSrc("");
-      return;
+      return undefined;
     }
 
-    // New `src` must clear prior failure/loading state — otherwise a logo change never renders
-    // (preview stays blank and html2pdf capture can fail after swapping URLs).
     setHasError(false);
     setIsLoading(true);
+    setImageSrc(null);
+    terminalRef.current = false;
 
-    // If it's a blob URL or data URL, use it directly
-    if (src.startsWith('blob:') || src.startsWith('data:')) {
+    if (src.startsWith("blob:") || src.startsWith("data:")) {
       setImageSrc(src);
       setIsLoading(false);
-      return;
+      return undefined;
     }
 
-    const resolvedUrl = AssetService.getLogo(src);
-    if (resolvedUrl) {
+    const applyResolved = () => {
+      const resolvedUrl = AssetService.getLogo(src);
+      if (cancelled) return;
+      if (!resolvedUrl || resolvedUrl === DEFAULT_LOGO_SRC) {
+        setImageSrc(DEFAULT_LOGO_SRC);
+        setIsLoading(false);
+        return;
+      }
       setImageSrc(resolvedUrl);
       setIsLoading(false);
-      return;
-    }
-    setHasError(true);
-    setIsLoading(false);
-  }, [src]);
+    };
 
-  if (hasError || !imageSrc) {
+    if (!preflightStorage) {
+      applyResolved();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      const resolvedUrl = AssetService.getLogo(src);
+      if (cancelled) return;
+      if (!resolvedUrl || resolvedUrl === DEFAULT_LOGO_SRC) {
+        setImageSrc(DEFAULT_LOGO_SRC);
+        setIsLoading(false);
+        return;
+      }
+      if (/^https?:\/\//i.test(resolvedUrl)) {
+        const ok = await verifyPublicStorageUrlOnce(resolvedUrl);
+        if (cancelled) return;
+        if (!ok) {
+          markStorageAssetFailed(resolvedUrl);
+          clearLogoUrlDiskCacheForSrc(src);
+        }
+      }
+      if (cancelled) return;
+      setImageSrc(AssetService.getLogo(src));
+      setIsLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src, preflightStorage]);
+
+  if (hasError || imageSrc === "") {
     return (
       <img
         src={DEFAULT_LOGO_SRC}
         alt={alt}
         className={className}
         style={style}
+        loading="lazy"
+        decoding="async"
       />
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className={`bg-gray-100 animate-pulse ${className}`} style={style} />
-    );
+  if (isLoading || imageSrc === null) {
+    return <div className={`bg-gray-100 animate-pulse ${className}`} style={style} />;
   }
 
-  // html2canvas needs CORS-safe images; limit to Supabase storage hosts.
   const needsCorsForCapture =
     typeof imageSrc === "string" &&
     imageSrc.includes("supabase.co") &&
@@ -79,14 +123,21 @@ export default function LogoImage({
       alt={alt}
       className={className}
       style={style}
+      loading="lazy"
+      decoding="async"
       {...(needsCorsForCapture ? { crossOrigin: "anonymous" } : {})}
-      onError={() => {
-        if (imageSrc !== DEFAULT_LOGO_SRC) {
+      onError={(e) => {
+        if (terminalRef.current) return;
+        const failed = normalizeUrlKey(e.currentTarget?.src);
+        if (failed && failed !== normalizeUrlKey(DEFAULT_LOGO_SRC)) {
+          markStorageAssetFailed(failed);
+          clearLogoUrlDiskCacheForSrc(src);
           setImageSrc(DEFAULT_LOGO_SRC);
           setHasError(false);
           setIsLoading(false);
           return;
         }
+        terminalRef.current = true;
         setHasError(true);
         setIsLoading(false);
       }}
@@ -96,3 +147,5 @@ export default function LogoImage({
     />
   );
 }
+
+export default memo(LogoImage);

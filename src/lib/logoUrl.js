@@ -1,4 +1,10 @@
 import AssetService from "@/services/AssetService";
+export {
+  isStorageAssetKnownFailed,
+  isValidLogoStorageObjectKey,
+  markStorageAssetFailed,
+  verifyPublicStorageUrlOnce,
+} from "@/lib/paidlyStorageAssetGuard";
 
 export function cleanLogoPath(url) {
   return AssetService.cleanPath(url);

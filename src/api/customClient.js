@@ -202,6 +202,17 @@ function getSelectColumns(table) {
   return SUPABASE_SELECT_COLUMNS[table] || "id, created_at, updated_at";
 }
 
+/** PostgREST 400 / unknown column when explicit `SUPABASE_SELECT_COLUMNS` is ahead of a fork DB. */
+function isPostgrestSelectSchemaDriftError(error) {
+  if (!error) return false;
+  const status = Number(error.status ?? error.statusCode ?? NaN);
+  if (status === 400) return true;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "PGRST204") return true;
+  const m = String(error.message ?? error.details ?? error.hint ?? "").toLowerCase();
+  return /column|does not exist|schema cache|could not find|unknown column|pgrst/i.test(m);
+}
+
 /** Full list minus optional jsonb (scripts/add-profiles-business-jsonb.sql). */
 const PROFILES_SELECT_WITHOUT_BUSINESS =
   "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, invoice_template, invoice_header, reminder_settings, quote_reminder_settings, created_at, updated_at";
@@ -534,54 +545,70 @@ class EntityManager {
 
       if (supabaseTable) {
         const columns = getSelectColumns(supabaseTable);
-        const { data, error } = await runPostgrestWithResilience(
-          async () => {
-            let query = supabase.from(supabaseTable).select(columns);
+        const buildListQuery = (selectCols) => {
+          let query = supabase.from(supabaseTable).select(selectCols);
 
-            if (supabaseTable === "notes") {
-              query = query.eq("user_id", userId);
-            } else if (
-              [
-                "clients",
-                "services",
-                "invoices",
-                "quotes",
-                "payments",
-                "banking_details",
-                "recurring_invoices",
-                "invoice_views",
-                "document_sends",
-                "message_logs",
-                "payslips",
-                "expenses",
-                "tasks",
-              ].includes(supabaseTable)
-            ) {
-              query = query.eq("org_id", orgId);
+          if (supabaseTable === "notes") {
+            query = query.eq("user_id", userId);
+          } else if (
+            [
+              "clients",
+              "services",
+              "invoices",
+              "quotes",
+              "payments",
+              "banking_details",
+              "recurring_invoices",
+              "invoice_views",
+              "document_sends",
+              "message_logs",
+              "payslips",
+              "expenses",
+              "tasks",
+            ].includes(supabaseTable)
+          ) {
+            query = query.eq("org_id", orgId);
+          }
+          if (supabaseTable === "packages") {
+            if (orgId) {
+              query = query.or("org_id.is.null,org_id.eq." + orgId);
+            } else {
+              query = query.is("org_id", null);
             }
-            if (supabaseTable === "packages") {
-              if (orgId) {
-                query = query.or("org_id.is.null,org_id.eq." + orgId);
-              } else {
-                query = query.is("org_id", null);
-              }
-            }
+          }
 
-            const opts = this._listOptions || {};
-            const orderColumn = opts.orderBy?.column ?? "created_at";
-            const orderAsc = opts.orderBy?.ascending ?? false;
-            if (opts.limit != null && opts.limit > 0) {
-              query = query.order(orderColumn, { ascending: orderAsc });
-              const from = opts.offset ?? 0;
-              const to = from + opts.limit - 1;
-              query = query.range(from, to);
-            }
+          const opts = this._listOptions || {};
+          const orderColumn = opts.orderBy?.column ?? "created_at";
+          const orderAsc = opts.orderBy?.ascending ?? false;
+          if (opts.limit != null && opts.limit > 0) {
+            query = query.order(orderColumn, { ascending: orderAsc });
+            const from = opts.offset ?? 0;
+            const to = from + opts.limit - 1;
+            query = query.range(from, to);
+          }
 
-            return query;
-          },
+          return query;
+        };
+
+        let { data, error } = await runPostgrestWithResilience(
+          () => buildListQuery(columns),
           { kind: "read", silent: true, label: `pull.${this.entityName}` }
         );
-        
+
+        if (
+          error &&
+          isPostgrestSelectSchemaDriftError(error) &&
+          (supabaseTable === "invoices" || supabaseTable === "quotes")
+        ) {
+          const retry = await runPostgrestWithResilience(() => buildListQuery("*"), {
+            kind: "read",
+            silent: true,
+            label: `pull.${this.entityName}.wildcard`,
+          });
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (!error && data) {
           // Clear existing data and reload from Supabase
           this.data = {};
@@ -676,37 +703,52 @@ class EntityManager {
 
             if (supabaseTable) {
               const columns = getSelectColumns(supabaseTable);
-              const { data, error } = await runPostgrestWithResilience(
-                async () => {
-                  let query = supabase.from(supabaseTable).select(columns).eq("id", idStr);
-                  if (supabaseTable === "notes") {
-                    query = query.eq("user_id", userId);
-                  } else if (
-                    [
-                      "clients",
-                      "services",
-                      "invoices",
-                      "quotes",
-                      "payments",
-                      "banking_details",
-                      "recurring_invoices",
-                      "invoice_views",
-                      "document_sends",
-                      "message_logs",
-                      "payslips",
-                      "expenses",
-                      "tasks",
-                    ].includes(supabaseTable)
-                  ) {
-                    if (!orgId) {
-                      throw new Error("Unable to determine organization for current user");
-                    }
-                    query = query.eq("org_id", orgId);
+              const buildGetQuery = (selectCols) => async () => {
+                let query = supabase.from(supabaseTable).select(selectCols).eq("id", idStr);
+                if (supabaseTable === "notes") {
+                  query = query.eq("user_id", userId);
+                } else if (
+                  [
+                    "clients",
+                    "services",
+                    "invoices",
+                    "quotes",
+                    "payments",
+                    "banking_details",
+                    "recurring_invoices",
+                    "invoice_views",
+                    "document_sends",
+                    "message_logs",
+                    "payslips",
+                    "expenses",
+                    "tasks",
+                  ].includes(supabaseTable)
+                ) {
+                  if (!orgId) {
+                    throw new Error("Unable to determine organization for current user");
                   }
-                  return query.single();
-                },
-                { kind: "read", silent: true, label: `get.${this.entityName}` }
-              );
+                  query = query.eq("org_id", orgId);
+                }
+                return query.single();
+              };
+              let { data, error } = await runPostgrestWithResilience(buildGetQuery(columns), {
+                kind: "read",
+                silent: true,
+                label: `get.${this.entityName}`,
+              });
+              if (
+                error &&
+                isPostgrestSelectSchemaDriftError(error) &&
+                (supabaseTable === "invoices" || supabaseTable === "quotes")
+              ) {
+                const retry = await runPostgrestWithResilience(buildGetQuery("*"), {
+                  kind: "read",
+                  silent: true,
+                  label: `get.${this.entityName}.wildcard`,
+                });
+                data = retry.data;
+                error = retry.error;
+              }
               if (!error && data) {
                 const record = {
                   ...data,

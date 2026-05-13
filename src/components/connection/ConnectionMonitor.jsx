@@ -5,7 +5,6 @@ import {
   isPaidlyRealtimeMainChannelJoined,
   kickPaidlyRealtimeIfNeededOnMonitorMount,
   notifyPaidlyRealtimeNavigatorOnline,
-  requestPaidlyRealtimeErrorRecovery,
   subscribePaidlyMainChannelStatus,
 } from "@/lib/realtime/paidlyRealtimeManager";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
@@ -108,8 +107,9 @@ export default function ConnectionMonitor() {
       }
       if (evt === "CLOSED" || evt === "CHANNEL_ERROR" || evt === "TIMED_OUT") {
         if (!hasPaidlyRealtimeWork()) return;
+        // Transport recovery + backoff live in paidlyRealtimeManager (subscribe callback). Calling
+        // requestPaidlyRealtimeErrorRecovery here duplicated work on the main thread while failing.
         scheduleDegradedTransition("Realtime connection interrupted.");
-        requestPaidlyRealtimeErrorRecovery(`connection_monitor:${evt}`);
       }
     });
 

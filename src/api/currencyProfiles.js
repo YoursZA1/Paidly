@@ -5,9 +5,15 @@
 
 import { breakApi } from './apiClient';
 import { backendApi } from './backendClient';
+import {
+  fetchLatestExchangeRatesPayload,
+  getExchangeRates,
+  isExchangeRatesSyncDisabled,
+  markExchangeRatesTerminalFailure,
+  readExchangeRatesCircuitOpen,
+} from '@/lib/exchangeRatesClientPolicy';
 
-// If exchange-rate routes are not deployed on this environment, stop retrying every page/view.
-let exchangeRatesApiUnavailable = false;
+export { getExchangeRates };
 
 /**
  * Get user's preferred currency from auth profile (Supabase profiles table).
@@ -81,34 +87,6 @@ export const setBusinessCurrency = async (businessId, settings) => {
 };
 
 /**
- * Get exchange rates (optional backend). Fails fast when backend is down (e.g. dev server not running).
- * @param {string} baseCurrency - Base currency code
- * @returns {Promise} Exchange rates object
- */
-export const getExchangeRates = async (baseCurrency = 'ZAR') => {
-  if (exchangeRatesApiUnavailable) return {};
-  try {
-    if (typeof backendApi.get === 'function') {
-      const response = await backendApi.get('/api/exchange-rates', {
-        params: { base: baseCurrency },
-        timeout: 5000,
-        __paidlySilent: true,
-      });
-      return response.data || {};
-    }
-  } catch (error) {
-    const status = Number(error?.response?.status || 0);
-    if (status === 404 || status === 405 || status === 501) {
-      exchangeRatesApiUnavailable = true;
-    }
-    if (import.meta.env?.DEV) {
-      console.warn('Exchange rates unavailable (backend may be down). Using empty rates.', error?.code || error?.message);
-    }
-  }
-  return {};
-};
-
-/**
  * Get historical exchange rates (optional backend).
  * @param {string} baseCurrency - Base currency code
  * @param {string} date - Date in YYYY-MM-DD format
@@ -118,7 +96,10 @@ export const getHistoricalExchangeRates = async (
   baseCurrency = 'ZAR',
   date
 ) => {
-  if (exchangeRatesApiUnavailable) return {};
+  if (isExchangeRatesSyncDisabled() || readExchangeRatesCircuitOpen()) {
+    const latest = await fetchLatestExchangeRatesPayload(baseCurrency);
+    return latest && typeof latest === 'object' ? latest : {};
+  }
   try {
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get(
@@ -128,10 +109,7 @@ export const getHistoricalExchangeRates = async (
       return response.data || {};
     }
   } catch (error) {
-    const status = Number(error?.response?.status || 0);
-    if (status === 404 || status === 405 || status === 501) {
-      exchangeRatesApiUnavailable = true;
-    }
+    markExchangeRatesTerminalFailure(error?.response?.status);
     if (import.meta.env?.DEV) {
       console.warn('Historical exchange rates unavailable.', error?.response?.status || error?.message);
     }
@@ -222,7 +200,10 @@ export const getInvoiceCurrencyHistory = async (invoiceId) => {
  * @returns {Promise} Exchange rates for the date
  */
 export const getCurrencyRatesForDate = async (date) => {
-  if (exchangeRatesApiUnavailable) return {};
+  if (isExchangeRatesSyncDisabled() || readExchangeRatesCircuitOpen()) {
+    const latest = await fetchLatestExchangeRatesPayload('ZAR');
+    return latest && typeof latest === 'object' ? latest : {};
+  }
   try {
     if (typeof backendApi.get === 'function') {
       const response = await backendApi.get(`/api/exchange-rates/${date}`, {
@@ -231,10 +212,7 @@ export const getCurrencyRatesForDate = async (date) => {
       return response.data || {};
     }
   } catch (error) {
-    const status = Number(error?.response?.status || 0);
-    if (status === 404 || status === 405 || status === 501) {
-      exchangeRatesApiUnavailable = true;
-    }
+    markExchangeRatesTerminalFailure(error?.response?.status);
     console.error('Error fetching currency rates for date:', error);
   }
   return {};

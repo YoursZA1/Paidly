@@ -13,7 +13,7 @@ This document summarizes the performance audit and the refactors applied to redu
 
 ### Duplicate data fetches
 - **Layout** calls `fetchAll()` (store) when user is present; **Dashboard** (non-admin) reads from the same store, so one fetch serves both.
-- **Layout** skips `fetchAll` when `lastFetchedAt` is within 5 minutes to avoid refetch on re-mount.
+- **Layout** skips `fetchAll` when `lastFetchedAt` is within **10 minutes** (`PAIDLY_STALE_MS.appStoreBootstrap`) so return navigation does not cold-load the whole bootstrap.
 - **Invoices** and **Quotes** use React Query with dedicated keys (`invoices-page`, `quotes-page`); **Clients** uses `useClientsQuery` (key `clients`). No duplicate fetches when navigating between these pages within cache window.
 - **RecurringInvoices**, **CashFlow**, **Calendar**, **Reports**, **Messages**, etc. previously used `useEffect` + `loadData()` with no cache; they have been (or can be) migrated to React Query to share cache and avoid refetch on back-navigation.
 
@@ -57,8 +57,8 @@ This document summarizes the performance audit and the refactors applied to redu
   - **Invoices**: `queryKey: ["invoices-page"]`, `staleTime: 5 * 60 * 1000`, `refetchOnMount: false`.
   - **Quotes**: `queryKey: ["quotes-page"]`, same defaults.
   - **Clients**: `useClientsQuery` with `queryKey: ["clients"]`, `staleTime: 5 * 60 * 1000`, `refetchOnMount: false`.
-- **Global defaults** (`main.jsx`): `staleTime: 5 * 60 * 1000`, `gcTime: 10 * 60 * 1000`, `refetchOnWindowFocus: false`, `refetchOnMount: false`.
-- **Layout** only calls `fetchAll()` when store data is missing or older than 5 minutes (`lastFetchedAt`).
+- **Global defaults** (`createAppQueryClient` in `src/lib/query-client.js`): `staleTime` follows `PAIDLY_STALE_MS.invoices` (5 minutes), `gcTime` 30 minutes, `refetchOnWindowFocus: true`, `refetchOnMount: true` (stale-while-revalidate). Canonical TTL table: `src/lib/paidlyClientCachePolicy.js` and `docs/Paidly-Caching-Architecture.md`.
+- **Layout** only calls `fetchAll()` when store data is missing or older than **10 minutes** (`lastFetchedAt`, aligned with client-list TTL).
 - **RecurringInvoices** and **CashFlow** migrated to React Query so their data is cached and not refetched when navigating back.
 
 ### Recommendation

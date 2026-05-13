@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
@@ -35,11 +35,15 @@ import {
   AppQuickSearchMobileDialog,
   OPEN_EVENT as QUICK_SEARCH_OPEN_EVENT,
 } from "@/components/layout/AppQuickSearch";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useToast } from "@/components/ui/use-toast";
 import Logo from "@/components/shared/Logo";
 import { useAppStore } from "@/stores/useAppStore";
+import { useShallow } from "zustand/shallow";
+import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
 import { ROLES, STAFF_ROLES } from "@/lib/permissions";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
@@ -318,10 +322,19 @@ const QuoteReminderService = {
   checkAndSendReminders: async () => {}
 };
 
+const PRIMARY_NAV_PREFETCH_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-clients"]);
+
 const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const isCollapsedRail = collapsed && !mobile;
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const prefetchRouteData = useCallback(() => {
+    if (!item?.id || !PRIMARY_NAV_PREFETCH_IDS.has(item.id)) return;
+    schedulePrimaryNavPrefetch({ navId: item.id, userId: user?.id ?? null, queryClient });
+  }, [item?.id, user?.id, queryClient]);
 
   if (!item) return null;
 
@@ -412,6 +425,8 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
               id={item.id}
               to={item.url}
               onClick={onClick}
+              onPointerEnter={prefetchRouteData}
+              onFocus={prefetchRouteData}
               aria-label={item.title}
               className={`relative z-10 group flex items-center transition-all duration-150 justify-center px-2 py-2 rounded-xl ${isActive ? "bg-white/[0.12]" : "hover:bg-white/[0.06]"}`}
             >
@@ -433,6 +448,8 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
           id={item.id}
           to={item.url}
           onClick={onClick}
+          onPointerEnter={prefetchRouteData}
+          onFocus={prefetchRouteData}
           className={`relative z-10 group flex items-center transition-all duration-150 ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2 gap-3 px-3 rounded-xl"} ${mobile ? (isActive ? "bg-orange-50" : "hover:bg-muted/60") : (isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]")}`}
         >
           <span
@@ -604,7 +621,9 @@ const STANDALONE_PAGE_NAMES = [
   "Affiliate",
   "Affiliate/apply",
 ];
-const SHARED_STORE_STALE_MS = 5 * 60 * 1000;
+
+/** Trust persisted Zustand + Dexie/RQ seeds — full bootstrap at most every {@link PAIDLY_STALE_MS.appStoreBootstrap}. */
+const SHARED_STORE_STALE_MS = PAIDLY_STALE_MS.appStoreBootstrap;
 const FETCH_ALL_COOLDOWN_MS = 10000;
 
 export default function Layout({ children, currentPageName }) {
@@ -622,7 +641,7 @@ export default function Layout({ children, currentPageName }) {
   const mainContentRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, session, logout, refreshUser } = useAuth();
   const userRef = useRef(user);
   userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
@@ -668,10 +687,14 @@ export default function Layout({ children, currentPageName }) {
   }, [user?.id, isCompactLayout]);
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const fetchAll = useAppStore((s) => s.fetchAll);
-  const lastFetchedAt = useAppStore((s) => s.lastFetchedAt);
-  const userProfile = useAppStore((s) => s.userProfile);
-  const resetStore = useAppStore((s) => s.reset);
+  const { fetchAll, lastFetchedAt, userProfile, resetStore } = useAppStore(
+    useShallow((s) => ({
+      fetchAll: s.fetchAll,
+      lastFetchedAt: s.lastFetchedAt,
+      userProfile: s.userProfile,
+      resetStore: s.reset,
+    }))
+  );
   const lastFetchAllRequestAtRef = useRef(0);
 
   // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
@@ -689,8 +712,8 @@ export default function Layout({ children, currentPageName }) {
     if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
     lastFetchAllRequestAtRef.current = now;
     // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
-    fetchAll(user);
-  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile]);
+    fetchAll(user, { accessToken: session?.accessToken ?? null });
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile, session?.accessToken]);
 
   // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
   useEffect(() => {
@@ -698,6 +721,7 @@ export default function Layout({ children, currentPageName }) {
     let debounceId = null;
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       const stale = lastFetchedAt == null || Date.now() - lastFetchedAt >= SHARED_STORE_STALE_MS;
       if (!stale) return;
       if (debounceId) clearTimeout(debounceId);
@@ -706,7 +730,7 @@ export default function Layout({ children, currentPageName }) {
         const now = Date.now();
         if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
         lastFetchAllRequestAtRef.current = now;
-        fetchAll(userRef.current);
+        fetchAll(userRef.current, { accessToken: session?.accessToken ?? null });
       }, 400);
     };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -714,7 +738,7 @@ export default function Layout({ children, currentPageName }) {
       if (debounceId) clearTimeout(debounceId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt]);
+  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt, session?.accessToken]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo
