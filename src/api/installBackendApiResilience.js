@@ -52,6 +52,13 @@ function shouldRetry(config, error) {
   const worthRetry = network || statusRetry;
   if (!worthRetry) return false;
 
+  // 429: never retry mutations (duplicate POST risk + doubles pressure on shared IP limits).
+  // Idempotent reads: at most one retry so a transient throttle does not become a 3× request storm.
+  if (status === 429) {
+    if (!isIdempotentMethod(config)) return false;
+    return count < 1;
+  }
+
   if (isIdempotentMethod(config)) {
     return count < MAX_RETRIES_GET;
   }
@@ -86,7 +93,8 @@ function maybeToastFinalFailure(error) {
 
 /**
  * Retries transient failures on the shared Axios instance; surfaces one Sonner toast per failing request shape.
- * GET/HEAD: up to 2 retries on network/timeout or 408/429/5xx. Mutations: 1 retry on the same (duplicate POST on 503 is rare).
+ * GET/HEAD: up to 2 retries on network/timeout or 408/425/5xx; **429** at most **one** retry (2 attempts total).
+ * Mutations: 1 retry on network/timeout or 408/425/5xx — **not** on 429 (avoids amplifying rate limits).
  */
 export function installBackendApiResilience(api) {
   api.interceptors.response.use(

@@ -21,8 +21,11 @@ import {
   REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS,
   whenDocumentVisible,
 } from "@/lib/paidlyRealtimeReconciliationEngine";
+import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
 
 const SYNC_INTERVAL_MS = 5000;
+/** Coalesce session recovery when the queue has work but `getSession()` is momentarily empty (auth latency / refresh races). */
+const SYNC_QUEUE_SESSION_WAKE_MIN_MS = 8000;
 /** Admin dashboard previously listened to these tables only (not `clients` / `document_sends`). */
 const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expenses", "quotes", "payslips"]);
 
@@ -37,6 +40,7 @@ export default function SyncEngine() {
   const replaceOptimisticInvoice = useAppStore((s) => s.replaceOptimisticInvoice);
   const fetchAllFromStore = useAppStore((s) => s.fetchAll);
   const runningRef = useRef(false);
+  const lastSyncQueueSessionWakeMsRef = useRef(0);
   const globalStoreRefreshTimerRef = useRef(null);
   const realtimeEntityDebounceRefs = useRef({
     invoices: null,
@@ -170,7 +174,18 @@ export default function SyncEngine() {
       if (!nextJob) return;
 
       const session = await supabase.auth.getSession();
-      if (!session?.data?.session) return;
+      if (!session?.data?.session) {
+        const now = Date.now();
+        if (now - lastSyncQueueSessionWakeMsRef.current >= SYNC_QUEUE_SESSION_WAKE_MIN_MS) {
+          lastSyncQueueSessionWakeMsRef.current = now;
+          requestSessionRefresh({
+            source: "sync_queue_session",
+            silent: true,
+            debounceMs: 0,
+          });
+        }
+        return;
+      }
 
       markProcessing(nextJob.id);
       try {

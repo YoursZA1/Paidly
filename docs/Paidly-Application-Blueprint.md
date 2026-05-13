@@ -44,6 +44,8 @@ UI → Hooks → Services → Entity facades (EntityManager) → Supabase
 - Public document access (shares, tokens)
 - **Cron** jobs (dunning, reminders, ops)
 
+**Deployment note:** Same-origin `/api` on Vercel is implemented by **`api/*.js` serverless functions**; the optional **Express** app in `server/src/index.js` is a **separate** runtime (rate limits and middleware apply only where that process fronts `/api`). See **`docs/API_DEPLOYMENT_MODEL.md`** before tuning limits or tracing 429s.
+
 **Goal:** Evolve Paidly from an **invoicing tool** into a full **business operating system**—same story as **Positioning** below.
 
 On-call session/runtime guardrails: see `docs/SESSION_RUNTIME_GUARDS.md`.

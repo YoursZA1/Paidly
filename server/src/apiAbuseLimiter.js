@@ -46,7 +46,7 @@ export function tryConsumeApiBudget(ip, reqPath, method) {
 
   const tiers = [];
 
-  // Global baseline: `express-rate-limit` in `globalExpressRateLimit.js` (default 100 / 15 min per IP).
+  // Global baseline: `express-rate-limit` in `globalExpressRateLimit.js` (default 220 / 15 min per IP; heartbeats + refresh skipped).
 
   if (m === "POST" && path === "/api/send-email") {
     tiers.push({

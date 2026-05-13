@@ -5,6 +5,7 @@ import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
+import { clearSessionOrgIdCache } from "@/api/customClient";
 import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
@@ -380,7 +381,7 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const SESSION_READ_MS = 8000;
+      const SESSION_READ_MS = 10_000;
       const first = await Promise.race([
         readSessionSafe(false),
         new Promise((resolve) => {
@@ -599,7 +600,7 @@ export function AuthProvider({ children }) {
   // Initialize: one getSession, then restore user from profile (avoids duplicate getSession + User.me round trips)
   useEffect(() => {
     let cancelled = false;
-    const SESSION_INIT_MS = 12000;
+    const SESSION_INIT_MS = 15_000;
     (async () => {
       try {
         await consumeAuthCallbackFromUrl();
@@ -1038,6 +1039,7 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (event === "SIGNED_OUT") {
+        clearSessionOrgIdCache();
         useWakeRecoveryStore.getState().reset();
         if (manualLogoutRef.current) {
           manualLogoutRef.current = false;
@@ -1121,6 +1123,7 @@ export function AuthProvider({ children }) {
         : null;
 
       if (event === "SIGNED_IN" && norm) {
+        clearSessionOrgIdCache();
         connectionLifecycle.markConnected("signed_in");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);

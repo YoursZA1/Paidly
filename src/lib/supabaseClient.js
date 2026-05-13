@@ -78,7 +78,8 @@ export const supabase = createClient(effectiveUrl, effectiveKey, {
   },
   realtime: {
     params: {
-      eventsPerSecond: 10,
+      /** Default was 10; modest bump reduces postgres_changes throttling under multi-tab / burst sync (tune with Supabase plan). */
+      eventsPerSecond: 20,
     },
   },
 });
