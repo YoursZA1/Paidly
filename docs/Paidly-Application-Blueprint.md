@@ -50,6 +50,10 @@ UI → Hooks → Services → Entity facades (EntityManager) → Supabase
 
 On-call session/runtime guardrails: see `docs/SESSION_RUNTIME_GUARDS.md`.
 
+**New to the codebase:** see **`docs/HOW_EVERYTHING_CONNECTS.md`** (one-page diagrams: browser ↔ Supabase ↔ `/api` ↔ optional Express).
+
+**Runtime scalability & coordination:** `docs/runtime-audit-report.md`, `src/core/` (`RuntimeCoordinator`, query policies, mutation dedupe, request budgeting, error classification).
+
 ---
 
 ## Positioning — real product advantage

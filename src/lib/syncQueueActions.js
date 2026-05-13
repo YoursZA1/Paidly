@@ -2,6 +2,13 @@ import { useSyncQueueStore } from "@/stores/useSyncQueueStore";
 import { SYNC_JOB_TYPES } from "@/lib/syncJobProcessor";
 import { useAppStore } from "@/stores/useAppStore";
 
+function makeOperationId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `op_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function queueCreateInvoice(invoiceData, meta = {}) {
   const tempId = `temp_invoice_${Date.now()}`;
   useAppStore.getState().prependOptimisticInvoice({
@@ -15,7 +22,13 @@ export function queueCreateInvoice(invoiceData, meta = {}) {
   return useSyncQueueStore.getState().addToQueue(
     SYNC_JOB_TYPES.CREATE_INVOICE,
     { invoiceData },
-    { maxRetries: 5, conflictKey: `invoice:create:${invoiceData?.invoice_number || tempId}`, optimisticTempId: tempId, ...meta }
+    {
+      ...meta,
+      maxRetries: 5,
+      conflictKey: `invoice:create:${invoiceData?.invoice_number || tempId}`,
+      optimisticTempId: tempId,
+      operationId: meta.operationId ?? makeOperationId(),
+    }
   );
 }
 
@@ -30,7 +43,12 @@ export function queueSendInvoice(invoiceId, options = {}, meta = {}) {
   return useSyncQueueStore.getState().addToQueue(
     SYNC_JOB_TYPES.SEND_INVOICE,
     { invoiceId, options },
-    { maxRetries: 6, conflictKey: `invoice:send:${invoiceId || "unknown"}`, ...meta }
+    {
+      ...meta,
+      maxRetries: 6,
+      conflictKey: `invoice:send:${invoiceId || "unknown"}`,
+      operationId: meta.operationId ?? makeOperationId(),
+    }
   );
 }
 
@@ -44,7 +62,12 @@ export function queueUpdateClient(clientId, clientData, meta = {}) {
   return useSyncQueueStore.getState().addToQueue(
     SYNC_JOB_TYPES.UPDATE_CLIENT,
     { clientId, clientData },
-    { maxRetries: 5, conflictKey: `client:update:${clientId || "unknown"}`, ...meta }
+    {
+      ...meta,
+      maxRetries: 5,
+      conflictKey: `client:update:${clientId || "unknown"}`,
+      operationId: meta.operationId ?? makeOperationId(),
+    }
   );
 }
 

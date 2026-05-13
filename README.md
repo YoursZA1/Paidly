@@ -5,6 +5,10 @@ It's a Vite+React app that communicates with the Paidly API.
 
 **Production app:** [https://www.paidly.co.za](https://www.paidly.co.za)
 
+**How the pieces connect (diagrams + links):** [docs/HOW_EVERYTHING_CONNECTS.md](docs/HOW_EVERYTHING_CONNECTS.md)
+
+**Runtime scalability (audit + `src/core/`):** [docs/runtime-audit-report.md](docs/runtime-audit-report.md) · [docs/architecture-improvement-plan.md](docs/architecture-improvement-plan.md)
+
 ## Development & Build
 
 | Command | Purpose |

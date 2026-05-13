@@ -72,7 +72,12 @@ export const useSyncQueueStore = create((set, get) => ({
           const merged = {
             ...existing,
             payload: mergePayload(existing.payload, payload),
-            meta: { ...existing.meta, ...meta, conflictKey },
+            meta: {
+              ...existing.meta,
+              ...meta,
+              conflictKey,
+              operationId: meta.operationId ?? existing.meta?.operationId,
+            },
             status: "pending",
             attempts: 0,
             nextAttemptAt: Date.now(),
