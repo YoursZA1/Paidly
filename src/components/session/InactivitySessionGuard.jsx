@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import Button from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
@@ -18,6 +18,10 @@ const KEEP_ALIVE_INTERVAL_MS = Number(import.meta.env.VITE_SESSION_KEEPALIVE_MS 
 export default function InactivitySessionGuard() {
   const { isAuthenticated, authReady, session, logout } = useAuth();
   const connectionLifecycle = useConnectionLifecycle();
+  // Idempotency guard: prevents duplicate terminal-logout execution if local and remote
+  // timeout callbacks race (e.g. tab's own countdown fires while a SESSION_FORCE_LOGOUT
+  // broadcast from another tab is also in-flight).
+  const terminalLogoutFiredRef = useRef(false);
 
   const keepAlive = useCallback(async () => {
     if (isRecoveryCircuitOpen()) return;
@@ -38,6 +42,8 @@ export default function InactivitySessionGuard() {
   }, [session?.accessToken, session?.access_token]);
 
   const onTimeout = useCallback(async () => {
+    if (terminalLogoutFiredRef.current) return;
+    terminalLogoutFiredRef.current = true;
     try {
       await connectionLifecycle?.transitionToExpired("inactivity_timeout", {
         signOutLocal: false,
@@ -64,24 +70,38 @@ export default function InactivitySessionGuard() {
   }, [connectionLifecycle, logout]);
 
   const onRemoteTimeout = useCallback(async () => {
-    await connectionLifecycle?.transitionToExpired("inactivity_timeout", {
-      signOutLocal: true,
-      clearAuthState: true,
-      broadcast: true,
-      redirect: false,
-      source: "inactivity_remote_timeout",
-    });
-    // Safety net: same guarantee as onTimeout — SessionExpiredModal relies on EXPIRED status.
-    setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
-    if (typeof window !== "undefined") {
+    if (terminalLogoutFiredRef.current) return;
+    terminalLogoutFiredRef.current = true;
+    try {
       try {
-        window.sessionStorage.setItem("paidly_session_expired_reason", "inactivity_timeout");
+        await connectionLifecycle?.transitionToExpired("inactivity_timeout", {
+          signOutLocal: false,
+          clearAuthState: true,
+          broadcast: true,
+          redirect: false,
+          source: "inactivity_remote_timeout",
+        });
       } catch {
-        // ignore storage errors
+        // Lifecycle errors must not prevent the EXPIRED status, logout, and navigation below.
       }
-      navigateTo("/login?reason=inactivity");
+      // Safety net: same guarantee as onTimeout — SessionExpiredModal and RequireAuth rely on
+      // EXPIRED status being set even if transitionToExpired short-circuited or threw.
+      setSessionHealthStatus(SESSION_STATUS.EXPIRED, "inactivity_timeout");
+      // Mirror onTimeout: full teardown via logout clears session/user state, destroys realtime
+      // channels (scope: "global"), revokes the server-side session, and purges auth storage.
+      // signOutLocal: false above avoids the redundant scope:"local" call inside transitionToExpired.
+      await logout({ keepExpiredState: true });
+    } finally {
+      if (typeof window !== "undefined") {
+        try {
+          window.sessionStorage.setItem("paidly_session_expired_reason", "inactivity_timeout");
+        } catch {
+          // ignore storage errors
+        }
+        navigateTo("/login?reason=inactivity");
+      }
     }
-  }, [connectionLifecycle]);
+  }, [connectionLifecycle, logout]);
 
   const { warningOpen, countdownSeconds, stayLoggedIn } = useInactivitySessionTimeout({
     enabled: Boolean(authReady && isAuthenticated),

@@ -26,6 +26,7 @@ import { withApiLogging } from "@/utils/apiLogger";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
+import LogoImage from "@/components/shared/LogoImage";
 import { lineItemHasContent } from "@/utils/lineItemContent";
 import { normalizeDocumentType, DOCUMENT_TYPES } from "@/document-engine";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
@@ -1187,7 +1188,7 @@ function CreateDocumentCore({ docType }) {
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
                       {effectiveOwnerLogoUrl ? (
-                        <img
+                        <LogoImage
                           src={effectiveOwnerLogoUrl}
                           alt=""
                           className="max-h-full max-w-full object-contain"

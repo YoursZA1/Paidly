@@ -78,12 +78,45 @@ describe("InactivitySessionGuard terminal transitions", () => {
     expect(navGoMock).toHaveBeenCalledWith("/login?reason=inactivity");
   });
 
-  it("onRemoteTimeout transitions EXPIRED", async () => {
+  it("onRemoteTimeout mirrors onTimeout: calls logout and navigates", async () => {
     expect(typeof capturedOnRemoteTimeout).toBe("function");
     await act(async () => {
       await capturedOnRemoteTimeout();
     });
     expect(transitionToExpiredMock).toHaveBeenCalledWith("inactivity_timeout", expect.any(Object));
+    expect(logoutMock).toHaveBeenCalledWith({ keepExpiredState: true });
+    expect(navGoMock).toHaveBeenCalledWith("/login?reason=inactivity");
+  });
+
+  it("onRemoteTimeout clears auth state preventing stale session", async () => {
+    await act(async () => {
+      await capturedOnRemoteTimeout();
+    });
+    // transitionToExpired with clearAuthState: true clears session/user from AuthContext store.
+    expect(transitionToExpiredMock).toHaveBeenCalledWith(
+      "inactivity_timeout",
+      expect.objectContaining({ clearAuthState: true, signOutLocal: false })
+    );
+    // logout purges Supabase auth storage, calls global signOut (destroys realtime), and
+    // revokes the server-side session — ensuring no stale subscriptions or protected data remain.
+    expect(logoutMock).toHaveBeenCalledWith({ keepExpiredState: true });
+  });
+
+  it("simultaneous local and remote timeout: logout called exactly once", async () => {
+    expect(typeof capturedOnTimeout).toBe("function");
+    expect(typeof capturedOnRemoteTimeout).toBe("function");
+    await act(async () => {
+      await Promise.all([capturedOnTimeout(), capturedOnRemoteTimeout()]);
+    });
+    expect(logoutMock).toHaveBeenCalledTimes(1);
+    expect(navGoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("onRemoteTimeout navigates even when transitionToExpired throws", async () => {
+    transitionToExpiredMock.mockRejectedValueOnce(new Error("lifecycle error"));
+    await act(async () => {
+      await capturedOnRemoteTimeout();
+    });
     expect(navGoMock).toHaveBeenCalledWith("/login?reason=inactivity");
   });
 });

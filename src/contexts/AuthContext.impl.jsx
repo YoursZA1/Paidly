@@ -880,7 +880,7 @@ export function AuthProvider({ children }) {
       sync.close();
       authTabSyncRef.current = null;
     };
-  }, [connectionLifecycle]);
+  }, [connectionLifecycle, requestSessionRefreshGuarded]);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -949,7 +949,7 @@ export function AuthProvider({ children }) {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [connectionLifecycle, runWakeRecoverySequence]);
+  }, [connectionLifecycle, runWakeRecoverySequence, requestSessionRefreshGuarded]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
