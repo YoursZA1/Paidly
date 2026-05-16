@@ -1,8 +1,10 @@
 /**
- * Health + session keep-alive in one function (Vercel Hobby ≤12 functions).
- * Rewrites: /api/health → ?op=health, /api/keep-alive → ?op=keep-alive
+ * Health, keep-alive, and dashboard bootstrap in one function (Vercel Hobby ≤12 functions).
+ * Rewrites: /api/health → ?op=health, /api/keep-alive → ?op=keep-alive,
+ *           /api/dashboard/bootstrap → ?op=dashboard-bootstrap
  */
 import { createClient } from "@supabase/supabase-js";
+import dashboardBootstrapHandler from "../server/src/dashboardBootstrapHandler.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -20,6 +22,10 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Method not allowed" });
     }
     return res.status(200).json({ status: "ok", time: Date.now() });
+  }
+
+  if (op === "dashboard-bootstrap") {
+    return dashboardBootstrapHandler(req, res);
   }
 
   if (op === "keep-alive") {

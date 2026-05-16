@@ -49,6 +49,10 @@
       "destination": "/api/system?op=keep-alive"
     },
     {
+      "source": "/api/dashboard/bootstrap",
+      "destination": "/api/system?op=dashboard-bootstrap"
+    },
+    {
       "source": "/api/og",
       "destination": "/api/public-share?doc=og"
     },
