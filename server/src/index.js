@@ -41,12 +41,7 @@ import { sendAdminPlatformMessageToSignupEmail } from "./adminPlatformUserOutrea
 import { purgeUserStorageAssets } from "./purgeUserStorage.js";
 import { getSupabaseAnonClient } from "./supabaseAnon.js";
 import { getUserFromRequest, requireAuthMiddleware } from "./supabaseAuth.js";
-import {
-  consumeLoginSlot,
-  consumeSignupSlot,
-  getClientIp,
-  startLoginRateLimitPruner,
-} from "./loginIpRateLimit.js";
+import { getClientIp, startLoginRateLimitPruner } from "./loginIpRateLimit.js";
 import {
   auditHttpResponses,
   enforceHttps,
@@ -68,7 +63,6 @@ import {
   isValidUuid,
   normalizeHtmlPdfPageMargins,
   sanitizeCssForPdf,
-  sanitizeEmailHtmlBody,
   sanitizeHtmlForPdf,
   sanitizeHtmlPdfTitle,
   sanitizeInviteMetadata,
@@ -78,13 +72,7 @@ import {
 } from "./inputValidation.js";
 import { generateHtmlPdfBuffer, getAnvilClient } from "./anvilPdf.js";
 import { parseBody } from "./validateBody.js";
-import {
-  forgotPasswordBodySchema,
-  refreshSessionBodySchema,
-  signInBodySchema,
-  signUpBodySchema,
-  waitlistBodySchema,
-} from "./schemas/apiBodySchemas.js";
+import { waitlistBodySchema } from "./schemas/apiBodySchemas.js";
 import { sendInvoiceBodySchema } from "./schemas/invoiceSchemas.js";
 import {
   adminBootstrapBodySchema,
@@ -94,7 +82,6 @@ import {
   generatePdfHtmlBodySchema,
   payfastOnceBodySchema,
   payfastSubscriptionBodySchema,
-  sendEmailBodySchema,
   trackOpenBodySchema,
 } from "./schemas/mutationSchemas.js";
 import { sendUnexpectedError } from "./apiResponse.js";
@@ -104,6 +91,13 @@ import { registerAffiliateUserRoutes } from "./affiliateUserRoutes.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
+import authSignInHandler from "./auth/authSignInApi.js";
+import authSignUpHandler from "./auth/authSignUpApi.js";
+import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
+import authRefreshHandler from "./auth/authRefreshApi.js";
+import sendEmailHandler from "./sendEmailApi.js";
+import { envFlag, envNumber } from "./envFlags.js";
+import { verifyTurnstileToken } from "./turnstileVerify.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
 import {
@@ -138,7 +132,6 @@ dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 initSentry();
 
 const app = express();
-const authRefreshInFlight = new Map();
 // So req.ip / X-Forwarded-For are correct behind a reverse proxy (e.g. nginx, Vercel, Railway).
 if (process.env.TRUST_PROXY === "false") {
   app.set("trust proxy", false);
@@ -165,19 +158,6 @@ if (adminBypassEnabled && process.env.NODE_ENV === "production") {
 function makeRequestId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function envFlag(name, defaultValue = false) {
-  const raw = String(process.env[name] ?? "").trim().toLowerCase();
-  if (!raw) return Boolean(defaultValue);
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
-function envNumber(name, fallback) {
-  const raw = String(process.env[name] ?? "").trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function parseConfiguredClientOrigins(rawValue) {
@@ -385,53 +365,6 @@ function evaluateDeploymentSecurityHealth() {
       TURNSTILE_SECRET_KEY_SET: Boolean(process.env.TURNSTILE_SECRET_KEY),
     },
   };
-}
-
-function getTurnstileClientIp(req) {
-  const raw = String(req.headers["x-forwarded-for"] || "").trim();
-  if (!raw) return undefined;
-  return raw.split(",")[0].trim() || undefined;
-}
-
-async function verifyTurnstileToken(token, req) {
-  const secret = String(process.env.TURNSTILE_SECRET_KEY || "").trim();
-  if (!secret) {
-    return { ok: false, reason: "turnstile_secret_missing" };
-  }
-  const t = String(token || "").trim();
-  if (!t) {
-    return { ok: false, reason: "turnstile_token_missing" };
-  }
-
-  const body = new URLSearchParams();
-  body.set("secret", secret);
-  body.set("response", t);
-  const ip = getTurnstileClientIp(req);
-  if (ip) body.set("remoteip", ip);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-    const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      return { ok: false, reason: "turnstile_http_error", detail: `status_${resp.status}` };
-    }
-    if (json?.success === true) {
-      return { ok: true };
-    }
-    const code = Array.isArray(json?.["error-codes"]) ? json["error-codes"].join(",") : "turnstile_failed";
-    return { ok: false, reason: "turnstile_failed", detail: code };
-  } catch (err) {
-    return { ok: false, reason: "turnstile_exception", detail: err?.name || err?.message || "unknown" };
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** Log admin API calls for monitoring sync and permission issues */
@@ -879,374 +812,17 @@ app.post("/api/waitlist", async (req, res) => {
   }
 });
 
-app.post("/api/auth/forgot-password", async (req, res) => {
-  const ip = getClientIp(req);
-  try {
-    const parsed = parseBody(forgotPasswordBodySchema, req, res, () =>
-      logSecurity("warn", "auth_forgot_password_bad_request", { ip, reason: "validation" })
-    );
-    if (!parsed) return;
-    const { email: normalizedEmail, redirectTo, turnstile_token } = parsed;
-
-    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_FORGOT_PASSWORD", turnstileEnabled);
-    if (requireTurnstile) {
-      const verify = await verifyTurnstileToken(turnstile_token, req);
-      if (!verify.ok) {
-        logSecurity("warn", "auth_forgot_password_turnstile_failed", {
-          ip,
-          email: normalizedEmail,
-          reason: verify.reason,
-          detail: verify.detail,
-        });
-        return res.status(403).json({
-          error: "Security verification failed. Please retry and complete the challenge.",
-        });
-      }
-    }
-
-    const supabaseAnon = getSupabaseAnonClient();
-    if (!supabaseAnon) {
-      logSecurity("error", "auth_forgot_password_misconfigured", { ip, reason: "no_supabase_anon" });
-      return res.status(503).json({
-        error:
-          "Password reset service is not configured. Set SUPABASE_ANON_KEY on the API server.",
-      });
-    }
-
-    const { error } = await supabaseAnon.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: typeof redirectTo === "string" ? redirectTo : undefined,
-    });
-
-    if (error) {
-      logSecurity("warn", "auth_forgot_password_failed", {
-        ip,
-        email: normalizedEmail,
-        reason: error.message || "forgot_password_error",
-      });
-      // Keep user-enumeration safe response.
-      return res.json({ ok: true });
-    }
-
-    logSecurity("info", "auth_forgot_password_requested", {
-      ip,
-      email: normalizedEmail,
-    });
-    return res.json({ ok: true });
-  } catch (err) {
-    logSecurity("error", "auth_forgot_password_exception", {
-      ip,
-      message: err?.message || "unknown",
-    });
-    if (!res.headersSent) return res.status(500).json({ error: "Password reset failed" });
-  }
-});
+app.post("/api/auth/forgot-password", authForgotPasswordHandler);
 
 // Affiliate user routes: POST /api/referrals/create, GET /affiliate/dashboard, GET /api/affiliate/dashboard
 registerAffiliateUserRoutes(app);
 
-/**
- * Password sign-in proxied through the API so we can rate-limit by IP before hitting Supabase.
- * Client sets the returned tokens via supabase.auth.setSession (see SupabaseAuthService.signInWithEmail).
- */
-app.post("/api/auth/sign-in", async (req, res) => {
-  const ip = getClientIp(req);
-  try {
-    const parsed = parseBody(signInBodySchema, req, res, () =>
-      logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "validation" })
-    );
-    if (!parsed) return;
-    const { email: normalizedEmail, password } = parsed;
+/** Shared handler: server/src/auth/authSignInApi.js (also Vercel api/auth/sign-in.js). */
+app.post("/api/auth/sign-in", authSignInHandler);
 
-    const slot = consumeLoginSlot(ip);
-    if (!slot.ok) {
-      logSecurity("warn", "auth_sign_in_rate_limited", {
-        ip,
-        retryAfterSeconds: slot.retryAfterSeconds,
-      });
-      res.setHeader("Retry-After", String(slot.retryAfterSeconds));
-      return res.status(429).json({
-        error: "Too many sign-in attempts from this network. Please try again later.",
-        retryAfterSeconds: slot.retryAfterSeconds,
-      });
-    }
+app.post("/api/auth/refresh", authRefreshHandler);
 
-    const supabaseAnon = getSupabaseAnonClient();
-    if (!supabaseAnon) {
-      logSecurity("error", "auth_sign_in_misconfigured", { ip, reason: "no_supabase_anon" });
-      return res.status(503).json({
-        error:
-          "Sign-in service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
-      });
-    }
-
-    const { data, error } = await supabaseAnon.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
-
-    if (error) {
-      logSecurity("warn", "auth_sign_in_failed", {
-        ip,
-        email: normalizedEmail,
-        reason: "invalid_credentials",
-      });
-      return res.status(401).json({
-        error: error.message || "Invalid login credentials",
-      });
-    }
-
-    const session = data?.session;
-    if (!session?.access_token || !session?.refresh_token) {
-      logSecurity("warn", "auth_sign_in_failed", {
-        ip,
-        email: normalizedEmail,
-        reason: "no_session",
-      });
-      return res.status(401).json({ error: "Invalid login credentials" });
-    }
-
-    if (!session?.user?.email_confirmed_at) {
-      logSecurity("warn", "auth_sign_in_unverified_email", {
-        ip,
-        email: normalizedEmail,
-        userId: session.user?.id || null,
-      });
-      return res.status(403).json({
-        error: "Email not verified. Please verify your email before signing in.",
-      });
-    }
-
-    logSecurity("info", "auth_sign_in_success", {
-      ip,
-      email: normalizedEmail,
-      userId: session.user?.id || null,
-    });
-
-    return res.json({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_in: session.expires_in,
-      expires_at: session.expires_at,
-      user: session.user,
-    });
-  } catch (err) {
-    logSecurity("error", "auth_sign_in_exception", {
-      ip,
-      message: err?.message || "unknown",
-    });
-    if (!res.headersSent) {
-      return res.status(500).json({ error: "Sign-in failed" });
-    }
-  }
-});
-
-/**
- * Refresh an access token from a refresh token via the anon client.
- * Includes in-process single-flight dedupe to avoid refresh races.
- */
-app.post("/api/auth/refresh", async (req, res) => {
-  const ip = getClientIp(req);
-  try {
-    const parsed = parseBody(refreshSessionBodySchema, req, res, () =>
-      logSecurity("warn", "auth_refresh_bad_request", { ip, reason: "validation" })
-    );
-    if (!parsed) return;
-    const refreshToken = String(parsed.refresh_token || "");
-    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
-
-    const existing = authRefreshInFlight.get(tokenHash);
-    if (existing) {
-      const payload = await existing;
-      return res.status(payload.status).json(payload.body);
-    }
-
-    const refreshPromise = (async () => {
-      const supabaseAnon = getSupabaseAnonClient();
-      if (!supabaseAnon) {
-        logSecurity("error", "auth_refresh_misconfigured", { ip, reason: "no_supabase_anon" });
-        return {
-          status: 503,
-          body: {
-            error:
-              "Refresh service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
-          },
-        };
-      }
-
-      const { data, error } = await supabaseAnon.auth.refreshSession({ refresh_token: refreshToken });
-      if (error || !data?.session?.access_token || !data?.session?.refresh_token) {
-        logSecurity("warn", "auth_refresh_failed", {
-          ip,
-          reason: error?.message || "refresh_failed",
-        });
-        return {
-          status: 401,
-          body: { error: error?.message || "Session refresh failed" },
-        };
-      }
-
-      return {
-        status: 200,
-        body: {
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-          expires_in: data.session.expires_in,
-          expires_at: data.session.expires_at,
-          user: data.session.user || null,
-        },
-      };
-    })();
-
-    authRefreshInFlight.set(tokenHash, refreshPromise);
-    const payload = await refreshPromise;
-    return res.status(payload.status).json(payload.body);
-  } catch (err) {
-    logSecurity("error", "auth_refresh_exception", {
-      ip,
-      message: err?.message || "unknown",
-    });
-    if (!res.headersSent) {
-      return res.status(500).json({ error: "Session refresh failed" });
-    }
-  } finally {
-    try {
-      const token = String(req?.body?.refresh_token || "");
-      if (token) {
-        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-        authRefreshInFlight.delete(tokenHash);
-      }
-    } catch {
-      // ignore map cleanup failures
-    }
-  }
-});
-
-/**
- * Sign-up proxied through the API (tiered IP limits in apiAbuseLimiter + this path).
- * Same anon client as sign-in; never log passwords.
- */
-app.post("/api/auth/sign-up", async (req, res) => {
-  const ip = getClientIp(req);
-  try {
-    const parsed = parseBody(signUpBodySchema, req, res, () =>
-      logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
-    );
-    if (!parsed) return;
-    const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo } = parsed;
-
-    const slot = consumeSignupSlot(ip);
-    if (!slot.ok) {
-      logSecurity("warn", "auth_sign_up_rate_limited", {
-        ip,
-        retryAfterSeconds: slot.retryAfterSeconds,
-      });
-      res.setHeader("Retry-After", String(slot.retryAfterSeconds));
-      return res.status(429).json({
-        error: "Too many sign-up attempts from this network. Please try again later.",
-        retryAfterSeconds: slot.retryAfterSeconds,
-      });
-    }
-
-    const supabaseAnon = getSupabaseAnonClient();
-    if (!supabaseAnon) {
-      logSecurity("error", "auth_sign_up_misconfigured", { ip, reason: "no_supabase_anon" });
-      return res.status(503).json({
-        error:
-          "Sign-up service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
-      });
-    }
-
-    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_SIGNUP", turnstileEnabled);
-    if (requireTurnstile) {
-      const verify = await verifyTurnstileToken(turnstile_token, req);
-      if (!verify.ok) {
-        logSecurity("warn", "auth_sign_up_turnstile_failed", {
-          ip,
-          email: normalizedEmail,
-          reason: verify.reason,
-          detail: verify.detail,
-        });
-        return res.status(403).json({
-          error: "Security verification failed. Please retry and complete the challenge.",
-        });
-      }
-    }
-
-    const userMetadata = sanitizeSignUpUserMetadata(
-      profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {}
-    );
-
-    let safeEmailRedirectTo;
-    if (typeof redirectTo === "string" && redirectTo.trim()) {
-      try {
-        const url = new URL(redirectTo);
-        const allowedOrigins = new Set(
-          [process.env.CLIENT_ORIGIN, req.headers.origin]
-            .map((value) => String(value || "").trim())
-            .filter(Boolean)
-        );
-        const hostIsLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-        if (allowedOrigins.has(url.origin) && (url.protocol === "https:" || hostIsLocal)) {
-          safeEmailRedirectTo = url.toString();
-        }
-      } catch {
-        safeEmailRedirectTo = undefined;
-      }
-    }
-
-    const { data, error } = await supabaseAnon.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: userMetadata,
-        emailRedirectTo: safeEmailRedirectTo,
-      },
-    });
-
-    if (error) {
-      logSecurity("warn", "auth_sign_up_failed", {
-        ip,
-        email: normalizedEmail,
-        reason: error.message || "signup_error",
-      });
-      return res.status(400).json({
-        error: error.message || "Sign up failed",
-      });
-    }
-
-    const session = data?.session;
-    const user = data?.user ?? null;
-
-    logSecurity("info", "auth_sign_up_success", {
-      ip,
-      email: normalizedEmail,
-      userId: user?.id || null,
-      session: Boolean(session?.access_token),
-    });
-
-    return res.json({
-      user,
-      session: session
-        ? {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-            expires_in: session.expires_in,
-            expires_at: session.expires_at,
-          }
-        : null,
-    });
-  } catch (err) {
-    logSecurity("error", "auth_sign_up_exception", {
-      ip,
-      message: err?.message || "unknown",
-    });
-    if (!res.headersSent) {
-      return res.status(500).json({ error: "Sign up failed" });
-    }
-  }
-});
+app.post("/api/auth/sign-up", authSignUpHandler);
 
 /**
  * Track when a client opens an invoice link (tracking_token in message_logs).
@@ -1412,38 +988,7 @@ app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/send-email", requireAuthMiddleware, async (req, res) => {
-  try {
-    const user = req.authUser;
-
-    await assertUserHasFeature(supabaseAdmin, user.id, "email");
-
-    const parsed = parseBody(sendEmailBodySchema, req, res);
-    if (!parsed) return;
-
-    const toNorm = parsed.to;
-    const subjectSafe = sanitizeOneLine(parsed.subject, 998);
-    if (!subjectSafe) {
-      return res.status(400).json({ error: "Invalid subject" });
-    }
-
-    const bodySafe = sanitizeEmailHtmlBody(parsed.body);
-
-    const result = await sendHtmlEmail(
-      toNorm,
-      subjectSafe,
-      bodySafe,
-      sanitizeOneLine(user?.user_metadata?.company_name || "Paidly", 200) || "Paidly"
-    );
-
-    if (!result.success) {
-      return res.status(500).json({ success: false, error: result.error });
-    }
-    return res.json({ success: true, data: result.data });
-  } catch (err) {
-    return sendUnexpectedError(res, err, "send-email", { success: false });
-  }
-});
+app.post("/api/send-email", sendEmailHandler);
 
 const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
 const PAYFAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

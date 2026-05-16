@@ -49,10 +49,17 @@ export class RequestCoordinator {
     return getRuntimeCoordinatorSnapshot().pauseNonCriticalRequests;
   }
 
-  async withSlot<T>(fn: () => Promise<T>): Promise<T> {
+  /** Block until RuntimeCoordinator allows non-critical HTTP (or maxWaitMs elapses). */
+  async waitUntilUnpaused(maxWaitMs = 120_000): Promise<void> {
+    const start = Date.now();
     while (getRuntimeCoordinatorSnapshot().pauseNonCriticalRequests) {
+      if (Date.now() - start >= maxWaitMs) return;
       await new Promise((r) => globalThis.setTimeout(r, 100));
     }
+  }
+
+  async withSlot<T>(fn: () => Promise<T>): Promise<T> {
+    await this.waitUntilUnpaused();
     while (this.active >= this.maxConcurrent) {
       await new Promise<void>((resolve) => {
         this.waitQueue.push(resolve);

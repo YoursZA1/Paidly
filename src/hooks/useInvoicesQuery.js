@@ -4,8 +4,11 @@ import { runDedupedAsync } from '@/lib/inflightRequestDedupe';
 import { withTimeoutRetry } from '@/utils/fetchWithTimeout';
 import { withApiLogging, getCurrentPage } from '@/utils/apiLogger';
 import { PAIDLY_STALE_MS } from '@/lib/paidlyClientCachePolicy';
+import { queryKeys, listQueryDefaults } from '@/core/query/queryPolicies';
+import { useAuth } from '@/contexts/AuthContext';
 
-const INVOICES_LIST_KEY = ['invoices'];
+/** @deprecated Broad key — use queryKeys.invoiceList(scopeKey) */
+export const INVOICES_LIST_KEY = ['invoices'];
 const TIMEOUT_MS = 30000;
 const RETRIES = 1;
 const LIST_OPTS = { limit: 100, maxWaitMs: 12000 };
@@ -37,8 +40,12 @@ async function fetchInvoicesAndClients() {
  * `staleTime` matches `PAIDLY_STALE_MS.invoices` (see `paidlyClientCachePolicy.js`).
  */
 export function useInvoicesQuery(options = {}) {
+  const { user } = useAuth();
+  const scopeKey = user?.id ?? "_guest";
+  const defaults = listQueryDefaults();
   return useQuery({
-    queryKey: INVOICES_LIST_KEY,
+    ...options,
+    queryKey: queryKeys.invoiceList(scopeKey, "with-clients"),
     queryFn: async () => {
       const [invoicesData, clientsData] = await fetchInvoicesAndClients();
       return {
@@ -46,7 +53,9 @@ export function useInvoicesQuery(options = {}) {
         clients: clientsData || [],
       };
     },
-    staleTime: PAIDLY_STALE_MS.invoices,
-    ...options,
+    staleTime: options.staleTime ?? PAIDLY_STALE_MS.invoices,
+    gcTime: options.gcTime ?? defaults.gcTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus ?? defaults.refetchOnWindowFocus,
+    enabled: options.enabled ?? Boolean(user?.id),
   });
 }

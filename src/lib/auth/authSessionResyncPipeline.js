@@ -1,4 +1,5 @@
 import { isRefreshSuccess } from "@/lib/session/refreshResult";
+import { useRuntimeCoordinator } from "@/core/runtime/RuntimeCoordinator";
 
 /**
  * Body registered with {@link registerSessionRefreshExecutor} in AuthProvider.
@@ -16,12 +17,27 @@ export async function runSessionRefreshExecutorPipeline({
   refreshUser,
   afterProfileHydrated,
 }) {
-  const refreshResult = await refreshSession({ silent, bypassThrottle });
-  // Terminal or non-success refresh outcomes must not fan out into resync/bootstrap/entity work.
-  if (!isRefreshSuccess(refreshResult)) {
+  const rc = useRuntimeCoordinator.getState();
+  const startedRecovery = rc.beginAuthRecovery();
+  try {
+    const refreshResult = await refreshSession({ silent, bypassThrottle });
+    // Terminal or non-success refresh outcomes must not fan out into resync/bootstrap/entity work.
+    if (!isRefreshSuccess(refreshResult)) {
+      if (startedRecovery && useRuntimeCoordinator.getState().phase === "AUTH_RECOVERING") {
+        rc.endAuthRecoverySuccess();
+      }
+      return refreshResult;
+    }
+    await refreshUser();
+    await afterProfileHydrated();
+    if (startedRecovery) {
+      rc.endAuthRecoverySuccess();
+    }
     return refreshResult;
+  } catch (e) {
+    if (startedRecovery) {
+      rc.endAuthRecoveryFatal(e?.message || "session_resync_failed");
+    }
+    throw e;
   }
-  await refreshUser();
-  await afterProfileHydrated();
-  return refreshResult;
 }

@@ -40,19 +40,20 @@ describe("createReconnectEscalationController", () => {
       }),
     });
 
-    ctl.schedule();
-    await vi.advanceTimersByTimeAsync(3100);
-    ctl.schedule();
-    await vi.advanceTimersByTimeAsync(3100);
-    ctl.schedule();
-    await vi.advanceTimersByTimeAsync(3100);
+    // MAX_RECONNECT_ATTEMPTS is 5 — drive probes until the circuit opens (backoff has jitter).
+    for (let i = 0; i < 10 && handleFatal.mock.calls.length === 0; i += 1) {
+      ctl.schedule();
+      await vi.advanceTimersByTimeAsync(25_000);
+    }
 
-    expect(supabaseRefreshSession).toHaveBeenCalledTimes(3);
     expect(handleFatal).toHaveBeenCalledWith("reconnect_loop_break");
     expect(transitionToExpired).not.toHaveBeenCalled();
+    expect(supabaseRefreshSession.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(supabaseRefreshSession.mock.calls.length).toBeLessThanOrEqual(6);
 
+    const callsBefore = supabaseRefreshSession.mock.calls.length;
     ctl.schedule();
-    await vi.advanceTimersByTimeAsync(3100);
-    expect(supabaseRefreshSession).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(supabaseRefreshSession.mock.calls.length).toBe(callsBefore);
   });
 });

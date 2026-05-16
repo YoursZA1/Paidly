@@ -1,3 +1,7 @@
+import {
+  notifyAuthRecoveryFatal,
+  notifyRuntimeFromLifecycle,
+} from "@/core/runtime/runtimeCoordinatorBridge";
 import { useConnectionLifecycleStore } from "@/lib/connection/connectionLifecycleStore";
 import { buildLifecyclePlan } from "@/lib/connection/lifecyclePolicy";
 import { LifecycleSignalType } from "@/lib/connection/lifecycleSignalTypes";
@@ -73,6 +77,7 @@ export function createConnectionLifecycleManager({ sessionManager }) {
    * @param {{ type: string } & Record<string, unknown>} signal
    */
   function report(signal) {
+    notifyRuntimeFromLifecycle(signal);
     switch (signal.type) {
       case LifecycleSignalType.REALTIME_SUBSCRIBED:
       case LifecycleSignalType.REALTIME_DISCONNECTED:
@@ -223,6 +228,7 @@ export function createConnectionLifecycleManager({ sessionManager }) {
 
     handleRefreshFatal(reason) {
       patch({ refresh: { phase: "fatal", lastReason: reason ?? null } });
+      notifyAuthRecoveryFatal(reason ?? "refresh_fatal");
       return sink.handleRefreshFatal(reason);
     },
 

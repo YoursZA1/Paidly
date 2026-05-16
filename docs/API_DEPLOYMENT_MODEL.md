@@ -13,6 +13,33 @@ This document is the **canonical map** of where `/api` traffic runs so rate limi
 
 **SPA client:** `src/api/backendClient.js` uses same-origin `/api` in production when `VITE_SERVER_URL` is unset (typical Vercel app hosting). Those requests hit **A**, not **B**, unless you proxy `/api` to an external Express origin.
 
+## 1b. Shared serverless handlers (Wave 1)
+
+These routes use **one implementation** in `server/src/` re-exported from `api/` (same pattern as `api/auth/bootstrap-user.js`):
+
+| Route | Shared module |
+|-------|----------------|
+| `POST /api/auth/sign-in` | `server/src/auth/authSignInApi.js` |
+| `POST /api/auth/sign-up` | `server/src/auth/authSignUpApi.js` |
+| `POST /api/auth/forgot-password` | `server/src/auth/authForgotPasswordApi.js` |
+| `POST /api/auth/refresh` | `server/src/auth/authRefreshApi.js` |
+| `POST /api/send-email` | `server/src/sendEmailApi.js` |
+
+**Production auth (default):** `shouldUseNodeAuthApi()` is **true** on production builds unless `VITE_SUPABASE_ONLY=1` or `VITE_DISABLE_NODE_AUTH_API=1`. JWTs still come from Supabase; the API adds IP rate limits, Turnstile verification, and security logs.
+
+**Server env (Vercel + Express):** `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET_KEY` (when Turnstile required), `RESEND_*` for send-email.
+
+## 1c. Canonical integration paths (PayFast + email)
+
+| Concern | Canonical route | Client entry | Notes |
+|--------|-----------------|--------------|-------|
+| **Transactional email** | `POST /api/send-email` | `IntegrationManager.Core.SendEmail` → same-origin `/api` | Implementation: `server/src/sendEmailApi.js` (Vercel re-export `api/send-email.js`). Do not call Resend from the browser. |
+| **PayFast subscription checkout** | `POST /api/payfast/subscription` | Billing UI via `backendApi` / `apiRequest` | Signed payload from server; client posts `fields` to PayFast. |
+| **PayFast one-time invoice** | `POST /api/payfast/once` | Invoice payment flows | Same signing pattern as subscription. |
+| **PayFast ITN (webhooks)** | `POST /api/payfast/webhook`, `POST /api/payfast/subscription/itn` | N/A (PayFast server) | Subscription ITN also at `/payfast/subscription/itn` on Express. **Billing columns** (`subscription_plan`, `payfast_*`) are updated only here or via admin/service role — never from `AuthManager.updateMyUserData`. |
+
+Legacy duplicate handlers in `api/payfast-handler.js` should be treated as deprecated; new work uses the routes above.
+
 ## 2. Related docs
 
 - **`docs/API_RATE_LIMIT_BUDGET.md`** — keep-alive, Axios retries, and Express budget math.

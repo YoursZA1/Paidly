@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { clearPersistedQueryCache } from "@/lib/paidlyIdbQueryPersistence";
 
 /**
  * Version bump when persisted query **shape** or allowlist semantics change.
@@ -23,4 +24,10 @@ export function bustOrgScopedQueries(client: QueryClient, orgId: string): void {
  */
 export function bustAllQueriesAfterLogout(client: QueryClient): void {
   client.clear();
+}
+
+/** Clear in-memory React Query + LS/IDB snapshots (call after auth storage purge). */
+export async function purgeQueryClientAfterLogout(client: QueryClient): Promise<void> {
+  bustAllQueriesAfterLogout(client);
+  await clearPersistedQueryCache();
 }

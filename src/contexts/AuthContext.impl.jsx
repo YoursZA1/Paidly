@@ -44,6 +44,12 @@ import { createReconnectEscalationController } from "@/lib/auth/authReconnectEsc
 import { runAuthRefreshQueueJob } from "@/lib/auth/authRefreshQueueJob";
 import { runSessionRefreshExecutorPipeline } from "@/lib/auth/authSessionResyncPipeline";
 import {
+  initRuntimeCoordinatorTelemetry,
+  notifyAuthBootstrapComplete,
+} from "@/core/runtime/runtimeCoordinatorBridge";
+import { purgeQueryClientAfterLogout } from "@/core/query/persistedQueryClient";
+import { getOrCreateAppQueryClient } from "@/lib/query-client";
+import {
   refreshFailed,
   refreshFatal,
   refreshSkipped,
@@ -714,12 +720,17 @@ export function AuthProvider({ children }) {
         }
         if (!cancelled) {
           patchAuthSession({ loading: false, authLoadingTimedOut: false });
+          notifyAuthBootstrapComplete();
         }
       }
     })();
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    initRuntimeCoordinatorTelemetry();
   }, []);
 
   /**
@@ -1287,6 +1298,11 @@ export function AuthProvider({ children }) {
         clearTimeout(timeoutId);
         // 3. Always remove Supabase auth keys after signOut (or if it failed / timed out).
         purgeSupabaseAuthStorage();
+        try {
+          await purgeQueryClientAfterLogout(getOrCreateAppQueryClient());
+        } catch {
+          /* ignore cache purge failures */
+        }
       }
     },
     [purgeSupabaseAuthStorage]
@@ -1312,6 +1328,11 @@ export function AuthProvider({ children }) {
         }
         await sessionManager.RefreshManager.handleFatal(reason || "refresh_token_invalid");
         purgeSupabaseAuthStorage();
+        try {
+          await purgeQueryClientAfterLogout(getOrCreateAppQueryClient());
+        } catch {
+          /* ignore */
+        }
         return;
       }
 
@@ -1345,6 +1366,11 @@ export function AuthProvider({ children }) {
         source: "unauthorized_handler",
       });
       purgeSupabaseAuthStorage();
+      try {
+        await purgeQueryClientAfterLogout(getOrCreateAppQueryClient());
+      } catch {
+        /* ignore */
+      }
     },
     [connectionLifecycle, purgeSupabaseAuthStorage, requestSessionRefreshGuarded, sessionManager]
   );

@@ -31,6 +31,7 @@ import { useDocumentListController, buildLookupMap } from "@/hooks/useDocumentLi
 import { invoiceListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import { exportInvoicesCsvWithItems } from "@/services/DocumentExportService";
+import { invalidateInvoiceDomain } from "@/lib/queryInvalidation";
 
 export default function InvoicesPage() {
     const { toast } = useToast();
@@ -212,8 +213,7 @@ export default function InvoicesPage() {
                 }
             }
             await refetchInvoices();
-            queryClient.invalidateQueries({ queryKey: ["invoices", "list"], exact: false });
-            queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
+            invalidateInvoiceDomain(queryClient, { scopeKey: authUserId ?? authUser?.id ?? null });
             toast({
                 title: "Import complete",
                 description: `${created} invoice(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,

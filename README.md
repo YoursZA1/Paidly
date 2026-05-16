@@ -45,7 +45,8 @@ The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
    - **`VITE_SERVER_URL` (optional):**
      - **Case A — API on the same Vercel deployment** (serverless `api/`, same host as the app): **leave it unset** (or delete it). The browser uses relative `fetch("/api/...")` / same-origin requests. Do **not** set it to a stale or different host.
      - **Case B — API on a separate host:** set **`VITE_SERVER_URL=https://api.paidly.co.za`** (no trailing slash; adjust host to your API). CORS on that API must allow the app origin.
-   - Without any backend URL features: **email/password sign-in still works** (via Supabase). For waitlist/currency/server rate limits that need the API, ensure `/api/*` is reachable (Case A or B). Set **`VITE_SUPABASE_ONLY=1`** to acknowledge a Supabase-heavy deploy and silence client hints about the backend.
+   - **Auth (default on www):** same-origin `POST /api/auth/sign-in|sign-up|forgot-password` (Vercel serverless, shared with Express). Set **`VITE_SUPABASE_ONLY=1`** only if you intentionally skip the API auth layer (direct Supabase). Set **`VITE_DISABLE_NODE_AUTH_API=1`** to opt out while keeping other `/api` features.
+   - Ensure **`SUPABASE_ANON_KEY`** and (if Turnstile is on) **`TURNSTILE_SECRET_KEY`** are set on the Vercel project for auth routes.
 2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
 3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
 4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` to a comma-separated explicit allowlist (for example: `https://www.paidly.co.za,https://paidly.co.za`). In production, use `https` origins only (localhost allowed only for local testing).
@@ -61,7 +62,10 @@ Use this checklist before every production promotion:
    - **Same-deployment API:** `VITE_SERVER_URL` unset. **Separate API:** `VITE_SERVER_URL` is the real API origin (not localhost).
    - Confirm `ENFORCE_HTTPS=true`, `DISABLE_HSTS=false`, `CORS_DEBUG_ALLOW_ALL=false`.
 2. Database and policy checks
-   - Run: `npm run verify:prod`
+   - Apply pending migrations in Supabase (Dashboard → SQL or `supabase db push`), including:
+     - `20260516120000_revoke_privileged_rpc_from_authenticated.sql` (RPC lockdown)
+     - `20260516140000_invoices_client_operation_id.sql` (sync idempotency)
+   - Run: `npm run verify:prod` (loads `server/.env` + `.env.production`; health checks need API running or `VITE_SERVER_URL` pointing at production API)
    - Validate required affiliate/admin migrations are present.
    - Ensure no missing critical RLS policies for `affiliate_applications` and `affiliates`.
 3. Critical smoke checks (manual + scripted)

@@ -7,6 +7,7 @@
 
 /** Exact root keys (first segment of `queryKey`) persisted as-is. */
 export const PAIDLY_PERSISTED_QUERY_ROOT_KEYS = new Set([
+  "invoice-list",
   "invoices",
   "invoice",
   "clients",

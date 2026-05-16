@@ -22,6 +22,8 @@ import {
   whenDocumentVisible,
 } from "@/lib/paidlyRealtimeReconciliationEngine";
 import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
+import { useRuntimeCoordinator } from "@/core/runtime/RuntimeCoordinator";
+import { invalidateInvoiceDomain, invalidateClientDomain } from "@/lib/queryInvalidation";
 
 const SYNC_INTERVAL_MS = 5000;
 /** Coalesce session recovery when the queue has work but `getSession()` is momentarily empty (auth latency / refresh races). */
@@ -54,6 +56,7 @@ export default function SyncEngine() {
 
   const invalidateForEntity = useCallback(
     (entity, payload = null) => {
+      const scopeKey = user?.id ?? null;
       if (entity === "invoices") {
         const patched = reconcileInvoiceRealtimeEvent(
           queryClient,
@@ -64,13 +67,8 @@ export default function SyncEngine() {
           payload || {}
         );
         if (patched) return true;
-        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
         const id = payload?.new?.id || payload?.old?.id || null;
-        if (id) {
-          queryClient.invalidateQueries({ queryKey: ["invoice", id], exact: false });
-          queryClient.invalidateQueries({ queryKey: ["invoices", "detail", id], exact: false });
-        }
+        invalidateInvoiceDomain(queryClient, { scopeKey, invoiceId: id });
         return false;
       }
       if (entity === "clients") {
@@ -83,8 +81,7 @@ export default function SyncEngine() {
           payload || {}
         );
         if (patched) return true;
-        queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+        invalidateClientDomain(queryClient, { scopeKey });
         return false;
       }
       if (entity === "document_sends") {
@@ -97,8 +94,7 @@ export default function SyncEngine() {
         return false;
       }
       if (entity === "payments") {
-        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        invalidateInvoiceDomain(queryClient, { scopeKey });
         return false;
       }
       if (entity === "expenses") {
@@ -110,7 +106,7 @@ export default function SyncEngine() {
       }
       return false;
     },
-    [queryClient]
+    [queryClient, user?.id]
   );
 
   const scheduleGlobalStoreRefresh = useCallback(() => {
@@ -166,6 +162,7 @@ export default function SyncEngine() {
     if (useWakeRecoveryStore.getState().blockMutations) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     runningRef.current = true;
+    useRuntimeCoordinator.getState().setSyncActive(true);
     try {
       const now = Date.now();
       const nextJob = queue
@@ -199,12 +196,11 @@ export default function SyncEngine() {
         }
         const postJobSession = await supabase.auth.getSession();
         if (postJobSession?.data?.session) {
+          const scopeKey = user?.id ?? null;
           if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
-            queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
-            queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+            invalidateInvoiceDomain(queryClient, { scopeKey });
           } else if (nextJob.type === "UPDATE_CLIENT") {
-            queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-            queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+            invalidateClientDomain(queryClient, { scopeKey });
           }
         }
       } catch (error) {
@@ -212,8 +208,9 @@ export default function SyncEngine() {
       }
     } finally {
       runningRef.current = false;
+      useRuntimeCoordinator.getState().setSyncActive(false);
     }
-  }, [markDone, markFailed, markProcessing, queryClient, queue, replaceOptimisticInvoice]);
+  }, [markDone, markFailed, markProcessing, queryClient, queue, replaceOptimisticInvoice, user?.id]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -300,10 +297,10 @@ export default function SyncEngine() {
         void fetchAllFromStore(user).finally(() => {
           dispatchAppFetchAllSettled();
         });
-        queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+        const scopeKey = user?.id ?? null;
+        invalidateInvoiceDomain(queryClient, { scopeKey });
         queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        invalidateClientDomain(queryClient, { scopeKey });
         queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
       })();
     };

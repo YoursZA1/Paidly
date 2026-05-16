@@ -3,11 +3,12 @@
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
 | 1 | `docs/runtime-audit-report.md` | Done |
-| 2 | `src/core/runtime/RuntimeCoordinator.ts` (states, listeners, single-flight, **exponential reconnect backoff**) | Done — **wire from `AuthContext` / `navigator` next** |
-| 3 | `src/core/query/queryPolicies.ts` + broad invalidation audit | Policies done — **hook migration incremental** |
-| 4 | `src/core/query/persistedQueryClient.ts` + IDB | Helpers done — app still uses `createAppQueryClient` + `paidlyIdbQueryPersistence`; optional **`@tanstack/react-query-persist-client`** |
+| 2 | `src/core/runtime/RuntimeCoordinator.ts` (states, listeners, single-flight, **exponential reconnect backoff**) | Done — wired via `runtimeCoordinatorBridge` + CLM + auth pipeline |
+| 3 | `src/core/query/queryPolicies.ts` + broad invalidation audit | In progress — `useInvoicesQuery` + SyncEngine use scoped invalidation |
+| 4 | `src/core/query/persistedQueryClient.ts` + IDB | Done — `purgeQueryClientAfterLogout` on sign-out / fatal auth |
 | 5 | `src/core/realtime/RealtimeManager.ts` | Registry done — **delegate from `paidlyRealtimeManager`** |
-| 6 | `src/core/sync/MutationCoordinator.ts` + **`operationId` on sync queue jobs** | Coordinator done — **`operationId` in `syncQueueActions` / merge in store** |
+| 6 | `src/core/sync/MutationCoordinator.ts` + **`operationId` on sync queue jobs** | Done — `syncMutationCoordinator` + `client_operation_id` on invoices (Wave 3) |
+| 6b | `customClient.js` modular split | In progress — **AuthManager** + **IntegrationManager** extracted; **EntityManager** still in `customClient.js` (~1.7k lines) |
 | 7 | `src/core/network/RequestCoordinator.ts` + **`retryWithBudget`** | Done — **Axios integration optional** |
 | 8 | `src/core/errors/*` | `classifyPaidlyError` done — **replace string checks incrementally** |
 | 9 | Render perf audit + hot-path memo | Checklist in `architecture-improvement-plan.md` — **code passes optional** |

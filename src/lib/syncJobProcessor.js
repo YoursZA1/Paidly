@@ -1,5 +1,6 @@
 import { Client, Invoice } from "@/api/entities";
 import { sendInvoiceToClient } from "@/services/InvoiceSendService";
+import { syncMutationCoordinator } from "@/lib/syncMutationCoordinator";
 
 export const SYNC_JOB_TYPES = {
   CREATE_INVOICE: "CREATE_INVOICE",
@@ -10,8 +11,19 @@ export const SYNC_JOB_TYPES = {
 export async function processSyncJob(job) {
   switch (job.type) {
     case SYNC_JOB_TYPES.CREATE_INVOICE: {
-      const created = await Invoice.create(job.payload?.invoiceData || {});
-      return { id: created?.id || null };
+      const operationId = job.meta?.operationId;
+      const invoiceData = { ...(job.payload?.invoiceData || {}) };
+      if (operationId) {
+        invoiceData.client_operation_id = operationId;
+      }
+      const runCreate = async () => {
+        const created = await Invoice.create(invoiceData);
+        return { id: created?.id || null };
+      };
+      if (operationId) {
+        return syncMutationCoordinator.runOnce(operationId, runCreate);
+      }
+      return runCreate();
     }
     case SYNC_JOB_TYPES.SEND_INVOICE: {
       const invoiceId = job.payload?.invoiceId;

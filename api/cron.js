@@ -20,9 +20,11 @@ function isAuthorized(req) {
 async function runPaymentReminderBatch() {
   return {
     ran: false,
+    skipped: true,
+    reason: "not_scheduled",
     processedUsers: 0,
     message:
-      "Batch not implemented yet. Persist reminder_settings to profiles (or JSONB) and query invoices by org_id, then send via Resend. See docs/CRON_PAYMENT_REMINDERS.md",
+      "Payment reminder cron is disabled in vercel.json until Payment Intelligence (Wave 4) ships. Manual GET/POST still returns this payload. See docs/CRON_PAYMENT_REMINDERS.md",
   };
 }
 

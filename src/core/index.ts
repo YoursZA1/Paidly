@@ -7,6 +7,13 @@ export {
   subscribeRuntimeCoordinator,
   type RuntimePhase,
 } from "./runtime/RuntimeCoordinator";
+export {
+  initRuntimeCoordinatorTelemetry,
+  notifyRuntimeFromLifecycle,
+  notifyAuthBootstrapComplete,
+  notifyAuthRecoveryFatal,
+} from "./runtime/runtimeCoordinatorBridge";
+export { getSharedRequestCoordinator } from "./network/sharedRequestCoordinator";
 export * from "./query/queryPolicies";
 export * from "./query/persistedQueryClient";
 export { RealtimeManager } from "./realtime/RealtimeManager";

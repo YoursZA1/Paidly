@@ -166,10 +166,6 @@
       "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/payment-reminders",
-      "schedule": "0 8 * * *"
-    },
-    {
       "path": "/api/cron/subscription-dunning",
       "schedule": "30 8 * * *"
     },

@@ -1,5 +1,14 @@
 import process from "node:process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
+dotenv.config({ path: path.join(repoRoot, "server", ".env") });
+dotenv.config({ path: path.join(repoRoot, ".env") });
+dotenv.config({ path: path.join(repoRoot, ".env.production") });
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -37,6 +46,8 @@ const requiredMigrations = [
   "20260406120000_affiliate_applications_submit_rpc_and_insert_repair.sql",
   "20260407150000_organizations_bootstrap_rls.sql",
   "20260408120000_profiles_user_role_column.sql",
+  "20260516120000_revoke_privileged_rpc_from_authenticated.sql",
+  "20260516140000_invoices_client_operation_id.sql",
 ];
 
 const requiredIndexes = [

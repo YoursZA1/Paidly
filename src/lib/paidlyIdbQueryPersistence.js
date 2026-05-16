@@ -80,6 +80,26 @@ export async function hydrateQueryClientFromIdb(queryClient) {
 /**
  * @param {Array<{ queryKey: unknown[], data: unknown, updatedAt: number }>} snapshots
  */
+/**
+ * Remove persisted TanStack snapshots (logout / org switch). In-memory cache cleared separately.
+ */
+export async function clearPersistedQueryCache() {
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.removeItem(QUERY_CACHE_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  const db = getPaidlyIdbKvCache();
+  if (!db) return;
+  try {
+    await db.kv.where("key").startsWith("rq:").delete();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function saveReactQuerySnapshotsToIdb(snapshots) {
   const db = getPaidlyIdbKvCache();
   if (!db || !Array.isArray(snapshots)) return;

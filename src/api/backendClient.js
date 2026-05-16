@@ -9,6 +9,7 @@ import { installBackendApiResilience } from "@/api/installBackendApiResilience";
 import { runRpcUnauthorizedPolicy, isReplaySafeHttpMethod } from "@/lib/rpcSessionPolicy";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
+import { getSharedRequestCoordinator } from "@/core/network/sharedRequestCoordinator";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -82,19 +83,23 @@ export function isProductionBackendUrlLocalhost() {
 }
 
 /**
- * When false, email/password sign-in and sign-up use Supabase only (no POST /api/auth/*).
- * - Production + localhost API URL → false.
- * - VITE_SUPABASE_ONLY=1 → false (production or dev).
- * - Development (Vite): false by default so /api/auth is not hit when `npm run server` is off (no 503 in console).
- *   Set VITE_NODE_AUTH_API=1 when testing the Node auth routes locally with the server running.
+ * When true, email/password auth uses same-origin POST /api/auth/* (Vercel serverless or Express).
+ * Supabase still issues JWTs; the API adds IP limits, Turnstile verify, and structured security logs.
+ *
+ * - VITE_SUPABASE_ONLY=1 → false (direct Supabase only).
+ * - VITE_DISABLE_NODE_AUTH_API=1 → false (explicit opt-out).
+ * - Production + localhost VITE_SERVER_URL → false (misconfiguration guard).
+ * - Development: false unless VITE_NODE_AUTH_API=1 (avoids 503 when `npm run server` is off).
+ * - Production (default): true — same-deployment /api/auth/* on Vercel (Wave 1).
  */
 export function shouldUseNodeAuthApi() {
   if (isProductionBackendUrlLocalhost()) return false;
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) return false;
+  if (viteEnvFlag("VITE_DISABLE_NODE_AUTH_API")) return false;
   if (isNodeAuthRememberedUnreachable()) return false;
-  // In production, prefer direct Supabase auth unless explicitly enabled.
-  if (import.meta.env.PROD && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
-  if (isDev && !viteEnvFlag("VITE_NODE_AUTH_API")) return false;
+  if (viteEnvFlag("VITE_NODE_AUTH_API")) return true;
+  if (import.meta.env.PROD) return true;
+  if (isDev) return false;
   return true;
 }
 
@@ -119,6 +124,9 @@ export const backendApi = axios.create({
 installBackendApiResilience(backendApi);
 
 backendApi.interceptors.request.use(async (config) => {
+  if (!config?.__paidlyCritical) {
+    await getSharedRequestCoordinator().waitUntilUnpaused();
+  }
   if (!isRecoveryCircuitOpen()) return config;
   await triggerUnauthorizedSession("terminal_auth_state", {
     source: "backend_api",
