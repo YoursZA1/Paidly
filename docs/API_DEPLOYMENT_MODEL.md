@@ -29,13 +29,15 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 
 **Server env (Vercel + Express):** `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET_KEY` (when Turnstile required), `RESEND_*` for send-email.
 
+**Auth rate limits (Vercel + Express):** `POST /api/auth/sign-in` and `sign-up` use `consume_rate_limit_bucket` in Postgres when `RATE_LIMIT_PERSIST=1` (default in production) and `SUPABASE_SERVICE_ROLE_KEY` is set — shared across serverless instances. Falls back to in-memory per isolate if the RPC is missing. Apply migration `20260516160000_api_rate_limit_consume_rpc.sql`.
+
 ## 1c. Canonical integration paths (PayFast + email)
 
 | Concern | Canonical route | Client entry | Notes |
 |--------|-----------------|--------------|-------|
 | **Transactional email** | `POST /api/send-email` | `IntegrationManager.Core.SendEmail` → same-origin `/api` | Implementation: `server/src/sendEmailApi.js` (Vercel re-export `api/send-email.js`). Do not call Resend from the browser. |
 | **PayFast subscription checkout** | `POST /api/payfast/subscription` | Billing UI via `backendApi` / `apiRequest` | Signed payload from server; client posts `fields` to PayFast. |
-| **PayFast one-time invoice** | `POST /api/payfast/once` | Invoice payment flows | Same signing pattern as subscription. |
+| **PayFast one-time invoice** | `POST /api/payfast/once` | Invoice payment flows | `server/src/payfastOnceApi.js` (Express + Vercel `api/payfast/once.js` / `__pf=once`). |
 | **PayFast ITN (webhooks)** | `POST /api/payfast/webhook`, `POST /api/payfast/subscription/itn` | N/A (PayFast server) | Subscription ITN also at `/payfast/subscription/itn` on Express. **Billing columns** (`subscription_plan`, `payfast_*`) are updated only here or via admin/service role — never from `AuthManager.updateMyUserData`. |
 
 Legacy duplicate handlers in `api/payfast-handler.js` should be treated as deprecated; new work uses the routes above.

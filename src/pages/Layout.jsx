@@ -613,6 +613,7 @@ const STANDALONE_PAGE_NAMES = [
   "PublicQuote",
   "PublicPayslip",
   "Home",
+  "HowTo",
   "Login",
   "Signup",
   "ForgotPassword",

@@ -25,6 +25,9 @@ export default function Navbar({ active = null, onLoginClick }) {
           <a href="#product" className="transition hover:text-white">
             Product
           </a>
+          <Link to={createPageUrl("HowTo")} className="transition hover:text-white">
+            How to
+          </Link>
           <Link to={createAffiliateLandingUrl()} className="transition hover:text-white">
             Affiliate
           </Link>

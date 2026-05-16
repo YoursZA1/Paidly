@@ -13,6 +13,7 @@ export default function Footer({ onLoginClick }) {
       { label: "Get started", to: createSignupUrl() },
     ],
     Support: [
+      { label: "How to use Paidly", to: createPageUrl("HowTo") },
       { label: "Log in", action: "login" },
       { label: "Privacy Policy", to: createPageUrl("PrivacyPolicy") },
       { label: "Terms & Conditions", to: createPageUrl("TermsAndConditions") },

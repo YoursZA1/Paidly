@@ -1,12 +1,13 @@
 /**
- * Fixed-window rate limiter by client IP for sign-in attempts.
- * In-memory only — use Redis or similar if you run multiple server instances.
+ * IP rate limits for auth routes. Uses Postgres buckets when RATE_LIMIT_PERSIST=1
+ * (shared across Vercel serverless instances); otherwise in-memory per isolate.
  */
 
 import process from "node:process";
-
-const store = new Map();
-const signupStore = new Map();
+import {
+  consumeAuthIpSlot,
+  pruneMemoryRateLimitStores,
+} from "./rateLimit/consumeRateLimit.js";
 
 /**
  * @param {import("express").Request} req
@@ -19,26 +20,6 @@ export function getClientIp(req) {
   return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
-function windowMs() {
-  const n = Number(process.env.LOGIN_RATE_PER_IP_WINDOW_MS);
-  return Number.isFinite(n) && n > 0 ? n : 15 * 60 * 1000;
-}
-
-function maxPerWindow() {
-  const n = Number(process.env.LOGIN_RATE_PER_IP_MAX);
-  return Number.isFinite(n) && n > 0 ? n : 40;
-}
-
-function signupWindowMs() {
-  const n = Number(process.env.SIGNUP_RATE_PER_IP_WINDOW_MS);
-  return Number.isFinite(n) && n > 0 ? n : 60 * 60 * 1000;
-}
-
-function signupMaxPerWindow() {
-  const n = Number(process.env.SIGNUP_RATE_PER_IP_MAX);
-  return Number.isFinite(n) && n > 0 ? n : 8;
-}
-
 export function isLoginRateLimitEnabled() {
   if (process.env.LOGIN_RATE_LIMIT_ENABLED === "false") return false;
   if (process.env.NODE_ENV === "production") return true;
@@ -47,73 +28,28 @@ export function isLoginRateLimitEnabled() {
 
 /**
  * @param {string} ip
- * @returns {{ ok: true } | { ok: false, retryAfterSeconds: number }}
+ * @returns {Promise<{ ok: true } | { ok: false, retryAfterSeconds: number }>}
  */
-export function consumeLoginSlot(ip) {
+export async function consumeLoginSlot(ip) {
   if (!isLoginRateLimitEnabled()) {
     return { ok: true };
   }
-
-  const key = ip || "unknown";
-  const now = Date.now();
-  const win = windowMs();
-  const max = maxPerWindow();
-
-  let entry = store.get(key);
-  if (!entry || now >= entry.resetAt) {
-    entry = { count: 0, resetAt: now + win };
-    store.set(key, entry);
-  }
-
-  entry.count += 1;
-
-  if (entry.count > max) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
-    return { ok: false, retryAfterSeconds };
-  }
-
-  return { ok: true };
+  return consumeAuthIpSlot("login", ip);
 }
 
 /**
  * @param {string} ip
- * @returns {{ ok: true } | { ok: false, retryAfterSeconds: number }}
+ * @returns {Promise<{ ok: true } | { ok: false, retryAfterSeconds: number }>}
  */
-export function consumeSignupSlot(ip) {
+export async function consumeSignupSlot(ip) {
   if (!isLoginRateLimitEnabled()) {
     return { ok: true };
   }
-
-  const key = ip || "unknown";
-  const now = Date.now();
-  const win = signupWindowMs();
-  const max = signupMaxPerWindow();
-
-  let entry = signupStore.get(key);
-  if (!entry || now >= entry.resetAt) {
-    entry = { count: 0, resetAt: now + win };
-    signupStore.set(key, entry);
-  }
-
-  entry.count += 1;
-
-  if (entry.count > max) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
-    return { ok: false, retryAfterSeconds };
-  }
-
-  return { ok: true };
+  return consumeAuthIpSlot("signup", ip);
 }
 
-/** Best-effort prune to avoid unbounded growth (runs occasionally). */
 export function pruneLoginRateLimitStore() {
-  const now = Date.now();
-  for (const [k, v] of store) {
-    if (now >= v.resetAt) store.delete(k);
-  }
-  for (const [k, v] of signupStore) {
-    if (now >= v.resetAt) signupStore.delete(k);
-  }
+  pruneMemoryRateLimitStores();
 }
 
 let pruneTimer = null;

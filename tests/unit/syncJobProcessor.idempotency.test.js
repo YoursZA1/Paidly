@@ -40,3 +40,26 @@ describe("processSyncJob CREATE_INVOICE idempotency", () => {
     expect(Invoice.create.mock.calls[0][0].client_operation_id).toBe("op-dedupe-1");
   });
 });
+
+describe("processSyncJob UPDATE_CLIENT dedupe", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("dedupes parallel UPDATE_CLIENT with the same operationId", async () => {
+    const { Client } = await import("@/api/entities");
+    Client.update.mockResolvedValue({ id: "client-1" });
+
+    const job = {
+      type: SYNC_JOB_TYPES.UPDATE_CLIENT,
+      payload: { clientId: "client-1", clientData: { name: "Acme" } },
+      meta: { operationId: "op-client-1" },
+    };
+
+    const [a, b] = await Promise.all([processSyncJob(job), processSyncJob(job)]);
+
+    expect(Client.update).toHaveBeenCalledTimes(1);
+    expect(a.id).toBe("client-1");
+    expect(b.id).toBe("client-1");
+  });
+});

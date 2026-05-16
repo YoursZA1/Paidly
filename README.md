@@ -65,6 +65,7 @@ Use this checklist before every production promotion:
    - Apply pending migrations in Supabase (Dashboard → SQL or `supabase db push`), including:
      - `20260516120000_revoke_privileged_rpc_from_authenticated.sql` (RPC lockdown)
      - `20260516140000_invoices_client_operation_id.sql` (sync idempotency)
+     - `20260516160000_api_rate_limit_consume_rpc.sql` (shared auth rate limits on Vercel)
    - Run: `npm run verify:prod` (loads `server/.env` + `.env.production`; health checks need API running or `VITE_SERVER_URL` pointing at production API)
    - Validate required affiliate/admin migrations are present.
    - Ensure no missing critical RLS policies for `affiliate_applications` and `affiliates`.

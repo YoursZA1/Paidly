@@ -48,6 +48,7 @@ const requiredMigrations = [
   "20260408120000_profiles_user_role_column.sql",
   "20260516120000_revoke_privileged_rpc_from_authenticated.sql",
   "20260516140000_invoices_client_operation_id.sql",
+  "20260516160000_api_rate_limit_consume_rpc.sql",
 ];
 
 const requiredIndexes = [
@@ -128,6 +129,32 @@ async function verifyPolicies() {
   }
 }
 
+async function verifyWaveHardening() {
+  const { error: colError } = await supabase.from("invoices").select("client_operation_id").limit(0);
+  if (colError && /column|schema cache|does not exist/i.test(colError.message || "")) {
+    fail("invoices.client_operation_id column missing — apply 20260516140000_invoices_client_operation_id.sql");
+  } else if (colError) {
+    console.log(`SKIP: invoices.client_operation_id probe (${colError.message})`);
+  } else {
+    ok("invoices.client_operation_id column present");
+  }
+
+  const { data: rlData, error: rlError } = await supabase.rpc("consume_rate_limit_bucket", {
+    p_bucket_key: "verify-prod-readiness",
+    p_max_hits: 1000,
+    p_window_seconds: 60,
+  });
+  if (rlError) {
+    fail(
+      `consume_rate_limit_bucket RPC missing — apply 20260516160000_api_rate_limit_consume_rpc.sql (${rlError.message})`
+    );
+  } else if (rlData?.ok !== true && rlData?.ok !== false) {
+    fail("consume_rate_limit_bucket returned unexpected payload");
+  } else {
+    ok("consume_rate_limit_bucket RPC callable (shared auth rate limits)");
+  }
+}
+
 async function verifyHealthEndpoints() {
   const base = String(process.env.VITE_SERVER_URL || process.env.SERVER_URL || "").trim();
   if (!base) {
@@ -147,6 +174,7 @@ async function verifyHealthEndpoints() {
 }
 
 await verifyMigrations();
+await verifyWaveHardening();
 await verifyIndexes();
 await verifyPolicies();
 await verifyHealthEndpoints();

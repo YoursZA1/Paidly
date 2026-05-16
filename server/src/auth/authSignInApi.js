@@ -25,7 +25,7 @@ export default async function authSignInHandler(req, res) {
     if (!parsed) return;
     const { email: normalizedEmail, password } = parsed;
 
-    const slot = consumeLoginSlot(ip);
+    const slot = await consumeLoginSlot(ip);
     if (!slot.ok) {
       logSecurity("warn", "auth_sign_in_rate_limited", {
         ip,

@@ -11,14 +11,15 @@ describe("server loginIpRateLimit", () => {
     vi.stubEnv("LOGIN_RATE_LIMIT_IN_DEV", "true");
     vi.stubEnv("LOGIN_RATE_PER_IP_MAX", "3");
     vi.stubEnv("LOGIN_RATE_PER_IP_WINDOW_MS", "3600000");
+    vi.stubEnv("RATE_LIMIT_PERSIST", "false");
 
     const { consumeLoginSlot } = await import("../../server/src/loginIpRateLimit.js");
     const ip = "203.0.113.50";
 
-    expect(consumeLoginSlot(ip)).toEqual({ ok: true });
-    expect(consumeLoginSlot(ip)).toEqual({ ok: true });
-    expect(consumeLoginSlot(ip)).toEqual({ ok: true });
-    const blocked = consumeLoginSlot(ip);
+    expect(await consumeLoginSlot(ip)).toEqual({ ok: true });
+    expect(await consumeLoginSlot(ip)).toEqual({ ok: true });
+    expect(await consumeLoginSlot(ip)).toEqual({ ok: true });
+    const blocked = await consumeLoginSlot(ip);
     expect(blocked.ok).toBe(false);
     expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
   });
@@ -30,7 +31,7 @@ describe("server loginIpRateLimit", () => {
 
     const { consumeLoginSlot } = await import("../../server/src/loginIpRateLimit.js");
     const ip = "203.0.113.51";
-    expect(consumeLoginSlot(ip)).toEqual({ ok: true });
-    expect(consumeLoginSlot(ip)).toEqual({ ok: true });
+    expect(await consumeLoginSlot(ip)).toEqual({ ok: true });
+    expect(await consumeLoginSlot(ip)).toEqual({ ok: true });
   });
 });

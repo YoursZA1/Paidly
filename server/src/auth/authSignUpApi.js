@@ -27,7 +27,7 @@ export default async function authSignUpHandler(req, res) {
     if (!parsed) return;
     const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo } = parsed;
 
-    const slot = consumeSignupSlot(ip);
+    const slot = await consumeSignupSlot(ip);
     if (!slot.ok) {
       logSecurity("warn", "auth_sign_up_rate_limited", {
         ip,

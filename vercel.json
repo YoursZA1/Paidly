@@ -117,6 +117,10 @@
       "destination": "/api/payfast-handler?__pf=subscription"
     },
     {
+      "source": "/api/payfast/once",
+      "destination": "/api/payfast-handler?__pf=once"
+    },
+    {
       "source": "/api/payfast/webhook",
       "destination": "/api/payfast-handler?__pf=webhook"
     },

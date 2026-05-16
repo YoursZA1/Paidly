@@ -76,6 +76,7 @@ const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
 const BentoDemoPage = lazy(() => import("./BentoDemo"));
 const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
+const HowTo = lazy(() => import("./HowTo"));
 const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
 const AffiliateApply = lazy(() => import("./AffiliateApply"));
 const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
@@ -121,6 +122,9 @@ const AUTH_ROUTES = [
     { path: "/TermsAndConditions", element: <TermsAndConditions /> },
     { path: "/terms-and-conditions", element: <TermsAndConditions /> },
     { path: "/terms", element: <TermsAndConditions /> },
+    { path: "/HowTo", element: <HowTo /> },
+    { path: "/how-to", element: <HowTo /> },
+    { path: "/How-to", element: <HowTo /> },
     { path: "/affiliate", element: <AffiliateLanding /> },
     { path: "/Affiliate", element: <AffiliateLanding /> },
     { path: "/affiliate/apply", element: <AffiliateApply /> },

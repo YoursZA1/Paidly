@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { createSignupUrl } from "@/utils";
+import { createPageUrl, createSignupUrl } from "@/utils";
 
 /**
  * @param {{ onLoginClick: () => void }} props
@@ -41,7 +41,15 @@ export default function Hero({ onLoginClick }) {
             Log In
           </button>
         </div>
-        <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-400">
+        <p className="mt-6">
+          <Link
+            to={createPageUrl("HowTo")}
+            className="text-sm font-medium text-zinc-400 underline-offset-4 transition hover:text-white hover:underline"
+          >
+            New here? See how to use Paidly →
+          </Link>
+        </p>
+        <p className="mt-4 text-xs font-medium uppercase tracking-wider text-zinc-400">
           No credit card required to create your account.
         </p>
       </div>

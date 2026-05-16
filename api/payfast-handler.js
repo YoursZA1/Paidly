@@ -24,6 +24,7 @@ import { parseBody } from "../server/src/validateBody.js";
 import { payfastSubscriptionBodySchema } from "../server/src/schemas/mutationSchemas.js";
 import { assertFiniteAmount, isSafeHttpUrl, sanitizeOneLine } from "../server/src/inputValidation.js";
 import { applyPaidlyServerlessCors } from "../server/src/vercelPaidlyCors.js";
+import payfastOnceHandler from "../server/src/payfastOnceApi.js";
 
 const __pfDir = path.dirname(fileURLToPath(import.meta.url));
 // `vercel dev` injects env; for local tooling / missing injection, load repo + server .env (server wins on duplicate keys)
@@ -309,6 +310,9 @@ export default async function handler(req, res) {
 
   if (route === "subscription") {
     return payfastSubscriptionCheckout(req, res);
+  }
+  if (route === "once") {
+    return payfastOnceHandler(req, res);
   }
   if (route === "webhook" || route === "subscription/itn") {
     return payfastSubscriptionItnApi(req, res);

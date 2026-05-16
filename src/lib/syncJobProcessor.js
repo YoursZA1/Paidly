@@ -34,8 +34,15 @@ export async function processSyncJob(job) {
     case SYNC_JOB_TYPES.UPDATE_CLIENT: {
       const clientId = job.payload?.clientId;
       if (!clientId) throw new Error("Missing clientId for UPDATE_CLIENT");
-      const updated = await Client.update(clientId, job.payload?.clientData || {});
-      return { id: updated?.id || clientId };
+      const operationId = job.meta?.operationId;
+      const runUpdate = async () => {
+        const updated = await Client.update(clientId, job.payload?.clientData || {});
+        return { id: updated?.id || clientId };
+      };
+      if (operationId) {
+        return syncMutationCoordinator.runOnce(operationId, runUpdate);
+      }
+      return runUpdate();
     }
     default:
       throw new Error(`Unsupported sync job type: ${job.type}`);

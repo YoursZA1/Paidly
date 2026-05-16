@@ -17,6 +17,8 @@ export function invalidateInvoiceDomain(queryClient, opts = {}) {
     queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId], exact: false });
     queryClient.invalidateQueries({ queryKey: ["invoices", "detail", invoiceId], exact: false });
   }
+  /** Paginated list hook (`useInvoices` / InvoiceListService) */
+  queryClient.invalidateQueries({ queryKey: ["invoices", "list"], exact: false });
   /** Legacy roots — remove after hook migration completes */
   queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
   queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
