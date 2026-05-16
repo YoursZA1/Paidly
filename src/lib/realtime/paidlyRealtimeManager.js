@@ -245,7 +245,32 @@ function openRealtimeCircuitBreaker(reason) {
     realtimeCircuitBreakerUntilMs = 0;
     resetReconnectBackoffAndFailures();
     paidlyRealtimeLog("circuit_breaker_cleared", { reason: "cooldown_elapsed" });
+    if (computePaidlyRealtimeWork() && !isRecoveryCircuitOpen() && !isBrowserOffline()) {
+      requestPaidlyRealtimeErrorRecovery("circuit_breaker_cooldown_end");
+    }
   }, REALTIME_CIRCUIT_OPEN_MS);
+}
+
+/**
+ * Clears realtime backoff/circuit state and runs one rebuild (e.g. after tab wake or user refresh).
+ * Safe to call when the multiplex channel is stuck after transport errors.
+ */
+export function resetPaidlyRealtimeForUserRecovery(reason = "user_recovery") {
+  if (typeof window === "undefined" || !isSupabaseConfigured) return;
+  clearPendingReconnectTimers("user_recovery");
+  clearTransportCooldownState();
+  clearReconnectHardSuppressState();
+  realtimeCircuitBreakerUntilMs = 0;
+  realtimeConsecutiveFailures = 0;
+  reconnectBackoffStepIndex = 0;
+  reconnectHardRateTimestamps = [];
+  if (realtimeCircuitBreakerClearTimerId != null) {
+    window.clearTimeout(realtimeCircuitBreakerClearTimerId);
+    realtimeCircuitBreakerClearTimerId = null;
+  }
+  paidlyRealtimeLog("circuit_breaker_cleared", { reason: "user_recovery_reset" });
+  if (!computePaidlyRealtimeWork() || isRecoveryCircuitOpen() || isBrowserOffline()) return;
+  runChannelRebuild(`user_recovery:${reason}`, { force: true });
 }
 
 function recordRealtimeSubscribeFailure(reason) {

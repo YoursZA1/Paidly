@@ -15,6 +15,7 @@ import {
 import { normalizePaidlyPlan } from "@/api/auth/planNormalize.js";
 import { clearOrgIdCache } from "@/api/auth/orgCache.js";
 import { selectProfileByUserId } from "@/api/auth/profileSelect.js";
+import { mergeProfileLogo, resolveProfileLogoUrl, syncProfileLogoAliases } from "@/lib/profileLogo";
 
 export class AuthManager {
   constructor() {
@@ -152,6 +153,7 @@ export class AuthManager {
       business: companyProfile.business || null,
       plan: normalizePaidlyPlan(credentials.plan) // Keep null unless explicitly set
     };
+    this.user = syncProfileLogoAliases(this.user);
     this.saveUserToStorage();
     return this.user;
   }
@@ -313,7 +315,7 @@ export class AuthManager {
           display_name: fullName,
           email: profile.email || this.user.email,
           avatar_url: profile.avatar_url || this.user.avatar_url,
-          logo_url: profile.logo_url || this.user.logo_url || '',
+          logo_url: mergeProfileLogo(this.user.logo_url, profile),
           company_name: profile.company_name || this.user.company_name || '',
           company_address: profile.company_address || this.user.company_address || '',
           currency: profile.currency || this.user.currency || 'USD',
@@ -343,10 +345,11 @@ export class AuthManager {
               ? profile.quote_reminder_settings
               : this.user.quote_reminder_settings ?? null,
         };
+        this.user = syncProfileLogoAliases(this.user);
         this.saveUserToStorage();
       } else if (!error && !profile) {
         // No profile row yet: ensure local user has correct id
-        this.user = { ...this.user, id: effectiveId, supabase_id: effectiveId };
+        this.user = syncProfileLogoAliases({ ...this.user, id: effectiveId, supabase_id: effectiveId });
         this.saveUserToStorage();
       }
     } catch (e) {
@@ -354,7 +357,7 @@ export class AuthManager {
         warnProfileSlowOnce(getSupabaseErrorMessage(e, "Load profile failed"));
       }
     }
-    return this.user;
+    return syncProfileLogoAliases(this.user);
   }
 
   async getCurrentUser() {
@@ -428,7 +431,7 @@ export class AuthManager {
         company_name: profileData.company_name || "",
         company_address: profileData.company_address || "",
         currency: profileData.currency || "ZAR",
-        logo_url: profileData.logo_url || "",
+        logo_url: resolveProfileLogoUrl(profileData),
         timezone: profileData.timezone || "UTC",
         invoice_template: profileData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
         invoice_header: profileData.invoice_header || "",
@@ -447,6 +450,7 @@ export class AuthManager {
         reminder_settings: profileData.reminder_settings ?? null,
         quote_reminder_settings: profileData.quote_reminder_settings ?? null,
       };
+      this.user = syncProfileLogoAliases(this.user);
       this.isAuthenticated = true;
       this.saveUserToStorage();
       return this.user;
@@ -525,7 +529,7 @@ export class AuthManager {
         updatedUser.business = safeData.business;
       }
     }
-    this.user = updatedUser;
+    this.user = syncProfileLogoAliases(updatedUser);
     this.saveUserToStorage();
 
     // Persist to Supabase profiles table (per-user row keyed by auth user id)

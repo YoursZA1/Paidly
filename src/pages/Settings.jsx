@@ -17,7 +17,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { selectProfileByUserId } from "@/api/customClient";
-import LogoImage from "@/components/shared/LogoImage";
+import SettingsLogoPreviews from "@/components/settings/SettingsLogoPreviews";
+import { mergeProfileLogo, resolveProfileLogoUrl } from "@/lib/profileLogo";
+import AssetService from "@/services/AssetService";
+import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
 
 import HelpTooltip from "@/components/shared/HelpTooltip";
 import BankingForm from "@/components/banking/BankingForm";
@@ -181,7 +184,7 @@ function CompanyProfileSettings() {
             company_address: authUser.company_address ?? prev.company_address,
             phone: authUser.phone ?? prev.phone ?? "",
             company_website: authUser.company_website ?? prev.company_website ?? "",
-            logo_url: authUser.logo_url ?? prev.logo_url,
+            logo_url: mergeProfileLogo(prev.logo_url, authUser),
             currency: authUser.currency || prev.currency || "USD",
             timezone: authUser.timezone ?? prev.timezone,
             invoice_template: authUser.invoice_template || prev.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -232,7 +235,7 @@ function CompanyProfileSettings() {
                         company_address: data.company_address || "",
                         phone: data.phone || "",
                         company_website: data.company_website || "",
-                        logo_url: data.logo_url || "",
+                        logo_url: mergeProfileLogo(prev.logo_url, data),
                         currency: data.currency || "USD",
                         timezone: data.timezone || "",
                         invoice_template: data.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -410,6 +413,10 @@ function CompanyProfileSettings() {
                 business_branch_code: updatedData.business_branch_code,
             }));
             setLogoFile(null);
+            if (payload.logo_url) {
+                clearLogoUrlDiskCacheForSrc(payload.logo_url);
+                AssetService.clearLogoSessionCache();
+            }
             await refreshUser();
             toast({
                 title: "✓ Settings Saved",
@@ -441,7 +448,8 @@ function CompanyProfileSettings() {
     }
     
     // Check if branding is complete
-    const isBrandingComplete = formData.company_name && formData.company_address && formData.logo_url;
+    const isBrandingComplete =
+        formData.company_name && formData.company_address && resolveProfileLogoUrl(formData);
 
     const handlePreviewTemplate = () => {
         const previewBusiness = compactBusinessForProfile(formData);
@@ -453,7 +461,7 @@ function CompanyProfileSettings() {
             email: formData.email || authUser?.email || "",
             phone: (formData.phone || "").trim(),
             company_website: (formData.company_website || "").trim(),
-            logo_url: formData.logo_url || "",
+            logo_url: resolveProfileLogoUrl(formData),
             currency: formData.currency || "ZAR",
             invoice_template: formData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
             invoice_header: formData.invoice_header || "",
@@ -659,60 +667,7 @@ function CompanyProfileSettings() {
                 description="Upload your high-res logo for professional document headers."
             >
                 <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-muted/50 rounded-2xl border border-dashed border-border">
-                    <div className="flex gap-4">
-                        <div className="text-center">
-                            <div className="w-20 h-20 rounded-full bg-background border border-border flex items-center justify-center overflow-hidden">
-                                {formData.logo_url ? (
-                                    formData.logo_url.startsWith("blob:") ? (
-                                        <img
-                                            src={formData.logo_url}
-                                            alt="Profile"
-                                            className="object-cover w-full h-full"
-                                            onError={(e) => {
-                                                if (e.currentTarget.dataset.paidlyLogoFallback === "1") {
-                                                    e.currentTarget.removeAttribute("src");
-                                                    return;
-                                                }
-                                                e.currentTarget.dataset.paidlyLogoFallback = "1";
-                                                e.currentTarget.src = "/fallback-logo.png";
-                                            }}
-                                        />
-                                    ) : (
-                                        <LogoImage src={formData.logo_url} alt="Profile" className="object-cover w-full h-full" />
-                                    )
-                                ) : (
-                                    <UserIcon className="w-10 h-10 text-muted-foreground" />
-                                )}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-1">Profile</p>
-                        </div>
-                        <div className="text-center">
-                            <div className="w-20 h-20 rounded-lg bg-background border border-border flex items-center justify-center overflow-hidden">
-                                {formData.logo_url ? (
-                                    formData.logo_url.startsWith("blob:") ? (
-                                        <img
-                                            src={formData.logo_url}
-                                            alt="Logo"
-                                            className="object-contain w-12 h-12"
-                                            onError={(e) => {
-                                                if (e.currentTarget.dataset.paidlyLogoFallback === "1") {
-                                                    e.currentTarget.removeAttribute("src");
-                                                    return;
-                                                }
-                                                e.currentTarget.dataset.paidlyLogoFallback = "1";
-                                                e.currentTarget.src = "/fallback-logo.png";
-                                            }}
-                                        />
-                                    ) : (
-                                        <LogoImage src={formData.logo_url} alt="Logo" className="object-contain w-12 h-12" />
-                                    )
-                                ) : (
-                                    <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                                )}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-1">Invoice</p>
-                        </div>
-                    </div>
+                    <SettingsLogoPreviews logoUrl={formData.logo_url} />
                     <div className="flex-1 space-y-2 text-center md:text-left">
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                             <label
@@ -736,6 +691,9 @@ function CompanyProfileSettings() {
                           className="hidden"
                           onChange={handleLogoChange}
                         />
+                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
+                            One logo for profile, invoices, and quotes — saved to your profile and loaded from storage on each visit.
+                        </p>
                         <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                             JPEG, PNG, or SVG (SVG scales best in PDFs). Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
@@ -1502,6 +1460,48 @@ const SETTINGS_TABS = [
 
 const SETTINGS_TAB_IDS = new Set(SETTINGS_TABS.map((t) => t.value));
 
+const SETTINGS_TAB_PANEL_CLASS =
+    "mt-0 focus-visible:outline-none data-[state=inactive]:hidden";
+
+function SettingsTabPanels() {
+    return (
+        <>
+            <TabsContent value="profile" className={SETTINGS_TAB_PANEL_CLASS}>
+                <CompanyProfileSettings />
+            </TabsContent>
+            <TabsContent value="currency" className={SETTINGS_TAB_PANEL_CLASS}>
+                <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
+                    <CurrencyConfiguration />
+                </SettingsCard>
+            </TabsContent>
+            <TabsContent value="payments" className={SETTINGS_TAB_PANEL_CLASS}>
+                <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
+                    <PaymentMethodsSettings />
+                </SettingsCard>
+            </TabsContent>
+            <TabsContent value="reminders" className={`${SETTINGS_TAB_PANEL_CLASS} space-y-8`}>
+                <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
+                    <div className="space-y-8">
+                        <PaymentReminderSettings />
+                        <QuoteReminderSettings />
+                        <ReminderDashboard />
+                    </div>
+                </SettingsCard>
+            </TabsContent>
+            <TabsContent value="subscription" className={SETTINGS_TAB_PANEL_CLASS}>
+                <SettingsCard title="Subscription" description="Manage your plan and billing.">
+                    <SubscriptionSettings />
+                </SettingsCard>
+            </TabsContent>
+            <TabsContent value="security" className={SETTINGS_TAB_PANEL_CLASS}>
+                <SettingsCard title="Security" description="Manage authentication options and account security.">
+                    <TwoFactorSettings />
+                </SettingsCard>
+            </TabsContent>
+        </>
+    );
+}
+
 function resolveSettingsTab(tabParam) {
     if (!tabParam || !SETTINGS_TAB_IDS.has(tabParam)) return "profile";
     return tabParam;
@@ -1531,8 +1531,8 @@ export default function Settings() {
     };
 
     return (
-        <div className="w-full min-w-0 mobile-page bg-background overflow-x-hidden">
-            <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0">
+        <div className="w-full min-w-0 mobile-page overflow-x-hidden">
+            <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-16">
                 <header className="mb-6 sm:mb-8">
                     <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
                     <p className="text-sm text-muted-foreground mt-1">Manage your account and business preferences.</p>
@@ -1555,11 +1555,12 @@ export default function Settings() {
                     </div>
                 </div>
 
-                {/* Desktop: sidebar + content */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <div className="hidden md:flex gap-8 items-start">
-                        {/* Vertical nav */}
-                        <TabsList className="w-44 shrink-0 flex flex-col h-auto gap-0.5 bg-transparent p-0 items-stretch justify-start" aria-label="Settings sections">
+                    <div className="flex flex-col md:flex-row md:gap-8 md:items-start">
+                        <TabsList
+                            className="hidden md:flex w-44 shrink-0 flex-col h-auto gap-0.5 bg-transparent p-0 items-stretch justify-start"
+                            aria-label="Settings sections"
+                        >
                             {SETTINGS_TABS.map((tab) => {
                                 const Icon = tab.icon;
                                 return (
@@ -1577,77 +1578,9 @@ export default function Settings() {
                             })}
                         </TabsList>
 
-                        {/* Content pane */}
-                        <div className="flex-1 min-w-0">
-                            <TabsContent value="profile">
-                                <CompanyProfileSettings />
-                            </TabsContent>
-                            <TabsContent value="currency">
-                                <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
-                                    <CurrencyConfiguration />
-                                </SettingsCard>
-                            </TabsContent>
-                            <TabsContent value="payments">
-                                <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
-                                    <PaymentMethodsSettings />
-                                </SettingsCard>
-                            </TabsContent>
-                            <TabsContent value="reminders" className="space-y-8">
-                                <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
-                                    <div className="space-y-8">
-                                        <PaymentReminderSettings />
-                                        <QuoteReminderSettings />
-                                        <ReminderDashboard />
-                                    </div>
-                                </SettingsCard>
-                            </TabsContent>
-                            <TabsContent value="subscription">
-                                <SettingsCard title="Subscription" description="Manage your plan and billing.">
-                                    <SubscriptionSettings />
-                                </SettingsCard>
-                            </TabsContent>
-                            <TabsContent value="security">
-                                <SettingsCard title="Security" description="Manage authentication options and account security.">
-                                    <TwoFactorSettings />
-                                </SettingsCard>
-                            </TabsContent>
+                        <div className="min-w-0 flex-1 w-full">
+                            <SettingsTabPanels />
                         </div>
-                    </div>
-
-                    {/* Mobile: stacked content (no sidebar) */}
-                    <div className="md:hidden">
-                        <TabsContent value="profile">
-                            <CompanyProfileSettings />
-                        </TabsContent>
-                        <TabsContent value="currency">
-                            <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
-                                <CurrencyConfiguration />
-                            </SettingsCard>
-                        </TabsContent>
-                        <TabsContent value="payments">
-                            <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
-                                <PaymentMethodsSettings />
-                            </SettingsCard>
-                        </TabsContent>
-                        <TabsContent value="reminders" className="space-y-8">
-                            <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
-                                <div className="space-y-8">
-                                    <PaymentReminderSettings />
-                                    <QuoteReminderSettings />
-                                    <ReminderDashboard />
-                                </div>
-                            </SettingsCard>
-                        </TabsContent>
-                        <TabsContent value="subscription">
-                            <SettingsCard title="Subscription" description="Manage your plan and billing.">
-                                <SubscriptionSettings />
-                            </SettingsCard>
-                        </TabsContent>
-                        <TabsContent value="security">
-                            <SettingsCard title="Security" description="Manage authentication options and account security.">
-                                <TwoFactorSettings />
-                            </SettingsCard>
-                        </TabsContent>
                     </div>
                 </Tabs>
             </div>

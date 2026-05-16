@@ -926,7 +926,7 @@ export class EntityManager {
           supabaseData.client_operation_id = opId;
           const { data: existing, error: lookupErr } = await supabase
             .from("invoices")
-            .select(this.selectColumns)
+            .select(getSelectColumns("invoices"))
             .eq("org_id", orgId)
             .eq("client_operation_id", opId)
             .maybeSingle();

@@ -1,5 +1,6 @@
 import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
+import { resolveProfileLogoUrl } from "@/lib/profileLogo";
 
 /**
  * Overlay current session profile branding on a possibly stale `user` snapshot (e.g. ViewInvoice
@@ -22,11 +23,11 @@ export function mergeLiveBrandingForDocuments(userProp, liveAuthUser) {
   if (!hasSecondary && liveAuthUser.document_brand_secondary !== undefined) {
     base.document_brand_secondary = liveAuthUser.document_brand_secondary;
   }
-  if (!(base.logo_url || base.company_logo_url) && liveAuthUser.logo_url) {
-    base.logo_url = liveAuthUser.logo_url;
-  }
-  if (!base.company_logo_url && liveAuthUser.company_logo_url) {
-    base.company_logo_url = liveAuthUser.company_logo_url;
+  const liveLogo = resolveProfileLogoUrl(liveAuthUser);
+  const baseLogo = resolveProfileLogoUrl(base);
+  if (!baseLogo && liveLogo) {
+    base.logo_url = liveLogo;
+    base.company_logo_url = liveLogo;
   }
   if (!base.invoice_template && liveAuthUser.invoice_template) {
     base.invoice_template = liveAuthUser.invoice_template;

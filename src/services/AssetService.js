@@ -130,6 +130,10 @@ async function listLogoAssets(limit = 100) {
   return data || [];
 }
 
+function clearLogoSessionCache() {
+  SESSION_LOGO_BY_INPUT.clear();
+}
+
 const AssetService = {
   BUCKET: LOGO_BUCKET,
   FALLBACK_LOGO,
@@ -138,7 +142,8 @@ const AssetService = {
   listLogoAssets,
   markStorageAssetFailed,
   isValidLogoStorageObjectKey,
+  clearLogoSessionCache,
 };
 
 export default AssetService;
-export { cleanPath, getLogo, markStorageAssetFailed, isValidLogoStorageObjectKey };
+export { cleanPath, getLogo, markStorageAssetFailed, isValidLogoStorageObjectKey, clearLogoSessionCache };

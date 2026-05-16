@@ -6,6 +6,7 @@ import {
   isPostgrestSelectOrSyntax400,
   mapDashboardInvoiceSummaryRow,
 } from "@/schemas/dashboardInvoiceSummary";
+import { sanitizePostgrestSelect } from "@/lib/postgrestSelect";
 
 export const DASHBOARD_INVOICES_LIMIT = 40;
 export const DASHBOARD_PAYSLIPS_LIMIT = 40;
@@ -32,16 +33,18 @@ const DASHBOARD_FETCH_TIMEOUT_MS = 20_000;
  * One bounded fallback uses a smaller column set if the primary projection fails (fork DB drift).
  */
 export async function fetchDashboardInvoicesSummary(limit = DASHBOARD_INVOICES_LIMIT) {
-  const runSelect = (selectList) =>
-    promiseWithTimeout(
+  const runSelect = (selectList) => {
+    const safeSelect = sanitizePostgrestSelect(selectList);
+    return promiseWithTimeout(
       () =>
         supabase
           .from("invoices")
-          .select(selectList)
+          .select(safeSelect)
           .order("created_at", { ascending: false })
           .limit(limit),
       DASHBOARD_FETCH_TIMEOUT_MS
     );
+  };
 
   let { data, error } = await runSelect(DASHBOARD_INVOICES_SUMMARY_SELECT);
 

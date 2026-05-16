@@ -1,5 +1,6 @@
 import { clearSessionOrgIdCache } from "@/api/customClient";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
+import { resetPaidlyRealtimeForUserRecovery } from "@/lib/realtime/paidlyRealtimeManager";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
 
 /**
@@ -138,10 +139,12 @@ export async function runWakeRecoveryPipeline(ctx) {
 
     setPipelineState(WakeRecoveryState.REALTIME_RESTORING);
     ctx.setRecoveryPhase?.("realtime");
+    resetPaidlyRealtimeForUserRecovery("wake_recovery");
     try {
       await ctx.awaitRealtimeRecovery(reason, { channelJoinTimeoutMs: 12_000 });
     } catch (reErr) {
       console.warn("[Session] WakeRecoveryPipeline realtime step failed", reErr?.message || reErr);
+      resetPaidlyRealtimeForUserRecovery("wake_recovery_retry");
       setPipelineState(WakeRecoveryState.FAILED);
       if (!circuitOpen()) {
         ctx.requestSessionRefresh?.({
