@@ -2,9 +2,11 @@
  * Health, keep-alive, and dashboard bootstrap in one function (Vercel Hobby ≤12 functions).
  * Rewrites: /api/health → ?op=health, /api/keep-alive → ?op=keep-alive,
  *           /api/dashboard/bootstrap → ?op=dashboard-bootstrap
+ *           /api/send-email → ?op=send-email
  */
 import { createClient } from "@supabase/supabase-js";
 import dashboardBootstrapHandler from "../server/src/dashboardBootstrapHandler.js";
+import sendEmailHandler from "../server/src/sendEmailApi.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -26,6 +28,10 @@ export default async function handler(req, res) {
 
   if (op === "dashboard-bootstrap") {
     return dashboardBootstrapHandler(req, res);
+  }
+
+  if (op === "send-email") {
+    return sendEmailHandler(req, res);
   }
 
   if (op === "keep-alive") {

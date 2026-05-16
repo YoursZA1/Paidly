@@ -1,16 +1,20 @@
 /**
- * Public invoice/payslip by share token — single Vercel function (Hobby plan).
- * Original paths preserved via vercel.json rewrites → ?doc=&op=
- * Invoice OG images: /api/og → ?doc=og (vercel.json rewrite).
+ * Public docs, OG images, and email tracking — single Vercel function (Hobby plan).
+ * Rewrites: ?doc=invoice|quote|payslip|og|email-track (see vercel.json).
  */
 import { handlePublicInvoiceGet, handlePublicInvoiceVerify } from "./_publicInvoiceShared.js";
 import { handlePublicPayslipGet, handlePublicPayslipVerify } from "./_publicPayslipShared.js";
 import { handlePublicQuoteGet } from "./_publicQuoteShared.js";
+import { handleEmailTrack } from "./_emailTrackShared.js";
 import renderOgImageHandler from "../server/src/vercelOgImage.js";
 
 export default async function handler(req, res) {
   const doc = String(req.query.doc || "");
   const op = String(req.query.op || "");
+
+  if (doc === "email-track") {
+    return handleEmailTrack(req, res);
+  }
 
   if (doc === "og") {
     return renderOgImageHandler(req, res);

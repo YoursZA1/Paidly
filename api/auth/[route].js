@@ -17,8 +17,16 @@ const ROUTES = {
   "bootstrap-user": bootstrapUserOrganizationHandler,
 };
 
+function resolveAuthRoute(req) {
+  const fromQuery = String(req.query?.route ?? "").trim();
+  if (fromQuery) return fromQuery;
+  const url = req.url || "";
+  const m = url.match(/\/api\/auth\/([^/?]+)/);
+  return m ? decodeURIComponent(m[1]).trim() : "";
+}
+
 export default async function handler(req, res) {
-  const route = String(req.query.route || "").trim();
+  const route = resolveAuthRoute(req);
   const fn = ROUTES[route];
   if (!fn) {
     return res.status(404).json({ error: "Not found" });

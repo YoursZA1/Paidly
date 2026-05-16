@@ -53,6 +53,14 @@
       "destination": "/api/system?op=dashboard-bootstrap"
     },
     {
+      "source": "/api/send-email",
+      "destination": "/api/system?op=send-email"
+    },
+    {
+      "source": "/api/email-track",
+      "destination": "/api/public-share?doc=email-track"
+    },
+    {
       "source": "/api/og",
       "destination": "/api/public-share?doc=og"
     },
@@ -110,11 +118,11 @@
     },
     {
       "source": "/api/track-open",
-      "destination": "/api/email-track?mode=open"
+      "destination": "/api/public-share?doc=email-track&mode=open"
     },
     {
       "source": "/api/track-link",
-      "destination": "/api/email-track?mode=link"
+      "destination": "/api/public-share?doc=email-track&mode=link"
     },
     {
       "source": "/api/payfast/subscription",
@@ -134,7 +142,7 @@
     },
     {
       "source": "/payfast/subscription/itn",
-      "destination": "/api/payfast/subscription/itn"
+      "destination": "/api/payfast-handler?__pf=subscription%2Fitn"
     },
     {
       "source": "/((?!api/).*)",

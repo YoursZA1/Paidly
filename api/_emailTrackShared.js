@@ -1,8 +1,5 @@
 /**
- * Vercel serverless:
- * - GET  /api/email-track?token=uuid                 (pixel open)
- * - POST /api/track-open (rewritten here with mode)  (json open event)
- * - GET  /api/track-link?token=&u=                   (rewritten here with mode)
+ * Email open/click tracking (shared by public-share Vercel function).
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -61,7 +58,7 @@ function isAllowedRedirectUrl(target, requestHost) {
   }
 }
 
-export default async function handler(req, res) {
+export async function handleEmailTrack(req, res) {
   const mode = String(req.query?.mode || "pixel").toLowerCase();
   const supabase = getSupabaseAdmin();
 
