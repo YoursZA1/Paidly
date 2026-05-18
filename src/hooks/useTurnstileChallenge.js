@@ -8,13 +8,21 @@ function envFlag(name) {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+// Cloudflare Turnstile site keys always start with a digit + "x" followed by ≥10 alphanum chars.
+// Placeholder strings ("your-site-key", etc.) won't match, preventing 400020 errors.
+function isValidTurnstileSiteKey(key) {
+  return typeof key === "string" && /^[0-9]x[0-9A-Za-z_-]{10,}$/.test(key);
+}
+
 export function useTurnstileChallenge({ requiredEnvKey, theme = "light", requireInProdByDefault = true } = {}) {
   const [token, setToken] = useState("");
   const [ready, setReady] = useState(false);
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
 
-  const siteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+  const rawKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
+  // Treat placeholder/unconfigured keys as empty so the widget never mounts.
+  const siteKey = isValidTurnstileSiteKey(rawKey) ? rawKey : "";
   const required = useMemo(() => {
     if (!siteKey) return false;
     if (requiredEnvKey && envFlag(requiredEnvKey)) return true;
