@@ -1,181 +1,201 @@
 # Paidly — Auth Flow Guarantees
 
-> Updated: 2026-05-18
+> Updated: 2026-05-18 (final stability pass)
 
 ---
 
-## Guarantee 1 — Single-Flight Token Refresh
+## Core Guarantees
 
-**What is guaranteed:** At most one `supabase.auth.refreshSession()` call is in flight at any given moment per browser tab.
-
-**How it is enforced:**
-
-All session refresh paths route through `RefreshQueue.enqueue()`:
-
-```
-RefreshQueue.enqueue(task, meta)
-  ├── halted? → return refreshSkipped("queue_halted")
-  ├── inFlightPromise? → join existing promise (OR return refreshRetrying if meta.returnRetryingOnJoin)
-  ├── now - lastStartedAt < minGapMs (3s)? → return refreshSkipped("throttled")  [unless bypassThrottle]
-  └── execute task → sets inFlightPromise → clears on finally
-```
-
-**Paths enforced:**
-- `AuthContext.impl.jsx` — `refreshSession()` routes through queue
-- `authReconnectEscalation.js` — scheduled recovery routes through queue
-- `WakeRecoveryPipeline` — `refreshSession({ bypassThrottle: true })` (bypasses 3s gap, not single-flight)
-- Visibility-triggered refresh — `requestSessionRefreshGuarded` → queue
-
-**Invariant:** No code path calls `supabase.auth.refreshSession()` directly except inside `RefreshQueue.enqueue()` task functions.
+The following guarantees are enforced by code structure, not convention. Each guarantee lists the mechanism that enforces it.
 
 ---
 
-## Guarantee 2 — Single Auth State Listener
+### G-01: No parallel session refresh
 
-**What is guaranteed:** Exactly one `supabase.auth.onAuthStateChange` listener is registered for the lifetime of the app.
+**Guarantee:** At most one `supabase.auth.refreshSession()` call is in flight at any time within a tab.
 
-**Location:** `src/contexts/AuthContext.impl.jsx` — registered once in the top-level auth context effect.
+**Mechanism:**
+```
+RefreshQueue.enqueue(task)
+  └─ if (inFlightPromise) return inFlightPromise   ← concurrent callers join, not start
+  └─ else { inFlightPromise = task(); ... }         ← only one task starts
+```
 
-**Invariant:** No component, hook, or service registers a second `onAuthStateChange` listener. All auth state flows through the single listener which updates `authSessionStore`, `RuntimeCoordinator`, and realtime.
+**Secondary guard:** `refreshSupabaseSessionWithRecovery()` checks `isFreshEnough()` before initiating — if the token has been refreshed within the last N seconds, the call returns without hitting Supabase.
+
+**Cross-tab guard:** `authTabSync` localStorage lock — only the tab that acquires the lock executes the refresh. Other tabs read the updated session from storage.
+
+**Validated:** RefreshQueue does not expose a way to bypass `inFlightPromise` except through `bypassThrottle` (which bypasses the 3s throttle, not the in-flight guard).
 
 ---
 
-## Guarantee 3 — Session State Consistency Across Reads
+### G-02: No direct supabase.auth.refreshSession() calls outside the refresh pipeline
 
-**What is guaranteed:** All code that reads the session gets a consistent view. Concurrent calls in the same JS turn return the same session object.
+**Guarantee:** `supabase.auth.refreshSession()` is only called from `supabaseAuthRefresh.js` → `refreshSupabaseSessionWithRecovery()`.
 
-**How it is enforced by `SessionCoordinator`:**
+**Mechanism:** The `authReconnectEscalation.js` runProbe path calls `supabaseRefreshSession` which is injected via `getDeps()` — this injection is set to the safe wrapper in AuthContext, not the raw Supabase method.
 
-```
-getStableSession()
-  Tier 1 (synchronous): authSessionStore.session if expiresAt > now + 30s
-    → 0 network calls; returns immediately
-  Tier 2 (cached): _cached snapshot if fetchedAt within 5s
-    → 0 network calls; returns from memory
-  Tier 3 (single-flighted): supabase.auth.getSession()
-    → if _inflight exists: join it (no second Supabase call)
-    → otherwise: set _inflight → execute → cache result → clear _inflight
-```
+**Known exception:** `supabaseAuthRefresh.js` itself calls `supabase.auth.refreshSession()` at lines 157 and 162 — this IS the implementation, so it's correct.
 
-**Cache invalidation:** `invalidateSessionSnapshot()` is called on:
-- `SIGNED_IN` / `TOKEN_REFRESHED` events (new session is fresher than cache)
-- `SIGNED_OUT` events (clears stale session)
+**Validation:** No `supabase.auth.refreshSession()` calls exist outside `supabaseAuthRefresh.js`.
 
 ---
 
-## Guarantee 4 — No Auth Calls During Recovery
+### G-03: Single onAuthStateChange listener
 
-**What is guaranteed:** During `WakeRecoveryPipeline` and `AppRecoveryLock`, no feature code can issue mutations or auth-dependent operations.
+**Guarantee:** Exactly one `supabase.auth.onAuthStateChange` listener is registered per tab.
 
-**How it is enforced:**
+**Mechanism:** Registered once in `AuthContext.impl.jsx`, never in other components. Memory note explicitly warns against adding a second listener.
 
-```
-AppRecoveryLock.begin() → useWakeRecoveryStore.blockMutations = true
-RuntimeCoordinator.beginAuthRecovery() → pauseNonCriticalRequests = true
-
-Guards checking these flags:
-  SyncEngine.runOnce()         → checks blockMutations → return
-  RequestCoordinator.withSlot() → awaits waitUntilUnpaused()
-  SyncEngine.scheduleEntityInvalidation → hasActiveSession() guard
-  paidlyRealtimeManager callbacks → recoveryLockBlocksRealtimeDelivery() guard
-
-AppRecoveryLock.end() → blockMutations = false (in finally block — always runs)
-RuntimeCoordinator.endAuthRecoverySuccess() → pauseNonCriticalRequests = false
-```
-
-**Invariant:** `AppRecoveryLock.begin()` always has a matching `.end()` in a `finally` block.
+**Validated:** `grep "onAuthStateChange"` finds only one registration site in the app code.
 
 ---
 
-## Guarantee 5 — Terminal Auth States Cannot Self-Resolve
+### G-04: Terminal auth states permanently halt recovery
 
-**What is guaranteed:** Once the recovery circuit is open (EXPIRED / REAUTH_REQUIRED), no internal system can exit it. Only external auth events (`SIGNED_IN`, `INITIAL_SESSION`) clear it.
+**Guarantee:** Once the session enters EXPIRED or REAUTH_REQUIRED state, all refresh and reconnect attempts cease immediately.
 
-**How it is enforced:**
-
+**Mechanism:**
 ```
-isRecoveryCircuitOpen() returns true when recoveryCircuit.state === "OPEN"
-  → checked first in:
-    SyncEngine.runOnce()
-    SyncEngine.scheduleEntityInvalidation()
-    SyncEngine.onEntityEvent()
-    paidlyRealtimeManager.requestPaidlyRealtimeErrorRecovery()
-    paidlyRealtimeManager.schedulePaidlyRealtimeRebuild()
-    paidlyRealtimeManager.runChannelRebuild()
-    authReconnectEscalation.schedule()
+isRecoveryCircuitOpen() returns true when:
+  - sessionHealthStore.status === EXPIRED
+  - sessionHealthStore.status === REAUTH_REQUIRED
+  - connectionLifecycleStore.auth.phase === "expired" | "expired_surface"
 
-The circuit clears only on: SIGNED_IN or INITIAL_SESSION Supabase auth events.
+Gates (all check isRecoveryCircuitOpen() first):
+  - sessionRefreshScheduler.requestSessionRefresh()  → cancel + return
+  - SyncEngine.runOnce()                             → return
+  - SyncEngine.scheduleEntityInvalidation()          → return
+  - schedulePaidlyRealtimeRebuild()                  → return
+  - requestPaidlyRealtimeErrorRecovery()             → return
+  - authReconnectEscalation.schedule()               → terminalizing = true, return
 ```
 
-**Invariant:** No timer, network response, or user action can exit the terminal state without a fresh Supabase auth event.
+**EXPIRED is terminal:** `SESSION_STATUS.EXPIRED` is set only by `transitionToExpired()` which also calls sign-out. There is no transition FROM EXPIRED back to CONNECTED.
 
 ---
 
-## Guarantee 6 — Cross-Tab Sign-Out Propagation
+### G-05: Session reads are coordinated through SessionCoordinator for all runtime paths
 
-**What is guaranteed:** Signing out in one tab causes all other tabs to sign out as well (no stale sessions in background tabs).
+**Guarantee:** SyncEngine, realtime reconcilers, and wake recovery all read session through SessionCoordinator's single-flight/cached path.
 
-**How it is enforced:**
+**Mechanism:**
+- `SyncEngine.runOnce()` calls `getStableSession()` before processing jobs
+- `SyncEngine.scheduleEntityInvalidation()` calls `hasActiveSession()` before reconciling
+- `SyncEngine.scheduleGlobalStoreRefresh()` calls `hasActiveSession()` before fetching
+- `WakeRecoveryPipeline` reads session via `readSessionSafe()` (injected from AuthContext, which wraps the same coordinator path)
 
-```
-BroadcastChannel "paidly-auth-sync"
-  SIGNED_OUT message → received by all other tabs
-    → AuthContext.impl.jsx handles → triggers local sign-out flow
-    → authSessionStore.clearSession()
-    → RuntimeCoordinator.endAuthRecoveryFatal() or recoveryCircuit.open()
-```
-
-**Cross-tab token sync:** `TOKEN_REFRESHED` is also broadcast, updating `authSessionStore` in all tabs without each tab individually calling `refreshSession`.
+**Known gap (R-01 in remaining-risk-analysis.md):** Feature components (pages, services) call `supabase.auth.getSession()` directly for ad-hoc token grabs. These are generally safe (sequential single calls, not loops) but bypass the 5s snapshot cache.
 
 ---
 
-## Guarantee 7 — No Stale Auth During Sync Queue Execution
+### G-06: Realtime JWT is always current after token refresh
 
-**What is guaranteed:** The sync queue never processes a job with an expired or missing session. If the session disappears mid-queue, the job is deferred (not silently dropped or executed with stale credentials).
+**Guarantee:** The Supabase Realtime WebSocket connection receives the new JWT within one macrotask of every successful token refresh.
 
-**How it is enforced:**
-
+**Mechanism:**
 ```
-SyncEngine.runOnce():
-  1. hasActiveSession() check (synchronous) — not shown, redundant guard
-  2. getStableSession() (async, three-tier) → returns null if no session
-  3. No session? → requestSessionRefresh (debounced, 8s gap) → return without processing
-  4. Session found → markProcessing → processSyncJob
-  5. Post-job: hasActiveSession() → only then invalidate queries
+refreshSupabaseSessionWithRecovery() success
+  └─ AuthContext executor: reconcileRealtimeJwt(accessToken, reason)
+      └─ reconcilePaidlyRealtimeAfterTokenRefresh(accessToken, reason)
+          ├─ supabase.realtime.setAuth(accessToken)   ← JWT pushed to existing socket
+          └─ if (!isPaidlyRealtimeMainChannelJoined()) → rebuild channel
 ```
 
-**Protection against mid-job session expiry:** `processSyncJob` uses the token from the session read at step 2–3. If the token expires during a very long job, the API call may fail with a 401. The job is then `markFailed` with `retryable: true` and retried after the next successful session refresh.
+`setAuth()` runs even if the channel is already joined (safe no-op on the auth side). The channel is only torn down and rebuilt if it was not in a joined state, preventing unnecessary reconnect storms.
 
 ---
 
-## Guarantee 8 — Realtime JWT Always Stays Current
+### G-07: Wake recovery is non-reentrant
 
-**What is guaranteed:** The Supabase Realtime WebSocket always has the most recent JWT, even when the channel is healthy and not being rebuilt.
+**Guarantee:** At most one wake recovery pipeline runs at a time per tab.
 
-**How it is enforced:**
+**Mechanism:** `AppRecoveryLock.acquire()` returns false if already locked. The AuthContext wrapper checks this before calling `runWakeRecoveryPipeline()`.
 
-```
-TOKEN_REFRESHED → reconcilePaidlyRealtimeAfterTokenRefresh(newToken):
-  ├── supabase.realtime.setAuth(newToken)   ← ALWAYS runs, regardless of channel state
-  └── isPaidlyRealtimeMainChannelJoined()?
-        YES → return (no rebuild)           ← token already pushed via setAuth above
-        NO  → runChannelRebuild(force: true) ← rebuild with new token
-```
-
-`setAuth` pushes the JWT into the existing WebSocket connection. The channel does not need to be torn down for the new token to take effect. Rebuild is only needed if the channel was already unhealthy.
+**Secondary effect:** `wakeRecoveryStore.blockMutations = true` during the recovery window. This prevents realtime postgres_changes from being delivered to SyncEngine, preventing cache mutations while the session is in an uncertain state.
 
 ---
 
-## Auth Flow Decision Table
+### G-08: Reconnect escalation has a hard ceiling
 
-| Scenario | Action |
-|----------|--------|
-| App cold start | `INITIAL_SESSION` → `SessionCoordinator.invalidateSessionSnapshot()` → realtime connect |
-| 55-minute token rotation | `TOKEN_REFRESHED` → `setAuth` → skip rebuild if joined |
-| Tab focus (short gap) | `getSession()` confirm → `requestSessionRefreshGuarded` (3s min gap) |
-| Tab wake (long gap) | `WakeRecoveryPipeline` → Phase 1 (refresh) → Phase 2 (realtime) → Phase 3 (resync) |
-| Refresh failure | `RefreshQueue` → error → `authReconnectEscalation.schedule()` → backoff |
-| 5 consecutive escalation failures | `handleFatal("reconnect_loop_break")` → recoveryCircuit opens |
-| Sign out | `SIGNED_OUT` → `clearSession()` → BroadcastChannel → all tabs sign out |
-| Tab hidden | Session heartbeat skips; realtime heartbeat skips; no refresh triggered |
-| Offline | `RefreshQueue` → `PGRST_NETWORK_ERROR` → escalation → defers until online |
+**Guarantee:** The reconnect escalation loop stops permanently after 5 consecutive failures.
+
+**Mechanism:** `authReconnectEscalation.createReconnectEscalationController()`:
+```
+consecutiveFailures >= MAX_RECONNECT_ATTEMPTS (5)
+  └─ terminalizing = true
+  └─ sessionManager.RefreshManager.handleFatal("reconnect_loop_break")
+      └─ → transitions to terminal session state (EXPIRED/REAUTH_REQUIRED)
+          └─ isRecoveryCircuitOpen() returns true → all recovery halted
+```
+
+Jitter on backoff delays (±15%) prevents multi-tab thundering herd when multiple tabs all hit the same failure condition simultaneously.
+
+---
+
+### G-09: No rebuild of a healthy WebSocket connection
+
+**Guarantee:** The realtime multiplex channel is never torn down and rebuilt if it is already in `joined` state, regardless of how many JWT rotation events or visibility events fire.
+
+**Mechanism:**
+```
+reconcilePaidlyRealtimeAfterTokenRefresh():
+  └─ setAuth(accessToken) pushed unconditionally
+  └─ if (isPaidlyRealtimeMainChannelJoined()) {
+       paidlyRealtimeLog("reconnect_suppressed", { kind: "jwt_refresh_channel_healthy" });
+       return;
+     }
+
+runVisibilityReconnectCheckInternal():
+  └─ if (isPaidlyRealtimeMainChannelJoined()) {
+       paidlyRealtimeLog("reconnect_suppressed", { kind: "visibility_restore_channel_healthy" });
+       return;
+     }
+```
+
+This prevents the most common source of WebSocket reconnect storms: every tab focus + token refresh combination triggering a channel rebuild even when the connection is healthy.
+
+---
+
+## Session State Machine
+
+```
+                    bootstrap
+                       │
+                       ▼
+                   CONNECTED
+                  /    │    \
+          focus  /     │     \ network loss
+         resync /      │      \
+               /   token OK    \
+     UNSTABLE ◄─────────────────► RECONNECTING
+        │                              │
+        │ attempts failed              │ session missing
+        ▼                              ▼
+   DEGRADED                    REAUTH_REQUIRED
+        │
+        │ fatal error
+        ▼
+     EXPIRED  (terminal — no recovery)
+```
+
+All state transitions are mediated through `SessionOrchestrator` / `ConnectionLifecycleManager`. No component or service is permitted to call `transitionToExpired()` directly — this call routes through `connectionLifecycle.transitionToExpired()` which triggers sign-out, clears auth state, and broadcasts to other tabs.
+
+---
+
+## Refresh Token Safety
+
+**Single consumption guarantee:**
+1. Only one tab holds the refresh lock at a time (`authTabSync` localStorage lock)
+2. Within a tab, `RefreshQueue.inFlightPromise` prevents duplicate consumption
+3. The reconnect escalation's `supabaseRefreshSession` is injected from the safe wrapper — not called raw
+
+**Refresh token expiry flow:**
+```
+supabase.auth.refreshSession() → { error: "refresh_token_not_found" }
+  └─ isRefreshTokenFatalError(error) = true
+  └─ sessionManager.RefreshManager.handleFatal("refresh_token_invalid")
+  └─ transitionToExpired(...)
+```
+
+The app will not loop on an expired refresh token. One fatal error permanently opens the recovery circuit.

@@ -46,6 +46,7 @@ import { useShallow } from "zustand/shallow";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
 import { ROLES, STAFF_ROLES } from "@/lib/permissions";
+import { ADMIN_NAV_ITEMS } from "@/lib/adminNavConfig";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
@@ -98,68 +99,17 @@ const navItemShape = PropTypes.shape({
   children: PropTypes.arrayOf(PropTypes.any),
 });
 
-const ADMIN_V2_NAV_ROLES = [ROLES.ADMIN, ...STAFF_ROLES];
 /** Main app sidebar: customers + internal staff (staff also get admin-v2 merged below). */
 const MAIN_APP_NAV_ROLES = ["user", ...DASHBOARD_STAFF_ROLES];
 
-const adminNavigationItems = [
-  {
-    title: "Dashboard",
-    url: "/admin-v2",
-    icon: LayoutDashboard,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-dashboard",
-  },
-  {
-    title: "Users",
-    url: "/admin-v2/users",
-    icon: Users,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-users",
-  },
-  {
-    title: "Messages",
-    url: "/admin-v2/messages",
-    icon: MessageCircle,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-messages",
-  },
-  {
-    title: "Subscriptions",
-    url: "/admin-v2/subscriptions",
-    icon: Briefcase,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-subscriptions",
-  },
-  {
-    title: "Affiliates",
-    url: "/admin-v2/affiliates",
-    icon: Handshake,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-affiliates",
-  },
-  {
-    title: "Waitlist",
-    url: "/admin-v2/waitlist",
-    icon: Activity,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-waitlist",
-  },
-  {
-    title: "Settings",
-    url: "/admin-v2/settings",
-    icon: Settings,
-    feature: null,
-    roles: ADMIN_V2_NAV_ROLES,
-    id: "nav-admin-settings",
-  },
-];
+const adminNavigationItems = ADMIN_NAV_ITEMS.map((item) => ({
+  title: item.label,
+  url: item.path,
+  icon: item.icon,
+  feature: null,
+  roles: item.roles,
+  id: `nav-admin-${item.label.toLowerCase().replace(/\s+/g, '-')}`,
+}));
 
 const allNavigationItems = [
   {

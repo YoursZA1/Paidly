@@ -7,7 +7,7 @@ import {
   normalizePlanSlug,
   planIncludesFeature,
   priceForSlug,
-} from "@shared/plans.js";
+} from "@/lib/plans.js";
 
 /**
  * PayFast `item_name` / display keys → monthly ZAR (from `PLANS`).

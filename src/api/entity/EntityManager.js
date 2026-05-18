@@ -6,7 +6,7 @@ import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supa
 import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
-import { hasFeature } from "@shared/plans.js";
+import { hasFeature } from "@/lib/plans.js";
 import {
   runOrgBootstrapWithLock,
   getOrgBootstrapCircuitOpenUntil,

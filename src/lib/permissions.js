@@ -8,19 +8,19 @@ export const ROLES = {
 
 const ROLE_PERMISSIONS = {
   admin: {
-    pages: ['/', '/users', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
+    pages: ['/', '/users', '/messages', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
     canManageTeam: true,
   },
   management: {
-    pages: ['/', '/users', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
+    pages: ['/', '/users', '/messages', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
     canManageTeam: true,
   },
   sales: {
-    pages: ['/', '/users', '/subscriptions', '/waitlist'],
+    pages: ['/', '/users', '/messages', '/subscriptions', '/waitlist'],
     canManageTeam: false,
   },
   support: {
-    pages: ['/', '/users', '/affiliates', '/waitlist'],
+    pages: ['/', '/users', '/messages', '/affiliates', '/waitlist'],
     canManageTeam: false,
   },
   user: {

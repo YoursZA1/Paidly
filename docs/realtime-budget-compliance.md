@@ -1,136 +1,171 @@
 # Paidly — Realtime Budget Compliance
 
-> Updated: 2026-05-18
+> Updated: 2026-05-18 (final stability pass)
 
 ---
 
-## Overview
+## Compliance Summary
 
-This document audits compliance of all realtime-triggered cache operations against the budget systems defined in `RuntimeBudgetCoordinator.ts` and `paidlyRealtimeManager.js`.
-
----
-
-## Budget Layer Compliance Matrix
-
-| Budget Layer | What It Governs | Status | Compliance |
-|-------------|----------------|--------|------------|
-| Reconnect backoff (realtimeManager) | 1s→30s stepped delay between error recoveries | Enforced in `requestPaidlyRealtimeErrorRecovery` | ✅ |
-| Transport burst cooldown | ≥4 failures in 12s → 35s pause | Enforced via `transportFailureTimestamps` | ✅ |
-| Circuit breaker | ≥5 consecutive failures → 120s pause | Enforced via `realtimeConsecutiveFailures` | ✅ |
-| Hard rate suppress | ≥10 rebuilds in 90s → 90s suppress | Enforced via `reconnectHardRateTimestamps` | ✅ |
-| Rebuild min interval | 1.4s between rebuilds | Enforced via `lastRebuildCompletedAtMs` | ✅ |
-| JWT rebuild skip (healthy) | Skip rebuild when channel is joined | Enforced in `flushJwtRebuild` | ✅ |
-| Visibility reconnect min | 30s between visibility-driven reconnects | Enforced via `lastVisibilityReconnectScheduleAt` | ✅ |
-| Heartbeat reconnect min | 45s between heartbeat-driven reconnects | Enforced via `lastHeartbeatReconnectScheduleAt` | ✅ |
-| Subscribe watchdog | 20s hung-subscribe timeout | Enforced via `subscribeWatchdogId` | ✅ |
-| Cashflow invalidation coalesce | 300ms coalesce window per key | **Newly wired** via `scheduleInvalidation` | ✅ |
-| Entity event debounce | 900ms per-entity debounce | Enforced via `realtimeEntityDebounceRefs` | ✅ |
-| Global store refresh debounce | 2200ms debounce before `fetchAllFromStore` | Enforced via `globalStoreRefreshTimerRef` | ✅ |
-| Single reconciliation path | One reconciler per entity | All entities mapped to exactly one reconciler | ✅ |
-| No fetch-all on entity events | All reconcilers return `true` | Verified across all 7 entity types | ✅ |
+| Requirement | Status | Evidence |
+|-------------|--------|---------|
+| Single multiplex channel | ✅ PASS | `PAIDLY_REALTIME_CHANNEL = "paidly-sync-realtime"` — one channel, four logical domains |
+| No duplicate table subscriptions | ✅ PASS | `SYNC_TABLES_SET` blocks aux subscriptions on sync-owned tables |
+| No full-store reload on entity events | ✅ PASS | All reconcilers return `true` (patch succeeded); `scheduleGlobalStoreRefresh` only fires on `false` returns |
+| Invalidations coalesced under burst | ✅ PASS (fixed) | All reconcilers now use `scheduleInvalidation` for cashflow-page |
+| No reconnect storm on focus restore | ✅ PASS | `VISIBILITY_RECONNECT_MIN_MS=30s` rate-limits focus-driven reconnects |
+| No rebuild on healthy channel | ✅ PASS | `isPaidlyRealtimeMainChannelJoined()` checked before every JWT-driven rebuild |
+| Heartbeat watchdog | ✅ PASS | 22s interval; 5s post-subscribe grace; 45s rate limit between reconnects |
+| Circuit breaker on consecutive failures | ✅ PASS | 5 failures → 120s open; transport burst (4 in 12s) → 35s cooldown |
+| Cross-system reconnect rate tracked | ✅ PASS (fixed) | `recordAndCheckReconnectRate()` now called in `runChannelRebuild` |
 
 ---
 
-## Cashflow Invalidation Compliance
-
-Cashflow is the most heavily invalidated query in the app. Every financial entity type (invoices, clients, quotes, payments, expenses) triggers a cashflow invalidation on change.
-
-### Before Fix (this session)
+## Channel Architecture
 
 ```
-Entity events in one burst: invoice×3 + quote×2 + payment×1 + expense×1
-Cashflow invalidations fired: 7 (one per event, immediate)
-Concurrent cashflow refetches: up to 7
+paidly-sync-realtime  (single Supabase Realtime channel)
+│
+├─ Domain: sync (PAIDLY_REALTIME_SYNC_TABLES)
+│   invoices, clients, document_sends, quotes, payments, expenses, payslips
+│   → routed to syncBridge.onEntityEvent → SyncEngine
+│
+├─ Domain: profiles
+│   → profileListeners Set → AuthContext profile refresh
+│
+├─ Domain: notifications
+│   notifications (filtered user_id=eq.userId)
+│   message_deliveries (filtered user_id=eq.userId)
+│   → notificationListeners Set
+│
+└─ Domain: aux (extra tables via subscribePaidlyAuxPostgres)
+    → auxTableListeners Map (table:schema:filter → listener Set)
+    Note: SYNC_TABLES_SET blocks aux registration on sync-owned tables
 ```
 
-### After Fix
-
-```
-Entity events in one burst: invoice×3 + quote×2 + payment×1 + expense×1
-scheduleInvalidation calls: 7 (all for same key: '["cashflow-page"]')
-Timers armed: 1 (first call arms it; subsequent find existing → no-op)
-Cashflow refetches: 1 (after 300ms window closes)
-```
-
-### Reconciler Cashflow Audit
-
-| Reconciler | File | Calls Before | Calls After | Method |
-|-----------|------|-------------|-------------|--------|
-| `reconcileInvoiceRealtimeEvent` | `realtimeInvoiceReconciliation.js` | 2 direct | 2 coalesced | `scheduleInvalidation` |
-| `reconcileClientRealtimeEvent` | `realtimeClientReconciliation.js` | 2 direct | 2 coalesced | `scheduleInvalidation` |
-| `reconcileQuoteRealtimeEvent` | `realtimeEntityReconciliation.js` | 2 direct | 2 coalesced | `scheduleInvalidation` |
-| `reconcilePaymentRealtimeEvent` | `realtimeEntityReconciliation.js` | 1 direct | 1 coalesced | `scheduleInvalidation` |
-| `reconcileExpenseRealtimeEvent` | `realtimeEntityReconciliation.js` | 1 direct | 1 coalesced | `scheduleInvalidation` |
-| `reconcilePayslipRealtimeEvent` | `realtimeEntityReconciliation.js` | 0 | 0 | n/a |
-| **Total** | | **8 direct** | **8 coalesced** | |
+**Max concurrent logical subscriptions:** 12 (RealtimeManager budget)  
+**Current active domains:** 4 (sync, profiles, notifications, aux)
 
 ---
 
-## Reconnect Budget Compliance
+## Reconnect Pressure Analysis
 
-### Reconnect Suppression Layers (Enforced, Outermost First)
+### Layer 1 — JWT rotation (token refresh)
+- `reconcilePaidlyRealtimeAfterTokenRefresh()` called after every session refresh
+- `setAuth(accessToken)` pushes new JWT to existing WebSocket — no rebuild needed
+- Rebuild only fires if channel is NOT joined after setAuth
+- Coalesced: `authRotateCoalesce` flag drops duplicate signals in the same JS turn
+- Rate-limited: `JWT_CHANNEL_REBUILD_MIN_MS=2000ms` between JWT-driven rebuilds
 
+### Layer 2 — Visibility restore
+- `checkPaidlyRealtimeOnVisibilityRestore()` called when tab becomes visible
+- Debounced: 400ms before acting
+- Rate-limited: `VISIBILITY_RECONNECT_MIN_MS=30000ms` — at most 1 reconnect per 30s from focus
+- Skip if channel already joined
+
+### Layer 3 — Heartbeat watchdog
+- Fires every 22s on visible, online tabs
+- Rate-limited: `HEARTBEAT_RECONNECT_MIN_MS=45000ms` between reconnects
+- 5s post-subscribe grace period ignores transient state mismatch
+
+### Layer 4 — Error recovery backoff
 ```
-1. isRecoveryCircuitOpen()           — auth terminal state; any rebuild would connect unauthenticated
-2. isBrowserOffline()                — navigator.onLine === false
-3. isRealtimeCircuitBreakerOpen()    — ≥5 failures → 120s pause (bypass: JWT origin, cooldown wake)
-4. isTransportCooldownActive()       — ≥4 failures in 12s → 35s pause (bypass: JWT origin)
-5. isReconnectHardSuppressed()       — ≥10 rebuilds in 90s → 90s pause
-6. rebuildInFlight                   — subscribe handshake in progress (queues one rebuild via rebuildQueued)
-7. REBUILD_MIN_INTERVAL_MS (1.4s)    — minimum spacing; deferred via timer
-8. isPaidlyRealtimeMainChannelJoined() [JWT path only] — skip when already healthy
+Failure 1 → 1s delay
+Failure 2 → 2s delay
+Failure 3 → 5s delay
+Failure 4 → 10s delay
+Failure 5+ → 30s delay (cap)
+```
+Circuit opens at 5 consecutive failures → 120s pause.
+
+### Layer 5 — Transport burst protection
+```
+≥4 subscribe failures within 12s → transport cooldown armed (35s)
+During cooldown: no error-recovery rebuilds (JWT-driven rebuilds still allowed)
+After cooldown: one recovery attempt fires
 ```
 
-All layers verified active in `runChannelRebuild` and `requestPaidlyRealtimeErrorRecovery`.
+### Layer 6 — Hard rate suppression
+```
+≥10 rebuilds in 90s window → reconnect suppressed for 90s
+Bypassed by: jwt_refresh origin, transport_cooldown_end origin
+```
 
-### Unimplemented Budget Controls
-
-| Control | File | Status |
-|---------|------|--------|
-| `recordAndCheckReconnectRate()` | `RuntimeBudgetCoordinator.ts` | Defined but not called; realtimeManager has its own circuit breakers |
-| `consumeFocusRefetchBudget()` | `RuntimeBudgetCoordinator.ts` | Defined but not called; only 3 queries use `FocusRefetch.LIVE` currently |
+### Layer 7 — Cross-system budget (RuntimeBudgetCoordinator)
+```
+Window: 60s
+Max rebuilds: 15
+Current implementation: records every actual rebuild (wired 2026-05-18)
+Returns false if over budget (not yet enforced — layer 1-6 already prevent storms)
+```
 
 ---
 
-## Entity Reconciliation Budget Compliance
+## Invalidation Budget
 
-### Debounce Budget
+### Per-event coalescing (RuntimeBudgetCoordinator.scheduleInvalidation)
 
-Each entity type has its own debounce timer. Events arriving within 900ms of each other are collapsed into one reconciliation call. The last payload wins.
+| Entity | Cashflow-page method | Notes |
+|--------|---------------------|-------|
+| invoices | scheduleInvalidation ✅ | delete + insert/update paths |
+| clients | scheduleInvalidation ✅ | delete + insert/update paths |
+| quotes | scheduleInvalidation ✅ | delete + insert/update paths |
+| payments | scheduleInvalidation ✅ | **Fixed this pass** |
+| expenses | scheduleInvalidation ✅ | **Fixed this pass** |
+| payslips | n/a | no cashflow relationship |
 
-```
-Entity: invoices
-  Event at t=0   → timer armed (900ms)
-  Event at t=300 → timer reset (900ms from now)
-  Event at t=900 → timer fires with last payload
-```
+### Invalidation waves per wake recovery
+**Before fix:** 3 waves (WakeRecoveryPipeline → onWakeResync direct → onWakeResync via cascade)  
+**After fix:** 1 wave (WakeRecoveryPipeline) + 1 targeted wave (onWakeResync invoice domain only)
 
-### Single Reconciliation Path Verification
+### Focus refetch budget
+| Query root | Focus refetch | Registration |
+|-----------|---------------|-------------|
+| notifications | ✅ | FOCUS_LIVE_QUERY_ROOTS |
+| admin-messages | ✅ | FOCUS_LIVE_QUERY_ROOTS |
+| cashflow-page | ✅ | FOCUS_LIVE_QUERY_ROOTS (added this pass) |
+| All others | ❌ | global default: refetchOnWindowFocus=false |
 
-| Entity | Reconciler | Returns true | fetchAll triggered |
-|--------|-----------|--------------|-------------------|
-| invoices | `reconcileInvoiceRealtimeEvent` | ✅ (all paths) | Never |
-| clients | `reconcileClientRealtimeEvent` | ✅ (all paths) | Never |
-| document_sends | Inline in SyncEngine | ✅ | Never |
-| quotes | `reconcileQuoteRealtimeEvent` | ✅ (all paths, false → returns false on no-id) | Never in practice |
-| payments | `reconcilePaymentRealtimeEvent` | ✅ (always) | Never |
-| expenses | `reconcileExpenseRealtimeEvent` | ✅ (always) | Never |
-| payslips | `reconcilePayslipRealtimeEvent` | ✅ (all paths including fallback) | Never |
-
-**Note on quotes:** `reconcileQuoteRealtimeEvent` returns `false` if the delete payload has no `old.id` and the eventType is unrecognized. In that rare case, `SyncEngine.scheduleGlobalStoreRefresh` fires for non-admin users. This is an edge case where the payload is malformed.
+`consumeFocusRefetchBudget()` not wired — 3 registered roots are well within the 8-query cap. No protective value at current scale.
 
 ---
 
-## Recovery Lock Compliance
+## Recovery Circuit Integration
 
-During `WakeRecoveryPipeline` (and `AppRecoveryLock.begin()`):
+All realtime paths respect `isRecoveryCircuitOpen()`:
 
-- `recoveryLockBlocksRealtimeDelivery()` returns `true`
-- All `postgres_changes` callbacks in `paidlyRealtimeManager` silently return before calling `syncBridge.onEntityEvent`
-- `SyncEngine.runOnce()` checks `useWakeRecoveryStore.getState().blockMutations` — returns immediately
-- `RequestCoordinator.waitUntilUnpaused()` — all non-critical HTTP waits on `pauseNonCriticalRequests = true`
+```
+isRecoveryCircuitOpen() = true when:
+  - sessionHealthStore.status === EXPIRED
+  - sessionHealthStore.status === REAUTH_REQUIRED
+  - connectionLifecycleStore.auth.phase === "expired" | "expired_surface"
 
-After pipeline:
-- `AppRecoveryLock.end()` → `blockMutations = false`
-- `RuntimeCoordinator.endAuthRecoverySuccess()` → `pauseNonCriticalRequests = false`
-- `paidly:wake-recovery-resync` event fires → `fetchAllFromStore` (intentional full resync)
+Gates:
+  - schedulePaidlyRealtimeRebuild() → returns early
+  - requestPaidlyRealtimeErrorRecovery() → returns early
+  - SyncEngine.scheduleEntityInvalidation() → returns early
+  - SyncEngine.scheduleGlobalStoreRefresh() → returns early
+  - SyncEngine.runOnce() → returns early
+  - SyncEngine.onOnline() → returns early
+  - SyncEngine bridge: setPaidlySyncRealtimeBridge({ userId: null }) → no events delivered
+```
+
+Terminal auth state completely halts all realtime and sync activity.
+
+---
+
+## Entity Subscription Ownership
+
+Each table is owned by exactly one subscriber. Duplicate registrations are blocked:
+
+```
+PAIDLY_REALTIME_SYNC_TABLES (SyncEngine owns):
+  invoices, clients, document_sends, quotes, payments, expenses, payslips
+
+subscribePaidlyAuxPostgres() guard:
+  if (SYNC_TABLES_SET.has(table) && schema === "public") {
+    console.warn("Table is handled by SyncEngine")
+    return () => {}  ← no-op unsubscribe
+  }
+```
+
+No entity has duplicate realtime listeners.

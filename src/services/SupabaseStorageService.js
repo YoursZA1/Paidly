@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 
@@ -14,8 +15,8 @@ const PROFILE_LOGOS_BUCKET = "profile-logos";
  */
 async function resolveAuthUserId(userId) {
   if (userId && userId !== "anonymous") return userId;
-  const { data } = await supabase.auth.getSession();
-  const authId = data?.session?.user?.id;
+  const session = await getStableSession();
+  const authId = session?.user?.id;
   if (!authId) {
     throw new Error("You must be logged in to upload a logo. Please sign in and try again.");
   }

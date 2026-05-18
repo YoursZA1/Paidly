@@ -36,7 +36,7 @@ import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
-import { normalizePlanSlug, PLANS } from '@shared/plans.js';
+import { normalizePlanSlug, PLANS } from '@/lib/plans.js';
 import { bulkUpdateUsers } from '@/api/userManagement';
 
 const EMPTY_PLAN = '__empty__';

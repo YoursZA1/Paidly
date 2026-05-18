@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { apiRequest } from "@/utils/apiRequest";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 function viteEnvFlag(name) {
   const v = String(import.meta.env[name] ?? "").trim().toLowerCase();
@@ -101,8 +102,7 @@ export async function processPendingAffiliateReferral() {
   const code = getPendingReferralCodeFromStorage();
   if (!code) return { ok: true, skipped: true };
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData?.session;
+  const session = await getStableSession();
   const uid = session?.user?.id;
   const accessToken = session?.access_token;
   if (!uid || !accessToken) return { ok: false, error: "no_session" };
@@ -276,8 +276,8 @@ async function fetchAffiliateDashboardFromSupabase() {
     return { data: null, error: new Error("Unsupported Supabase query builder") };
   };
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const uid = sessionData?.session?.user?.id;
+  const session = await getStableSession();
+  const uid = session?.user?.id;
   if (!uid) return { ok: false, error: "no_session" };
 
   const affiliateQuery = supabase
@@ -370,8 +370,7 @@ async function fetchAffiliateDashboardFromSupabase() {
  * Bearer token required. Falls back to Supabase if the API fails or returns non-JSON (e.g. HTML shell).
  */
 export async function fetchAffiliateDashboardData() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData?.session;
+  const session = await getStableSession();
   const accessToken = session?.access_token;
   if (!session?.user?.id || !accessToken) {
     if (import.meta.env.DEV) {

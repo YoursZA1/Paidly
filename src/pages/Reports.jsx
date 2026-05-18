@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
-import { exportDataAsCSV } from '@/services/AdminCommonService';
+import { exportToCsv } from '@/utils/downloadFile';
 import {
   FileText,
   Calendar,
@@ -38,6 +38,11 @@ export default function Reports() {
   const [expenses, setExpenses] = useState(storeExpenses ?? []);
   const [user, setUser] = useState(profile ?? storeUser ?? null);
   const [isLoading, setIsLoading] = useState(!hasStoreData);
+  const [consolidatedFallbackUrl, setConsolidatedFallbackUrl] = useState(null);
+  const [consolidatedFallbackName, setConsolidatedFallbackName] = useState("");
+  const consolidatedFallbackUrlRef = useRef(null);
+  consolidatedFallbackUrlRef.current = consolidatedFallbackUrl;
+  useEffect(() => () => { if (consolidatedFallbackUrlRef.current) URL.revokeObjectURL(consolidatedFallbackUrlRef.current); }, []);
 
   useEffect(() => {
     loadData();
@@ -131,13 +136,22 @@ export default function Reports() {
   const userCurrency = user?.currency || 'ZAR';
 
   const handleExportConsolidated = () => {
+    if (consolidatedFallbackUrl) {
+      URL.revokeObjectURL(consolidatedFallbackUrl);
+      setConsolidatedFallbackUrl(null);
+    }
     const rows = [
       { period: 'This month', revenue: revenueMonth, expenses: expensesMonth, profit: profitMonth, margin_percent: marginPercentMonth },
       { period: 'This quarter', revenue: revenueQuarter, expenses: expensesQuarter, profit: profitQuarter, margin_percent: marginPercentQuarter },
       { period: 'All time', revenue: revenueAll, expenses: expensesAll, profit: profitAll, margin_percent: marginPercentAll },
     ];
-    exportDataAsCSV(rows, `consolidated_report_${format(now, 'yyyy-MM-dd')}.csv`, ['period', 'revenue', 'expenses', 'profit', 'margin_percent']);
-    toast({ title: 'Report downloaded', description: 'Consolidated report (CSV) saved.', variant: 'default' });
+    const filename = `consolidated_report_${format(now, 'yyyy-MM-dd')}.csv`;
+    const { url } = exportToCsv(rows, filename, ['period', 'revenue', 'expenses', 'profit', 'margin_percent']);
+    if (url) {
+      setConsolidatedFallbackUrl(url);
+      setConsolidatedFallbackName(filename);
+    }
+    toast({ title: 'Report downloaded', description: 'Consolidated report (CSV) saved. Use the Download button if the file didn\'t save automatically.', variant: 'default' });
   };
 
   return (
@@ -266,10 +280,20 @@ export default function Reports() {
                   Unified revenue, expenses, profit and margin across periods. Data from invoices and expenses.
                 </p>
               </div>
-              <Button variant="outline" size="sm" className="rounded-lg gap-2" onClick={handleExportConsolidated}>
-                <Download className="h-4 w-4" />
-                Download consolidated (CSV)
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" className="rounded-lg gap-2" onClick={handleExportConsolidated}>
+                  <Download className="h-4 w-4" />
+                  Download consolidated (CSV)
+                </Button>
+                {consolidatedFallbackUrl && (
+                  <Button variant="secondary" size="sm" className="rounded-lg gap-2" asChild>
+                    <a href={consolidatedFallbackUrl} download={consolidatedFallbackName}>
+                      <Download className="h-4 w-4" />
+                      Download
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>

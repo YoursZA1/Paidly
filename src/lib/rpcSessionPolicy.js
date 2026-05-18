@@ -3,6 +3,7 @@ import { refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
 import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { getStableSession, invalidateSessionSnapshot } from "@/core/auth/SessionCoordinator";
 
 function getResponseStatus(resultOrError) {
   if (!resultOrError) return null;
@@ -114,8 +115,9 @@ export async function getSessionAccessTokenOrHandleUnauthorized(reason = "missin
     return null;
   }
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token;
+    // Use the single-flight snapshot cache so concurrent RPC calls don't stack raw getSession() reads.
+    const session = await getStableSession();
+    const token = session?.access_token;
     if (token) return token;
   } catch {
     // continue to refresh path
@@ -126,8 +128,10 @@ export async function getSessionAccessTokenOrHandleUnauthorized(reason = "missin
     const refreshed = await refreshSupabaseSessionWithRecovery();
     if (refreshed?.ok) {
       trackSessionTelemetry("session_refresh_result", { source: "token_acquisition", result: "ok" });
-      const { data } = await supabase.auth.getSession();
-      const token = data?.session?.access_token;
+      // Bust the snapshot cache so we read the freshly-rotated token, not the stale snapshot.
+      invalidateSessionSnapshot();
+      const session = await getStableSession();
+      const token = session?.access_token;
       if (token) return token;
     } else if (refreshed?.fatal) {
       trackSessionTelemetry("session_refresh_result", { source: "token_acquisition", result: "fatal" });

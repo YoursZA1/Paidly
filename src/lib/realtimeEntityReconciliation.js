@@ -134,7 +134,7 @@ export function reconcilePaymentRealtimeEvent(queryClient, scopeKey, payload) {
     }
   }
 
-  queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+  scheduleInvalidation(queryClient, ["cashflow-page"]);
   paidlyDataLayerLog("realtime_patch_payments", { eventType, invoiceId });
   return true;
 }
@@ -153,7 +153,7 @@ export function reconcilePaymentRealtimeEvent(queryClient, scopeKey, payload) {
  */
 export function reconcileExpenseRealtimeEvent(queryClient, payload) {
   const eventType = String(payload?.eventType || "").toLowerCase();
-  queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+  scheduleInvalidation(queryClient, ["cashflow-page"]);
   paidlyDataLayerLog("realtime_patch_expenses", { eventType });
   return true;
 }

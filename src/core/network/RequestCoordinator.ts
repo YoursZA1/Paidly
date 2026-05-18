@@ -69,20 +69,28 @@ export class RequestCoordinator {
     });
   }
 
-  async withSlot<T>(fn: () => Promise<T>): Promise<T> {
-    await this.waitUntilUnpaused();
+  async acquireSlot(): Promise<void> {
     while (this.active >= this.maxConcurrent) {
       await new Promise<void>((resolve) => {
         this.waitQueue.push(resolve);
       });
     }
     this.active += 1;
+  }
+
+  releaseSlot(): void {
+    if (this.active > 0) this.active -= 1;
+    const next = this.waitQueue.shift();
+    if (next) next();
+  }
+
+  async withSlot<T>(fn: () => Promise<T>): Promise<T> {
+    await this.waitUntilUnpaused();
+    await this.acquireSlot();
     try {
       return await fn();
     } finally {
-      this.active -= 1;
-      const next = this.waitQueue.shift();
-      if (next) next();
+      this.releaseSlot();
     }
   }
 

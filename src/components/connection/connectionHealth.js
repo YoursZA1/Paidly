@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 const HEALTH_TIMEOUT_MS = 4500;
 
@@ -31,20 +32,23 @@ function isLikelyNetworkError(err) {
  */
 export async function runSupabaseHealthCheck() {
   try {
-    const { data: sessionData, error: sessionError } = await withTimeout(
-      supabase.auth.getSession(),
-      HEALTH_TIMEOUT_MS,
-      "session_reconnecting"
-    );
-
-    if (sessionError) {
-      if (isLikelyNetworkError(sessionError)) {
-        return { ok: false, error: sessionError };
+    // Route through SessionCoordinator to deduplicate concurrent focus/online checks.
+    // getStableSession uses the in-memory snapshot (5s TTL) so multiple simultaneous
+    // health probes in the same event turn hit Supabase at most once.
+    let uid = null;
+    try {
+      const session = await withTimeout(
+        getStableSession(),
+        HEALTH_TIMEOUT_MS,
+        "session_reconnecting"
+      );
+      uid = session?.user?.id ?? null;
+    } catch (sessionErr) {
+      if (isLikelyNetworkError(sessionErr)) {
+        return { ok: false, error: sessionErr instanceof Error ? sessionErr : new Error(String(sessionErr)) };
       }
-      // Auth errors (e.g. invalid refresh) — still "reachable"; treat as connected for network indicator
+      // Auth errors (e.g. invalid refresh token) — still "reachable"
     }
-
-    const uid = sessionData?.session?.user?.id;
     if (uid) {
       const { error: profileError } = await withTimeout(
         supabase.from("profiles").select("id").eq("id", uid).limit(1).maybeSingle(),

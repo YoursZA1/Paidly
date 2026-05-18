@@ -45,9 +45,11 @@ export default function SyncEngine() {
   const markFailed = useSyncQueueStore((s) => s.markFailed);
   const retryAllFailed = useSyncQueueStore((s) => s.retryAllFailed);
   const replaceOptimisticInvoice = useAppStore((s) => s.replaceOptimisticInvoice);
-  const fetchAllFromStore = useAppStore((s) => s.fetchAll);
   const runningRef = useRef(false);
   const lastSyncQueueSessionWakeMsRef = useRef(0);
+  // Stable ref so runOnce doesn't close over user?.id and recreate the interval on every auth change.
+  const userIdRef = useRef(user?.id);
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
 
   // On mount: reset any jobs that were "processing" when the app last crashed,
   // and remove jobs from other users that may share the same localStorage key.
@@ -131,17 +133,23 @@ export default function SyncEngine() {
         globalStoreRefreshTimerRef.current = null;
         await whenDocumentVisible();
         if (!hasActiveSession()) return;
-        const isAdmin = user?.role === "admin";
-        if (isAdmin) {
+        if (user?.role === "admin") {
           notifyAdminDashboardRealtimeStale();
           return;
         }
-        void fetchAllFromStore(user).finally(() => {
-          dispatchAppFetchAllSettled();
-        });
+        // Targeted invalidation — TanStack refetches lazily on next render,
+        // avoiding a synchronous full-store network call on every fallback path.
+        const scopeKey = user?.id ?? null;
+        invalidateInvoiceDomain(queryClient, { scopeKey });
+        // skipInvoiceCascade: invoices already invalidated above
+        invalidateClientDomain(queryClient, { scopeKey, skipInvoiceCascade: true });
+        queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
+        dispatchAppFetchAllSettled();
       })();
     }, REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
-  }, [user, fetchAllFromStore]);
+  }, [user, queryClient]);
 
   const scheduleEntityInvalidation = useCallback(
     (entity, payload = null, role = null) => {
@@ -205,7 +213,7 @@ export default function SyncEngine() {
           });
         }
         if (hasActiveSession()) {
-          const scopeKey = user?.id ?? null;
+          const scopeKey = userIdRef.current ?? null;
           if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
             invalidateInvoiceDomain(queryClient, { scopeKey });
           } else if (nextJob.type === "UPDATE_CLIENT") {
@@ -219,7 +227,7 @@ export default function SyncEngine() {
       runningRef.current = false;
       useRuntimeCoordinator.getState().setSyncActive(false);
     }
-  }, [markDone, markFailed, markProcessing, queryClient, replaceOptimisticInvoice, user?.id]);
+  }, [markDone, markFailed, markProcessing, queryClient, replaceOptimisticInvoice]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -302,19 +310,19 @@ export default function SyncEngine() {
         await whenDocumentVisible();
         if (!user?.id) return;
         if (!hasActiveSession()) return;
-        void fetchAllFromStore(user).finally(() => {
-          dispatchAppFetchAllSettled();
-        });
         const scopeKey = user?.id ?? null;
         invalidateInvoiceDomain(queryClient, { scopeKey });
+        // skipInvoiceCascade: invoices already invalidated above
+        invalidateClientDomain(queryClient, { scopeKey, skipInvoiceCascade: true });
         queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
-        invalidateClientDomain(queryClient, { scopeKey });
+        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
         queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
+        dispatchAppFetchAllSettled();
       })();
     };
     window.addEventListener(WAKE_RECOVERY_RESYNC, onWakeResync);
     return () => window.removeEventListener(WAKE_RECOVERY_RESYNC, onWakeResync);
-  }, [fetchAllFromStore, queryClient, user]);
+  }, [queryClient, user]);
 
   return null;
 }

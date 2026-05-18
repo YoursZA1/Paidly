@@ -45,8 +45,11 @@ On a single tab focus event, up to 4 calls could fire within milliseconds:
 |--------|-----|
 | SyncEngine pre-flight guards | `hasActiveSession()` — synchronous, no GoTrue overhead |
 | SyncEngine runOnce (needs null-session detection) | `getStableSession()` — needs the actual session object |
-| connectionHealth.js | Keep direct `supabase.auth.getSession()` — health check must bypass cache |
-| AuthContext lifecycle | Keep direct calls — auth provider owns the session lifecycle |
+| connectionHealth.js | `getStableSession()` — UID only used for PostgREST probe; 5s cache acceptable; deduplicates concurrent focus/online events |
+| rpcSessionPolicy.js (hot path) | `getStableSession()` for pre-flight check; `invalidateSessionSnapshot()` + `getStableSession()` after rotation |
+| PaymentReminderService (interval) | `getStableSession()` — avoids raw call on every reminder interval tick |
+| AuthContext lifecycle | Direct `supabase.auth.getSession()` — auth provider owns session lifecycle; must not use its own cache |
+| supabaseAuthRefresh.js | Direct calls — refresh engine itself; cache would be stale by definition |
 
 ### What `hasActiveSession()` does NOT guarantee
 

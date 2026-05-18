@@ -1,21 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CreditCard, UserCheck, ClipboardList, Settings, ChevronLeft, ChevronRight, ScrollText, LogOut, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-
-const NAV_ITEMS = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin-v2' },
-  { label: 'Users', icon: Users, path: '/admin-v2/users' },
-  { label: 'Messages', icon: MessageCircle, path: '/admin-v2/messages' },
-  { label: 'Subscriptions', icon: CreditCard, path: '/admin-v2/subscriptions' },
-  { label: 'Affiliates', icon: UserCheck, path: '/admin-v2/affiliates' },
-  { label: 'Waitlist', icon: ClipboardList, path: '/admin-v2/waitlist' },
-  { label: 'Audit Log', icon: ScrollText, path: '/admin-v2/audit-log' },
-  { label: 'Settings', icon: Settings, path: '/admin-v2/settings' },
-];
+import { getAdminNavForRole } from '@/lib/adminNavConfig';
 
 export default function Sidebar({ collapsed, setCollapsed }) {
   const location = useLocation();
@@ -47,7 +37,7 @@ export default function Sidebar({ collapsed, setCollapsed }) {
       </div>
 
       <nav className="flex-1 py-4 px-3 space-y-1.5">
-        {NAV_ITEMS.map((item) => {
+        {getAdminNavForRole(user?.role ?? '').map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link

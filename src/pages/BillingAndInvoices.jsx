@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useMySubscriptionsQuery } from "@/hooks/useMySubscriptionsQuery";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
-import { PLANS, normalizePlanSlug } from "@shared/plans.js";
+import { PLANS, normalizePlanSlug } from "@/lib/plans.js";
 import { priceForSlug } from "@/data/paidlySubscriptionPlans";
 import {
   describeSubscriptionState,

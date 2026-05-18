@@ -125,7 +125,12 @@ installBackendApiResilience(backendApi);
 
 backendApi.interceptors.request.use(async (config) => {
   if (!config?.__paidlyCritical) {
-    await getSharedRequestCoordinator().waitUntilUnpaused();
+    const coordinator = getSharedRequestCoordinator();
+    await coordinator.waitUntilUnpaused();
+    // Acquire a concurrency slot so backend API calls are bounded along with Supabase RPC.
+    // The slot is released in the response/error interceptor via __paidlySlotAcquired flag.
+    await coordinator.acquireSlot();
+    config.__paidlySlotAcquired = true;
   }
   if (!isRecoveryCircuitOpen()) return config;
   await triggerUnauthorizedSession("terminal_auth_state", {
@@ -149,8 +154,18 @@ backendApi.interceptors.request.use(async (config) => {
 });
 
 backendApi.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.config?.__paidlySlotAcquired) {
+      getSharedRequestCoordinator().releaseSlot();
+    }
+    return response;
+  },
   async (error) => {
+    if (error?.config?.__paidlySlotAcquired) {
+      getSharedRequestCoordinator().releaseSlot();
+      // Prevent double-release on retry
+      error.config.__paidlySlotAcquired = false;
+    }
     const status = error.response?.status;
     const cfg = error.config;
     if (status === 401 && cfg && !cfg.__paidlySkipAuthRedirect) {

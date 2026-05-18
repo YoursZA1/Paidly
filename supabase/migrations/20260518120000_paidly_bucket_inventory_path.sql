@@ -7,9 +7,9 @@
 
 DROP POLICY IF EXISTS "Users can upload paidly assets" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update paidly assets" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete paidly assets"  ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete paidly assets" ON storage.objects;
 
--- INSERT: user must be authenticated and path must be logo-*, document-logos/*, or inventory/<own-uid>/*
+-- INSERT: logo, document, or own inventory folder
 CREATE POLICY "Users can upload paidly assets"
 ON storage.objects
 FOR INSERT
@@ -19,10 +19,7 @@ WITH CHECK (
   AND (
     name LIKE 'logo-%'
     OR name LIKE 'document-logos/%'
-    OR (
-      name LIKE 'inventory/%'
-      AND (storage.foldername(name))[2] = (SELECT auth.uid())::text
-    )
+    OR name LIKE 'inventory/' || auth.uid()::text || '/%'
   )
 );
 

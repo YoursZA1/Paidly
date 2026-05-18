@@ -1,13 +1,18 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sharedDir = path.resolve(__dirname, "shared");
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@shared": path.resolve(__dirname, "./shared"),
+      "@shared": sharedDir,
+      "@shared/plans.js": path.join(sharedDir, "plans.js"),
       // Tests only: server code imports `resend`; Vitest often does not apply vi.mock there.
       resend: path.resolve(__dirname, "./tests/mocks/resend-test-double.js"),
     },

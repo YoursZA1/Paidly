@@ -26,13 +26,17 @@ export function invalidateInvoiceDomain(queryClient, opts = {}) {
 
 /**
  * @param {import('@tanstack/react-query').QueryClient} queryClient
- * @param {{ scopeKey?: string | null }} [opts]
+ * @param {{ scopeKey?: string | null, skipInvoiceCascade?: boolean }} [opts]
+ *   skipInvoiceCascade — when true, only invalidates client queries.
+ *   Use when the caller has already called invalidateInvoiceDomain separately to avoid double-invalidation.
  */
 export function invalidateClientDomain(queryClient, opts = {}) {
-  const { scopeKey } = opts;
+  const { scopeKey, skipInvoiceCascade = false } = opts;
   if (scopeKey) {
     queryClient.invalidateQueries({ queryKey: ["client-list", scopeKey], exact: false });
   }
   queryClient.invalidateQueries({ queryKey: ["clients"], exact: false });
-  invalidateInvoiceDomain(queryClient, { scopeKey });
+  if (!skipInvoiceCascade) {
+    invalidateInvoiceDomain(queryClient, { scopeKey });
+  }
 }

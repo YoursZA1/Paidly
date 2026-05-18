@@ -6,6 +6,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 export async function createActivityNotification(userId, message) {
   try {
@@ -30,8 +31,8 @@ export async function createActivityNotification(userId, message) {
 /** Create a notification for the current user (e.g. after they record a payment). RLS allows only user_id = auth.uid(). */
 export async function notifyCurrentUser(message) {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const userId = session?.session?.user?.id;
+    const session = await getStableSession();
+    const userId = session?.user?.id;
     if (!userId) return false;
     return createActivityNotification(userId, message);
   } catch {
@@ -60,8 +61,8 @@ export async function markNotificationRead(notificationId) {
 
 export async function markAllNotificationsReadForCurrentUser() {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const userId = session?.session?.user?.id;
+    const session = await getStableSession();
+    const userId = session?.user?.id;
     if (!userId) return false;
     const { error } = await supabase
       .from("notifications")

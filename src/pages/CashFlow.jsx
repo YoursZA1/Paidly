@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getFocusPolicy } from "@/core/query/queryFocusPolicy";
 import { Expense, Invoice, Payment } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
 import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
+import { triggerDownload } from "@/utils/downloadFile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -97,7 +99,7 @@ export default function CashFlowPage() {
         queryFn: () => fetchCashFlowPageData(profile),
         staleTime: 5 * 60 * 1000,
         refetchOnMount: false,
-        refetchOnWindowFocus: true,
+        ...getFocusPolicy("cashflow-page"),
         initialData: hasStoreData
             ? {
                 expenses: storeExpensesForInit ?? [],
@@ -137,8 +139,13 @@ export default function CashFlowPage() {
     const [expenseFilters, setExpenseFilters] = useState({});
     const [activeTab, setActiveTab] = useState('overview');
     const [isExportingExpenses, setIsExportingExpenses] = useState(false);
+    const [expenseFallbackUrl, setExpenseFallbackUrl] = useState(null);
+    const [expenseFallbackName, setExpenseFallbackName] = useState("Expense_export.csv");
     const [isImportingExpenses, setIsImportingExpenses] = useState(false);
     const expenseFileInputRef = useRef(null);
+    const expenseFallbackUrlRef = useRef(null);
+    expenseFallbackUrlRef.current = expenseFallbackUrl;
+    useEffect(() => () => { if (expenseFallbackUrlRef.current) URL.revokeObjectURL(expenseFallbackUrlRef.current); }, []);
 
     const invalidateCashFlow = () => queryClient.invalidateQueries({ queryKey: CASHFLOW_PAGE_QUERY_KEY });
 
@@ -154,6 +161,10 @@ export default function CashFlowPage() {
 
     const handleExportExpenseCsv = async () => {
         setIsExportingExpenses(true);
+        if (expenseFallbackUrl) {
+            URL.revokeObjectURL(expenseFallbackUrl);
+            setExpenseFallbackUrl(null);
+        }
         try {
             const list = await Expense.list("-date");
             if (!list?.length) {
@@ -162,13 +173,11 @@ export default function CashFlowPage() {
             }
             const csv = expensesToCsv(list);
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "Expense_export.csv";
-            a.click();
-            URL.revokeObjectURL(url);
-            toast({ title: "Export complete", description: `${list.length} expense(s) exported.`, variant: "default" });
+            const filename = "Expense_export.csv";
+            const url = triggerDownload(blob, filename);
+            setExpenseFallbackUrl(url);
+            setExpenseFallbackName(filename);
+            toast({ title: "Export complete", description: `${list.length} expense(s) exported. Use the Download button if the file didn't save automatically.`, variant: "default" });
         } catch (error) {
             toast({ title: "Export failed", description: error?.message || "Failed to export.", variant: "destructive" });
         }
@@ -455,6 +464,14 @@ export default function CashFlowPage() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        {expenseFallbackUrl && (
+                          <Button variant="secondary" className="gap-2" asChild>
+                            <a href={expenseFallbackUrl} download={expenseFallbackName}>
+                              <Download className="w-4 h-4" />
+                              Download
+                            </a>
+                          </Button>
+                        )}
                         <Button variant="outline" className="gap-2" onClick={() => setShowReceiptScanner(true)}>
                           <ScanLine className="w-4 h-4" /> Scan Receipt
                         </Button>

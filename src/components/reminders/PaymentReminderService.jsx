@@ -4,13 +4,13 @@ import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
-import { supabase } from '@/lib/supabaseClient';
 import { isAbortError } from '@/utils/retryOnAbort';
+import { getStableSession } from '@/core/auth/SessionCoordinator';
 
 class PaymentReminderService {
     static async checkAndSendReminders(profileOverride = null) {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = await getStableSession();
             if (!session?.user) {
                 return;
             }
@@ -175,7 +175,7 @@ class PaymentReminderService {
      */
     static async getPendingReminders() {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = await getStableSession();
             if (!session?.user) return [];
 
             const reminders = await PaymentReminder.filter({ email_sent: false });

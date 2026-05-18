@@ -6,6 +6,7 @@
  * heartbeat validation with post-subscribe grace — see docs/Paidly-Caching-Architecture.md Layer 10.
  */
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { recordAndCheckReconnectRate } from "@/core/runtime/RuntimeBudgetCoordinator";
 import {
   REALTIME_RECOVERY_IDS,
   registerRealtimeRecoveryHandler,
@@ -841,6 +842,9 @@ function runChannelRebuild(origin, opts = {}) {
   setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.RECONNECTING, origin);
   paidlyRealtimeLog("reconnect_started", { origin, subscribeGen });
   recordRealtimeReconnect();
+  // Cross-system budget: feed every rebuild into the shared rate tracker so diagnostics
+  // and future budget enforcement have accurate reconnect pressure data.
+  recordAndCheckReconnectRate();
 
   destroyMainChannel(origin);
   try {

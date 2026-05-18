@@ -6,34 +6,33 @@
  * here instead of setting refetchOnWindowFocus: true inline.
  *
  * Tiers:
- *   LIVE  — refetch on every focus (notifications, active invoice status)
- *   EAGER — refetch on focus if data is older than staleTime (dashboards)
- *   NONE  — never refetch on focus (settings, static lists)
+ *   LIVE — refetch on every focus (notifications, cashflow, active invoice status)
+ *   NONE — never refetch on focus (settings, static lists) — the default
+ *
+ * NOTE: TanStack Query v5 does not distinguish "refetch only when past staleTime"
+ * from "always refetch" for window focus events. Both map to refetchOnWindowFocus: true.
+ * Use staleTime on the query itself to control background freshness; focus refetch is
+ * an all-or-nothing flag.
  */
 
 export const FocusRefetch = {
-  /** Always refetch when the tab regains focus. For live notification feeds. */
+  /** Always refetch when the tab regains focus. */
   LIVE: { refetchOnWindowFocus: true } as const,
 
-  /**
-   * Refetch on focus only when data is past staleTime.
-   * Equivalent to the TanStack default — use for volatile aggregates.
-   */
-  EAGER: { refetchOnWindowFocus: true } as const,
-
-  /** Never refetch on focus. Default for all queries — opt in above if needed. */
+  /** Never refetch on focus. Default for all queries — opt in via LIVE if needed. */
   NONE: { refetchOnWindowFocus: false } as const,
 } as const;
 
 export type FocusRefetchPolicy = (typeof FocusRefetch)[keyof typeof FocusRefetch];
 
 /**
- * Tables / query families that are eligible for live focus refresh.
- * All others default to NONE.
+ * Query root keys eligible for live focus refresh.
+ * Add here instead of setting refetchOnWindowFocus: true inline in components.
  */
 export const FOCUS_LIVE_QUERY_ROOTS = new Set([
   "notifications",
   "admin-messages",
+  "cashflow-page",
 ]);
 
 /**

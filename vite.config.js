@@ -1,6 +1,11 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const sharedDir = path.resolve(__dirname, 'shared')
+const srcDir = path.resolve(__dirname, 'src')
 
 // https://vite.dev/config/
 // Environment: Vite loads .env, .env.local, .env.[mode] from project root.
@@ -43,10 +48,11 @@ export default defineConfig(async ({ mode }) => {
       return plugins;
     })(),
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@shared": path.resolve(__dirname, "./shared"),
-      },
+      alias: [
+        { find: '@', replacement: srcDir },
+        { find: '@shared', replacement: sharedDir },
+        { find: '@shared/plans.js', replacement: path.join(sharedDir, 'plans.js') },
+      ],
     },
     envDir: '.',
     server: {

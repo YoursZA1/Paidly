@@ -5,6 +5,7 @@
 
 import { Invoice, Quote, Client, BankingDetail, DocumentSend, MessageLog, User } from '@/api/entities';
 import { supabase } from '@/lib/supabaseClient';
+import { getStableSession } from '@/core/auth/SessionCoordinator';
 import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 import { createPageUrl } from '@/utils';
@@ -206,9 +207,8 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
   const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
   if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const accessToken = sessionData?.session?.access_token;
+  const session = await getStableSession();
+  const accessToken = session?.access_token;
   if (!accessToken) throw new Error('You must be logged in to send emails.');
 
   const subject = `Quote #${quoteForSend.quote_number} from ${quoteForSend.owner_company_name || userData?.company_name || 'Us'}`;

@@ -113,9 +113,15 @@ Auth recovery does NOT pause:
 
 ---
 
-## Planned Improvements
+## Completed Improvements (this session)
+
+- [x] `scheduleInvalidation()` used in all realtime reconcilers (`realtimeEntityReconciliation.js`, `realtimeInvoiceReconciliation.js`, `realtimeClientReconciliation.js`)
+- [x] `scheduleGlobalStoreRefresh` fallback replaced with targeted `invalidateQueries` per entity domain — eliminates full `fetchAllFromStore` on unrecognized event types
+- [x] `getStableSession()` adopted in `connectionHealth.js`, `rpcSessionPolicy.js`, `PaymentReminderService.jsx`
+- [x] `queryFocusPolicy.ts` adopted in `CashFlow.jsx` via `getFocusPolicy("cashflow-page")`
+
+## Remaining Improvements
 
 - [ ] Wrap Axios backend client in `RequestCoordinator.withSlot()` for unified concurrency
-- [ ] Add `scheduleInvalidation()` to realtime reconcilers for burst protection
 - [ ] Expose `RuntimeBudgetCoordinator.getRuntimeBudgetSnapshot()` in dev overlay
 - [ ] Add per-route refetch budgets for heavy dashboard pages

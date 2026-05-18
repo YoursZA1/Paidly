@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Wifi, WifiOff, Loader2, RefreshCw } from "lucide-react";
-import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,7 +56,7 @@ export default function ConnectionStatusIndicator({ className }) {
     setRetryBusy(true);
     setConnectionState({ status: CONNECTION_STATUS.RECONNECTING, lastError: null });
     try {
-      await supabase.auth.getSession();
+      await getStableSession();
       const { ok, error } = await runSupabaseHealthCheck();
       if (ok) {
         // Route through ConnectionManager.markConnected so degradedSince + pending timers are

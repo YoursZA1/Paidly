@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PLANS, PLAN_SLUGS } from "@shared/plans.js";
+import { PLANS, PLAN_SLUGS } from "@/lib/plans.js";
 import { payfastAmountZar } from "@/data/paidlySubscriptionPlans";
 import PayFastSubscriptionForm from "./PayFastSubscriptionForm";
 

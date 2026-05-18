@@ -40,7 +40,7 @@ Current behavior:
 realtime event → reconciler patches cache surgically → returns true → no fetchAll
 ```
 
-The only path that still calls `fetchAllFromStore` is the wake recovery handler (`paidly:wake-recovery-resync` event), which fires after a long background sleep. This is intentional: after an extended absence, a full resync is safer than trusting potentially-stale patches.
+`fetchAllFromStore` is no longer called anywhere in the realtime/sync path. The wake recovery handler (`paidly:wake-recovery-resync`) was the last holdout; it now issues the same set of targeted `invalidateQueries` calls as the fallback path. TanStack Query refetches stale data lazily on the next render of the affected component.
 
 ---
 
