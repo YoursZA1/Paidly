@@ -5,6 +5,7 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
+  Package,
   Receipt,
   Settings,
   UserPlus,
@@ -88,6 +89,21 @@ const guides = [
     link: { label: "Dashboard", to: createPageUrl("Dashboard") },
   },
   {
+    id: "inventory",
+    title: "Products & inventory",
+    icon: Package,
+    summary: "Manage your product catalog, track stock, and add services for invoice line items.",
+    steps: [
+      "Go to Manage Products. Click Add new product to create a physical product with SKU, cost, price, and opening stock.",
+      "Click Add service to add a service, labor rate, material, or expense — these appear as line items on invoices and quotes.",
+      "Use the Category filter and search to find items quickly. Edit any row to update pricing or stock levels.",
+      "Open the Tools panel to record a manual sale, receive stock, or view stock movement history.",
+      "Scan a barcode with a USB scanner or the camera icon to instantly look up and sell or receive a product.",
+      "Create a delivery order to track incoming stock from a supplier — marking it delivered automatically updates stock on hand.",
+    ],
+    link: { label: "Manage Products", to: createPageUrl("Services") },
+  },
+  {
     id: "send",
     title: "Sending & reminders",
     icon: Mail,
@@ -102,9 +118,11 @@ const guides = [
 ];
 
 const tips = [
-  "Use the Services catalog so line items auto-fill rate and description on new documents.",
+  "Products and services share one catalog — anything you add appears as a line-item option on every new invoice or quote.",
   "Recurring invoices automate repeat billing for retainers and subscriptions.",
+  "Scan a barcode with any USB wedge scanner on the Manage Products page to instantly record a sale or receive stock.",
   "Works offline: draft changes sync when you are back online (mobile-friendly).",
+  "Set a reorder level on products and Paidly flags low-stock items so you never run out unexpectedly.",
   "Invite your team from Settings when you need shared access on one organization.",
 ];
 
