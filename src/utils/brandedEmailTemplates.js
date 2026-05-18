@@ -14,6 +14,7 @@ import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
  *   primaryHex?: string,
  *   secondaryHex?: string,
  *   pixelUrl?: string,
+ *   logoUrl?: string,
  * }} opts
  */
 export function buildBrandedEmailDocumentHtml(opts) {
@@ -27,12 +28,14 @@ export function buildBrandedEmailDocumentHtml(opts) {
     primaryHex = '#f24e00',
     secondaryHex = '#ff7c00',
     pixelUrl = '',
+    logoUrl = '',
   } = opts;
 
   const pre = escapeHtml(preheader);
   const safeTitle = escapeHtml(title);
   const safeSub = escapeHtml(subtitle);
   const safeCompany = escapeHtml(companyName);
+  const safeLogoUrl = logoUrl && logoUrl.startsWith('https://') ? escapeHtml(logoUrl) : '';
 
   return `
 <!DOCTYPE html>
@@ -59,6 +62,7 @@ export function buildBrandedEmailDocumentHtml(opts) {
           </tr>
           <tr>
             <td style="padding:28px 24px 8px;color:#18181b;font-size:15px;line-height:1.6;">
+              ${safeLogoUrl ? `<div style="margin:0 0 20px;"><img src="${safeLogoUrl}" alt="${safeCompany}" style="max-width:160px;max-height:56px;display:block;border:0;outline:none;" /></div>` : ''}
               ${innerHtml}
             </td>
           </tr>

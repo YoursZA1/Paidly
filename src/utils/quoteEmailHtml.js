@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { buildBrandedEmailDocumentHtml } from "@/utils/brandedEmailTemplates";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { escapeHtml, sanitizeHttpUrl } from "@/utils/htmlSecurity";
+import { getLogo } from "@/services/AssetService";
 
 /**
  * Branded HTML body for quote emails (used by QuoteEmailPreviewModal and sendQuotePdfEmailToClient).
@@ -26,6 +27,9 @@ export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl
         parseDocumentBrandHex(quote?.document_brand_secondary) ||
         parseDocumentBrandHex(company?.document_brand_secondary) ||
         "#ff7c00";
+    const rawLogoPath = company?.logo_url || company?.company_logo_url || '';
+    const resolvedLogo = rawLogoPath ? getLogo(rawLogoPath) : '';
+    const logoUrl = resolvedLogo && resolvedLogo.startsWith('https://') ? resolvedLogo : '';
 
     const base = typeof window !== "undefined" ? window.location.origin : "";
     const safeCta = sanitizeHttpUrl(ctaHref, base) || "#";
@@ -64,5 +68,6 @@ export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl
         primaryHex: primary,
         secondaryHex: secondary,
         pixelUrl,
+        logoUrl,
     });
 }

@@ -25,7 +25,12 @@ export default async function authSignUpHandler(req, res) {
       logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo } = parsed;
+    const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo, hp } = parsed;
+
+    if (hp) {
+      logSecurity("warn", "honeypot_triggered", { ip, path: "/api/auth/sign-up" });
+      return res.status(400).json({ error: "Invalid request" });
+    }
 
     const slot = await consumeSignupSlot(ip);
     if (!slot.ok) {

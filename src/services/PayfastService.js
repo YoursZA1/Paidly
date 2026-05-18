@@ -1,4 +1,5 @@
 import { formatHttpStatusMessage } from "@/utils/apiErrorText";
+import { supabase } from "@/lib/supabaseClient";
 
 /**
  * PayFast subscription / once-off checkout
@@ -166,12 +167,19 @@ const PayfastService = {
         : {})
     };
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("You must be signed in to start a subscription.");
+    }
+
     let response;
     try {
       response = await fetch(`${getPayfastApiBase()}/api/payfast/subscription`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
         },
         body: JSON.stringify(payload)
       });

@@ -4,6 +4,9 @@ const storage = windowObj.localStorage;
 
 const toSnakeCase = (str) => str.replace(/([A-Z])/g, '_$1').toLowerCase();
 
+// Cap URL-sourced values to prevent localStorage pollution from arbitrarily large params.
+const MAX_PARAM_LEN = 8192;
+
 const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl = false } = {}) => {
   if (isNode) return defaultValue;
 
@@ -19,8 +22,9 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
   }
 
   if (searchParam) {
-    storage.setItem(storageKey, searchParam);
-    return searchParam;
+    const safe = String(searchParam).slice(0, MAX_PARAM_LEN);
+    storage.setItem(storageKey, safe);
+    return safe;
   }
 
   if (defaultValue) {

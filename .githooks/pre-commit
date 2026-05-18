@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Paidly pre-commit secret scanner
+#
+# Blocks commits that contain patterns matching live API keys or credentials.
+# .env files are gitignored, so this catches secrets accidentally added to source files.
+#
+# Activate once per machine:
+#   git config core.hooksPath .githooks
+#
+# Bypass (false positive only — never for real secrets):
+#   git commit --no-verify
+
+set -euo pipefail
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+[ -z "$STAGED" ] && exit 0
+
+FOUND=0
+
+check_pattern() {
+  local file="$1" label="$2" pattern="$3"
+  if git show ":$file" 2>/dev/null | grep -qE "$pattern" 2>/dev/null; then
+    echo "  BLOCKED  $file  [$label]"
+    FOUND=1
+  fi
+}
+
+for file in $STAGED; do
+  # Skip files that legitimately contain key names without values
+  case "$file" in
+    *.example|*.sample|*.md|*.txt|*.toml) continue ;;
+    .githooks/*|.gitleaks*|CHANGELOG*|LICENSE*) continue ;;
+  esac
+
+  [ -f "$file" ] || continue
+
+  # Resend email API key (re_<32+ chars>)
+  check_pattern "$file" "resend-api-key"         're_[A-Za-z0-9_-]{20,}'
+  # Supabase JWT — anon or service role (eyJhbGci prefix)
+  check_pattern "$file" "supabase-jwt"            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.'
+  # Stripe live secret key
+  check_pattern "$file" "stripe-live-key"         'sk_live_[A-Za-z0-9]{20,}'
+  # PayFast merchant key or passphrase in an assignment
+  check_pattern "$file" "payfast-merchant-key"    'MERCHANT_KEY=[A-Za-z0-9]{8,}'
+  check_pattern "$file" "payfast-passphrase"      'PASSPHRASE=[A-Za-z0-9@#!%&]{6,}'
+  # Cloudflare Turnstile secret (not the public site key)
+  check_pattern "$file" "turnstile-secret"        'TURNSTILE_SECRET_KEY=[A-Za-z0-9_-]{20,}'
+  # OpenAI / Anthropic keys
+  check_pattern "$file" "openai-key"              'sk-[A-Za-z0-9]{40,}'
+  check_pattern "$file" "anthropic-key"           'sk-ant-[A-Za-z0-9_-]{20,}'
+  # Private PEM key block
+  check_pattern "$file" "pem-private-key"         'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY'
+done
+
+if [ "$FOUND" -eq 1 ]; then
+  echo ""
+  echo "Commit blocked — possible credentials found in staged files."
+  echo "Move secrets to a .env file (all .env* files are gitignored)."
+  echo "False positive? Bypass with: git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0

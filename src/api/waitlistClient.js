@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { backendApi } from "@/api/backendClient";
 import { alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
+import { isValidEmail } from "@/utils/inputSanitization";
 
 /**
  * Insert waitlist row via Supabase (anon key + RLS insert policy).
@@ -13,7 +14,12 @@ export async function submitWaitlistSignup(payload) {
   const email = String(payload.email || "")
     .trim()
     .toLowerCase();
-  const name = payload.name != null ? String(payload.name).trim() : "";
+
+  if (!isValidEmail(email)) {
+    return { ok: false, error: "Please enter a valid email address." };
+  }
+
+  const name = payload.name != null ? String(payload.name).trim().slice(0, 200) : "";
   const source = payload.source != null ? String(payload.source).trim() : "landing";
   const turnstileToken = String(payload.turnstileToken || "").trim();
   const turnstileSiteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();

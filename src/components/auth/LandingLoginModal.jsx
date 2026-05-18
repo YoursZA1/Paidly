@@ -26,6 +26,8 @@ import {
 } from "@/utils/loginRateLimit";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 import { User } from "@/api/entities";
+import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
+import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -42,6 +44,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [honeypot, setHoneypot] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
@@ -50,6 +53,8 @@ export default function LandingLoginModal({ open, onOpenChange }) {
   const [showPassword, setShowPassword] = useState(false);
   const submitLockRef = useRef(false);
   const resendLockRef = useRef(false);
+
+  const turnstile = useTurnstileChallenge({ requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNIN" });
 
   const closeAndNavigate = (to) => {
     onOpenChange(false);
@@ -68,6 +73,9 @@ export default function LandingLoginModal({ open, onOpenChange }) {
     if (isLoading) return;
 
     setError("");
+
+    if (honeypot) return;
+
     const normalizedEmail = email.trim().toLowerCase();
     const throttle = getLoginThrottleState(normalizedEmail);
     if (throttle.blocked) {
@@ -77,12 +85,17 @@ export default function LandingLoginModal({ open, onOpenChange }) {
       return;
     }
 
+    if (turnstile.required && !turnstile.ready) {
+      setError("Please complete the security check before signing in.");
+      return;
+    }
+
     if (submitLockRef.current) return;
     submitLockRef.current = true;
     setIsLoading(true);
 
     try {
-      await login({ email: normalizedEmail, password });
+      await login({ email: normalizedEmail, password, turnstileToken: turnstile.token });
       onOpenChange(false);
       if (shouldRedirectToAppAfterAuth()) {
         window.location.href = getAppDashboardUrl();
@@ -94,6 +107,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
       clearLoginFailures(normalizedEmail);
     } catch (err) {
       recordLoginFailure(normalizedEmail);
+      turnstile.reset();
       if (
         err?.message?.toLowerCase().includes("email not confirmed") ||
         err?.message?.toLowerCase().includes("confirm your email")
@@ -158,6 +172,12 @@ export default function LandingLoginModal({ open, onOpenChange }) {
             </CardHeader>
             <CardContent className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5 pb-4 sm:pb-5">
               <form onSubmit={handleSubmit} className="space-y-3.5">
+                {/* Honeypot: hidden from real users via CSS; bots fill it → rejected server-side */}
+                <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: "1px", height: "1px", overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+                  <label htmlFor="llm-hp">Leave this blank</label>
+                  <input id="llm-hp" name="email_address" type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" />
+                </div>
+
                 <div className="space-y-1.5">
                   <Label htmlFor="landing-login-email" className="text-zinc-200">
                     Email
@@ -216,10 +236,18 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                   </div>
                 )}
 
+                <TurnstileChallenge
+                  siteKey={turnstile.siteKey}
+                  required={turnstile.required}
+                  ready={turnstile.ready}
+                  containerRef={turnstile.containerRef}
+                  helperClassName="text-xs text-zinc-400"
+                />
+
                 <Button
                   type="submit"
                   className="w-full h-11 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation font-semibold"
-                  disabled={isLoading}
+                  disabled={isLoading || (turnstile.required && !turnstile.ready)}
                   aria-busy={isLoading}
                 >
                   {isLoading ? (

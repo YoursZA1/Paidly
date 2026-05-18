@@ -7,6 +7,29 @@
 // We only need `process.env` for feature flags.
 const process = globalThis.process ?? { env: {} };
 
+// Lazily resolved — avoids circular imports at module load time.
+let _captureSecurityEvent = null;
+function getCaptureSecurityEvent() {
+  if (_captureSecurityEvent) return _captureSecurityEvent;
+  try {
+    // Dynamic require so this module stays importable in edge/test environments.
+    // eslint-disable-next-line no-undef
+    const mod = globalThis.__SECURITY_SENTRY_CAPTURE__;
+    if (typeof mod === "function") _captureSecurityEvent = mod;
+  } catch {}
+  return _captureSecurityEvent;
+}
+
+/**
+ * Call once at startup (from index.js or the serverless handler) to wire security
+ * events into Sentry. Avoids a static import cycle between securityMiddleware ↔ sentry.
+ *
+ * @param {(level: string, event: string, data: Record<string, unknown>) => void} fn
+ */
+export function setSecuritySentryCapture(fn) {
+  _captureSecurityEvent = typeof fn === "function" ? fn : null;
+}
+
 const IS_PROD = process.env.NODE_ENV === "production";
 
 /** @typedef {"info"|"warn"|"error"} SecurityLevel */
@@ -33,6 +56,13 @@ export function logSecurity(level, event, data = {}) {
     console.warn(line);
   } else {
     console.log(line);
+  }
+  // Forward warn/error events to Sentry when wired up (see setSecuritySentryCapture).
+  if (level === "warn" || level === "error") {
+    try {
+      const capture = _captureSecurityEvent ?? getCaptureSecurityEvent();
+      if (capture) capture(level, event, data);
+    } catch {}
   }
 }
 
@@ -155,6 +185,28 @@ export function enforceHttps() {
   };
 }
 
+// Inline script hashes for index.html (theme toggle + hostname redirect).
+// Update these whenever those <script> blocks change.
+const INLINE_SCRIPT_HASHES = [
+  "'sha256-q/lgmi1ZKolpqmBSngseCPpnC50Hv/KuLZ97k8sL0PM='",
+  "'sha256-dGNjLxH/mXMREe/MsV+YvHis9LC2vrzQP5ZLWuCJbZM='",
+].join(" ");
+
+const CSP = [
+  `default-src 'self'`,
+  `script-src 'self' ${INLINE_SCRIPT_HASHES} https://challenges.cloudflare.com`,
+  `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com`,
+  `font-src 'self' https://fonts.gstatic.com https://api.fontshare.com`,
+  `img-src 'self' data: blob: https://*.supabase.co`,
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io`,
+  `frame-src https://challenges.cloudflare.com`,
+  `object-src 'none'`,
+  `base-uri 'self'`,
+  `form-action 'self'`,
+  `frame-ancestors 'none'`,
+  `upgrade-insecure-requests`,
+].join("; ");
+
 export function securityHeaders() {
   return (req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -164,6 +216,9 @@ export function securityHeaders() {
       "Permissions-Policy",
       "camera=(), microphone=(), geolocation=(), payment=()"
     );
+    if (process.env.DISABLE_CSP !== "true") {
+      res.setHeader("Content-Security-Policy", CSP);
+    }
     if (IS_PROD && process.env.DISABLE_HSTS !== "true") {
       const maxAge = Number(process.env.HSTS_MAX_AGE) || 31536000;
       let value = `max-age=${maxAge}`;

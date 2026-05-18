@@ -170,7 +170,7 @@ const SupabaseAuthService = {
           turnstile_token: turnstileToken || undefined,
           redirectTo: emailRedirectTo || undefined,
         },
-        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true }
+        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true, timeout: 8000 }
       );
 
       if (status === 200 && data) {
@@ -247,8 +247,9 @@ const SupabaseAuthService = {
    * Password sign-in: POST /api/auth/sign-in when shouldUseNodeAuthApi() is true (production with a real API, or dev with VITE_NODE_AUTH_API=1).
    * Otherwise direct Supabase only — default in Vite dev avoids 503 when the Node server is not running.
    */
-  async signInWithEmail(email, password) {
+  async signInWithEmail(email, password, options = {}) {
     const normalized = (email || "").trim().toLowerCase();
+    const turnstileToken = String(options?.turnstileToken || "").trim();
 
     const signInDirect = async () => {
       const { data, error } = await retryOnAbort(
@@ -277,8 +278,12 @@ const SupabaseAuthService = {
     try {
       const { data, status, headers } = await backendApi.post(
         "/api/auth/sign-in",
-        { email: normalized, password },
-        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true }
+        {
+          email: normalized,
+          password,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+        },
+        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true, timeout: 8000 }
       );
 
       if (status === 200 && data?.access_token && data?.refresh_token) {
@@ -340,11 +345,20 @@ const SupabaseAuthService = {
   },
 
   async signInWithMagicLink(email, redirectTo = null) {
+    let safeRedirectTo = typeof window !== "undefined" ? window.location.origin : null;
+    if (redirectTo) {
+      try {
+        const url = new URL(redirectTo, typeof window !== "undefined" ? window.location.origin : undefined);
+        const sameOrigin = typeof window === "undefined" || url.origin === window.location.origin;
+        const safeProtocol = url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
+        if (sameOrigin && safeProtocol) safeRedirectTo = url.toString();
+      } catch {
+        // malformed URL — use fallback
+      }
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: redirectTo || window.location.origin
-      }
+      options: { emailRedirectTo: safeRedirectTo }
     });
 
     if (error) throw new Error(mapAuthError(error));
@@ -397,7 +411,7 @@ const SupabaseAuthService = {
           redirectTo: to || undefined,
           turnstile_token: turnstileToken || undefined,
         },
-        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true }
+        { validateStatus: () => true, __paidlySilent: true, __paidlyCritical: true, timeout: 8000 }
       );
       if (status === 200 && data?.ok) return true;
       if (status === 403) {

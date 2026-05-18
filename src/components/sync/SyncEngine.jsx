@@ -34,8 +34,27 @@ import { hasActiveSession, getStableSession } from "@/core/auth/SessionCoordinat
 const SYNC_INTERVAL_MS = 5000;
 /** Coalesce session recovery when the queue has work but `getSession()` is momentarily empty (auth latency / refresh races). */
 const SYNC_QUEUE_SESSION_WAKE_MIN_MS = 8000;
+/** Max time a single sync job may run before being force-failed as "timed out". Prevents jobs hung on a
+ *  stalled network call from keeping processingCount > 0 and showing "Syncing…" indefinitely. */
+const JOB_TIMEOUT_MS = 30_000;
+/** Interval at which we sweep for jobs that have been stuck in "processing" for longer than JOB_TIMEOUT_MS.
+ *  Covers the edge case where the in-flight promise resolved without going through the finally block
+ *  (e.g. during HMR in development, or if a future refactor removes the try/finally guard). */
+const STUCK_JOB_SWEEP_MS = 60_000;
 /** Admin dashboard previously listened to these tables only (not `clients` / `document_sends`). */
 const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expenses", "quotes", "payslips"]);
+
+/**
+ * Races `promise` against a `ms`-millisecond timeout.
+ * Always clears the timer regardless of which settles first.
+ */
+function withJobTimeout(promise, ms) {
+  let timerId;
+  const timeout = new Promise((_, reject) => {
+    timerId = setTimeout(() => reject(new Error("sync_job_timeout")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timerId));
+}
 
 export default function SyncEngine() {
   const queryClient = useQueryClient();
@@ -204,7 +223,7 @@ export default function SyncEngine() {
 
       markProcessing(nextJob.id);
       try {
-        const result = await processSyncJob(nextJob);
+        const result = await withJobTimeout(processSyncJob(nextJob), JOB_TIMEOUT_MS);
         markDone(nextJob.id, result);
         if (nextJob.type === "CREATE_INVOICE" && nextJob.meta?.optimisticTempId && result?.id) {
           replaceOptimisticInvoice(nextJob.meta.optimisticTempId, {
@@ -235,6 +254,30 @@ export default function SyncEngine() {
     }, SYNC_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [runOnce]);
+
+  // Periodic sweep: reset jobs that have been stuck in "processing" longer than JOB_TIMEOUT_MS.
+  // Guards against the edge case where a job's in-flight promise resolved without clearing
+  // runningRef (e.g. development HMR re-mounts, or future refactors that skip the finally block).
+  useEffect(() => {
+    const sweepId = window.setInterval(() => {
+      const { queue } = useSyncQueueStore.getState();
+      const cutoff = Date.now() - JOB_TIMEOUT_MS;
+      const hasStuck = queue.some(
+        (j) => j.status === "processing" && j.updatedAt <= cutoff
+      );
+      if (!hasStuck) return;
+      const now = Date.now();
+      useSyncQueueStore.setState((state) => {
+        const next = state.queue.map((j) =>
+          j.status === "processing" && j.updatedAt <= cutoff
+            ? { ...j, status: "pending", nextAttemptAt: now, updatedAt: now }
+            : j
+        );
+        return { queue: next };
+      });
+    }, STUCK_JOB_SWEEP_MS);
+    return () => window.clearInterval(sweepId);
+  }, []);
 
   useEffect(() => {
     const onOnline = () => {

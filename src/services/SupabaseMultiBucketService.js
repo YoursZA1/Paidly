@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
+import { UPLOAD_BUCKET_ALLOWLIST } from "@/utils/inputSanitization";
 
 /**
  * Generic upload function for any bucket
@@ -12,6 +13,14 @@ import { DEFAULT_STORAGE_BUCKET } from "@/constants/storageBucket";
 export async function uploadToBucket(file, bucket, path) {
   const finalBucket =
     bucket || import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+
+  if (!UPLOAD_BUCKET_ALLOWLIST.has(finalBucket)) {
+    throw new Error(`Upload rejected: unknown storage bucket "${finalBucket}"`);
+  }
+  if (typeof path !== "string" || path.includes("..") || path.startsWith("/") || path.includes("//")) {
+    throw new Error("Upload rejected: invalid storage path");
+  }
+
   try {
     const { error } = await supabase.storage.from(finalBucket).upload(path, file, {
       upsert: true,

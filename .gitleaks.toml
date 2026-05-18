@@ -1,0 +1,57 @@
+# Gitleaks secret scanner configuration
+# Docs: https://github.com/gitleaks/gitleaks
+#
+# Run locally:  gitleaks detect --source . --config .gitleaks.toml
+# Run in CI:    gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1
+
+title = "Paidly"
+
+[extend]
+# Inherit the full default ruleset and add project-specific rules below
+useDefault = true
+
+[[rules]]
+id          = "paidly-resend-key"
+description = "Resend email API key"
+regex       = '''re_[A-Za-z0-9_\-]{20,}'''
+keywords    = ["resend", "re_"]
+
+[[rules]]
+id          = "paidly-supabase-jwt"
+description = "Supabase JWT (anon or service role)"
+regex       = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_\-]{50,}'''
+keywords    = ["supabase", "eyJ"]
+
+[[rules]]
+id          = "paidly-payfast-credentials"
+description = "PayFast merchant key or passphrase"
+regex       = '''(?i)(merchant_key|passphrase)\s*=\s*["']?[A-Za-z0-9@#!%&]{6,}'''
+keywords    = ["payfast", "merchant_key", "passphrase"]
+
+[[rules]]
+id          = "paidly-turnstile-secret"
+description = "Cloudflare Turnstile secret key (server-only)"
+regex       = '''TURNSTILE_SECRET_KEY\s*=\s*["']?[A-Za-z0-9_\-]{20,}'''
+keywords    = ["turnstile", "cloudflare"]
+
+[allowlist]
+description = "Skip placeholder and documentation files"
+
+paths = [
+  '''(^|/)\.githooks/''',
+  '''(^|/)\.gitleaks\.toml$''',
+  '''(^|/)docs/''',
+  '''\.example$''',
+  '''\.sample$''',
+  '''CHANGELOG''',
+]
+
+regexes = [
+  # Generic placeholder patterns — not real secrets
+  '''YOUR_[A-Z0-9_]+''',
+  '''your_.*_here''',
+  '''<YOUR_.*?>''',
+  '''example\.com''',
+  # Supabase anon key is intentionally public and appears in client env examples
+  '''VITE_SUPABASE_ANON_KEY''',
+]

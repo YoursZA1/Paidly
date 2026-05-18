@@ -94,7 +94,7 @@ export async function consumePersistedRateLimit(bucketKey, maxHits, windowMs) {
 }
 
 /**
- * @param {'login'|'signup'} kind
+ * @param {'login'|'signup'|'forgot-password'} kind
  * @param {string} ip
  */
 export async function consumeAuthIpSlot(kind, ip) {
@@ -107,6 +107,16 @@ export async function consumeAuthIpSlot(kind, ip) {
       return consumePersistedRateLimit(bucket, max, windowMs);
     }
     return consumeMemoryRateLimit("login", bucket, max, windowMs);
+  }
+  if (kind === "forgot-password") {
+    // Conservative: 5 reset requests per IP per hour to prevent reset-email spam.
+    const max = num("FORGOT_PASSWORD_RATE_PER_IP_MAX", 5);
+    const windowMs = num("FORGOT_PASSWORD_RATE_PER_IP_WINDOW_MS", 60 * 60 * 1000);
+    const bucket = `auth:forgot-password:${key}`;
+    if (isRateLimitPersistEnabled()) {
+      return consumePersistedRateLimit(bucket, max, windowMs);
+    }
+    return consumeMemoryRateLimit("forgot-password", bucket, max, windowMs);
   }
   const max = num("SIGNUP_RATE_PER_IP_MAX", 8);
   const windowMs = num("SIGNUP_RATE_PER_IP_WINDOW_MS", 60 * 60 * 1000);

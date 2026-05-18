@@ -81,6 +81,24 @@ async function payfastSubscriptionCheckout(req, res) {
     const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
     if (!parsed) return;
 
+    // Verify the caller is authenticated and owns the userId they're subscribing for.
+    const adminSb = getSupabaseAdmin();
+    if (!adminSb) {
+      return res.status(503).json({ error: "Server configuration error (Supabase)" });
+    }
+    const rawAuth = String(req.headers?.authorization || req.headers?.Authorization || "");
+    const bearerMatch = rawAuth.match(/^Bearer\s+(.+)$/i);
+    if (!bearerMatch) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const { data: authData, error: authErr } = await adminSb.auth.getUser(bearerMatch[1].trim());
+    if (authErr || !authData?.user?.id) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    if (parsed.userId !== authData.user.id) {
+      return res.status(403).json({ error: "userId does not match authenticated user" });
+    }
+
     const {
       subscriptionId: _subscriptionId,
       userId,

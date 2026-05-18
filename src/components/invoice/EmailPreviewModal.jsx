@@ -13,6 +13,7 @@ import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/Invo
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
+import { getLogo } from '@/services/AssetService';
 import { useAuth } from '@/contexts/AuthContext';
 
 /** ctaHref: use tracked URL from getTrackedLinkUrl when sending; pixelUrl for opens. */
@@ -23,6 +24,9 @@ export const generateInvoiceEmailHtml = (invoice, client, company, ctaHref, pixe
     const dueDate = format(new Date(invoice.delivery_date), 'MMM d, yyyy');
     const primary = parseDocumentBrandHex(invoice?.document_brand_primary) || parseDocumentBrandHex(company?.document_brand_primary) || '#f24e00';
     const secondary = parseDocumentBrandHex(invoice?.document_brand_secondary) || parseDocumentBrandHex(company?.document_brand_secondary) || '#ff7c00';
+    const rawLogoPath = company?.logo_url || company?.company_logo_url || '';
+    const resolvedLogo = rawLogoPath ? getLogo(rawLogoPath) : '';
+    const logoUrl = resolvedLogo && resolvedLogo.startsWith('https://') ? resolvedLogo : '';
 
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     const safeCta = sanitizeHttpUrl(ctaHref, base) || '#';
@@ -61,6 +65,7 @@ export const generateInvoiceEmailHtml = (invoice, client, company, ctaHref, pixe
         primaryHex: primary,
         secondaryHex: secondary,
         pixelUrl,
+        logoUrl,
     });
 };
 

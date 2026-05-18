@@ -1178,11 +1178,11 @@ export function AuthProvider({ children }) {
     { channelName: "auth-profile-updates" }
   );
 
-  const login = useCallback(async ({ email, password, role }) => {
+  const login = useCallback(async ({ email, password, role, turnstileToken }) => {
     setError("");
     setVerifyGateEmail("");
     const normalizedEmail = (email || "").trim().toLowerCase();
-    const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
+    const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password, { turnstileToken });
     if (session?.user && session.user.email_confirmed_at == null) {
       // Defense in depth: do not allow app login for unverified users.
       try {
@@ -1198,7 +1198,13 @@ export function AuthProvider({ children }) {
     patchAuthSession({ session, authLoadingTimedOut: false });
     void bootstrapOrganizationAfterLogin(session);
 
-    await User.login({ email: normalizedEmail, password, role: role || undefined });
+    // 5-second timeout prevents a slow DB profile fetch from freezing the sign-in button.
+    // onAuthStateChange → refreshUser will fill in the full profile asynchronously.
+    const LOGIN_PROFILE_TIMEOUT_MS = 5000;
+    await Promise.race([
+      User.login({ email: normalizedEmail, password, role: role || undefined }),
+      new Promise((resolve) => setTimeout(resolve, LOGIN_PROFILE_TIMEOUT_MS)),
+    ]);
 
     // At this point email is verified — surface the session in React state immediately.
     // Do not await profiles upsert: a stuck network/DB write must not freeze the sign-in button or RequireAuth.

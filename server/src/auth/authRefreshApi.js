@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { getSupabaseAnonClient } from "../supabaseAnon.js";
-import { normalizeRequestBody, parseBody } from "../validateBody.js";
+import { parseBody } from "../validateBody.js";
 import { refreshSessionBodySchema } from "../schemas/apiBodySchemas.js";
 import { getClientIp } from "../loginIpRateLimit.js";
 import { logSecurity } from "../securityMiddleware.js";
@@ -19,13 +19,14 @@ export default async function authRefreshHandler(req, res) {
   }
 
   const ip = getClientIp(req);
+  let tokenHash = null;
   try {
     const parsed = parseBody(refreshSessionBodySchema, req, res, () =>
       logSecurity("warn", "auth_refresh_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
     const refreshToken = String(parsed.refresh_token || "");
-    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
 
     const existing = authRefreshInFlight.get(tokenHash);
     if (existing) {
@@ -82,14 +83,8 @@ export default async function authRefreshHandler(req, res) {
       return res.status(500).json({ error: "Session refresh failed" });
     }
   } finally {
-    try {
-      const token = String(normalizeRequestBody(req).refresh_token || "");
-      if (token) {
-        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-        authRefreshInFlight.delete(tokenHash);
-      }
-    } catch {
-      // ignore map cleanup failures
+    if (tokenHash) {
+      authRefreshInFlight.delete(tokenHash);
     }
   }
 }

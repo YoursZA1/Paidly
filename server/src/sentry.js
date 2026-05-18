@@ -26,4 +26,23 @@ export function captureServerException(error, context) {
   });
 }
 
+/**
+ * Forward a structured security event to Sentry as a message.
+ * No-ops when Sentry is not initialized (DSN not configured).
+ *
+ * @param {"warn"|"error"} level
+ * @param {string} event
+ * @param {Record<string, unknown>} data
+ */
+export function captureSecurityEvent(level, event, data = {}) {
+  if (!initialized) return;
+  const sentryLevel = level === "error" ? "error" : "warning";
+  Sentry.withScope((scope) => {
+    scope.setTag("security_event", event);
+    scope.setLevel(sentryLevel);
+    scope.setContext("security", data);
+    Sentry.captureMessage(`security.${event}`, sentryLevel);
+  });
+}
+
 export { Sentry };

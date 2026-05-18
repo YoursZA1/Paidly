@@ -86,9 +86,9 @@ export default function BankImportModal({ onImportComplete, onCancel }) {
             // Note: Parallel execution for speed
             const promises = selected.map(t => Expense.create({
                 date: t.date,
-                description: t.description,
+                description: String(t.description || "").slice(0, 500),
                 amount: t.amount,
-                vendor: t.vendor || t.description, // Fallback vendor
+                vendor: String(t.vendor || t.description || "").slice(0, 200),
                 category: t.category,
                 payment_method: 'bank_transfer',
                 expense_number: `IMP-${Date.now()}-${Math.floor(Math.random() * 1000)}`,

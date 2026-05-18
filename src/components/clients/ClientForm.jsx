@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { isValidEmail, isValidHttpUrl } from "@/utils/inputSanitization";
 import PropTypes from "prop-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ function SectionCollapsible({ title, defaultOpen, children }) {
 
 export default function ClientForm({ client = null, onSave, onCancel, layout = "dialog" }) {
     const [formData, setFormData] = useState(() => emptyClientState(client));
+    const [validationErrors, setValidationErrors] = useState({});
     const isPage = layout === "page";
 
     useEffect(() => {
@@ -67,8 +69,36 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
         }));
     };
 
+    const validate = useCallback(() => {
+        const errors = {};
+        if (!formData.name.trim()) errors.name = "Name is required";
+        else if (formData.name.trim().length > 200) errors.name = "Name must be 200 characters or fewer";
+
+        if (!formData.email.trim()) errors.email = "Email is required";
+        else if (!isValidEmail(formData.email)) errors.email = "Enter a valid email address";
+
+        if (formData.alternate_email && !isValidEmail(formData.alternate_email))
+            errors.alternate_email = "Enter a valid email address";
+
+        if (formData.website && !isValidHttpUrl(formData.website))
+            errors.website = "Enter a valid URL starting with https://";
+
+        if (formData.notes && formData.notes.length > 5000)
+            errors.notes = "Notes must be 5000 characters or fewer";
+        if (formData.internal_notes && formData.internal_notes.length > 5000)
+            errors.internal_notes = "Notes must be 5000 characters or fewer";
+
+        return errors;
+    }, [formData]);
+
     const handleSubmit = (e) => {
         e.preventDefault();
+        const errors = validate();
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors(errors);
+            return;
+        }
+        setValidationErrors({});
         onSave(formData);
     };
 
@@ -153,9 +183,10 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     value={formData.name}
                     onChange={(e) => handleInputChange("name", e.target.value)}
                     placeholder="Enter client name"
-                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                    className={cn("h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20", validationErrors.name && "border-destructive")}
                     data-testid="client-name"
                 />
+                {validationErrors.name && <p className="text-xs text-destructive">{validationErrors.name}</p>}
             </div>
 
             <div className="space-y-2">
@@ -168,9 +199,10 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     placeholder="client@example.com"
-                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                    className={cn("h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20", validationErrors.email && "border-destructive")}
                     data-testid="client-email"
                 />
+                {validationErrors.email && <p className="text-xs text-destructive">{validationErrors.email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -209,8 +241,9 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     value={formData.website}
                     onChange={(e) => handleInputChange("website", e.target.value)}
                     placeholder="https://example.com"
-                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                    className={cn("h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20", validationErrors.website && "border-destructive")}
                 />
+                {validationErrors.website && <p className="text-xs text-destructive">{validationErrors.website}</p>}
             </div>
 
             <div className="space-y-2">
@@ -236,8 +269,9 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     value={formData.alternate_email}
                     onChange={(e) => handleInputChange("alternate_email", e.target.value)}
                     placeholder="alternate@example.com"
-                    className="h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                    className={cn("h-12 rounded-xl border-border focus:border-primary focus:ring-primary/20", validationErrors.alternate_email && "border-destructive")}
                 />
+                {validationErrors.alternate_email && <p className="text-xs text-destructive">{validationErrors.alternate_email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -286,7 +320,9 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     onChange={(e) => handleInputChange("notes", e.target.value)}
                     placeholder="Public notes about this client..."
                     className="min-h-32 resize-none rounded-xl border-border focus:border-primary focus:ring-primary/20"
+                    maxLength={5000}
                 />
+                {validationErrors.notes && <p className="text-xs text-destructive">{validationErrors.notes}</p>}
             </div>
 
             <div className="space-y-2">
@@ -301,7 +337,9 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                     onChange={(e) => handleInputChange("internal_notes", e.target.value)}
                     placeholder="Internal notes, reminders, special requirements..."
                     className="min-h-32 resize-none rounded-xl border-amber-200 bg-amber-50/30 focus:border-amber-500 focus:ring-amber-500/20"
+                    maxLength={5000}
                 />
+                {validationErrors.internal_notes && <p className="text-xs text-destructive">{validationErrors.internal_notes}</p>}
             </div>
         </div>
     );

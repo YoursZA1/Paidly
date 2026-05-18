@@ -1,4 +1,4 @@
-import { initSentry, Sentry } from "./sentry.js";
+import { initSentry, captureSecurityEvent, Sentry } from "./sentry.js";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,12 +48,14 @@ import {
   getSecurityEventsSnapshot,
   logSecurity,
   securityHeaders,
+  setSecuritySentryCapture,
   startSecurityAuditPruner,
 } from "./securityMiddleware.js";
 import {
   apiAbuseLimiterMiddleware,
   startApiAbusePruner,
 } from "./apiAbuseLimiter.js";
+import { createBotDetectionMiddleware } from "./botDetection.js";
 import { createGlobalApiLimiter } from "./globalExpressRateLimit.js";
 import {
   assertFiniteAmount,
@@ -131,6 +133,8 @@ dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
 // Must be called after dotenv so SENTRY_DSN is available
 initSentry();
+// Forward security warn/error log events to Sentry so they appear as issues, not just stdout.
+setSecuritySentryCapture(captureSecurityEvent);
 
 const app = express();
 // So req.ip / X-Forwarded-For are correct behind a reverse proxy (e.g. nginx, Vercel, Railway).
@@ -565,6 +569,7 @@ app.use(express.urlencoded({
 
 app.use("/api", createGlobalApiLimiter(getClientIp));
 app.use(apiAbuseLimiterMiddleware(getClientIp, logSecurity));
+app.use(createBotDetectionMiddleware(logSecurity));
 
 registerClientPortalRoutes(app);
 registerPublicInvoiceRoutes(app);
@@ -1012,13 +1017,22 @@ const handlePayfastSubscriptionItn = createPayfastSubscriptionItnHandler({
  * PayFast subscription — same clean flow as `api/payfast-handler.js` (rewrite → `__pf=subscription`):
  * client POST JSON → this route builds + signs → JSON `{ payfastUrl, fields }` → client POSTs `fields` to PayFast.
  */
-app.post("/api/payfast/subscription", (req, res) => {
+app.post("/api/payfast/subscription", requireAuthMiddleware, (req, res) => {
   const smoke = String(process.env.PAYFAST_SUBSCRIPTION_SMOKE_TEST || "").trim().toLowerCase();
   if (smoke === "true" || smoke === "1") {
     return res.status(200).json({ success: true, message: "API working" });
   }
   const parsed = parseBody(payfastSubscriptionBodySchema, req, res);
   if (!parsed) return;
+
+  // Prevent IDOR: the userId in the body must match the authenticated caller.
+  if (parsed.userId !== req.authUser.id) {
+    logSecurity("warn", "payfast_subscription_userid_mismatch", {
+      claimed: parsed.userId,
+      actual: req.authUser.id,
+    });
+    return res.status(403).json({ error: "userId does not match authenticated user" });
+  }
 
   const {
     subscriptionId: _subscriptionId,
@@ -1492,13 +1506,22 @@ app.post("/api/admin/users/bulk-update", async (req, res) => {
     if (!adminUser) return;
 
     const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    const data =
+    const rawData =
       req.body?.data && typeof req.body.data === "object" && !Array.isArray(req.body.data)
         ? req.body.data
         : null;
 
-    if (!ids.length || !data) {
+    if (!ids.length || !rawData) {
       return res.status(400).json({ error: "ids[] and data object are required" });
+    }
+
+    // Whitelist the profile fields that bulk-update is permitted to set.
+    const BULK_ALLOWED_FIELDS = new Set(["subscription_plan", "full_name"]);
+    const data = Object.fromEntries(
+      Object.entries(rawData).filter(([k]) => BULK_ALLOWED_FIELDS.has(k))
+    );
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "No permitted fields provided (allowed: subscription_plan, full_name)" });
     }
 
     const uniqueIds = [...new Set(ids.map((v) => String(v || "").trim()).filter(Boolean))];
@@ -1551,6 +1574,9 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
     const delId = String(userId).trim();
     if (!isValidUuid(delId)) {
       return res.status(400).json({ error: "Invalid user id" });
+    }
+    if (delId === adminUser.id) {
+      return res.status(400).json({ error: "Admins cannot delete their own account via this endpoint. Use /api/account/delete instead." });
     }
 
     await purgeUserStorageAssets(supabaseAdmin, delId);
@@ -1784,6 +1810,9 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
 
     if (!recipient_id) {
       return res.status(400).json({ error: "recipient_id is required" });
+    }
+    if (!isValidUuid(recipient_id)) {
+      return res.status(400).json({ error: "recipient_id must be a valid UUID" });
     }
     if (!sendEmail && !sendInApp) {
       return res.status(400).json({ error: "Select at least one delivery channel" });

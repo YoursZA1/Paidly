@@ -20,6 +20,7 @@ import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import InvoiceMetaTags from '@/components/invoice/InvoiceMetaTags';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { isValidShareToken } from '@/utils/inputSanitization';
 
 /**
  * Public read-only invoice view at /view/:token.
@@ -49,8 +50,8 @@ export default function InvoiceView() {
     const fetchInvoiceData = async () => {
       setIsLoading(true);
       try {
-        if (!token) {
-          setError('Invalid invoice link. No token provided.');
+        if (!token || !isValidShareToken(token)) {
+          setError('Invalid invoice link.');
           return;
         }
 

@@ -42,9 +42,11 @@ function backoffMsWithJitter(attempt) {
 
 function shouldRetry(config, error) {
   const url = String(config?.url || "");
-  if (url.includes("/api/exchange-rates")) {
-    return false;
-  }
+  if (url.includes("/api/exchange-rates")) return false;
+  // Auth endpoints must never be retried: wrong-password failures are not transient,
+  // and a network retry doubles the hang time before the Supabase fallback kicks in.
+  if (url.includes("/api/auth/")) return false;
+  if (config.__paidlyNoRetry) return false;
   const count = config.__paidlyRetryCount ?? 0;
   const status = error.response?.status;
   const network = isNetworkOrTimeoutError(error);

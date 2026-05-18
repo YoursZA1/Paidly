@@ -4,18 +4,31 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Mail, Lock, Loader2 } from 'lucide-react';
+import { getPortalThrottleState, recordPortalFailure } from '@/utils/clientPortalRateLimit';
 
 export default function ClientLogin({ onLogin, isSubmitting = false }) {
     const [email, setEmail] = useState('');
+    const [honeypot, setHoneypot] = useState('');
     const [error, setError] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
+        if (honeypot) return;
+
+        const normalizedEmail = email.trim().toLowerCase();
+        const throttle = getPortalThrottleState(normalizedEmail);
+        if (throttle.blocked) {
+            const mins = Math.max(1, Math.ceil(throttle.retryAfterMs / 60000));
+            setError(`Too many attempts. Please try again in ${mins} minute(s).`);
+            return;
+        }
+
         try {
-            await onLogin(email);
+            await onLogin(normalizedEmail);
         } catch (err) {
+            recordPortalFailure(normalizedEmail);
             setError(err?.message || 'Invalid email or client not found. Please check your email address.');
         }
     };
@@ -34,6 +47,12 @@ export default function ClientLogin({ onLogin, isSubmitting = false }) {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Honeypot: invisible to real users; bots fill it → rejected */}
+                        <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: "1px", height: "1px", overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+                            <label htmlFor="cl-hp">Leave this blank</label>
+                            <input id="cl-hp" name="phone_number" type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" />
+                        </div>
+
                         <div className="space-y-2">
                             <Label htmlFor="email">Email Address</Label>
                             <div className="relative">

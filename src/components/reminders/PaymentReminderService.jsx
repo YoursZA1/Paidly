@@ -4,6 +4,7 @@ import { createPageUrl } from '@/utils';
 import { format } from 'date-fns';
 import { buildBrandedEmailDocumentHtml } from '@/utils/brandedEmailTemplates';
 import { escapeHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
+import { getLogo } from '@/services/AssetService';
 import { isAbortError } from '@/utils/retryOnAbort';
 import { getStableSession } from '@/core/auth/SessionCoordinator';
 
@@ -149,6 +150,9 @@ class PaymentReminderService {
               </a>
             </div>
         `;
+        const rawLogoPath = user?.logo_url || user?.company_logo_url || '';
+        const resolvedLogo = rawLogoPath ? getLogo(rawLogoPath) : '';
+        const logoUrl = resolvedLogo && resolvedLogo.startsWith('https://') ? resolvedLogo : '';
         const htmlBody = buildBrandedEmailDocumentHtml({
             preheader: subject,
             title: 'Payment reminder',
@@ -159,6 +163,7 @@ class PaymentReminderService {
             primaryHex: '#f24e00',
             secondaryHex: '#ff7c00',
             pixelUrl: '',
+            logoUrl,
         });
 
         await SendEmail({

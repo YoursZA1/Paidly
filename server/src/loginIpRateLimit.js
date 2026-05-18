@@ -48,6 +48,17 @@ export async function consumeSignupSlot(ip) {
   return consumeAuthIpSlot("signup", ip);
 }
 
+/**
+ * @param {string} ip
+ * @returns {Promise<{ ok: true } | { ok: false, retryAfterSeconds: number }>}
+ */
+export async function consumeForgotPasswordSlot(ip) {
+  if (!isLoginRateLimitEnabled()) {
+    return { ok: true };
+  }
+  return consumeAuthIpSlot("forgot-password", ip);
+}
+
 export function pruneLoginRateLimitStore() {
   pruneMemoryRateLimitStores();
 }

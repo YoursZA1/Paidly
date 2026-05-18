@@ -28,6 +28,7 @@ import MobileBottomNav from "@/components/ui/MobileBottomNav";
 import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
 import SessionIndicator from "@/components/SessionIndicator";
 import SyncStatusIndicator from "@/components/sync/SyncStatusIndicator.jsx";
+import SyncStatus from "@/components/common/SyncStatus.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
 import {
@@ -41,6 +42,7 @@ import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useToast } from "@/components/ui/use-toast";
 import Logo from "@/components/shared/Logo";
+import { useCompanyBrand } from "@/hooks/useCompanyBrand";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
@@ -426,7 +428,7 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setTheme, resolvedTheme }) => {
+const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme, resolvedTheme }) => {
   const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
   const managementIds = new Set([
     "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
@@ -493,11 +495,12 @@ const MobileNav = ({ items, onClose, user, navigate, handleLogout, theme, setThe
               type="button"
               className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-muted transition-all text-left touch-manipulation"
             >
-              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-muted border-2 border-white dark:border-card shadow-sm overflow-hidden shrink-0 flex items-center justify-center font-semibold text-slate-600 dark:text-muted-foreground text-sm">
-                {user?.logo_url ? (
-                  <Logo path={user.logo_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")
+              <div className="relative w-10 h-10 rounded-full bg-slate-100 dark:bg-muted border-2 border-white dark:border-card shadow-sm overflow-hidden shrink-0 flex items-center justify-center font-semibold text-slate-600 dark:text-muted-foreground text-sm">
+                <span aria-hidden="true">
+                  {user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")}
+                </span>
+                {brand?.hasLogo && (
+                  <Logo path={brand.logoPath} alt="" className="absolute inset-0 w-full h-full object-cover" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
@@ -547,6 +550,12 @@ MobileNav.propTypes = {
   items: PropTypes.arrayOf(navItemShape).isRequired,
   onClose: PropTypes.func,
   user: PropTypes.object,
+  brand: PropTypes.shape({
+    hasLogo: PropTypes.bool,
+    logoPath: PropTypes.string,
+    initials: PropTypes.string,
+    companyName: PropTypes.string,
+  }),
   navigate: PropTypes.func,
   handleLogout: PropTypes.func,
   theme: PropTypes.string,
@@ -596,6 +605,7 @@ export default function Layout({ children, currentPageName }) {
   const userRef = useRef(user);
   userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
+  const brand = useCompanyBrand();
   const planForNavFeatures =
     layoutProfile?.subscription_plan ||
     layoutProfile?.plan ||
@@ -959,11 +969,12 @@ export default function Layout({ children, currentPageName }) {
               </Tooltip>
             ) : (
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/[0.06] transition-colors duration-150 group">
-                <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0 text-primary text-[11px] font-bold overflow-hidden border border-primary/20">
-                  {user?.logo_url ? (
-                    <Logo path={user.logo_url} alt="" className="w-full h-full object-cover rounded-lg" />
-                  ) : (
-                    user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")
+                <div className="relative w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0 text-primary text-[11px] font-bold overflow-hidden border border-primary/20">
+                  <span aria-hidden="true">
+                    {user?.full_name ? user.full_name[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : "U")}
+                  </span>
+                  {brand.hasLogo && (
+                    <Logo path={brand.logoPath} alt="" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -995,6 +1006,7 @@ export default function Layout({ children, currentPageName }) {
             items={getNavigationItems(planForNavFeatures, user?.role)}
             onClose={() => setIsMobileMenuOpen(false)}
             user={user}
+            brand={brand}
             navigate={navigate}
             handleLogout={handleLogout}
             theme={theme}
@@ -1050,11 +1062,12 @@ export default function Layout({ children, currentPageName }) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="rounded-xl p-0 min-h-[44px] min-w-[44px] touch-manipulation shrink-0" aria-label="Account menu">
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden border border-border">
-                      {user.logo_url ? (
-                        <Logo path={user.logo_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        user.full_name ? user.full_name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : "U")
+                    <div className="relative w-9 h-9 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden border border-border">
+                      <span aria-hidden="true">
+                        {user.full_name ? user.full_name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : "U")}
+                      </span>
+                      {brand.hasLogo && (
+                        <Logo path={brand.logoPath} alt="" className="absolute inset-0 w-full h-full object-cover" />
                       )}
                     </div>
                   </Button>
@@ -1127,9 +1140,7 @@ export default function Layout({ children, currentPageName }) {
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="mr-0.5 flex items-center gap-1">
-              <ConnectionStatusIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
-              <SessionIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
-              <SyncStatusIndicator className="max-w-[min(22vw,9rem)] md:max-w-[12rem]" />
+              <SyncStatus className="max-w-[min(22vw,10rem)] md:max-w-[13rem]" />
             </div>
             <NotificationBell />
             
@@ -1137,14 +1148,18 @@ export default function Layout({ children, currentPageName }) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 hover:bg-muted rounded-xl text-foreground min-h-[48px] min-w-[48px] md:min-h-11 md:min-w-11 sm:min-w-0 sm:min-h-10 touch-manipulation px-2 sm:px-3">
-                    <div className="w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-muted flex items-center justify-center font-medium text-muted-foreground text-xs overflow-hidden shrink-0">
-                      {user.logo_url ? (
-                        <Logo path={user.logo_url} alt="Profile" className="w-full h-full object-cover" />
-                      ) : (
-                        user.full_name ? user.full_name[0].toUpperCase() : 'U'
+                    {/* Two-layer avatar: initials always present; logo image overlays when resolved */}
+                    <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-500 flex items-center justify-center font-semibold text-white text-[11px] overflow-hidden shrink-0 select-none">
+                      <span aria-hidden="true">{brand.initials}</span>
+                      {brand.hasLogo && (
+                        <Logo
+                          path={brand.logoPath}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
                       )}
                     </div>
-                    <span className="font-medium hidden sm:block text-foreground truncate max-w-[120px]">{user.company_name || user.full_name || 'User'}</span>
+                    <span className="font-medium hidden sm:block text-foreground truncate max-w-[120px]">{brand.companyName}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border bg-card shadow-elevation-lg">

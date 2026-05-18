@@ -32,8 +32,19 @@ dist-ssr
 **/.env.development
 **/.env.production
 **/.env.local
+# Certificate and private key files
 *.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+*.pkcs12
+# Secrets files
 secrets.json
+*secrets*.json
+.secrets
+credentials.json
 .supabase-cli/
 .vercel
 .playwright-browsers

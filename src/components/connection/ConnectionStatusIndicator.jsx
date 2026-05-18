@@ -93,11 +93,13 @@ export default function ConnectionStatusIndicator({ className }) {
     canShowConnected &&
     status === CONNECTION_STATUS.CONNECTED &&
     !suppressConnectedIndicator;
-  // Never show DISCONNECTED when session health confirms we are connected — the two indicators
-  // would otherwise contradict each other due to stale connection-store state.
+  // Never show either problem pill when session health confirms we are connected — the two stores
+  // can transiently diverge (e.g. a Supabase CLOSED event sets connectionStore to RECONNECTING
+  // while the session-health store already resolved back to CONNECTED). Session health is the
+  // authoritative signal; connectionStore is a derived transport view.
   const showProblemPill =
-    status === CONNECTION_STATUS.RECONNECTING ||
-    (status === CONNECTION_STATUS.DISCONNECTED && !sessionHealthy);
+    !sessionHealthy &&
+    (status === CONNECTION_STATUS.RECONNECTING || status === CONNECTION_STATUS.DISCONNECTED);
   const visible = showConnectedIcon || showProblemPill;
 
   const pill = (
@@ -115,7 +117,7 @@ export default function ConnectionStatusIndicator({ className }) {
         status === CONNECTION_STATUS.CONNECTED
           ? "Connected to Paidly"
           : status === CONNECTION_STATUS.RECONNECTING
-            ? "Syncing data…"
+            ? "Reconnecting to Paidly…"
             : normalizedError || "Offline"
       }
       className={cn(
@@ -150,7 +152,7 @@ export default function ConnectionStatusIndicator({ className }) {
       )}
       {status === CONNECTION_STATUS.CONNECTED ? null : (
         <span className="max-w-[4.5rem] truncate sm:max-w-[9rem] md:max-w-[13rem]">
-          {status === CONNECTION_STATUS.RECONNECTING && "Syncing…"}
+          {status === CONNECTION_STATUS.RECONNECTING && "Reconnecting…"}
           {status === CONNECTION_STATUS.DISCONNECTED && (normalizedError || "Offline")}
         </span>
       )}
