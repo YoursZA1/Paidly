@@ -10,6 +10,8 @@ import { useAppStore } from "@/stores/useAppStore";
 import { normalizeCatalogRows, normalizeInventoryRows } from "@/utils/inventoryNormalization";
 import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
+import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
+import { catalogRowsToCsvSource } from "@/utils/catalogCsvUtils";
 
 import ManageProductsView from "../components/inventory/ManageProductsView";
 import ProductFormDialog from "../components/inventory/ProductFormDialog";
@@ -19,6 +21,7 @@ import DeliveryFormDialog from "../components/inventory/DeliveryFormDialog";
 import CategoryDialog from "../components/inventory/CategoryDialog";
 import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
+import IndustryTemplatesDialog from "../components/inventory/IndustryTemplatesDialog";
 import AssetService from "@/services/AssetService";
 
 function toInt(value) {
@@ -198,6 +201,9 @@ export default function Inventory() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
   const [toolsView, setToolsView] = useState("actions");
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [industryTemplatesOpen, setIndustryTemplatesOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -1028,6 +1034,81 @@ export default function Inventory() {
     setReorderingIds((ids) => ids.filter((id) => id !== productIdToClear));
   }, []);
 
+  const handleExportCsv = useCallback(() => {
+    if (sortedProducts.length === 0) return;
+    setIsExportingCsv(true);
+    try {
+      const csvContent = servicesToCsv(catalogRowsToCsvSource(sortedProducts));
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `catalog_export_${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Export complete",
+        description: `${sortedProducts.length} item(s) exported.`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Catalog export failed:", error);
+      toast({
+        title: "Export failed",
+        description: error?.message || "Failed to export.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingCsv(false);
+    }
+  }, [sortedProducts, toast]);
+
+  const handleImportCsvFile = useCallback(
+    async (e) => {
+      const file = e.target?.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setIsImportingCsv(true);
+      try {
+        const text = await file.text();
+        const { headers, rows } = parseServiceCsv(text);
+        let created = 0;
+        let skipped = 0;
+        for (const row of rows) {
+          const payload = csvRowToServicePayload(headers, row);
+          if (!payload) {
+            skipped++;
+            continue;
+          }
+          try {
+            await Service.create(payload);
+            created++;
+          } catch (err) {
+            console.warn("Catalog CSV import row failed:", payload.name, err);
+            skipped++;
+          }
+        }
+        await refetchAll();
+        toast({
+          title: "Import complete",
+          description: `${created} item(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
+          variant: "default",
+        });
+      } catch (error) {
+        console.error("Catalog import failed:", error);
+        toast({
+          title: "Import failed",
+          description: error?.message || "Could not parse CSV.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsImportingCsv(false);
+      }
+    },
+    [refetchAll, toast]
+  );
 
   return (
     <>
@@ -1076,6 +1157,20 @@ export default function Inventory() {
           setPageSize(size);
           setPage(1);
         }}
+        isImporting={isImportingCsv}
+        isExporting={isExportingCsv}
+        exportDisabled={sortedProducts.length === 0}
+        onImportFile={handleImportCsvFile}
+        onExportCsv={handleExportCsv}
+        onOpenIndustryTemplates={() => setIndustryTemplatesOpen(true)}
+      />
+
+      <IndustryTemplatesDialog
+        open={industryTemplatesOpen}
+        onOpenChange={setIndustryTemplatesOpen}
+        userId={user?.id}
+        currencyCode={userCurrency}
+        onComplete={refetchAll}
       />
 
       <CategoryDialog

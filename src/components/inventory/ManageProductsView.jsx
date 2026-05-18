@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import ProductTable from "@/components/inventory/ProductTable";
 import InventoryFilterBar from "@/components/inventory/InventoryFilterBar";
 import InventoryTableFooter from "@/components/inventory/InventoryTableFooter";
+import CatalogDataActions from "@/components/inventory/CatalogDataActions";
 
 /**
  * Reference-aligned “Manage Products” layout (search, filters, table, pagination).
@@ -46,6 +47,12 @@ export default function ManageProductsView({
   totalItems,
   onPageChange,
   onPageSizeChange,
+  isImporting,
+  isExporting,
+  exportDisabled,
+  onImportFile,
+  onExportCsv,
+  onOpenIndustryTemplates,
 }) {
   return (
     <div className="min-h-screen bg-[#f6f4f2] dark:bg-background">
@@ -71,7 +78,15 @@ export default function ManageProductsView({
                 className="h-11 sm:h-12 pl-11 rounded-full bg-card border-border/50 shadow-sm"
               />
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <CatalogDataActions
+                isImporting={isImporting}
+                isExporting={isExporting}
+                exportDisabled={exportDisabled}
+                onImportFile={onImportFile}
+                onExport={onExportCsv}
+                onOpenIndustryTemplates={onOpenIndustryTemplates}
+              />
               <Button
                 type="button"
                 variant="outline"
