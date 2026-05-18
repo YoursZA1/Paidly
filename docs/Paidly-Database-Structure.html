@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paidly Database Structure</title>
+  <style>
+    @page { margin: 18mm 14mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; line-height: 1.4; }
+    h1 { font-size: 22px; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #64748b; margin-bottom: 20px; font-size: 11px; }
+    h2 { font-size: 14px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #3b82f6; color: #1e40af; page-break-after: avoid; }
+    h3 { font-size: 11px; margin: 14px 0 6px; color: #334155; font-family: ui-monospace, monospace; page-break-after: avoid; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; page-break-inside: avoid; }
+    th { background: #f1f5f9; text-align: left; padding: 5px 6px; border: 1px solid #e2e8f0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; }
+    td { padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: top; word-break: break-word; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    code { font-size: 9px; background: #e2e8f0; padding: 1px 4px; border-radius: 3px; }
+    .legend { background: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Paidly — Database Structure</h1>
+  <p class="meta">Generated 2026-05-16 · PostgreSQL (Supabase) · 46 public tables · Source: <code>supabase/schema.postgres.sql</code> + migrations</p>
+  <div class="legend">
+    <strong>Scope:</strong> Application tables in <code>public</code> schema. Auth users live in <code>auth.users</code> (Supabase managed).
+    Row Level Security (RLS) is enabled on user/org data; admin bypass uses <code>public.is_admin()</code> from JWT <code>app_metadata.role</code>.
+  </div>
+  <h2>Core &amp; tenancy</h2>
+<h3>public.companies</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid NOT NULL</td><td>REFERENCES public.organizations(id) ON DELETE CASCADE</td></tr>
+<tr><td><code>name</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>logo_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.memberships</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>user_id</code></td><td>uuid not null</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>role</code></td><td>text not null default 'member'</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.organizations</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>name</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>owner_id</code></td><td>uuid not null</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>logo_url</code></td><td>TEXT</td><td>—</td></tr>
+</tbody></table>
+<h3>public.profiles</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>full_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>avatar_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>logo_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>company_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>company_address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>phone</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>subscription_plan</code></td><td>text default 'starter'</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text default 'USD'</td><td>—</td></tr>
+<tr><td><code>timezone</code></td><td>text default 'UTC'</td><td>—</td></tr>
+<tr><td><code>invoice_template</code></td><td>text default 'classic'</td><td>—</td></tr>
+<tr><td><code>invoice_header</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>business</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>reminder_settings</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>quote_reminder_settings</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>last_active_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>last_active_path</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_pro</code></td><td>boolean DEFAULT false, ADD COLUMN IF NOT EXISTS payfast_token text, ADD COLUMN IF NOT EXISTS subscription_status text</td><td>—</td></tr>
+<tr><td><code>role</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>user_role</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>list_filter_prefs</code></td><td>jsonb NOT NULL DEFAULT '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>plan</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>subscription_status</code></td><td>text NOT NULL DEFAULT 'inactive'</td><td>—</td></tr>
+<tr><td><code>trial_ends_at</code></td><td>timestamptz</td><td>—</td></tr>
+</tbody></table>
+<h2>CRM &amp; catalog</h2>
+<h3>public.clients</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>name</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>phone</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>contact_person</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>website</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>tax_id</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>fax</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>alternate_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>internal_notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>industry</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>payment_terms</code></td><td>text default 'net_30'</td><td>—</td></tr>
+<tr><td><code>payment_terms_days</code></td><td>integer default 30</td><td>—</td></tr>
+<tr><td><code>follow_up_enabled</code></td><td>boolean default true</td><td>—</td></tr>
+<tr><td><code>segment</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>total_spent</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>last_invoice_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.services</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>name</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>item_type</code></td><td>text not null default 'service' check (item_type in ('service', 'product', 'labor', 'material', 'expense'))</td><td>—</td></tr>
+<tr><td><code>default_unit</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>default_rate</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_category</code></td><td>text default 'standard' check (tax_category in ('standard', 'reduced', 'zero', 'exempt'))</td><td>—</td></tr>
+<tr><td><code>is_active</code></td><td>boolean default true</td><td>—</td></tr>
+<tr><td><code>rate</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>unit</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>unit_price</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>unit_of_measure</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>service_type</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>sku</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>price</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>billing_unit</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>role</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>hourly_rate</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>unit_type</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>cost_rate</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>cost_type</code></td><td>text check (cost_type in ('fixed', 'variable'))</td><td>—</td></tr>
+<tr><td><code>default_cost</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>category</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>pricing_type</code></td><td>text check (pricing_type in ('hourly', 'fixed', 'per_item', 'daily', 'weekly', 'monthly'))</td><td>—</td></tr>
+<tr><td><code>min_quantity</code></td><td>integer default 1</td><td>—</td></tr>
+<tr><td><code>tags</code></td><td>text[]</td><td>—</td></tr>
+<tr><td><code>estimated_duration</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>requirements</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>price_locked</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>price_locked_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>price_locked_reason</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>usage_count</code></td><td>integer default 0</td><td>—</td></tr>
+<tr><td><code>last_used_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>type_specific_data</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>type</code></td><td>text CHECK (type IN ('product', 'service')) NOT NULL DEFAULT 'service'</td><td>—</td></tr>
+<tr><td><code>stock_quantity</code></td><td>integer, ADD COLUMN IF NOT EXISTS cost_price numeric(12,2), ADD COLUMN IF NOT EXISTS low_stock_threshold integer DEFAULT 5</td><td>—</td></tr>
+</tbody></table>
+<h2>Inventory</h2>
+<h3>public.deliveries</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>text PRIMARY KEY</td><td>—</td></tr>
+<tr><td><code>product_id</code></td><td>text NOT NULL</td><td>REFERENCES public.products(id) ON DELETE CASCADE</td></tr>
+<tr><td><code>quantity</code></td><td>numeric NOT NULL</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_transit','delivered','cancelled'))</td><td>—</td></tr>
+<tr><td><code>supplier</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>expected_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>tracking_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>updated_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean DEFAULT false</td><td>—</td></tr>
+</tbody></table>
+<h3>public.inventory_movements</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>product_id</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>quantity</code></td><td>integer</td><td>—</td></tr>
+<tr><td><code>type</code></td><td>text,        -- 'in' | 'out'</td><td>—</td></tr>
+<tr><td><code>source</code></td><td>text,      -- e.g. 'invoice'</td><td>—</td></tr>
+<tr><td><code>reference_id</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamp DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.products</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>text PRIMARY KEY</td><td>—</td></tr>
+<tr><td><code>name</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>sku</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>category</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>count_style</code></td><td>text NOT NULL DEFAULT 'units' CHECK (count_style IN ('units','cases','packs','boxes','pallets','bottles','bags','rolls'))</td><td>—</td></tr>
+<tr><td><code>units_per_count</code></td><td>numeric DEFAULT 1</td><td>—</td></tr>
+<tr><td><code>stock_on_hand</code></td><td>numeric DEFAULT 0</td><td>—</td></tr>
+<tr><td><code>reorder_level</code></td><td>numeric DEFAULT 10</td><td>—</td></tr>
+<tr><td><code>price</code></td><td>numeric</td><td>—</td></tr>
+<tr><td><code>image_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>updated_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean DEFAULT false</td><td>—</td></tr>
+</tbody></table>
+<h3>public.stock_transactions</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>text PRIMARY KEY</td><td>—</td></tr>
+<tr><td><code>product_id</code></td><td>text NOT NULL</td><td>REFERENCES public.products(id) ON DELETE CASCADE</td></tr>
+<tr><td><code>type</code></td><td>text NOT NULL CHECK (type IN ('sold','received','adjusted','returned'))</td><td>—</td></tr>
+<tr><td><code>quantity</code></td><td>numeric NOT NULL</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>created_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>updated_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean DEFAULT false</td><td>—</td></tr>
+</tbody></table>
+<h2>Documents (legacy)</h2>
+<h3>public.invoice_items</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>invoice_id</code></td><td>uuid not null</td><td>references public.invoices(id) on delete cascade</td></tr>
+<tr><td><code>service_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>quantity</code></td><td>numeric(12,2) not null default 1</td><td>—</td></tr>
+<tr><td><code>unit_price</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_price</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>service_id</code></td><td>uuid references public.services(id)</td><td>—</td></tr>
+</tbody></table>
+<h3>public.invoices</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>invoice_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'draft'</td><td>—</td></tr>
+<tr><td><code>project_title</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>project_description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>invoice_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>delivery_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>delivery_address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>subtotal</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_rate</code></td><td>numeric(6,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text default 'USD'</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>terms_conditions</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>banking_detail_id</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>upfront_payment</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>milestone_payment</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>final_payment</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>milestone_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>final_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>pdf_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>recurring_invoice_id</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>public_share_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>sent_to_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_company_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_company_address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_logo_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_currency</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>company_id</code></td><td>uuid REFERENCES public.companies(id) ON DELETE SET NULL</td><td>—</td></tr>
+<tr><td><code>document_brand_primary</code></td><td>text, ADD COLUMN IF NOT EXISTS document_brand_secondary text</td><td>—</td></tr>
+<tr><td><code>client_operation_id</code></td><td>text</td><td>—</td></tr>
+</tbody></table>
+<h3>public.quote_items</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>quote_id</code></td><td>uuid not null</td><td>references public.quotes(id) on delete cascade</td></tr>
+<tr><td><code>service_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>quantity</code></td><td>numeric(12,2) not null default 1</td><td>—</td></tr>
+<tr><td><code>unit_price</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_price</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+</tbody></table>
+<h3>public.quotes</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>quote_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'draft'</td><td>—</td></tr>
+<tr><td><code>project_title</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>project_description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>valid_until</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>subtotal</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_rate</code></td><td>numeric(6,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text default 'USD'</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>terms_conditions</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_company_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_company_address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_logo_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>owner_currency</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>public_share_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>document_brand_primary</code></td><td>text, ADD COLUMN IF NOT EXISTS document_brand_secondary text</td><td>—</td></tr>
+<tr><td><code>banking_detail_id</code></td><td>uuid references public.banking_details(id) on delete set null</td><td>—</td></tr>
+<tr><td><code>sent_date</code></td><td>timestamptz null</td><td>—</td></tr>
+</tbody></table>
+<h2>Documents (unified engine)</h2>
+<h3>public.document_events</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>document_id</code></td><td>uuid not null</td><td>references public.documents(id) on delete cascade</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>event_type</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>payload</code></td><td>jsonb not null default '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>actor_user_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.document_items</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>document_id</code></td><td>uuid not null</td><td>references public.documents(id) on delete cascade</td></tr>
+<tr><td><code>line_order</code></td><td>int not null default 0</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>quantity</code></td><td>numeric(14,4) not null default 1</td><td>—</td></tr>
+<tr><td><code>unit_price</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_price</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>metadata</code></td><td>jsonb not null default '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.document_sends</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>document_type</code></td><td>text not null check (document_type in ('invoice', 'quote'))</td><td>—</td></tr>
+<tr><td><code>document_id</code></td><td>uuid not null</td><td>—</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>channel</code></td><td>text not null check (channel in ('email', 'whatsapp'))</td><td>—</td></tr>
+<tr><td><code>sent_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.documents</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>type</code></td><td>text not null check (type in ('invoice', 'quote', 'payslip'))</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'draft'</td><td>—</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>document_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>title</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>issue_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>due_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>valid_until</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>subtotal</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>tax_rate</code></td><td>numeric(10,4) default 0</td><td>—</td></tr>
+<tr><td><code>tax_amount</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>discount_amount</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>total_amount</code></td><td>numeric(14,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text not null default 'ZAR'</td><td>—</td></tr>
+<tr><td><code>metadata</code></td><td>jsonb not null default '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>public_share_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>source_document_id</code></td><td>uuid</td><td>references public.documents(id) on delete set null</td></tr>
+<tr><td><code>created_by</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>source_quote_id</code></td><td>uuid references public.documents (id) on delete set null</td><td>—</td></tr>
+<tr><td><code>base_currency</code></td><td>text not null default 'ZAR', add column if not exists exchange_rate numeric(18,8) not null default 1</td><td>—</td></tr>
+</tbody></table>
+<h2>Billing &amp; payments</h2>
+<h3>public.banking_details</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>bank_name</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>account_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>account_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>routing_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>swift_code</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>payment_method</code></td><td>text default 'bank_transfer'</td><td>—</td></tr>
+<tr><td><code>additional_info</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>payment_gateway_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_default</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.packages</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>name</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>price</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text default 'ZAR'</td><td>—</td></tr>
+<tr><td><code>frequency</code></td><td>text default '/month'</td><td>—</td></tr>
+<tr><td><code>features</code></td><td>jsonb default '[]'</td><td>—</td></tr>
+<tr><td><code>is_recommended</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>website_link</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean default false</td><td>—</td></tr>
+</tbody></table>
+<h3>public.payments</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>invoice_id</code></td><td>uuid</td><td>references public.invoices(id) on delete set null</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'pending'</td><td>—</td></tr>
+<tr><td><code>paid_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>method</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>reference</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>document_id</code></td><td>uuid references public.documents(id) on delete set null</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text not null default 'ZAR', add column if not exists exchange_rate numeric(18,8) not null default 1</td><td>—</td></tr>
+<tr><td><code>payment_method</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>reference_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>payment_date</code></td><td>timestamptz</td><td>—</td></tr>
+</tbody></table>
+<h3>public.recurring_invoices</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>profile_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>invoice_template</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>frequency</code></td><td>text not null default 'monthly'</td><td>—</td></tr>
+<tr><td><code>start_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>end_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>next_generation_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'active'</td><td>—</td></tr>
+<tr><td><code>last_generated_invoice_id</code></td><td>uuid</td><td>references public.invoices(id) on delete set null</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.subscription_dunning_events</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>subscription_id</code></td><td>uuid NOT NULL</td><td>REFERENCES public.subscriptions(id) ON DELETE CASCADE</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>REFERENCES auth.users(id) ON DELETE SET NULL</td></tr>
+<tr><td><code>event_type</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>attempt_no</code></td><td>integer</td><td>—</td></tr>
+<tr><td><code>details</code></td><td>jsonb NOT NULL DEFAULT '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.subscriptions</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>email</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>full_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>user_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>user_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>plan</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>current_plan</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'active'</td><td>—</td></tr>
+<tr><td><code>amount</code></td><td>numeric</td><td>—</td></tr>
+<tr><td><code>custom_price</code></td><td>numeric</td><td>—</td></tr>
+<tr><td><code>billing_cycle</code></td><td>text DEFAULT 'monthly'</td><td>—</td></tr>
+<tr><td><code>next_billing_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid REFERENCES auth.users (id) ON DELETE SET NULL</td><td>—</td></tr>
+<tr><td><code>start_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>payfast_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>provider</code></td><td>text DEFAULT 'payfast'</td><td>—</td></tr>
+<tr><td><code>failure_count</code></td><td>integer NOT NULL DEFAULT 0</td><td>—</td></tr>
+<tr><td><code>last_payment_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>next_retry_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>dunning_stage</code></td><td>integer NOT NULL DEFAULT 0</td><td>—</td></tr>
+<tr><td><code>past_due_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>canceled_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>last_payment_failure_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>max_retry_attempts</code></td><td>integer NOT NULL DEFAULT 3</td><td>—</td></tr>
+<tr><td><code>retry_interval_hours</code></td><td>integer NOT NULL DEFAULT 24</td><td>—</td></tr>
+<tr><td><code>payfast_subscription_id</code></td><td>text</td><td>—</td></tr>
+</tbody></table>
+<h2>Payroll</h2>
+<h3>public.payslips</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>payslip_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>employee_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>employee_id</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>employee_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>employee_phone</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>position</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>department</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>pay_period_start</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>pay_period_end</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>pay_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>basic_salary</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>overtime_hours</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>overtime_rate</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>allowances</code></td><td>jsonb default '[]'</td><td>—</td></tr>
+<tr><td><code>gross_pay</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>tax_deduction</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>uif_deduction</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>pension_deduction</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>medical_aid_deduction</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>other_deductions</code></td><td>jsonb default '[]'</td><td>—</td></tr>
+<tr><td><code>total_deductions</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>net_pay</code></td><td>numeric(12,2) default 0</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text default 'draft'</td><td>—</td></tr>
+<tr><td><code>public_share_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>sent_to_email</code></td><td>text</td><td>—</td></tr>
+</tbody></table>
+<h2>Finance</h2>
+<h3>public.expenses</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>expense_number</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>category</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>amount</code></td><td>numeric(12,2) not null default 0</td><td>—</td></tr>
+<tr><td><code>date</code></td><td>date not null default (current_date)</td><td>—</td></tr>
+<tr><td><code>payment_method</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>vendor</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>receipt_url</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_claimable</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>claimed</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>notes</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>vat</code></td><td>numeric(12,2)</td><td>—</td></tr>
+</tbody></table>
+<h2>Operations</h2>
+<h3>public.notifications</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid not null</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>message</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>read</code></td><td>boolean not null default false</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.tasks</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>title</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>assigned_to</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>due_date</code></td><td>date</td><td>—</td></tr>
+<tr><td><code>priority</code></td><td>text default 'medium'</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text default 'pending'</td><td>—</td></tr>
+<tr><td><code>category</code></td><td>text default 'other'</td><td>—</td></tr>
+<tr><td><code>parent_task_id</code></td><td>uuid</td><td>references public.tasks(id) on delete set null</td></tr>
+<tr><td><code>depends_on</code></td><td>jsonb default '[]'</td><td>—</td></tr>
+<tr><td><code>estimated_hours</code></td><td>numeric(12,2)</td><td>—</td></tr>
+<tr><td><code>tags</code></td><td>text[] default '{}'</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean default false</td><td>—</td></tr>
+</tbody></table>
+<h2>Analytics &amp; tracking</h2>
+<h3>public.invoice_views</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>invoice_id</code></td><td>uuid not null</td><td>references public.invoices(id) on delete cascade</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>viewed_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>ip_address</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>user_agent</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>is_read</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>created_by_id</code></td><td>uuid</td><td>references auth.users(id) on delete set null</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>is_sample</code></td><td>boolean default false</td><td>—</td></tr>
+</tbody></table>
+<h2>Messaging</h2>
+<h3>public.client_portal_messages</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>client_id</code></td><td>uuid not null</td><td>references public.clients(id) on delete cascade</td></tr>
+<tr><td><code>sender_type</code></td><td>text not null check (sender_type in ('client', 'business'))</td><td>—</td></tr>
+<tr><td><code>subject</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>content</code></td><td>text not null default ''</td><td>—</td></tr>
+<tr><td><code>attachments</code></td><td>jsonb not null default '[]'::jsonb</td><td>—</td></tr>
+<tr><td><code>is_read</code></td><td>boolean not null default false</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.message_deliveries</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>message_id</code></td><td>uuid not null</td><td>references public.admin_platform_messages (id) on delete cascade</td></tr>
+<tr><td><code>user_id</code></td><td>uuid not null</td><td>references public.profiles (id) on delete cascade</td></tr>
+<tr><td><code>channel</code></td><td>text not null check (channel in ('email', 'in_app'))</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'pending'</td><td>—</td></tr>
+<tr><td><code>sent_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>read_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.message_logs</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default uuid_generate_v4()</td><td>—</td></tr>
+<tr><td><code>org_id</code></td><td>uuid not null</td><td>references public.organizations(id) on delete cascade</td></tr>
+<tr><td><code>document_type</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>document_id</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>client_id</code></td><td>uuid</td><td>references public.clients(id) on delete set null</td></tr>
+<tr><td><code>channel</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>recipient</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>sent_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>opened_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>viewed</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>paid</code></td><td>boolean default false</td><td>—</td></tr>
+<tr><td><code>payment_date</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>tracking_token</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>clicked_at</code></td><td>timestamptz</td><td>—</td></tr>
+</tbody></table>
+<h2>Growth</h2>
+<h3>public.waitlist_signups</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>UUID PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>email</code></td><td>TEXT NOT NULL</td><td>—</td></tr>
+<tr><td><code>name</code></td><td>TEXT</td><td>—</td></tr>
+<tr><td><code>source</code></td><td>TEXT</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>TIMESTAMPTZ NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>converted</code></td><td>boolean NOT NULL DEFAULT false</td><td>—</td></tr>
+</tbody></table>
+<h2>Affiliates</h2>
+<h3>public.affiliate_applications</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>email</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>full_name</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>why_promote</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>audience_platform</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid</td><td>REFERENCES auth.users (id) ON DELETE SET NULL</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>commission_rate</code></td><td>numeric</td><td>—</td></tr>
+</tbody></table>
+<h3>public.affiliate_clicks</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>affiliate_id</code></td><td>uuid NOT NULL</td><td>REFERENCES public.affiliates (id) ON DELETE CASCADE</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.affiliates</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid NOT NULL</td><td>REFERENCES auth.users (id) ON DELETE CASCADE</td></tr>
+<tr><td><code>application_id</code></td><td>uuid</td><td>REFERENCES public.affiliate_applications (id) ON DELETE SET NULL</td></tr>
+<tr><td><code>referral_code</code></td><td>text NOT NULL</td><td>—</td></tr>
+<tr><td><code>commission_rate</code></td><td>numeric NOT NULL DEFAULT 0.2 CHECK (commission_rate &gt;= 0 AND commission_rate &lt;= 1)</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended'))</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.commissions</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>affiliate_id</code></td><td>uuid NOT NULL</td><td>REFERENCES public.affiliates (id) ON DELETE CASCADE</td></tr>
+<tr><td><code>referral_id</code></td><td>uuid</td><td>REFERENCES public.referrals (id) ON DELETE SET NULL</td></tr>
+<tr><td><code>amount</code></td><td>numeric NOT NULL CHECK (amount &gt;= 0)</td><td>—</td></tr>
+<tr><td><code>currency</code></td><td>text NOT NULL DEFAULT 'ZAR'</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid'))</td><td>—</td></tr>
+<tr><td><code>source</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.referrals</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>affiliate_id</code></td><td>uuid NOT NULL</td><td>REFERENCES public.affiliates (id) ON DELETE CASCADE</td></tr>
+<tr><td><code>referred_user_id</code></td><td>uuid NOT NULL</td><td>REFERENCES auth.users (id) ON DELETE CASCADE</td></tr>
+<tr><td><code>status</code></td><td>text NOT NULL DEFAULT 'signed_up' CHECK (status IN ('signed_up', 'subscribed', 'paid'))</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h2>Drafts</h2>
+<h3>public.draft_versions</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid not null</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>document_type</code></td><td>text not null check (document_type in ('invoice', 'payslip'))</td><td>—</td></tr>
+<tr><td><code>draft_key</code></td><td>text not null default 'default'</td><td>—</td></tr>
+<tr><td><code>form_data</code></td><td>jsonb not null default '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>version</code></td><td>bigint not null default 0</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.drafts</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>user_id</code></td><td>uuid not null</td><td>references auth.users(id) on delete cascade</td></tr>
+<tr><td><code>document_type</code></td><td>text not null check (document_type in ('invoice', 'payslip'))</td><td>—</td></tr>
+<tr><td><code>draft_key</code></td><td>text not null default 'default'</td><td>—</td></tr>
+<tr><td><code>form_data</code></td><td>jsonb not null default '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>version</code></td><td>bigint not null default 0</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h2>Admin &amp; audit</h2>
+<h3>public.admin_broadcast_jobs</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>idempotency_key</code></td><td>text not null unique</td><td>—</td></tr>
+<tr><td><code>sender_id</code></td><td>uuid not null</td><td>references public.profiles(id) on delete cascade</td></tr>
+<tr><td><code>subject</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>content</code></td><td>text not null</td><td>—</td></tr>
+<tr><td><code>recipient_rows</code></td><td>jsonb not null default '[]'::jsonb</td><td>—</td></tr>
+<tr><td><code>total_recipients</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>notifications_inserted</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>messages_inserted</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>email_sent</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>email_skipped</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>email_failed</code></td><td>integer not null default 0</td><td>—</td></tr>
+<tr><td><code>status</code></td><td>text not null default 'queued'</td><td>—</td></tr>
+<tr><td><code>error</code></td><td>text null</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+<tr><td><code>started_at</code></td><td>timestamptz null</td><td>—</td></tr>
+<tr><td><code>finished_at</code></td><td>timestamptz null</td><td>—</td></tr>
+</tbody></table>
+<h3>public.admin_platform_messages</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid primary key default gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>recipient_id</code></td><td>uuid not null</td><td>references public.profiles (id) on delete cascade</td></tr>
+<tr><td><code>sender_id</code></td><td>uuid not null</td><td>references public.profiles (id) on delete cascade</td></tr>
+<tr><td><code>subject</code></td><td>text not null default ''</td><td>—</td></tr>
+<tr><td><code>content</code></td><td>text not null default ''</td><td>—</td></tr>
+<tr><td><code>is_read</code></td><td>boolean not null default false</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz not null default now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.admin_settings</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>key</code></td><td>text PRIMARY KEY</td><td>—</td></tr>
+<tr><td><code>value</code></td><td>jsonb NOT NULL DEFAULT '{}'::jsonb</td><td>—</td></tr>
+<tr><td><code>updated_by</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+</tbody></table>
+<h3>public.admin_system_state</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>boolean PRIMARY KEY DEFAULT true CHECK (id = true)</td><td>—</td></tr>
+<tr><td><code>maintenance_mode</code></td><td>boolean NOT NULL DEFAULT false</td><td>—</td></tr>
+<tr><td><code>last_reset_at</code></td><td>timestamptz</td><td>—</td></tr>
+<tr><td><code>updated_by</code></td><td>uuid</td><td>—</td></tr>
+<tr><td><code>updated_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>reset_reason</code></td><td>text</td><td>—</td></tr>
+</tbody></table>
+<h3>public.audit_logs</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>uuid PRIMARY KEY DEFAULT gen_random_uuid()</td><td>—</td></tr>
+<tr><td><code>category</code></td><td>text NOT NULL DEFAULT 'settings'</td><td>—</td></tr>
+<tr><td><code>action</code></td><td>text NOT NULL DEFAULT ''</td><td>—</td></tr>
+<tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>before</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>after</code></td><td>jsonb</td><td>—</td></tr>
+<tr><td><code>actor_name</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>actor_email</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>actor_role</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>target_label</code></td><td>text</td><td>—</td></tr>
+<tr><td><code>created_at</code></td><td>timestamptz NOT NULL DEFAULT now()</td><td>—</td></tr>
+<tr><td><code>actor_id</code></td><td>uuid, ADD COLUMN IF NOT EXISTS entity text, ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb</td><td>—</td></tr>
+</tbody></table>
+<h2>Platform</h2>
+<h3>public.api_rate_limit_buckets</h3>
+<table><thead><tr><th>Column</th><th>Type</th><th>Constraints / FK</th></tr></thead><tbody>
+<tr><td><code>bucket_key</code></td><td>text PRIMARY KEY</td><td>—</td></tr>
+<tr><td><code>hit_count</code></td><td>integer NOT NULL DEFAULT 0</td><td>—</td></tr>
+<tr><td><code>window_reset_at</code></td><td>timestamptz NOT NULL</td><td>—</td></tr>
+</tbody></table>
+
+</body>
+</html>
