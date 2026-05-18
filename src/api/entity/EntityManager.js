@@ -31,6 +31,7 @@ import {
   attachInvoiceCompany,
   getSupabaseTableForEntityName,
 } from "@/api/entity/entityShared.js";
+import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
 export class EntityManager {
   /** @type {{ auth: { user?: object } } | null} */

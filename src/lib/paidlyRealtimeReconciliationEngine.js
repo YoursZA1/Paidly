@@ -12,22 +12,24 @@ export const REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS = 2200;
 /**
  * Resolve when the tab becomes visible (or immediately if already visible / no DOM).
  */
-export function whenDocumentVisible({ pollMs = 600, maxWaitMs = 120_000 } = {}) {
+export function whenDocumentVisible({ maxWaitMs = 120_000 } = {}) {
   if (typeof document === "undefined" || document.visibilityState === "visible") {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    const started = Date.now();
-    const id = window.setInterval(() => {
-      if (Date.now() - started > maxWaitMs) {
-        window.clearInterval(id);
-        resolve();
-        return;
-      }
-      if (document.visibilityState !== "visible") return;
-      window.clearInterval(id);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisibility);
       resolve();
-    }, pollMs);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") finish();
+    };
+    const timeoutId = setTimeout(finish, maxWaitMs);
+    document.addEventListener("visibilitychange", onVisibility);
   });
 }
 
@@ -36,24 +38,23 @@ export function whenDocumentVisible({ pollMs = 600, maxWaitMs = 120_000 } = {}) 
  * @param {() => void} fn
  * @returns {() => void} cancel
  */
-export function runWhenDocumentVisible(fn, { pollMs = 600, maxWaitMs = 120_000 } = {}) {
+export function runWhenDocumentVisible(fn, { maxWaitMs = 120_000 } = {}) {
   if (typeof document === "undefined" || document.visibilityState === "visible") {
     fn();
     return () => {};
   }
-  const started = Date.now();
-  const id = window.setInterval(() => {
-    if (Date.now() - started > maxWaitMs) {
-      window.clearInterval(id);
-      return;
-    }
-    if (document.visibilityState !== "visible") return;
-    window.clearInterval(id);
-    try {
-      fn();
-    } catch {
-      /* ignore */
-    }
-  }, pollMs);
-  return () => window.clearInterval(id);
+  let cancelled = false;
+  const cleanup = () => {
+    cancelled = true;
+    clearTimeout(timeoutId);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+  const onVisibility = () => {
+    if (cancelled || document.visibilityState !== "visible") return;
+    cleanup();
+    try { fn(); } catch { /* ignore */ }
+  };
+  const timeoutId = setTimeout(cleanup, maxWaitMs);
+  document.addEventListener("visibilitychange", onVisibility);
+  return cleanup;
 }

@@ -1083,6 +1083,12 @@ export async function reconcilePaidlyRealtimeAfterTokenRefresh(accessToken, reas
       });
       return;
     }
+    // setAuth() already pushed the new JWT to the existing socket above.
+    // Only rebuild if the channel is not healthy — avoid tearing down a working connection on every token rotation.
+    if (isPaidlyRealtimeMainChannelJoined()) {
+      paidlyRealtimeLog("reconnect_suppressed", { kind: "jwt_refresh_channel_healthy", jwtReason: reason, tokenChanged });
+      return;
+    }
     lastJwtChannelRebuildAtMs = now;
     clearPendingReconnectTimers("jwt_refresh_preempt");
     runChannelRebuild(`jwt_refresh:${reason}`, { force: true });

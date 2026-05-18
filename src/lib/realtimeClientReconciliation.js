@@ -3,6 +3,7 @@
  * all client/invoice queries and running a global `fetchAll`.
  */
 import { paidlyDataLayerLog } from "@/lib/paidlyDataLayerInstrumentation";
+import { scheduleInvalidation } from "@/core/runtime/RuntimeBudgetCoordinator";
 
 /**
  * @param {import("@tanstack/react-query").QueryClient} queryClient
@@ -18,7 +19,7 @@ export function reconcileClientRealtimeEvent(queryClient, store, payload) {
     if (!id) return false;
     store.removeFromRemote(id);
     patchClientsInfiniteQueries(queryClient, { mode: "delete", id });
-    queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+    scheduleInvalidation(queryClient, ["cashflow-page"]);
     paidlyDataLayerLog("realtime_patch_clients", { eventType, id });
     return true;
   }
@@ -28,7 +29,7 @@ export function reconcileClientRealtimeEvent(queryClient, store, payload) {
     if (!row || typeof row !== "object" || !row.id) return false;
     store.upsertFromRemote(row);
     patchClientsInfiniteQueries(queryClient, { mode: "upsert", row, insert: eventType === "insert" });
-    queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+    scheduleInvalidation(queryClient, ["cashflow-page"]);
     paidlyDataLayerLog("realtime_patch_clients", { eventType, id: row.id });
     return true;
   }

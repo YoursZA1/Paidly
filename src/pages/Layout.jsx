@@ -204,7 +204,7 @@ const allNavigationItems = [
     id: "nav-documents",
   },
   {
-    title: "Prod & Services",
+    title: "Products",
     url: createPageUrl("Services"),
     icon: Briefcase,
     feature: null,

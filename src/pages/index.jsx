@@ -151,6 +151,8 @@ const MAIN_ROUTES = [
     { path: "/notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/Services", element: <RequireAuth><Services /></RequireAuth> },
     { path: "/services", element: <RequireAuth><Services /></RequireAuth> },
+    { path: "/Inventory", element: <RequireAuth><Navigate to="/Services" replace /></RequireAuth> },
+    { path: "/inventory", element: <RequireAuth><Navigate to="/Services" replace /></RequireAuth> },
     { path: "/Calendar", element: <RequireAuth><Calendar /></RequireAuth> },
     { path: "/Messages", element: <RequireAuth><Messages /></RequireAuth> },
     { path: "/Budgets", element: <RequireAuth><Budgets /></RequireAuth> },

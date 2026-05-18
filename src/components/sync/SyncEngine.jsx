@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabaseClient";
 
 const WAKE_RECOVERY_RESYNC = "paidly:wake-recovery-resync";
 import { useSyncQueueStore } from "@/stores/useSyncQueueStore";
@@ -14,6 +13,12 @@ import {
 import { setPaidlySyncRealtimeBridge } from "@/lib/realtime/paidlyRealtimeManager";
 import { reconcileInvoiceRealtimeEvent } from "@/lib/realtimeInvoiceReconciliation";
 import { reconcileClientRealtimeEvent } from "@/lib/realtimeClientReconciliation";
+import {
+  reconcileQuoteRealtimeEvent,
+  reconcilePaymentRealtimeEvent,
+  reconcileExpenseRealtimeEvent,
+  reconcilePayslipRealtimeEvent,
+} from "@/lib/realtimeEntityReconciliation";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 import {
@@ -24,6 +29,7 @@ import {
 import { requestSessionRefresh } from "@/lib/session/sessionRefreshScheduler";
 import { useRuntimeCoordinator } from "@/core/runtime/RuntimeCoordinator";
 import { invalidateInvoiceDomain, invalidateClientDomain } from "@/lib/queryInvalidation";
+import { hasActiveSession, getStableSession } from "@/core/auth/SessionCoordinator";
 
 const SYNC_INTERVAL_MS = 5000;
 /** Coalesce session recovery when the queue has work but `getSession()` is momentarily empty (auth latency / refresh races). */
@@ -34,7 +40,6 @@ const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expense
 export default function SyncEngine() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const queue = useSyncQueueStore((s) => s.queue);
   const markProcessing = useSyncQueueStore((s) => s.markProcessing);
   const markDone = useSyncQueueStore((s) => s.markDone);
   const markFailed = useSyncQueueStore((s) => s.markFailed);
@@ -43,6 +48,15 @@ export default function SyncEngine() {
   const fetchAllFromStore = useAppStore((s) => s.fetchAll);
   const runningRef = useRef(false);
   const lastSyncQueueSessionWakeMsRef = useRef(0);
+
+  // On mount: reset any jobs that were "processing" when the app last crashed,
+  // and remove jobs from other users that may share the same localStorage key.
+  useEffect(() => {
+    const store = useSyncQueueStore.getState();
+    store.resetStuckJobs();
+    if (user?.id) store.pruneJobsNotForUser(user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const globalStoreRefreshTimerRef = useRef(null);
   const realtimeEntityDebounceRefs = useRef({
     invoices: null,
@@ -86,23 +100,20 @@ export default function SyncEngine() {
       }
       if (entity === "document_sends") {
         queryClient.invalidateQueries({ queryKey: ["admin-messages"], exact: false });
-        return false;
+        // Targeted invalidation is sufficient — skip global fetchAll
+        return true;
       }
       if (entity === "quotes") {
-        queryClient.invalidateQueries({ queryKey: ["quotes"], exact: false });
-        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        return false;
+        return reconcileQuoteRealtimeEvent(queryClient, payload || {});
       }
       if (entity === "payments") {
-        invalidateInvoiceDomain(queryClient, { scopeKey });
-        return false;
+        return reconcilePaymentRealtimeEvent(queryClient, scopeKey, payload || {});
       }
       if (entity === "expenses") {
-        queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
-        return false;
+        return reconcileExpenseRealtimeEvent(queryClient, payload || {});
       }
       if (entity === "payslips") {
-        queryClient.invalidateQueries({ queryKey: ["payslips"], exact: false });
+        return reconcilePayslipRealtimeEvent(queryClient, payload || {});
       }
       return false;
     },
@@ -119,8 +130,7 @@ export default function SyncEngine() {
       void (async () => {
         globalStoreRefreshTimerRef.current = null;
         await whenDocumentVisible();
-        const session = await supabase.auth.getSession();
-        if (!session?.data?.session) return;
+        if (!hasActiveSession()) return;
         const isAdmin = user?.role === "admin";
         if (isAdmin) {
           notifyAdminDashboardRealtimeStale();
@@ -144,8 +154,7 @@ export default function SyncEngine() {
         void (async () => {
           realtimeEntityDebounceRefs.current[entity] = null;
           await whenDocumentVisible();
-          const session = await supabase.auth.getSession();
-          if (!session?.data?.session) return;
+          if (!hasActiveSession()) return;
           const skipGlobalFetchAll = invalidateForEntity(entity, payload);
           if (role !== "admin" && !skipGlobalFetchAll) {
             scheduleGlobalStoreRefresh();
@@ -165,13 +174,14 @@ export default function SyncEngine() {
     useRuntimeCoordinator.getState().setSyncActive(true);
     try {
       const now = Date.now();
-      const nextJob = queue
+      const { queue: currentQueue } = useSyncQueueStore.getState();
+      const nextJob = currentQueue
         .filter((job) => (job.status === "pending" || job.status === "processing") && job.nextAttemptAt <= now)
         .sort((a, b) => a.createdAt - b.createdAt)[0];
       if (!nextJob) return;
 
-      const session = await supabase.auth.getSession();
-      if (!session?.data?.session) {
+      const rawSession = await getStableSession();
+      if (!rawSession) {
         const now = Date.now();
         if (now - lastSyncQueueSessionWakeMsRef.current >= SYNC_QUEUE_SESSION_WAKE_MIN_MS) {
           lastSyncQueueSessionWakeMsRef.current = now;
@@ -194,8 +204,7 @@ export default function SyncEngine() {
             sync_state: "synced",
           });
         }
-        const postJobSession = await supabase.auth.getSession();
-        if (postJobSession?.data?.session) {
+        if (hasActiveSession()) {
           const scopeKey = user?.id ?? null;
           if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
             invalidateInvoiceDomain(queryClient, { scopeKey });
@@ -210,7 +219,7 @@ export default function SyncEngine() {
       runningRef.current = false;
       useRuntimeCoordinator.getState().setSyncActive(false);
     }
-  }, [markDone, markFailed, markProcessing, queryClient, queue, replaceOptimisticInvoice, user?.id]);
+  }, [markDone, markFailed, markProcessing, queryClient, replaceOptimisticInvoice, user?.id]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -292,8 +301,7 @@ export default function SyncEngine() {
       void (async () => {
         await whenDocumentVisible();
         if (!user?.id) return;
-        const session = await supabase.auth.getSession();
-        if (!session?.data?.session) return;
+        if (!hasActiveSession()) return;
         void fetchAllFromStore(user).finally(() => {
           dispatchAppFetchAllSettled();
         });

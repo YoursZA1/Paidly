@@ -168,6 +168,40 @@ export const useSyncQueueStore = create((set, get) => ({
       return { queue };
     }),
 
+  /**
+   * Reset jobs stuck in "processing" back to "pending".
+   * Call once on SyncEngine mount to recover jobs that were in-flight when the app crashed or was force-closed.
+   */
+  resetStuckJobs: () =>
+    set((state) => {
+      const hadStuck = state.queue.some((j) => j.status === "processing");
+      if (!hadStuck) return {};
+      const now = Date.now();
+      const queue = state.queue.map((job) =>
+        job.status === "processing"
+          ? { ...job, status: "pending", nextAttemptAt: now, updatedAt: now }
+          : job
+      );
+      persistQueue(queue);
+      return { queue };
+    }),
+
+  /**
+   * Remove jobs that belong to a different user (identified by meta.userId).
+   * Call after login to prevent one user's offline queue from being replayed under another user's session.
+   * Jobs without meta.userId are kept (legacy jobs or jobs that predate user-scoping).
+   */
+  pruneJobsNotForUser: (userId) =>
+    set((state) => {
+      if (!userId) return {};
+      const queue = state.queue.filter(
+        (job) => !job.meta?.userId || job.meta.userId === userId
+      );
+      if (queue.length === state.queue.length) return {};
+      persistQueue(queue);
+      return { queue };
+    }),
+
   pendingJobs: () => {
     const now = Date.now();
     return get().queue.filter((job) => (job.status === "pending" || job.status === "processing") && job.nextAttemptAt <= now);

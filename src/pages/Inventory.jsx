@@ -1,25 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertTriangle,
-  Barcode,
-  ChevronDown,
-  Package,
-  Plus,
-  Search,
-  ShoppingCart,
-  Truck,
-} from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -27,19 +7,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
-import { normalizeInventoryRows } from "@/utils/inventoryNormalization";
+import { normalizeCatalogRows, normalizeInventoryRows } from "@/utils/inventoryNormalization";
 import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
-import { createPageUrl } from "@/utils";
+import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 
-import StatsCard from "../components/inventory/StatsCard";
-import ProductTable from "../components/inventory/ProductTable";
+import ManageProductsView from "../components/inventory/ManageProductsView";
 import ProductFormDialog from "../components/inventory/ProductFormDialog";
+import CatalogItemDialog from "../components/inventory/CatalogItemDialog";
 import SellStockDialog from "../components/inventory/SellStockDialog";
 import DeliveryFormDialog from "../components/inventory/DeliveryFormDialog";
-import DeliveryTable from "../components/inventory/DeliveryTable";
-import RecentActivity from "../components/inventory/RecentActivity";
-import LowStockAlert from "../components/inventory/LowStockAlert";
+import CategoryDialog from "../components/inventory/CategoryDialog";
+import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
+import AssetService from "@/services/AssetService";
 
 function toInt(value) {
   const n = Number(value);
@@ -99,7 +79,10 @@ function getReadableSaveError(error) {
   const msg = raw.toLowerCase();
   if (!raw) return "Failed to save product. Please try again.";
   if (msg.includes("duplicate key") || msg.includes("already exists")) {
-    return "A product with this SKU already exists. Please use a different SKU.";
+    if (msg.includes("barcode")) {
+      return "A product with this barcode already exists in your organization.";
+    }
+    return "A product with this SKU or barcode already exists. Please use different values.";
   }
   if (msg.includes("violates row-level security") || msg.includes("permission denied")) {
     return "You do not have permission to update this product.";
@@ -141,10 +124,58 @@ function resolveInventoryProductOrgId(product, membershipOrgId) {
   return fromRaw ?? membershipOrgId ?? null;
 }
 
+function productStatusKey(product) {
+  if (product?.is_active === false) return "inactive";
+  if (product?.item_type === "service") return "active";
+  const stock = Number(product?.stock_on_hand ?? 0);
+  const threshold = Number(product?.reorder_level ?? 10);
+  if (stock <= 0) return "out";
+  if (stock <= threshold) return "low";
+  return "active";
+}
+
+function compareProducts(a, b, key, direction) {
+  const dir = direction === "desc" ? -1 : 1;
+  const cmpStr = (x, y) => {
+    const xs = String(x ?? "").toLowerCase();
+    const ys = String(y ?? "").toLowerCase();
+    if (xs < ys) return -1 * dir;
+    if (xs > ys) return 1 * dir;
+    return 0;
+  };
+  const cmpNum = (x, y) => {
+    const xn = Number(x) || 0;
+    const yn = Number(y) || 0;
+    if (xn < yn) return -1 * dir;
+    if (xn > yn) return 1 * dir;
+    return 0;
+  };
+
+  switch (key) {
+    case "category":
+      return cmpStr(a.category, b.category) || cmpStr(a.name, b.name);
+    case "sku":
+      return cmpStr(a.sku || a.barcode, b.sku || b.barcode) || cmpStr(a.name, b.name);
+    case "quantity":
+      return cmpNum(a.stock_on_hand, b.stock_on_hand) || cmpStr(a.name, b.name);
+    case "cost":
+      return cmpNum(a.cost, b.cost) || cmpStr(a.name, b.name);
+    case "price":
+      return cmpNum(a.price, b.price) || cmpStr(a.name, b.name);
+    case "status":
+      return cmpStr(productStatusKey(a), productStatusKey(b)) || cmpStr(a.name, b.name);
+    case "type":
+      return cmpStr(a.item_type, b.item_type) || cmpStr(a.name, b.name);
+    case "name":
+    default:
+      return cmpStr(a.name, b.name);
+  }
+}
+
 export default function Inventory() {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
   const userProfile = useAppStore((s) => s.userProfile);
   const userCurrency = userProfile?.currency || "ZAR";
 
@@ -155,12 +186,25 @@ export default function Inventory() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("products");
-  const [productFilter, setProductFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [quantityFilter, setQuantityFilter] = useState("all");
+  const [priceFilter, setPriceFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("name");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
+  const [toolsView, setToolsView] = useState("actions");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
+  const [catalogDialogItem, setCatalogDialogItem] = useState(null);
+  const [catalogDialogType, setCatalogDialogType] = useState("service");
 
   const [sellDialogOpen, setSellDialogOpen] = useState(false);
 
@@ -223,9 +267,17 @@ export default function Inventory() {
 
   const findProductByBarcode = useCallback(
     (barcode) => {
-      const code = String(barcode || "").trim();
+      const code = String(barcode || "").trim().toLowerCase();
       if (!code) return null;
-      return products.find((p) => String(p.sku || "").trim() === code) || null;
+      return (
+        products
+          .filter((p) => p.item_type === "product")
+          .find((p) => {
+            const sku = String(p.sku || "").trim().toLowerCase();
+            const bc = String(p.barcode || "").trim().toLowerCase();
+            return sku === code || bc === code;
+          }) || null
+      );
     },
     [products]
   );
@@ -258,12 +310,14 @@ export default function Inventory() {
           name,
           description,
           sku,
+          barcode,
           category,
+          image_url,
           item_type,
-          type,
           default_unit,
           min_quantity,
           stock_quantity,
+          stock_capacity,
           low_stock_threshold,
           price,
           cost_price,
@@ -272,15 +326,12 @@ export default function Inventory() {
           updated_at
         `.replace(/\s+/g, " ")
       )
-      .eq("item_type", "product")
       .order("updated_at", { ascending: false })
       .limit(500);
 
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
-
-    // Centralized normalization policy for product rows.
-    return normalizeInventoryRows("products", rows);
+    return normalizeCatalogRows(rows);
   }, []);
 
   const loadTransactions = useCallback(async () => {
@@ -326,22 +377,30 @@ export default function Inventory() {
       if (t.status === "fulfilled") setTransactions(t.value);
       if (d.status === "fulfilled") setDeliveries(d.value);
 
-      if (p.status === "rejected" || t.status === "rejected") {
-        throw new Error("Some inventory data failed to load.");
+      // Transactions and deliveries are supplementary (Tools sheet only) — log but don't crash.
+      if (t.status === "rejected") {
+        console.warn("Inventory: transactions load skipped", t.reason?.message || t.reason);
+      }
+
+      if (p.status === "rejected") {
+        const raw = String(p.reason?.message || p.reason || "");
+        throw new Error(raw || "Failed to load products.");
       }
     } finally {
       setIsLoading(false);
     }
-  }, [loadDeliveries, loadProducts, loadTransactions]);
+    await invalidateServicesCatalog(queryClient);
+  }, [loadDeliveries, loadProducts, loadTransactions, queryClient]);
 
   useEffect(() => {
     if (!user?.id) return;
     refetchAll().catch((e) => {
       console.error("Inventory: initial load failed", e);
-      setLoadError("Failed to load inventory data. Please refresh and try again.");
+      const msg = String(e?.message || "Failed to load inventory data. Please refresh and try again.");
+      setLoadError(msg);
       toast({
         title: "✗ Inventory Load Failed",
-        description: "Failed to load inventory data. Please refresh and try again.",
+        description: msg,
         variant: "destructive",
       });
     });
@@ -433,7 +492,7 @@ export default function Inventory() {
 
         const { data: currentRow, error: getErr } = await supabase
           .from("services")
-          .select("id, stock_quantity, type")
+          .select("id, stock_quantity")
           .eq("id", product_id)
           .eq("org_id", resolvedOrgId)
           .maybeSingle();
@@ -510,16 +569,26 @@ export default function Inventory() {
   }, [handleBarcode, pendingBarcode]);
 
   const lowStockProducts = useMemo(() => {
-    return products.filter((p) => (p.stock_on_hand || 0) <= (p.reorder_level || 10));
+    return products.filter(
+      (p) =>
+        p.item_type === "product" &&
+        (p.stock_on_hand || 0) <= (p.reorder_level || 10)
+    );
   }, [products]);
 
-  const stats = useMemo(() => {
-    const totalStock = products.reduce((sum, p) => sum + (Number(p.stock_on_hand ?? 0) || 0), 0);
-    const totalSold = transactions.filter((t) => t.type === "sold").reduce((sum, t) => sum + (Number(t.quantity ?? 0) || 0), 0);
-    const lowStockCount = lowStockProducts.length;
-    const pendingDeliveries = deliveries.filter((d) => d.status === "pending" || d.status === "in_transit").length;
-    return { totalStock, totalSold, lowStockCount, pendingDeliveries };
-  }, [deliveries, lowStockProducts.length, products, transactions]);
+  const inventoryProducts = useMemo(
+    () => products.filter((p) => p.item_type === "product"),
+    [products]
+  );
+
+  const categories = useMemo(() => {
+    const set = new Set();
+    for (const p of products) {
+      const c = String(p.category || "").trim();
+      if (c) set.add(c);
+    }
+    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -527,25 +596,104 @@ export default function Inventory() {
       !q ||
       String(p.name ?? "").toLowerCase().includes(q) ||
       String(p.sku ?? "").toLowerCase().includes(q) ||
+      String(p.barcode ?? "").toLowerCase().includes(q) ||
       String(p.category ?? "").toLowerCase().includes(q);
 
     return products.filter((p) => {
       if (!matchesQuery(p)) return false;
 
-      const stock = Number(p.stock_on_hand ?? 0);
-      const threshold = Number(p.reorder_level ?? 10);
-      if (productFilter === "out") return stock <= 0;
-      if (productFilter === "low") return stock > 0 && stock <= threshold;
+      if (typeFilter === "product" && p.item_type !== "product") return false;
+      if (typeFilter === "service" && p.item_type !== "service") return false;
+
+      if (statusFilter === "active" && productStatusKey(p) !== "active") return false;
+
+      if (categoryFilter !== "all") {
+        const cat = String(p.category || "").trim();
+        if (cat !== categoryFilter) return false;
+      }
+
+      if (p.item_type === "product" && quantityFilter !== "all") {
+        const stock = Number(p.stock_on_hand ?? 0);
+        const threshold = Number(p.reorder_level ?? 10);
+        if (quantityFilter === "out" && stock > 0) return false;
+        if (quantityFilter === "low" && (stock <= 0 || stock > threshold)) return false;
+        if (quantityFilter === "in_stock" && stock <= 0) return false;
+      }
+
+      const price = Number(p.price ?? 0);
+      if (priceFilter === "under_50" && price >= 50) return false;
+      if (priceFilter === "50_200" && (price < 50 || price > 200)) return false;
+      if (priceFilter === "over_200" && price <= 200) return false;
+
       return true;
     });
-  }, [productFilter, products, search]);
+  }, [categoryFilter, priceFilter, products, quantityFilter, search, statusFilter, typeFilter]);
 
-  const openProductPage = useCallback(
-    (product) => {
-      if (!product?.id) return;
-      navigate(`${createPageUrl("EditCatalogItem")}?id=${encodeURIComponent(product.id)}`);
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    list.sort((a, b) => compareProducts(a, b, sortKey, sortDirection));
+    return list;
+  }, [filteredProducts, sortDirection, sortKey]);
+
+  const totalFiltered = sortedProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize) || 1);
+  const safePage = Math.min(page, totalPages);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return sortedProducts.slice(start, start + pageSize);
+  }, [pageSize, safePage, sortedProducts]);
+
+  const handleSort = useCallback(
+    (key) => {
+      if (sortKey === key) {
+        setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+      } else {
+        setSortKey(key);
+        setSortDirection("asc");
+      }
     },
-    [navigate]
+    [sortKey]
+  );
+
+  const profileAvatarUrl = useMemo(() => {
+    const raw = userProfile?.avatar_url || user?.avatar_url || "";
+    if (!raw) return null;
+    const resolved = AssetService.getLogo(raw);
+    return resolved && resolved !== AssetService.FALLBACK_LOGO ? resolved : null;
+  }, [user?.avatar_url, userProfile?.avatar_url]);
+
+  const profileInitials = useMemo(() => {
+    const name = String(userProfile?.full_name || user?.full_name || "").trim();
+    if (name) {
+      const parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    const email = String(userProfile?.email || user?.email || "").trim();
+    return email ? email[0].toUpperCase() : "U";
+  }, [user?.email, user?.full_name, userProfile?.email, userProfile?.full_name]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, typeFilter, categoryFilter, quantityFilter, priceFilter, pageSize]);
+
+  const openCatalogDialog = useCallback((row, type = "service") => {
+    setCatalogDialogItem(row || null);
+    setCatalogDialogType(row?.item_type || type);
+    setCatalogDialogOpen(true);
+  }, []);
+
+  const handleEditRow = useCallback(
+    (row) => {
+      if (row?.item_type !== "product") {
+        openCatalogDialog(row);
+        return;
+      }
+      setEditingProduct(row);
+      setProductDialogOpen(true);
+    },
+    [openCatalogDialog]
   );
 
   // Product handlers
@@ -582,11 +730,14 @@ export default function Inventory() {
           type: "product",
           name,
           sku: (productData?.sku || "").trim() || null,
+          barcode: (productData?.barcode || "").trim() || null,
           category: (productData?.category || "").trim() || null,
+          image_url: productData?.image_url || null,
           default_unit: toDbDefaultUnit(productData?.count_style, editingProduct?._raw?.default_unit),
-          // Inventory fields (stored on services)
           stock_quantity: toInt(productData?.stock_on_hand),
+          stock_capacity: Number(productData?.stock_capacity) > 0 ? Number(productData.stock_capacity) : null,
           low_stock_threshold: toInt(productData?.reorder_level || 10),
+          cost_price: Number(productData?.cost ?? 0) || 0,
           price: Number(productData?.price ?? 0) || 0,
           default_rate: Number(productData?.price ?? 0) || 0,
         };
@@ -744,8 +895,11 @@ export default function Inventory() {
         }
 
         const now = new Date().toISOString();
+        const deliveryProduct = products.find((p) => p.id === deliveryData.product_id);
+        const deliveryOrgId = deliveryProduct?._raw?.org_id ?? deliveryProduct?.org_id ?? null;
         const baseFields = {
           product_id: deliveryData.product_id,
+          org_id: deliveryOrgId,
           quantity: toInt(deliveryData.quantity),
           status: deliveryData.status,
           supplier: deliveryData.supplier || null,
@@ -874,249 +1028,105 @@ export default function Inventory() {
     setReorderingIds((ids) => ids.filter((id) => id !== productIdToClear));
   }, []);
 
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50">
-        <div className="responsive-page-shell py-4 sm:py-5 space-y-3">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1.1fr)_auto] lg:items-center">
-            <div className="min-w-0">
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">Inventory</h1>
-              <p className="text-sm text-muted-foreground">Manage stock, track sales, and monitor product performance</p>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search products by name, SKU, or category..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-10 h-10 sm:h-11 bg-card border-border/50"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                onClick={() => {
-                  setEditingProduct(null);
-                  setProductDialogOpen(true);
-                }}
-                className="gap-2 h-11 px-4"
-              >
-                <Plus className="w-4 h-4" /> Add Product
-              </Button>
+    <>
+      <ManageProductsView
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        profileAvatarUrl={profileAvatarUrl}
+        profileInitials={profileInitials}
+        onCreateCategory={() => setCategoryDialogOpen(true)}
+        onAddProduct={() => {
+          setEditingProduct(null);
+          setProductDialogOpen(true);
+        }}
+        onAddService={() => openCatalogDialog(null, "service")}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        categories={categories}
+        quantityFilter={quantityFilter}
+        onQuantityFilterChange={setQuantityFilter}
+        priceFilter={priceFilter}
+        onPriceFilterChange={setPriceFilter}
+        onOpenTools={() => {
+          setToolsView("actions");
+          setToolsSheetOpen(true);
+        }}
+        isLoading={isLoading}
+        loadError={loadError}
+        onRetry={refetchAll}
+        products={paginatedProducts}
+        currencyCode={userCurrency}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        onOpenProduct={openCatalogDialog}
+        onEditProduct={handleEditRow}
+        onDeleteProduct={handleDeleteProduct}
+        page={safePage}
+        pageSize={pageSize}
+        totalItems={totalFiltered}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-11 gap-1.5">
-                    Actions
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setScannerMode("receive");
-                      setScannerQty(1);
-                      setScannerOpen(true);
-                    }}
-                  >
-                    <Barcode className="w-4 h-4" />
-                    Scan Receive
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setScannerMode("sell");
-                      setScannerQty(1);
-                      setScannerOpen(true);
-                    }}
-                  >
-                    <Barcode className="w-4 h-4" />
-                    Scan Sale
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSellDialogOpen(true)}>Record Sale</DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setEditingDelivery(null);
-                      setDeliveryDialogOpen(true);
-                    }}
-                  >
-                    New Delivery
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
-      </header>
+      <CategoryDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        existingCategories={categories}
+        onUseCategory={(name) => {
+          setEditingProduct({ category: name, item_type: "product" });
+          setProductDialogOpen(true);
+        }}
+      />
 
-      <main className="responsive-page-shell py-4 sm:py-6 md:py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-4 md:gap-6">
-          <section className="space-y-4 md:space-y-5 min-w-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              <StatsCard
-                title="Stock on Hand"
-                value={stats.totalStock.toLocaleString()}
-                subtitle={`Across ${products.length} products`}
-                trend="+12 this week"
-                icon={Package}
-                color="primary"
-                active={productFilter === "all" && activeTab === "products"}
-                onClick={() => {
-                  setActiveTab("products");
-                  setProductFilter("all");
-                }}
-              />
-              <StatsCard
-                title="Total Sold"
-                value={stats.totalSold.toLocaleString()}
-                subtitle="All time"
-                trend="Sales activity"
-                icon={ShoppingCart}
-                color="accent"
-                active={activeTab === "stock"}
-                onClick={() => setActiveTab("stock")}
-              />
-              <StatsCard
-                title="Low Stock"
-                value={stats.lowStockCount}
-                subtitle="Needs restock"
-                trend={stats.lowStockCount > 0 ? "Act now to avoid stockouts" : "Healthy levels"}
-                icon={AlertTriangle}
-                color="yellow"
-                active={productFilter === "low" && activeTab === "products"}
-                onClick={() => {
-                  setActiveTab("products");
-                  setProductFilter("low");
-                }}
-              />
-              <StatsCard
-                title="Pending Deliveries"
-                value={stats.pendingDeliveries}
-                subtitle="Pending or in transit"
-                trend={stats.pendingDeliveries > 0 ? "Inbound stock expected" : "No pending deliveries"}
-                icon={Truck}
-                color="blue"
-                active={activeTab === "deliveries"}
-                onClick={() => setActiveTab("deliveries")}
-              />
-            </div>
-
-            <LowStockAlert lowStockProducts={lowStockProducts} reorderingIds={reorderingIds} onReorder={handleReorder} />
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full sm:w-auto bg-muted/30">
-                <TabsTrigger value="products" className="gap-1.5">
-                  Products
-                </TabsTrigger>
-                <TabsTrigger value="deliveries" className="gap-1.5">
-                  Deliveries
-                </TabsTrigger>
-                <TabsTrigger value="stock" className="gap-1.5">
-                  Stock History
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="products" className="mt-4">
-                <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-sm">
-                  {isLoading ? (
-                    <div className="p-4 space-y-3">
-                      <Skeleton className="h-9 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  ) : loadError ? (
-                    <div className="p-6 text-sm">
-                      <p className="text-destructive font-medium">Unable to load inventory.</p>
-                      <p className="text-muted-foreground mt-1">{loadError}</p>
-                      <Button variant="outline" className="mt-3" onClick={() => refetchAll()}>
-                        Retry
-                      </Button>
-                    </div>
-                  ) : (
-                    <ProductTable
-                      products={filteredProducts}
-                      currencyCode={userCurrency}
-                      onOpenProduct={openProductPage}
-                      onEdit={(p) => {
-                        setEditingProduct(p);
-                        setProductDialogOpen(true);
-                      }}
-                      onDelete={handleDeleteProduct}
-                    />
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="deliveries" className="mt-4">
-                <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-sm">
-                  <DeliveryTable
-                    deliveries={deliveries}
-                    products={products}
-                    onEdit={(d) => {
-                      setEditingDelivery(d);
-                      setDeliveryDialogOpen(true);
-                    }}
-                    onDelete={handleDeleteDelivery}
-                    onMarkDelivered={handleMarkDelivered}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="stock" className="mt-4">
-                <div className="bg-card rounded-xl border border-border/50 overflow-hidden p-4 shadow-sm">
-                  <div className="text-sm text-muted-foreground mb-3">
-                    Recent stock movements for sales, restocks, and deliveries.
-                  </div>
-                  <RecentActivity transactions={transactions} products={products} limit={16} />
-                </div>
-              </TabsContent>
-            </Tabs>
-          </section>
-
-          <aside className="space-y-4 xl:sticky xl:top-24 self-start">
-            <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
-              <h3 className="font-semibold text-sm text-foreground">Quick Actions</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-2 mt-3">
-                <Button
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setProductDialogOpen(true);
-                  }}
-                >
-                  + Add Product
-                </Button>
-                <Button variant="outline" className="justify-start" onClick={() => setSellDialogOpen(true)}>
-                  Record Sale
-                </Button>
-                <Button
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    setEditingDelivery(null);
-                    setDeliveryDialogOpen(true);
-                  }}
-                >
-                  Receive Stock
-                </Button>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <h2 className="font-semibold text-sm text-foreground">Recent Activity</h2>
-              </div>
-              <RecentActivity
-                transactions={transactions}
-                products={products}
-                compact
-                onViewAll={() => setActiveTab("stock")}
-              />
-            </div>
-          </aside>
-        </div>
-      </main>
+      <InventoryToolsSheet
+        open={toolsSheetOpen}
+        onOpenChange={setToolsSheetOpen}
+        view={toolsView}
+        onViewChange={setToolsView}
+        products={inventoryProducts}
+        transactions={transactions}
+        deliveries={deliveries}
+        lowStockProducts={lowStockProducts}
+        reorderingIds={reorderingIds}
+        onScanReceive={() => {
+          setToolsSheetOpen(false);
+          setScannerMode("receive");
+          setScannerQty(1);
+          setScannerOpen(true);
+        }}
+        onScanSell={() => {
+          setToolsSheetOpen(false);
+          setScannerMode("sell");
+          setScannerQty(1);
+          setScannerOpen(true);
+        }}
+        onRecordSale={() => {
+          setToolsSheetOpen(false);
+          setSellDialogOpen(true);
+        }}
+        onNewDelivery={() => {
+          setToolsSheetOpen(false);
+          setEditingDelivery(null);
+          setDeliveryDialogOpen(true);
+        }}
+        onReorder={handleReorder}
+        onEditDelivery={(d) => {
+          setEditingDelivery(d);
+          setDeliveryDialogOpen(true);
+        }}
+        onDeleteDelivery={handleDeleteDelivery}
+        onMarkDelivered={handleMarkDelivered}
+      />
 
       <ProductFormDialog
         open={productDialogOpen}
@@ -1128,10 +1138,21 @@ export default function Inventory() {
         onSave={handleSaveProduct}
       />
 
+      <CatalogItemDialog
+        open={catalogDialogOpen}
+        onOpenChange={(open) => {
+          setCatalogDialogOpen(open);
+          if (!open) setCatalogDialogItem(null);
+        }}
+        item={catalogDialogItem}
+        defaultType={catalogDialogType}
+        onSaved={refetchAll}
+      />
+
       <SellStockDialog
         open={sellDialogOpen}
         onOpenChange={setSellDialogOpen}
-        products={products}
+        products={inventoryProducts}
         onSell={handleSell}
       />
 
@@ -1145,7 +1166,7 @@ export default function Inventory() {
           }
         }}
         delivery={editingDelivery}
-        products={products}
+        products={inventoryProducts}
         onSave={async (data) => {
           await handleSaveDelivery(data);
           clearReorderingIdForProduct(data?.product_id);
@@ -1160,7 +1181,6 @@ export default function Inventory() {
           handleBarcode(code);
         }}
       />
-    </div>
+    </>
   );
 }
-

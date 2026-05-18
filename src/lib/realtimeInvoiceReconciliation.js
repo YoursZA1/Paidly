@@ -3,6 +3,7 @@
  * instead of invalidating entire trees or calling fetchAll() on every row event.
  */
 import { paidlyDataLayerLog } from "@/lib/paidlyDataLayerInstrumentation";
+import { scheduleInvalidation } from "@/core/runtime/RuntimeBudgetCoordinator";
 
 /**
  * @param {import("@tanstack/react-query").QueryClient} queryClient
@@ -20,7 +21,7 @@ export function reconcileInvoiceRealtimeEvent(queryClient, store, payload) {
     patchInvoicesListQuery(queryClient, { mode: "delete", id });
     patchInvoicesInfiniteListQueries(queryClient, { mode: "delete", id });
     patchInvoiceDetailQueries(queryClient, id, null);
-    queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+    scheduleInvalidation(queryClient, ["cashflow-page"]);
     paidlyDataLayerLog("realtime_patch_invoices", { eventType, id });
     return true;
   }
@@ -32,7 +33,7 @@ export function reconcileInvoiceRealtimeEvent(queryClient, store, payload) {
     patchInvoicesListQuery(queryClient, { mode: "upsert", row });
     patchInvoicesInfiniteListQueries(queryClient, { mode: "upsert", row, insert: eventType === "insert" });
     patchInvoiceDetailQueries(queryClient, row.id, row);
-    queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
+    scheduleInvalidation(queryClient, ["cashflow-page"]);
     paidlyDataLayerLog("realtime_patch_invoices", { eventType, id: row.id });
     return true;
   }

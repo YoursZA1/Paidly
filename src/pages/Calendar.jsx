@@ -478,6 +478,7 @@ export default function CalendarPage() {
                           .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
                         const isSelected = isSameDay(date, selectedDate);
                         const hovered = hoveredDate && isSameDay(date, hoveredDate);
+                        const showDayPreview = hovered || isSelected;
 
                         return (
                           <div
@@ -537,8 +538,8 @@ export default function CalendarPage() {
                               )}
                             </div>
 
-                            {hovered ? (
-                              <div className="pointer-events-none absolute left-2 right-2 bottom-2 rounded-lg border border-border bg-background/95 shadow-sm p-2 space-y-1">
+                            {showDayPreview ? (
+                              <div className="pointer-events-none absolute left-2 right-2 bottom-2 rounded-lg border border-border bg-background/95 shadow-sm p-2 space-y-1 z-10">
                                 <p className="text-[11px] font-medium text-foreground truncate">{format(date, "EEE, MMM d")}</p>
                                 <p className="text-[10px] text-muted-foreground truncate">
                                   {dayInvoices.length + dayTasks.length + dayQuotes.length} item

@@ -1,4 +1,4 @@
-import { getRuntimeCoordinatorSnapshot } from "@/core/runtime/RuntimeCoordinator";
+import { getRuntimeCoordinatorSnapshot, useRuntimeCoordinator } from "@/core/runtime/RuntimeCoordinator";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms));
 
@@ -51,11 +51,22 @@ export class RequestCoordinator {
 
   /** Block until RuntimeCoordinator allows non-critical HTTP (or maxWaitMs elapses). */
   async waitUntilUnpaused(maxWaitMs = 120_000): Promise<void> {
-    const start = Date.now();
-    while (getRuntimeCoordinatorSnapshot().pauseNonCriticalRequests) {
-      if (Date.now() - start >= maxWaitMs) return;
-      await new Promise((r) => globalThis.setTimeout(r, 100));
-    }
+    if (!getRuntimeCoordinatorSnapshot().pauseNonCriticalRequests) return;
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        unsub();
+        resolve();
+      };
+      const timeoutId = globalThis.setTimeout(finish, maxWaitMs);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unsub = (useRuntimeCoordinator as any).subscribe(
+        (state: { pauseNonCriticalRequests: boolean }) => { if (!state.pauseNonCriticalRequests) finish(); }
+      );
+    });
   }
 
   async withSlot<T>(fn: () => Promise<T>): Promise<T> {

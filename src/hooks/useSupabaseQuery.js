@@ -14,7 +14,7 @@ export function useSupabaseQuery({
   order,
   enabled = true,
   staleTime = PAIDLY_STALE_MS.invoices,
-  retry = 1,
+  retry = false,
 }) {
   return useQuery({
     queryKey,

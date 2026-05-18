@@ -140,16 +140,37 @@ describe("paidlyRealtimeManager", () => {
     expect(validatePaidlyRealtime()).toEqual({ ok: true, hasWork: false, joined: false });
   });
 
-  it("reconcilePaidlyRealtimeAfterTokenRefresh calls realtime.setAuth and rebuilds the multiplex channel", async () => {
+  it("reconcilePaidlyRealtimeAfterTokenRefresh calls realtime.setAuth and skips rebuild when channel is healthy", async () => {
     const { supabase } = await import("@/lib/supabaseClient");
     subscribePaidlyProfilesRealtime(() => {});
-    await flushAndCompleteSubscribe();
+    await flushAndCompleteSubscribe(); // channel is now joined (state: "joined" from mock)
     const channelCallsBefore = vi.mocked(supabase.channel).mock.calls.length;
+    const removeCallsBefore = vi.mocked(removeChannelMock).mock.calls.length;
     await reconcilePaidlyRealtimeAfterTokenRefresh("eyJhbGciOiJIUzI1NiIs.test.jwt", "unit_test");
     await flushAndCompleteSubscribe();
+    // setAuth must always be called — JWT must reach the existing socket
     expect(setAuthMock).toHaveBeenCalledWith("eyJhbGciOiJIUzI1NiIs.test.jwt");
-    expect(vi.mocked(supabase.channel).mock.calls.length).toBeGreaterThanOrEqual(channelCallsBefore);
-    expect(removeChannelMock).toHaveBeenCalled();
+    // Healthy channel: rebuild must be suppressed (teardown-free JWT rotation)
+    expect(vi.mocked(supabase.channel).mock.calls.length).toBe(channelCallsBefore);
+    expect(vi.mocked(removeChannelMock).mock.calls.length).toBe(removeCallsBefore);
+  });
+
+  it("reconcilePaidlyRealtimeAfterTokenRefresh rebuilds when channel is not joined", async () => {
+    const { supabase } = await import("@/lib/supabaseClient");
+    // Simulate a non-joined channel by overriding the mock state before subscribe
+    vi.mocked(supabase.channel).mockReturnValueOnce({
+      on: channelOnMock,
+      subscribe: subscribeMock,
+      state: "errored", // not joined
+    });
+    subscribePaidlyProfilesRealtime(() => {});
+    await flushAndCompleteSubscribe("CHANNEL_ERROR"); // subscribe fails
+    const channelCallsBefore = vi.mocked(supabase.channel).mock.calls.length;
+    await reconcilePaidlyRealtimeAfterTokenRefresh("eyJhbGciOiJIUzI1NiIs.test.jwt2", "unit_test_unhealthy");
+    await flushAndCompleteSubscribe();
+    expect(setAuthMock).toHaveBeenCalledWith("eyJhbGciOiJIUzI1NiIs.test.jwt2");
+    // Unhealthy channel: rebuild must happen
+    expect(vi.mocked(supabase.channel).mock.calls.length).toBeGreaterThan(channelCallsBefore);
   });
 
   it("exposes connection phase snapshot after subscribe", async () => {

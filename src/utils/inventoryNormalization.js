@@ -21,16 +21,29 @@ export function normalizeInventoryProductRow(row) {
   const rawCountStyle = toTrimmedString(row?.default_unit ?? row?.unit ?? "units").toLowerCase();
   const countStyle = COUNT_STYLES.has(rawCountStyle) ? rawCountStyle : "units";
 
+  const reorder = toNumber(row?.low_stock_threshold, 10);
+  const stock = toNumber(row?.stock_quantity, 0);
+  const capacityRaw = row?.stock_capacity;
+  const stockCapacity =
+    capacityRaw != null && capacityRaw !== ""
+      ? toNumber(capacityRaw, Math.max(stock, reorder, 1))
+      : Math.max(stock, reorder, 1);
+
   return {
     id,
     name,
     sku: toTrimmedString(row?.sku),
+    barcode: toTrimmedString(row?.barcode),
     category: toTrimmedString(row?.category),
+    image_url: toTrimmedString(row?.image_url) || null,
     count_style: countStyle,
     units_per_count: 1,
-    stock_on_hand: toNumber(row?.stock_quantity, 0),
-    reorder_level: toNumber(row?.low_stock_threshold, 10),
-    price: toNumber(row?.price, 0),
+    stock_on_hand: stock,
+    stock_capacity: stockCapacity,
+    reorder_level: reorder,
+    cost: toNumber(row?.cost_price ?? row?.cost_rate, 0),
+    price: toNumber(row?.price ?? row?.default_rate, 0),
+    is_active: row?.is_active !== false,
     _raw: row,
   };
 }
@@ -74,6 +87,43 @@ export function normalizeInventoryDeliveryRow(row, index = 0) {
     created_date: created,
     updated_date: updated,
   };
+}
+
+/** Catalog row for unified products + services table. */
+export function normalizeCatalogTableRow(row) {
+  const itemType = row?.item_type === "product" ? "product" : "service";
+  if (itemType === "product") {
+    const normalized = normalizeInventoryProductRow(row);
+    return normalized ? { ...normalized, item_type: "product" } : null;
+  }
+
+  const id = toTrimmedString(row?.id);
+  const name = toTrimmedString(row?.name);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    item_type: "service",
+    sku: toTrimmedString(row?.sku) || "",
+    barcode: "",
+    category: toTrimmedString(row?.category),
+    image_url: toTrimmedString(row?.image_url) || null,
+    count_style: "units",
+    units_per_count: 1,
+    stock_on_hand: null,
+    stock_capacity: null,
+    reorder_level: null,
+    cost: toNumber(row?.cost_rate ?? row?.cost_price, 0),
+    price: toNumber(row?.default_rate ?? row?.price ?? row?.unit_price, 0),
+    is_active: row?.is_active !== false,
+    _raw: row,
+  };
+}
+
+export function normalizeCatalogRows(rows = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  return list.map(normalizeCatalogTableRow).filter(Boolean);
 }
 
 export function normalizeInventoryRows(kind, rows = []) {

@@ -83,8 +83,11 @@ export function createAppQueryClient() {
         staleTime: PAIDLY_STALE_MS.invoices,
         gcTime: Math.max(PAIDLY_STALE_MS.clients * 3, 30 * 60 * 1000),
         retry: false,
-        /** Tab / window visible again → refetch active queries when stale (`staleTime`). */
-        refetchOnWindowFocus: true,
+        /**
+         * Off by default — opt in via queryFocusPolicy.ts for queries that truly need live focus refresh.
+         * Prevents focus-time request floods when many stale queries are mounted simultaneously.
+         */
+        refetchOnWindowFocus: false,
         /**
          * Stale-while-revalidate: keep previous successful data visible while a refetch runs
          * (reduces layout thrash / blocking spinners on navigation).

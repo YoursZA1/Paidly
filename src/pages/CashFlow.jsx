@@ -472,7 +472,7 @@ export default function CashFlowPage() {
                 </motion.div>
 
                 {isLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 auto-rows-fr">
                         {[...Array(4)].map((_, i) => (
                             <Card key={i}>
                                 <CardHeader className="pb-2">
@@ -486,9 +486,8 @@ export default function CashFlowPage() {
                         ))}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 auto-rows-fr">
                         {kpiModels.map((kpi) => {
-                          const isNet = kpi.id === "net";
                           const iconMap = {
                             net: Wallet,
                             moneyIn: TrendingUp,
@@ -496,15 +495,16 @@ export default function CashFlowPage() {
                             outstanding: DollarSign,
                           };
                           const toneValueClass = {
-                            positive: "text-xl font-semibold text-emerald-600",
-                            negative: "text-xl font-semibold text-red-600",
-                            warning: "text-xl font-semibold text-orange-600",
+                            positive: "text-emerald-600",
+                            negative: "text-red-600",
+                            warning: "text-orange-600",
                           };
                           const toneIconClass = {
                             positive: "text-emerald-600",
                             negative: "text-red-600",
                             warning: "text-orange-600",
                           };
+                          const isActive = kpiFilter === kpi.id || (kpiFilter === "all" && kpi.id === "net");
                           return (
                             <CashFlowKpiCard
                               key={kpi.id}
@@ -513,9 +513,10 @@ export default function CashFlowPage() {
                               currency={userCurrency}
                               icon={iconMap[kpi.id]}
                               iconClassName={toneIconClass[kpi.tone] || "text-muted-foreground"}
-                              valueClassName={isNet ? "text-3xl font-semibold tracking-tight" : toneValueClass[kpi.tone]}
-                              className={isNet ? "sm:col-span-2 border-primary/30" : undefined}
-                              onClick={() => setKpiFilter(kpi.id)}
+                              valueClassName={toneValueClass[kpi.tone] || "text-foreground"}
+                              featured={Boolean(kpi.featured)}
+                              active={isActive}
+                              onClick={() => setKpiFilter(kpi.id === "net" ? "all" : kpi.id)}
                               trendLabel={kpi.trendLabel}
                               trendIcon={kpi.trendDirection === "up" ? ArrowUpRight : kpi.trendDirection === "down" ? ArrowDownRight : undefined}
                               trendClassName={kpi.trendDirection === "up" ? "text-emerald-600" : "text-red-600"}
