@@ -49,13 +49,18 @@ export async function runAuthRefreshQueueJob(ctx) {
     const refreshed = await refreshSupabaseSessionWithRecovery();
 
     if (refreshed.reason === "refresh_timeout") {
-      sessionLog.warn("refresh:failure", { source, reason: "refresh_timeout" });
-      recordAuthRefreshFailure({ source, reason: "refresh_timeout" });
-      if (!silent) {
-        connectionLifecycle.markReconnecting(navigator.onLine ? "refresh_timeout" : "offline");
+      if (believedSignedIn) {
+        sessionLog.warn("refresh:failure", { source, reason: "refresh_timeout" });
+        recordAuthRefreshFailure({ source, reason: "refresh_timeout" });
+        if (!silent) {
+          connectionLifecycle.markReconnecting(navigator.onLine ? "refresh_timeout" : "offline");
+        }
+        scheduleReconnectEscalation();
+        return refreshFailed("refresh_timeout");
       }
-      if (believedSignedIn) scheduleReconnectEscalation();
-      return refreshFailed("refresh_timeout");
+      // Guest-state init: no session to recover, timeout is expected noise.
+      sessionLog.info("refresh:skipped", { source, reason: "refresh_timeout_unauthenticated" });
+      return refreshSuccess();
     }
 
     if (

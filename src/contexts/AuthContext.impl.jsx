@@ -540,6 +540,7 @@ export function AuthProvider({ children }) {
     const out = await sessionManager.RetryController.enqueue(
       () =>
         runAuthRefreshQueueJob({
+          source: queueSource,
           believedSignedIn: Boolean(userIdRef.current || sessionUserIdRef.current),
           silent,
           connectionLifecycle,
