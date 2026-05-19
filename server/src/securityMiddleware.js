@@ -198,7 +198,7 @@ const CSP = [
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com`,
   `font-src 'self' https://fonts.gstatic.com https://api.fontshare.com`,
   `img-src 'self' data: blob: https://*.supabase.co`,
-  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io`,
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io https://challenges.cloudflare.com`,
   `frame-src https://challenges.cloudflare.com`,
   `object-src 'none'`,
   `base-uri 'self'`,
@@ -214,7 +214,7 @@ export function securityHeaders() {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader(
       "Permissions-Policy",
-      "camera=(), microphone=(), geolocation=(), payment=()"
+      "camera=(), microphone=(), geolocation=(), payment=(), xr-spatial-tracking=()"
     );
     if (process.env.DISABLE_CSP !== "true") {
       res.setHeader("Content-Security-Policy", CSP);
