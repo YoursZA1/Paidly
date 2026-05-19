@@ -52,6 +52,10 @@ export default async function authForgotPasswordHandler(req, res) {
     if (requireTurnstile) {
       const verify = await verifyTurnstileToken(turnstile_token, req);
       if (!verify.ok) {
+        if (verify.reason === "turnstile_secret_missing") {
+          logSecurity("error", "auth_turnstile_misconfigured", { ip, path: "/api/auth/forgot-password", reason: "TURNSTILE_SECRET_KEY not set" });
+          return res.status(503).json({ error: "Security service is not configured on the server." });
+        }
         logSecurity("warn", "auth_forgot_password_turnstile_failed", {
           ip,
           email: normalizedEmail,
