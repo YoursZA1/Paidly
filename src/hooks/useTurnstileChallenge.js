@@ -17,7 +17,10 @@ function isValidTurnstileSiteKey(key) {
 export function useTurnstileChallenge({ requiredEnvKey, theme = "light", requireInProdByDefault = true } = {}) {
   const [token, setToken] = useState("");
   const [ready, setReady] = useState(false);
-  const containerRef = useRef(null);
+  // Callback ref: when the container <div> mounts (Dialog opens) or unmounts (Dialog closes),
+  // containerEl updates and the effect re-runs. A plain useRef won't re-fire the effect.
+  const [containerEl, setContainerEl] = useState(null);
+  const containerRef = useCallback((el) => setContainerEl(el), []);
   const widgetIdRef = useRef(null);
 
   const rawKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || "").trim();
@@ -48,10 +51,12 @@ export function useTurnstileChallenge({ requiredEnvKey, theme = "light", require
   useEffect(() => {
     if (!siteKey) return;
     if (typeof window === "undefined") return;
+    // Wait until the container DOM node is actually available (Dialog may not be open yet).
+    if (!containerEl) return;
 
     const renderWidget = () => {
-      if (!window.turnstile || !containerRef.current || widgetIdRef.current !== null) return;
-      const widgetId = window.turnstile.render(containerRef.current, {
+      if (!window.turnstile || !containerEl || widgetIdRef.current !== null) return;
+      const widgetId = window.turnstile.render(containerEl, {
         sitekey: siteKey,
         theme,
         callback: (value) => {
@@ -85,13 +90,13 @@ export function useTurnstileChallenge({ requiredEnvKey, theme = "light", require
         try {
           window.turnstile.remove(widgetIdRef.current);
         } catch {
-          // ignore
+          // ignore — Cloudflare may have already cleaned up
         }
       }
       widgetIdRef.current = null;
       clear();
     };
-  }, [clear, siteKey, theme]);
+  }, [clear, siteKey, theme, containerEl]);
 
   return {
     siteKey,
