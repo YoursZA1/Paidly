@@ -54,7 +54,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
   const submitLockRef = useRef(false);
   const resendLockRef = useRef(false);
 
-  const turnstile = useTurnstileChallenge({ requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNIN" });
+  const turnstile = useTurnstileChallenge({ requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNIN", requireInProdByDefault: false });
 
   const closeAndNavigate = (to) => {
     onOpenChange(false);
