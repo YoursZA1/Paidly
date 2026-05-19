@@ -33,6 +33,6 @@ export function paidlyRealtimeLog(event, fields = {}) {
     return;
   }
   if (PRODUCTION_REALTIME_EVENTS.has(event)) {
-    console.info("[PaidlyRealtime]", payload);
+    console.debug("[PaidlyRealtime]", payload);
   }
 }

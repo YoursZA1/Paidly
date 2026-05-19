@@ -171,7 +171,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=(), xr-spatial-tracking=()"
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), xr-spatial-tracking=(\"https://challenges.cloudflare.com\")"
         },
         {
           "key": "Content-Security-Policy",
