@@ -9,12 +9,6 @@ import App from '@/App.jsx'
 import '@/index.css'
 import ErrorBoundary from '@/components/ErrorBoundary.jsx'
 import { AuthProvider } from "@/contexts/AuthContext";
-import { AppProvider } from "@/contexts/AppContext";
-import ConnectionMonitor from "@/components/connection/ConnectionMonitor.jsx";
-import SessionActivityBeacon from "@/components/activity/SessionActivityBeacon.jsx";
-import SessionExpiredModal from "@/components/session/SessionExpiredModal.jsx";
-import InactivitySessionGuard from "@/components/session/InactivitySessionGuard.jsx";
-import SyncEngine from "@/components/sync/SyncEngine.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
     installGlobalAsyncErrorHandlers,
@@ -68,14 +62,7 @@ async function bootstrapAndRender() {
         <TooltipProvider delayDuration={0} skipDelayDuration={0}>
           <ErrorBoundary>
             <AuthProvider>
-              <AppProvider>
-                <ConnectionMonitor />
-                <SyncEngine />
-                <SessionActivityBeacon />
-                <InactivitySessionGuard />
-                <SessionExpiredModal />
-                <App />
-              </AppProvider>
+              <App />
             </AuthProvider>
           </ErrorBoundary>
         </TooltipProvider>

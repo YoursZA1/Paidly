@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
+import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
 
 /**
  * Lazy load all page components so the initial bundle only loads the current route.
@@ -398,9 +399,11 @@ function PagesContent() {
     }
 
     return (
-        <Layout currentPageName={currentPageName}>
-            {content}
-        </Layout>
+        <AuthenticatedShell>
+            <Layout currentPageName={currentPageName}>
+                {content}
+            </Layout>
+        </AuthenticatedShell>
     );
 }
 
