@@ -168,7 +168,7 @@ export default function SyncEngine() {
         dispatchAppFetchAllSettled();
       })();
     }, REALTIME_GLOBAL_STORE_REFRESH_DEBOUNCE_MS);
-  }, [user, queryClient]);
+  }, [user?.id, user?.role, queryClient]);
 
   const scheduleEntityInvalidation = useCallback(
     (entity, payload = null, role = null) => {
