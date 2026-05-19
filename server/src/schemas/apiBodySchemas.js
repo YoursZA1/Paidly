@@ -24,8 +24,6 @@ export const apiPasswordSchema = z
 export const signInBodySchema = z.object({
   email: apiEmailSchema,
   password: apiPasswordSchema,
-  /** Cloudflare Turnstile token — required when TURNSTILE_REQUIRE_SIGNIN=true */
-  turnstile_token: z.string().trim().min(1).max(4096).optional(),
   /** Honeypot — must be absent or empty; bots fill visible-looking inputs */
   hp: z.string().optional(),
 });
@@ -39,8 +37,6 @@ export const signUpBodySchema = z.object({
   }),
   /** Supabase user_metadata; omitted or null OK */
   data: z.record(z.string(), z.unknown()).nullish(),
-  /** Cloudflare Turnstile token from client widget */
-  turnstile_token: z.string().trim().min(1).max(4096).optional(),
   /** Optional email-confirmation redirect URL */
   redirectTo: z.string().url().max(2048).optional(),
   /** Honeypot — must be absent or empty */
@@ -57,14 +53,12 @@ export const waitlistBodySchema = z.object({
   email: apiEmailSchema,
   name: optionalTrimmedLine(120),
   source: optionalTrimmedLine(64),
-  turnstile_token: z.string().trim().min(1).max(4096).optional(),
   hp: z.string().optional(),
 });
 
 export const forgotPasswordBodySchema = z.object({
   email: apiEmailSchema,
   redirectTo: z.string().url().max(2048).optional(),
-  turnstile_token: z.string().trim().min(1).max(4096).optional(),
   hp: z.string().optional(),
 });
 

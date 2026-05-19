@@ -481,7 +481,7 @@ Paidly is a **business operating system for SMBs**—not a narrow invoicing tool
 | **Payfast** | Payments / subscriptions |
 | **Resend / SMTP** | Transactional email from `/api` |
 | **Anvil** | PDF generation paths (tooling + app) |
-| **Turnstile** | Signup / forgot-password bot resistance |
+| **IP rate limits** | Sign-in / sign-up / forgot-password via Node auth API when enabled |
 
 ## B.4 Repository map
 

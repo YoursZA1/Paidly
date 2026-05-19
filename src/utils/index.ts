@@ -76,66 +76,13 @@ export function createAffiliateApplyUrl(): string {
     return "/affiliate/apply";
 }
 
-/**
- * When sign-in runs on a different origin than the dashboard (e.g. legacy split marketing vs app hosts),
- * set VITE_APP_URL to the dashboard origin. With a single deployment on https://www.paidly.co.za, leave unset
- * so redirects stay same-origin (vercel.json still 308s legacy app.* / apex → www).
- */
-export function getAppDashboardUrl(): string {
-    const base = (import.meta.env.VITE_APP_URL || '').toString().replace(/\/$/, '');
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const appOrigin = base || origin;
-    return appOrigin + createPageUrl('Dashboard');
-}
-
-/**
- * Origin to use for OAuth redirect (Google, etc.).
- * Use VITE_APP_URL when set (e.g. production) so callback lands on the app domain;
- * otherwise use current origin (e.g. http://localhost:5173 in dev).
- * This value must be allowlisted in Supabase: Authentication → URL Configuration → Redirect URLs.
- */
-export function getOAuthRedirectOrigin(): string {
-    if (typeof window === 'undefined') return '';
-    const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
-    try {
-        if (appUrl) return new URL(appUrl).origin;
-    } catch {
-        // ignore
-    }
-    return window.location.origin;
-}
-
-/**
- * Settings → Subscription → "Manage Billing & Invoices".
- * Use `VITE_STRIPE_BILLING_PORTAL` for an external portal (e.g. Stripe Customer Portal URL).
- * Otherwise same origin as the deployed app (`VITE_APP_URL` or `window.location.origin`), not a hardcoded marketing domain.
- */
-export function getBillingPortalUrl(): string {
-    const portal = (import.meta.env.VITE_STRIPE_BILLING_PORTAL || '').toString().trim();
-    if (portal) return portal;
-    const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
-    if (appUrl) {
-        try {
-            return new URL(appUrl).origin;
-        } catch {
-            // ignore
-        }
-    }
-    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
-    return '';
-}
-
-/** True when we should send the user to the app domain after login/signup (e.g. signed in on www → go to app). */
-export function shouldRedirectToAppAfterAuth(): boolean {
-    const appUrl = (import.meta.env.VITE_APP_URL || '').toString().trim();
-    if (!appUrl || typeof window === 'undefined') return false;
-    try {
-        const appOrigin = new URL(appUrl).origin;
-        return window.location.origin !== appOrigin;
-    } catch {
-        return false;
-    }
-}
+export {
+    getAppDashboardUrl,
+    getBillingPortalUrl,
+    getOAuthRedirectOrigin,
+    resolvePaidlyAppOrigin,
+    shouldRedirectToAppAfterAuth,
+} from "@/lib/appOrigin";
 
 const WELCOME_TOUR_ELIGIBLE_PREFIX = 'paidly_welcome_tour_eligible_';
 

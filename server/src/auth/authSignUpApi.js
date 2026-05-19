@@ -3,13 +3,11 @@ import { parseBody } from "../validateBody.js";
 import { signUpBodySchema } from "../schemas/apiBodySchemas.js";
 import { consumeSignupSlot, getClientIp } from "../loginIpRateLimit.js";
 import { logSecurity } from "../securityMiddleware.js";
-import { envFlag } from "../envFlags.js";
-import { verifyTurnstileToken } from "../turnstileVerify.js";
 import { sanitizeSignUpUserMetadata } from "../inputValidation.js";
 import { applyApiCors } from "./applyApiCors.js";
 
 /**
- * POST /api/auth/sign-up — IP rate limit, Turnstile (when enabled), Supabase sign-up.
+ * POST /api/auth/sign-up — IP rate limit + Supabase sign-up.
  */
 export default async function authSignUpHandler(req, res) {
   applyApiCors(req, res);
@@ -25,7 +23,7 @@ export default async function authSignUpHandler(req, res) {
       logSecurity("warn", "auth_sign_up_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, password, data: profile, turnstile_token, redirectTo, hp } = parsed;
+    const { email: normalizedEmail, password, data: profile, redirectTo, hp } = parsed;
 
     if (hp) {
       logSecurity("warn", "honeypot_triggered", { ip, path: "/api/auth/sign-up" });
@@ -52,27 +50,6 @@ export default async function authSignUpHandler(req, res) {
         error:
           "Sign-up service is not configured. Set SUPABASE_ANON_KEY on the API server (same value as the browser anon key).",
       });
-    }
-
-    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_SIGNUP", turnstileEnabled);
-    if (requireTurnstile) {
-      const verify = await verifyTurnstileToken(turnstile_token, req);
-      if (!verify.ok) {
-        if (verify.reason === "turnstile_secret_missing") {
-          logSecurity("error", "auth_turnstile_misconfigured", { ip, path: "/api/auth/sign-up", reason: "TURNSTILE_SECRET_KEY not set" });
-          return res.status(503).json({ error: "Security service is not configured on the server." });
-        }
-        logSecurity("warn", "auth_sign_up_turnstile_failed", {
-          ip,
-          email: normalizedEmail,
-          reason: verify.reason,
-          detail: verify.detail,
-        });
-        return res.status(403).json({
-          error: "Security verification failed. Please retry and complete the challenge.",
-        });
-      }
     }
 
     const userMetadata = sanitizeSignUpUserMetadata(

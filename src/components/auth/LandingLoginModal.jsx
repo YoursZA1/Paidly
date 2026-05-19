@@ -13,22 +13,14 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
-import {
-  createPageUrl,
-  createSignupUrl,
-  getAppDashboardUrl,
-  shouldRedirectToAppAfterAuth,
-} from "@/utils";
+import { createPageUrl, createSignupUrl } from "@/utils";
+import { completePostAuthNavigation } from "@/lib/postAuthNavigation";
 import {
   getLoginThrottleState,
   recordLoginFailure,
   clearLoginFailures,
 } from "@/utils/loginRateLimit";
-import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
-import { User } from "@/api/entities";
-import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
-import TurnstileChallenge from "@/components/security/TurnstileChallenge";
-
+import { patchAuthSession } from "@/stores/authSessionStore";
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
 }
@@ -54,18 +46,9 @@ export default function LandingLoginModal({ open, onOpenChange }) {
   const submitLockRef = useRef(false);
   const resendLockRef = useRef(false);
 
-  const turnstile = useTurnstileChallenge({ requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNIN", requireInProdByDefault: false });
-
   const closeAndNavigate = (to) => {
     onOpenChange(false);
     navigate(to);
-  };
-
-  const resolvePostLoginRoute = (userLike, fallbackPath) => {
-    const role = String(userLike?.role || "").toLowerCase();
-    if (isStaffDashboardRole(role)) return staffDashboardHomePath();
-    const safeFallback = fallbackPath?.startsWith("/admin") ? createPageUrl("Dashboard") : fallbackPath;
-    return safeFallback || createPageUrl("Dashboard");
   };
 
   const handleSubmit = async (e) => {
@@ -85,29 +68,18 @@ export default function LandingLoginModal({ open, onOpenChange }) {
       return;
     }
 
-    if (turnstile.required && !turnstile.ready) {
-      setError("Please complete the security check before signing in.");
-      return;
-    }
-
     if (submitLockRef.current) return;
     submitLockRef.current = true;
     setIsLoading(true);
 
     try {
-      await login({ email: normalizedEmail, password, turnstileToken: turnstile.token });
-      onOpenChange(false);
-      if (shouldRedirectToAppAfterAuth()) {
-        window.location.href = getAppDashboardUrl();
-        return;
-      }
-      const appUser = (await User.getCurrentUser?.()) || null;
-      const destination = resolvePostLoginRoute(appUser, from);
-      navigate(destination, { replace: true });
+      await login({ email: normalizedEmail, password });
       clearLoginFailures(normalizedEmail);
+      patchAuthSession({ loading: false });
+      onOpenChange(false);
+      if (completePostAuthNavigation({ navigate, fromPath: from })) return;
     } catch (err) {
       recordLoginFailure(normalizedEmail);
-      turnstile.reset();
       if (
         err?.message?.toLowerCase().includes("email not confirmed") ||
         err?.message?.toLowerCase().includes("confirm your email")
@@ -236,18 +208,10 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                   </div>
                 )}
 
-                <TurnstileChallenge
-                  siteKey={turnstile.siteKey}
-                  required={turnstile.required}
-                  ready={turnstile.ready}
-                  containerRef={turnstile.containerRef}
-                  helperClassName="text-xs text-zinc-400"
-                />
-
                 <Button
                   type="submit"
                   className="w-full h-11 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] touch-manipulation font-semibold"
-                  disabled={isLoading || (turnstile.required && !turnstile.ready)}
+                  disabled={isLoading}
                   aria-busy={isLoading}
                 >
                   {isLoading ? (

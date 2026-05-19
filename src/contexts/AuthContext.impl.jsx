@@ -6,7 +6,6 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { clearSessionOrgIdCache } from "@/api/customClient";
-import { useSupabaseRealtime } from "@/hooks/useSupabaseRealtime";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";
@@ -754,7 +753,15 @@ export function AuthProvider({ children }) {
         refreshSession,
         refreshUser,
         afterProfileHydrated: async () => {
-          scheduleRealtimeRecoveryAfterAuth("session_resync");
+          const path =
+            typeof window !== "undefined" ? window.location.pathname || "" : "";
+          const onPublicShell =
+            /^\/(login|signup|forgotpassword|resetpassword|auth)(\/|$)/i.test(path) ||
+            path === "/" ||
+            /^\/home$/i.test(path);
+          if (!onPublicShell) {
+            scheduleRealtimeRecoveryAfterAuth("session_resync");
+          }
           await enforceProtectedRouteSessionInvariant(
             typeof window !== "undefined" ? window.location.pathname : "",
             {
@@ -949,7 +956,14 @@ export function AuthProvider({ children }) {
 
       // Fast stale check: rebuilds realtime ONLY if the channel is not joined.
       // Never forces a reconnect when the channel is healthy (requirement 11).
-      if (signedIn) {
+      // Skip on public/auth routes — AuthenticatedShell (realtime) is not mounted there.
+      const path =
+        typeof window !== "undefined" ? window.location.pathname || "" : "";
+      const onPublicShell =
+        /^\/(login|signup|forgotpassword|resetpassword|auth)(\/|$)/i.test(path) ||
+        path === "/" ||
+        /^\/home$/i.test(path);
+      if (signedIn && !onPublicShell) {
         checkRealtimeOnVisibilityRestore();
       }
 
@@ -1150,7 +1164,15 @@ export function AuthProvider({ children }) {
         patchAuthSession({ session: norm });
         touchAuthHeartbeatIfValid(norm);
         scheduleRefreshUserRef.current();
-        reconcileRealtimeJwtFromSupabaseAuthEvent(event, norm.accessToken);
+        const authPath =
+          typeof window !== "undefined" ? window.location.pathname || "" : "";
+        const onPublicAuthRoute =
+          /^\/(login|signup|forgotpassword|resetpassword|auth)(\/|$)/i.test(authPath) ||
+          authPath === "/" ||
+          /^\/home$/i.test(authPath);
+        if (!onPublicAuthRoute) {
+          reconcileRealtimeJwtFromSupabaseAuthEvent(event, norm.accessToken);
+        }
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event });
       } else if (event === "INITIAL_SESSION" && norm?.user) {
         connectionLifecycle.markConnected("initial_session");
@@ -1170,20 +1192,11 @@ export function AuthProvider({ children }) {
     processPendingAffiliateReferral();
   }, [session?.user?.id]);
 
-  // Auto-update profile (and assets like logo) when the profiles row changes (e.g. Settings save, another tab, or admin)
-  useSupabaseRealtime(
-    user?.id ? ["profiles"] : [],
-    useCallback(() => {
-      scheduleRefreshUser();
-    }, [scheduleRefreshUser]),
-    { channelName: "auth-profile-updates" }
-  );
-
-  const login = useCallback(async ({ email, password, role, turnstileToken }) => {
+  const login = useCallback(async ({ email, password, role }) => {
     setError("");
     setVerifyGateEmail("");
     const normalizedEmail = (email || "").trim().toLowerCase();
-    const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password, { turnstileToken });
+    const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
     if (session?.user && session.user.email_confirmed_at == null) {
       // Defense in depth: do not allow app login for unverified users.
       try {

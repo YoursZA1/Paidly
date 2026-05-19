@@ -42,8 +42,6 @@ import { userService } from "@/services/ExcelUserService";
 import { useAuth } from "@/contexts/AuthContext";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
-import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
-import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 
 const USERS_STORAGE_KEY = "breakapi_users";
@@ -165,10 +163,6 @@ export default function Signup() {
   const [resendStatus, setResendStatus] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const turnstile = useTurnstileChallenge({
-    requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNUP",
-    theme: "dark",
-  });
 
   // Persist ?ref= for post-signup attribution (localStorage); also support legacy #sign-up?ref= URLs.
   useEffect(() => {
@@ -276,10 +270,6 @@ export default function Signup() {
       return;
     }
 
-    if (turnstile.required && !turnstile.token) {
-      setError("Please complete the security check before creating your account.");
-      return;
-    }
 
     if (loading || stepOneSubmitLockRef.current) return;
     stepOneSubmitLockRef.current = true;
@@ -317,8 +307,7 @@ export default function Signup() {
             role: "user",
             plan: selectedPlan,
             subscription_plan: selectedPlan,
-          },
-          { turnstileToken: turnstile.token }
+          }
         );
         authUserId = createdAuthUser?.id || null;
         if (!authUserId) {
@@ -328,7 +317,6 @@ export default function Signup() {
         }
         clearSignupAttempts(normalizedEmail);
       } catch (supabaseErr) {
-        turnstile.reset();
         // Do not stack the per-email sessionStorage counter when Supabase/API already rate-limited.
         if (!isAuthSignupEmailRateLimitError(supabaseErr)) {
           recordSignupAttempt(normalizedEmail);
@@ -530,7 +518,7 @@ export default function Signup() {
       setQuickSetupEligibleAfterSignup(createdUserId);
       setTimeout(async () => {
         if (shouldRedirectToAppAfterAuth()) {
-          window.location.href = getAppDashboardUrl();
+          window.location.replace(getAppDashboardUrl());
           return;
         }
         const { User } = await import("@/api/entities");
@@ -710,18 +698,10 @@ export default function Signup() {
                 </div>
               )}
 
-              <TurnstileChallenge
-                siteKey={turnstile.siteKey}
-                required={turnstile.required}
-                ready={turnstile.ready}
-                containerRef={turnstile.containerRef}
-                helperClassName="text-xs text-zinc-400"
-              />
-
               <Button
                 type="submit"
                 className="w-full h-11 rounded-xl bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/20 transition hover:bg-[#E64700] touch-manipulation"
-                disabled={loading || (turnstile.required && !turnstile.ready)}
+                disabled={loading}
                 aria-busy={loading}
               >
                 {loading ? "Creating account..." : "Sign up"}

@@ -6,22 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
-import {
-  createPageUrl,
-  createSignupUrl,
-  getAppDashboardUrl,
-  shouldRedirectToAppAfterAuth,
-} from "@/utils";
+import { createPageUrl, createSignupUrl } from "@/utils";
+import { completePostAuthNavigation } from "@/lib/postAuthNavigation";
 import {
   getLoginThrottleState,
   recordLoginFailure,
   clearLoginFailures,
 } from "@/utils/loginRateLimit";
-import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
-import { User } from "@/api/entities";
-import { useTurnstileChallenge } from "@/hooks/useTurnstileChallenge";
-import TurnstileChallenge from "@/components/security/TurnstileChallenge";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
+import { patchAuthSession } from "@/stores/authSessionStore";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -45,15 +38,6 @@ export default function Login() {
   const submitLockRef = useRef(false);
   const resendLockRef = useRef(false);
 
-  const turnstile = useTurnstileChallenge({ requiredEnvKey: "VITE_TURNSTILE_REQUIRE_SIGNIN", requireInProdByDefault: false });
-
-  const resolvePostLoginRoute = (userLike, fallbackPath) => {
-    const role = String(userLike?.role || "").toLowerCase();
-    if (isStaffDashboardRole(role)) return staffDashboardHomePath();
-    const safeFallback = fallbackPath?.startsWith("/admin") ? createPageUrl("Dashboard") : fallbackPath;
-    return safeFallback || createPageUrl("Dashboard");
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading || submitLockRef.current) return;
@@ -69,26 +53,16 @@ export default function Login() {
       return;
     }
 
-    if (turnstile.required && !turnstile.ready) {
-      setError("Please complete the security check before signing in.");
-      return;
-    }
-
     submitLockRef.current = true;
     setIsLoading(true);
 
     try {
-      await login({ email: normalizedEmail, password, turnstileToken: turnstile.token });
+      await login({ email: normalizedEmail, password });
       clearLoginFailures(normalizedEmail);
-      if (shouldRedirectToAppAfterAuth()) {
-        window.location.href = getAppDashboardUrl();
-        return;
-      }
-      const appUser = (await User.getCurrentUser?.()) || null;
-      navigate(resolvePostLoginRoute(appUser, from), { replace: true });
+      patchAuthSession({ loading: false });
+      if (completePostAuthNavigation({ navigate, fromPath: from })) return;
     } catch (err) {
       recordLoginFailure(normalizedEmail);
-      turnstile.reset();
       if (
         err?.message?.toLowerCase().includes("email not confirmed") ||
         err?.message?.toLowerCase().includes("confirm your email")
@@ -204,18 +178,10 @@ export default function Login() {
               </div>
             )}
 
-            <TurnstileChallenge
-              siteKey={turnstile.siteKey}
-              required={turnstile.required}
-              ready={turnstile.ready}
-              containerRef={turnstile.containerRef}
-              helperClassName="text-xs text-zinc-500"
-            />
-
             <Button
               type="submit"
               className="w-full h-11 rounded-xl bg-[#FF4F00] text-white hover:bg-[#E64700] font-semibold shadow-lg shadow-[#FF4F00]/20 transition-colors"
-              disabled={isLoading || (turnstile.required && !turnstile.ready)}
+              disabled={isLoading}
               aria-busy={isLoading}
             >
               {isLoading ? (

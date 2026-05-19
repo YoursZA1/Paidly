@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
 import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
+import AuthLayout from "@/components/layout/AuthLayout";
 
 /**
  * Lazy load all page components so the initial bundle only loads the current route.
@@ -102,13 +103,13 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 const AUTH_ROUTES = [
     { path: "/Home", element: <Home /> },
     { path: "/home", element: <Home /> },
-    { path: "/Auth", element: <Login /> },
-    { path: "/Auth.html", element: <Login /> },
-    { path: "/Login", element: <Login /> },
-    { path: "/login", element: <Login /> },
-    { path: "/Signup", element: <Signup /> },
-    { path: "/signup", element: <Signup /> },
-    { path: "/ForgotPassword", element: <ForgotPassword /> },
+    { path: "/Auth", element: <AuthLayout><Login /></AuthLayout> },
+    { path: "/Auth.html", element: <AuthLayout><Login /></AuthLayout> },
+    { path: "/Login", element: <AuthLayout><Login /></AuthLayout> },
+    { path: "/login", element: <AuthLayout><Login /></AuthLayout> },
+    { path: "/Signup", element: <AuthLayout><Signup /></AuthLayout> },
+    { path: "/signup", element: <AuthLayout><Signup /></AuthLayout> },
+    { path: "/ForgotPassword", element: <AuthLayout><ForgotPassword /></AuthLayout> },
     { path: "/ResetPassword", element: <ResetPassword /> },
     { path: "/AcceptInvite", element: <AcceptInvite /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },

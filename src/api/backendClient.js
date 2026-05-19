@@ -84,7 +84,7 @@ export function isProductionBackendUrlLocalhost() {
 
 /**
  * When true, email/password auth uses same-origin POST /api/auth/* (Vercel serverless or Express).
- * Supabase still issues JWTs; the API adds IP limits, Turnstile verify, and structured security logs.
+ * Supabase still issues JWTs; the API adds IP rate limits and structured security logs.
  *
  * - VITE_SUPABASE_ONLY=1 → false (direct Supabase only).
  * - VITE_DISABLE_NODE_AUTH_API=1 → false (explicit opt-out).

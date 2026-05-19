@@ -3,8 +3,6 @@ import { parseBody } from "../validateBody.js";
 import { signInBodySchema } from "../schemas/apiBodySchemas.js";
 import { consumeLoginSlot, getClientIp } from "../loginIpRateLimit.js";
 import { logSecurity } from "../securityMiddleware.js";
-import { envFlag } from "../envFlags.js";
-import { verifyTurnstileToken } from "../turnstileVerify.js";
 import { applyApiCors } from "./applyApiCors.js";
 
 /**
@@ -25,32 +23,11 @@ export default async function authSignInHandler(req, res) {
       logSecurity("warn", "auth_sign_in_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, password, turnstile_token, hp } = parsed;
+    const { email: normalizedEmail, password, hp } = parsed;
 
     if (hp) {
       logSecurity("warn", "honeypot_triggered", { ip, path: "/api/auth/sign-in" });
       return res.status(400).json({ error: "Invalid request" });
-    }
-
-    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_SIGNIN", turnstileEnabled);
-    if (requireTurnstile) {
-      const verify = await verifyTurnstileToken(turnstile_token, req);
-      if (!verify.ok) {
-        if (verify.reason === "turnstile_secret_missing") {
-          logSecurity("error", "auth_turnstile_misconfigured", { ip, path: "/api/auth/sign-in", reason: "TURNSTILE_SECRET_KEY not set" });
-          return res.status(503).json({ error: "Security service is not configured on the server." });
-        }
-        logSecurity("warn", "auth_sign_in_turnstile_failed", {
-          ip,
-          email: normalizedEmail,
-          reason: verify.reason,
-          detail: verify.detail,
-        });
-        return res.status(403).json({
-          error: "Security verification failed. Please retry and complete the challenge.",
-        });
-      }
     }
 
     const slot = await consumeLoginSlot(ip);

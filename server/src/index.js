@@ -100,7 +100,6 @@ import authRefreshHandler from "./auth/authRefreshApi.js";
 import sendEmailHandler from "./sendEmailApi.js";
 import payfastOnceHandler from "./payfastOnceApi.js";
 import { envFlag, envNumber } from "./envFlags.js";
-import { verifyTurnstileToken } from "./turnstileVerify.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
 import {
@@ -288,20 +287,11 @@ function evaluateDeploymentSecurityHealth() {
   const enforceHttpsEnabled = !envFlag("ENFORCE_HTTPS", true) ? false : true;
   const hstsDisabled = envFlag("DISABLE_HSTS", false);
   const publicDbDirectAccess = envFlag("PUBLIC_DB_DIRECT_ACCESS", false);
-  const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-  const turnstileRequireSignup = envFlag("TURNSTILE_REQUIRE_SIGNUP", turnstileEnabled);
-  const turnstileRequireWaitlist = envFlag("TURNSTILE_REQUIRE_WAITLIST", turnstileEnabled);
-  const turnstileRequireForgotPassword = envFlag("TURNSTILE_REQUIRE_FORGOT_PASSWORD", turnstileEnabled);
-
   if (!process.env.SUPABASE_URL) issues.push("SUPABASE_URL is missing.");
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) issues.push("SUPABASE_SERVICE_ROLE_KEY is missing.");
   if (!process.env.SUPABASE_ANON_KEY) issues.push("SUPABASE_ANON_KEY is missing.");
   if (!process.env.RESEND_API_KEY) issues.push("RESEND_API_KEY is missing.");
   if (!process.env.ADMIN_BOOTSTRAP_TOKEN) issues.push("ADMIN_BOOTSTRAP_TOKEN is missing.");
-  if (turnstileEnabled && !process.env.TURNSTILE_SECRET_KEY) {
-    issues.push("TURNSTILE_SECRET_KEY is missing while TURNSTILE_ENABLED is true.");
-  }
-
   if (isProd) {
     if (trustProxyDisabled) {
       issues.push("TRUST_PROXY must not be false in production (required for secure proxy headers).");
@@ -343,8 +333,6 @@ function evaluateDeploymentSecurityHealth() {
       PUBLIC_DB_DIRECT_ACCESS: false,
       ADMIN_BYPASS_AUTH: false,
       CLIENT_ORIGIN_EXPLICIT_IN_PRODUCTION: true,
-      TURNSTILE_SECRET_IF_ENABLED: true,
-      TURNSTILE_WAITLIST_AND_FORGOT_PASSWORD_OPTIONAL: true,
     },
     observed: {
       NODE_ENV: process.env.NODE_ENV || "development",
@@ -363,11 +351,6 @@ function evaluateDeploymentSecurityHealth() {
       SUPABASE_ANON_KEY_SET: Boolean(process.env.SUPABASE_ANON_KEY),
       RESEND_API_KEY_SET: Boolean(process.env.RESEND_API_KEY),
       ADMIN_BOOTSTRAP_TOKEN_SET: Boolean(process.env.ADMIN_BOOTSTRAP_TOKEN),
-      TURNSTILE_ENABLED: turnstileEnabled,
-      TURNSTILE_REQUIRE_SIGNUP: turnstileRequireSignup,
-      TURNSTILE_REQUIRE_WAITLIST: turnstileRequireWaitlist,
-      TURNSTILE_REQUIRE_FORGOT_PASSWORD: turnstileRequireForgotPassword,
-      TURNSTILE_SECRET_KEY_SET: Boolean(process.env.TURNSTILE_SECRET_KEY),
     },
   };
 }
@@ -754,26 +737,9 @@ app.post("/api/waitlist", async (req, res) => {
       logSecurity("warn", "waitlist_bad_request", { ip, reason: "validation" })
     );
     if (!parsed) return;
-    const { email: normalizedEmail, name, source, turnstile_token } = parsed;
+    const { email: normalizedEmail, name, source } = parsed;
     const nameSafe = sanitizeOneLine(name != null ? name : "", 120);
     const sourceSafe = sanitizeOneLine(source != null ? source : "", 64);
-
-    const turnstileEnabled = envFlag("TURNSTILE_ENABLED", false);
-    const requireTurnstile = envFlag("TURNSTILE_REQUIRE_WAITLIST", turnstileEnabled);
-    if (requireTurnstile) {
-      const verify = await verifyTurnstileToken(turnstile_token, req);
-      if (!verify.ok) {
-        logSecurity("warn", "waitlist_turnstile_failed", {
-          ip,
-          email: normalizedEmail,
-          reason: verify.reason,
-          detail: verify.detail,
-        });
-        return res.status(403).json({
-          error: "Security verification failed. Please retry and complete the challenge.",
-        });
-      }
-    }
 
     const { error } = await supabaseAdmin.from("waitlist_signups").insert({
       email: normalizedEmail,

@@ -25,9 +25,9 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 | `POST /api/auth/refresh` | `server/src/auth/authRefreshApi.js` |
 | `POST /api/send-email` | `server/src/sendEmailApi.js` |
 
-**Production auth (default):** `shouldUseNodeAuthApi()` is **true** on production builds unless `VITE_SUPABASE_ONLY=1` or `VITE_DISABLE_NODE_AUTH_API=1`. JWTs still come from Supabase; the API adds IP rate limits, Turnstile verification, and security logs.
+**Production auth (default):** `shouldUseNodeAuthApi()` is **true** on production builds unless `VITE_SUPABASE_ONLY=1` or `VITE_DISABLE_NODE_AUTH_API=1`. JWTs still come from Supabase; the API adds IP rate limits and security logs.
 
-**Server env (Vercel + Express):** `SUPABASE_ANON_KEY`, `TURNSTILE_SECRET_KEY` (when Turnstile required), `RESEND_*` for send-email.
+**Server env (Vercel + Express):** `SUPABASE_ANON_KEY`, `RESEND_*` for send-email.
 
 **Auth rate limits (Vercel + Express):** `POST /api/auth/sign-in` and `sign-up` use `consume_rate_limit_bucket` in Postgres when `RATE_LIMIT_PERSIST=1` (default in production) and `SUPABASE_SERVICE_ROLE_KEY` is set — shared across serverless instances. Falls back to in-memory per isolate if the RPC is missing. Apply migration `20260516160000_api_rate_limit_consume_rpc.sql`.
 

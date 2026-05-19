@@ -46,7 +46,7 @@ The app is deployed at **https://www.paidly.co.za**. For Vercel (or similar):
      - **Case A — API on the same Vercel deployment** (serverless `api/`, same host as the app): **leave it unset** (or delete it). The browser uses relative `fetch("/api/...")` / same-origin requests. Do **not** set it to a stale or different host.
      - **Case B — API on a separate host:** set **`VITE_SERVER_URL=https://api.paidly.co.za`** (no trailing slash; adjust host to your API). CORS on that API must allow the app origin.
    - **Auth (default on www):** same-origin `POST /api/auth/sign-in|sign-up|forgot-password` (Vercel serverless, shared with Express). Set **`VITE_SUPABASE_ONLY=1`** only if you intentionally skip the API auth layer (direct Supabase). Set **`VITE_DISABLE_NODE_AUTH_API=1`** to opt out while keeping other `/api` features.
-   - Ensure **`SUPABASE_ANON_KEY`** and (if Turnstile is on) **`TURNSTILE_SECRET_KEY`** are set on the Vercel project for auth routes.
+   - Ensure **`SUPABASE_ANON_KEY`** is set on the Vercel project for auth routes.
 2. **Supabase Auth:** Set **Site URL** to **`https://www.paidly.co.za`**. In **Redirect URLs**, include `https://www.paidly.co.za/**`, and (if needed) `https://paidly.co.za/**`, legacy `app.paidly.co.za` / `www.app.paidly.co.za`, and Vercel preview URLs. **`vercel.json`** 308-redirects apex and legacy app hosts → `www.paidly.co.za`.
 3. **`VITE_APP_URL`:** Leave **unset** when everything runs on **www.paidly.co.za** (same-origin after login). Set it only if users sign in on a different origin than the dashboard.
 4. **Backend CORS:** Deploy the latest `server` and set `CLIENT_ORIGIN` to a comma-separated explicit allowlist (for example: `https://www.paidly.co.za,https://paidly.co.za`). In production, use `https` origins only (localhost allowed only for local testing).
@@ -112,20 +112,8 @@ Required for Supabase (auth and storage) and for the backend API. Vite loads `.e
    | `VITE_SUPABASE_URL` | Yes | Supabase project URL (Settings → API). |
    | `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (Settings → API). |
    | `VITE_SERVER_URL` | Optional in prod (see Deployment) | **Local:** `http://localhost:5179` (include port; backend default). **Prod Case A (same Vercel app):** omit — use relative `/api/*`. **Prod Case B (separate API):** e.g. `https://api.paidly.co.za`. Without it, same-origin `/api/*` is used when the env is empty. |
-   | `VITE_TURNSTILE_SITE_KEY` | Recommended in prod | Cloudflare Turnstile site key for signup bot protection. |
-   | `VITE_TURNSTILE_REQUIRE_SIGNUP` | No | Set to `true` to enforce challenge on sign-up in all environments (defaults to required in prod when site key exists). |
-   | `VITE_TURNSTILE_REQUIRE_WAITLIST` | No | Set to `true` to enforce challenge on waitlist form (defaults to required in prod when site key exists). |
-   | `VITE_TURNSTILE_REQUIRE_FORGOT_PASSWORD` | No | Set to `true` to enforce challenge on forgot-password form (defaults to required in prod when site key exists). |
    | `VITE_SUPABASE_ONLY` | No | Set to `1` or `true` in production if you **do not** deploy the Node API; silences the missing-`VITE_SERVER_URL` console warning (sign-in stays direct to Supabase). |
    | `VITE_SUPABASE_STORAGE_BUCKET` | No | Storage bucket name (default: `paidly`). Set to `invoicebreek` if your Supabase project still uses the legacy bucket. |
-
-Server-side Turnstile variables (set in backend runtime/Vercel project env, never in client code):
-
-- `TURNSTILE_ENABLED=true`
-- `TURNSTILE_REQUIRE_SIGNUP=true`
-- `TURNSTILE_REQUIRE_WAITLIST=true`
-- `TURNSTILE_REQUIRE_FORGOT_PASSWORD=true`
-- `TURNSTILE_SECRET_KEY=<your-turnstile-secret>`
 
 Optional observability alert thresholds for `GET /api/health/observability`:
 

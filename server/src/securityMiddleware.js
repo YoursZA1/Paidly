@@ -185,21 +185,13 @@ export function enforceHttps() {
   };
 }
 
-// Inline script hashes for index.html (theme toggle + hostname redirect).
-// Update these whenever those <script> blocks change.
-const INLINE_SCRIPT_HASHES = [
-  "'sha256-q/lgmi1ZKolpqmBSngseCPpnC50Hv/KuLZ97k8sL0PM='",
-  "'sha256-dGNjLxH/mXMREe/MsV+YvHis9LC2vrzQP5ZLWuCJbZM='",
-].join(" ");
-
 const CSP = [
   `default-src 'self'`,
-  `script-src 'self' ${INLINE_SCRIPT_HASHES} https://challenges.cloudflare.com`,
+  `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com`,
   `font-src 'self' https://fonts.gstatic.com https://api.fontshare.com`,
   `img-src 'self' data: blob: https://*.supabase.co`,
-  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io https://challenges.cloudflare.com`,
-  `frame-src https://challenges.cloudflare.com`,
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io`,
   `object-src 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,
