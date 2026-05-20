@@ -87,7 +87,7 @@ export default function ProductPreview() {
               <span className="h-3 w-3 rounded-full bg-amber-500/80" />
               <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
               <span className="ml-4 flex-1 truncate rounded-md bg-black/40 px-3 py-1.5 text-center text-xs text-zinc-500">
-                www.paidly.co.za/dashboard
+                app.paidly.co.za/dashboard
               </span>
             </div>
 
@@ -167,9 +167,9 @@ export default function ProductPreview() {
                 </div>
                 <ul className="mt-2 divide-y divide-white/[0.04] text-sm">
                   {[
-                    { id: "INV-1042", client: "Highveld Construction", amount: "R 48,500", status: "Paid" },
-                    { id: "INV-1041", client: "Brightleaf Marketing", amount: "R 12,200", status: "Paid" },
-                    { id: "INV-1040", client: "Table Bay Logistics", amount: "R 26,950", status: "Overdue" },
+                    { id: "INV-1042", client: "Acme Studio", amount: "R 4,500", status: "Paid" },
+                    { id: "INV-1041", client: "Northwind Ltd", amount: "R 12,200", status: "Paid" },
+                    { id: "INV-1040", client: "Cape Designs", amount: "R 8,950", status: "Overdue" },
                   ].map(({ id, client, amount, status }) => (
                     <li key={id} className="flex items-center justify-between py-2.5">
                       <div className="flex items-center gap-3">
