@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getSupabaseErrorMessage,
+  SUPABASE_ABORT_USER_MESSAGE,
   throwIfSupabaseError,
   withSupabaseErrorHandling,
 } from "@/utils/supabaseErrorUtils";
@@ -14,6 +15,15 @@ describe("getSupabaseErrorMessage", () => {
 
   it("returns string when error is a string", () => {
     expect(getSupabaseErrorMessage("Invalid email")).toBe("Invalid email");
+  });
+
+  it("normalizes abort / cancel errors (including Chromium 'signal is aborted' text)", () => {
+    expect(getSupabaseErrorMessage({ message: "signal is aborted without reason" })).toBe(
+      SUPABASE_ABORT_USER_MESSAGE
+    );
+    expect(getSupabaseErrorMessage("signal is aborted without reason")).toBe(SUPABASE_ABORT_USER_MESSAGE);
+    const dom = new DOMException("Aborted", "AbortError");
+    expect(getSupabaseErrorMessage(dom)).toBe(SUPABASE_ABORT_USER_MESSAGE);
   });
 
   it("returns error.message for Error instances", () => {
@@ -53,6 +63,12 @@ describe("throwIfSupabaseError", () => {
     ).toThrow("RLS policy violation");
   });
 
+  it("throws abort-shaped Supabase errors as friendly copy", () => {
+    expect(() =>
+      throwIfSupabaseError({ error: { message: "signal is aborted without reason" } }, "Load failed")
+    ).toThrow(SUPABASE_ABORT_USER_MESSAGE);
+  });
+
   it("throws Error with cause set to original error", () => {
     const result = { error: { message: "Test", code: "PGRST301" } };
     try {
@@ -81,6 +97,14 @@ describe("withSupabaseErrorHandling", () => {
         throw { message: "Postgrest error" };
       }, "Fallback")
     ).rejects.toThrow("Postgrest error");
+  });
+
+  it("maps thrown abort errors to friendly copy", async () => {
+    await expect(
+      withSupabaseErrorHandling(async () => {
+        throw new DOMException("signal is aborted without reason", "AbortError");
+      }, "Operation failed")
+    ).rejects.toThrow(SUPABASE_ABORT_USER_MESSAGE);
   });
 
   it("uses fallback when thrown error has no message or only [object Object]", async () => {

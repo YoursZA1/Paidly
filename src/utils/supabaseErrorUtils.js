@@ -3,6 +3,11 @@
  * Use for all async operations involving Supabase (auth, storage, database).
  */
 
+import { isAbortError } from "@/utils/retryOnAbort";
+
+/** User-visible copy when an operation was cancelled (navigation, Strict Mode teardown, timeout, duplicate in-flight). */
+export const SUPABASE_ABORT_USER_MESSAGE = "The request was interrupted. Please try again.";
+
 /** Shown when GoTrue / Supabase Auth blocks sign-up or confirmation emails (per-email or project limits). */
 export const AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE =
   "Too many sign-up or confirmation emails were sent recently. Wait 30-60 minutes and try again. If you already started, use \"Resend confirmation\" on the login page. For heavy testing, space out attempts or raise limits in Supabase (Authentication → Rate limits).";
@@ -63,6 +68,10 @@ export function isSupabaseMissingRelationError(error) {
  */
 export function getSupabaseErrorMessage(error, fallback = "Something went wrong") {
   if (error == null) return fallback;
+  // Supabase JS often returns { error } with message "signal is aborted without reason" (not thrown) — never surface raw.
+  if (isAbortError(error)) {
+    return SUPABASE_ABORT_USER_MESSAGE;
+  }
   if (typeof error === "string") {
     const s = error.trim();
     if (/email rate limit exceeded|over_email_send_rate/i.test(s.toLowerCase())) {
