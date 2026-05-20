@@ -85,7 +85,7 @@ export default function Pricing() {
         </div>
 
         {/* Plans */}
-        <div className="mt-14 grid gap-5 lg:grid-cols-3">
+        <div className="mt-16 grid gap-5 lg:grid-cols-3">
           {PLANS.map((plan, i) => (
             <motion.div
               key={plan.name}
@@ -93,7 +93,7 @@ export default function Pricing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-60px" }}
               transition={{ duration: 0.55, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
-              className={`relative flex flex-col overflow-hidden rounded-2xl border p-7 transition-all duration-300 ${
+              className={`relative flex flex-col rounded-2xl border p-7 transition-all duration-300 ${
                 plan.highlighted
                   ? "border-[#FF4F00]/40 bg-gradient-to-b from-[#FF4F00]/[0.08] to-transparent shadow-xl shadow-[#FF4F00]/10 hover:border-[#FF4F00]/55"
                   : "border-white/[0.08] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]"
@@ -102,7 +102,7 @@ export default function Pricing() {
               {/* Highlighted top border accent */}
               {plan.highlighted && (
                 <div
-                  className="pointer-events-none absolute inset-x-0 top-0 h-px"
+                  className="pointer-events-none absolute left-6 right-6 top-0 h-px"
                   aria-hidden
                   style={{
                     background:
@@ -112,7 +112,7 @@ export default function Pricing() {
               )}
 
               {plan.badge && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-[#FF4F00] px-3.5 py-1 text-xs font-semibold text-white shadow-lg shadow-[#FF4F00]/30">
+                <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#FF4F00] px-3.5 py-1 text-xs font-semibold text-white shadow-lg shadow-[#FF4F00]/30">
                   {plan.badge}
                 </span>
               )}

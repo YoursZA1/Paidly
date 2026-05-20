@@ -15,7 +15,6 @@ const RouteFallback = () => (
 );
 
 const Dashboard = lazy(() => import("./Dashboard"));
-const Login = lazy(() => import("./Login"));
 const Signup = lazy(() => import("./Signup"));
 const Home = lazy(() => import("./Home"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
@@ -103,10 +102,10 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 const AUTH_ROUTES = [
     { path: "/Home", element: <Home /> },
     { path: "/home", element: <Home /> },
-    { path: "/Auth", element: <AuthLayout><Login /></AuthLayout> },
-    { path: "/Auth.html", element: <AuthLayout><Login /></AuthLayout> },
-    { path: "/Login", element: <AuthLayout><Login /></AuthLayout> },
-    { path: "/login", element: <AuthLayout><Login /></AuthLayout> },
+    { path: "/Auth", element: <Home navActive="login" /> },
+    { path: "/Auth.html", element: <Home navActive="login" /> },
+    { path: "/Login", element: <Home navActive="login" /> },
+    { path: "/login", element: <Home navActive="login" /> },
     { path: "/Signup", element: <AuthLayout><Signup /></AuthLayout> },
     { path: "/signup", element: <AuthLayout><Signup /></AuthLayout> },
     { path: "/ForgotPassword", element: <AuthLayout><ForgotPassword /></AuthLayout> },

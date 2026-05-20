@@ -46,27 +46,12 @@ export default function Hero({ onLoginClick }) {
       />
 
       <div className="relative mx-auto max-w-4xl text-center">
-        {/* Announcement badge */}
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={FADE_UP}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-4 py-1.5 text-xs font-medium text-zinc-300 backdrop-blur-sm"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-          </span>
-          Live · Send your first invoice in 2 minutes
-        </motion.div>
-
         {/* Headline */}
         <motion.h1
           initial="hidden"
           animate="visible"
           variants={FADE_UP}
-          transition={{ duration: 0.6, delay: 0.07, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="font-sans text-5xl font-bold leading-[1.06] tracking-tight text-white sm:text-6xl lg:text-[4.5rem]"
         >
           Get Paid Faster.{" "}
