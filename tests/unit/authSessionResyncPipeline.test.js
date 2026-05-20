@@ -3,14 +3,14 @@ import { runSessionRefreshExecutorPipeline } from "@/lib/auth/authSessionResyncP
 
 describe("runSessionRefreshExecutorPipeline", () => {
   it("short-circuits downstream work when refresh is fatal", async () => {
-    const refreshSession = vi.fn(async () => ({ status: "fatal", reason: "refresh_token_invalid" }));
+    const syncSession = vi.fn(async () => ({ status: "fatal", reason: "refresh_token_invalid" }));
     const refreshUser = vi.fn(async () => {});
     const afterProfileHydrated = vi.fn(async () => {});
 
     const result = await runSessionRefreshExecutorPipeline({
       silent: true,
       bypassThrottle: false,
-      refreshSession,
+      syncSession,
       refreshUser,
       afterProfileHydrated,
     });
@@ -21,14 +21,14 @@ describe("runSessionRefreshExecutorPipeline", () => {
   });
 
   it("runs downstream work only on successful refresh", async () => {
-    const refreshSession = vi.fn(async () => ({ status: "success" }));
+    const syncSession = vi.fn(async () => ({ status: "success" }));
     const refreshUser = vi.fn(async () => {});
     const afterProfileHydrated = vi.fn(async () => {});
 
     const result = await runSessionRefreshExecutorPipeline({
       silent: true,
       bypassThrottle: false,
-      refreshSession,
+      syncSession,
       refreshUser,
       afterProfileHydrated,
     });
