@@ -21,6 +21,8 @@ import {
   clearLoginFailures,
 } from "@/utils/loginRateLimit";
 import { patchAuthSession } from "@/stores/authSessionStore";
+import { isAbortError } from "@/utils/retryOnAbort";
+
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
 }
@@ -87,7 +89,11 @@ export default function LandingLoginModal({ open, onOpenChange }) {
         setShowVerifyDialog(true);
         setError("");
       } else {
-        setError(err?.message || "Login failed. Please try again.");
+        setError(
+          isAbortError(err)
+            ? "Sign-in was interrupted. Please try again."
+            : err?.message || "Login failed. Please try again."
+        );
       }
     } finally {
       submitLockRef.current = false;

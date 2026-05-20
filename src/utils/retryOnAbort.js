@@ -10,9 +10,12 @@
 export const isAbortError = (err) => {
   if (err == null) return false;
   if (typeof err === 'string') {
-    return String(err).toLowerCase().includes('aborted');
+    const s = String(err).toLowerCase();
+    return s.includes('aborted') || s.includes('signal is aborted') || s.includes('user aborted');
   }
   if (err?.name === 'AbortError') return true;
+  // Axios / fetch cancel
+  if (err?.code === 'ERR_CANCELED' || err?.code === 'ECONNABORTED') return true;
   // Legacy / edge: DOMException with ABORT_ERR
   if (err?.name === 'DOMException') {
     const code = err.code;
@@ -21,7 +24,12 @@ export const isAbortError = (err) => {
     }
   }
   const msg = err?.message != null ? String(err.message).toLowerCase() : '';
-  return msg.includes('aborted');
+  return (
+    msg.includes('aborted') ||
+    msg.includes('signal is aborted') ||
+    msg.includes('user aborted') ||
+    msg.includes('the operation was aborted')
+  );
 };
 
 /**

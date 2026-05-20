@@ -20,7 +20,9 @@ vi.mock("@/api/entities", () => ({
 
 vi.mock("@/services/SupabaseAuthService", () => ({
   default: {
-    getSession: vi.fn(async () => null),
+    getSession: vi.fn(async () => {
+      throw new Error("refresh token not found");
+    }),
     signInWithEmail: vi.fn(async () => null),
     signOut: vi.fn(async () => {}),
     resetPasswordForEmail: vi.fn(async () => true),
@@ -32,7 +34,10 @@ vi.mock("@/lib/supabaseClient", () => ({
   isSupabaseConfigured: true,
   supabase: {
     auth: {
-      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
+      getSession: vi.fn(async () => ({
+        data: { session: null },
+        error: { message: "refresh token not found", code: "refresh_token_not_found" },
+      })),
       getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
       refreshSession: (...args) => supabaseRefreshSessionMock(...args),
       onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
@@ -43,9 +48,8 @@ vi.mock("@/lib/supabaseClient", () => ({
 }));
 
 vi.mock("@/lib/supabaseAuthRefresh", () => ({
-  msUntilProactiveRefresh: vi.fn(() => null),
   refreshSupabaseSessionWithRecovery: (...args) => refreshSupabaseSessionWithRecoveryMock(...args),
-  isRefreshTokenFatalError: vi.fn(() => false),
+  isRefreshTokenFatalError: vi.fn(() => true),
 }));
 
 vi.mock("@/hooks/useSupabaseRealtime", () => ({ useSupabaseRealtime: () => {} }));
@@ -61,7 +65,7 @@ vi.mock("@/lib/authSessionReconnectToast", () => ({
 }));
 vi.mock("@/utils/resetApp", () => ({ resetApp: vi.fn() }));
 vi.mock("@/lib/unauthorizedSessionHandler", () => ({ setUnauthorizedSessionHandler: vi.fn() }));
-vi.mock("@/lib/authUserId", () => ({ getAuthUserId: vi.fn(() => null) }));
+vi.mock("@/lib/authUserId", () => ({ getAuthUserId: vi.fn(() => "user_1") }));
 vi.mock("@/lib/authRefreshTelemetry", () => ({
   recordAuthRefreshFailure: vi.fn(),
   recordAuthRefreshFatal: vi.fn(),
@@ -93,9 +97,7 @@ describe("AuthContext fatal refresh handling", () => {
 
   beforeEach(() => {
     refreshSupabaseSessionWithRecoveryMock.mockReset();
-    refreshSupabaseSessionWithRecoveryMock.mockResolvedValue({ fatal: true });
     supabaseRefreshSessionMock.mockReset();
-    supabaseRefreshSessionMock.mockResolvedValue({ data: { session: null }, error: null });
     supabaseSignOutLocalMock.mockClear();
     useSessionHealthStore.setState({
       status: SESSION_STATUS.CONNECTED,
@@ -104,7 +106,12 @@ describe("AuthContext fatal refresh handling", () => {
     });
     patchAuthSession({
       user: { id: "user_1" },
-      session: { user: { id: "user_1" }, accessToken: "a", refreshToken: "r", expiresAt: Math.floor(Date.now() / 1000) + 3600 },
+      session: {
+        user: { id: "user_1" },
+        accessToken: "a",
+        refreshToken: "r",
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
       loading: false,
       authLoadingTimedOut: false,
     });
@@ -121,7 +128,7 @@ describe("AuthContext fatal refresh handling", () => {
     container.remove();
   });
 
-  it("transitions to REAUTH_REQUIRED immediately on fatal refresh and does not attempt reconnect refresh", async () => {
+  it("syncSession mirrors storage only and never calls manual refreshSession()", async () => {
     await act(async () => {
       root.render(
         <AuthProvider>
@@ -132,11 +139,7 @@ describe("AuthContext fatal refresh handling", () => {
       await Promise.resolve();
     });
 
-    expect(refreshSupabaseSessionWithRecoveryMock).toHaveBeenCalled();
-    expect(useSessionHealthStore.getState().status).toBe(SESSION_STATUS.REAUTH_REQUIRED);
-    expect(useSessionHealthStore.getState().reason).toBe("refresh_token_invalid");
+    expect(refreshSupabaseSessionWithRecoveryMock).not.toHaveBeenCalled();
     expect(supabaseRefreshSessionMock).not.toHaveBeenCalled();
-    expect(supabaseSignOutLocalMock).toHaveBeenCalledWith({ scope: "local" });
   });
 });
-

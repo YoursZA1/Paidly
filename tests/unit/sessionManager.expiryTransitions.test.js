@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSessionManager } from "@/lib/session/SessionManager";
+import { createSessionManager } from "@/lib/session/SessionOrchestrator";
 import { SESSION_STATUS } from "@/stores/sessionHealthStore";
 
 function makeDeps(overrides = {}) {

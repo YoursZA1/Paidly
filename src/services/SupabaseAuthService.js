@@ -6,7 +6,7 @@ import {
   getBackendBaseUrl,
 } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
-import { retryOnAbort } from "@/utils/retryOnAbort";
+import { retryOnAbort, isAbortError } from "@/utils/retryOnAbort";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
@@ -227,23 +227,30 @@ const SupabaseAuthService = {
     const normalized = (email || "").trim().toLowerCase();
 
     const signInDirect = async () => {
-      const { data, error } = await retryOnAbort(
-        () =>
-          supabase.auth.signInWithPassword({
-            email: normalized,
-            password,
-          }),
-        2,
-        400
-      );
-      if (error) {
-        const msg = mapAuthError(error);
-        if (looksLikeNetworkFailureText(msg)) {
-          throw new Error(humanizeSupabaseTransportMessage());
+      try {
+        const { data, error } = await retryOnAbort(
+          () =>
+            supabase.auth.signInWithPassword({
+              email: normalized,
+              password,
+            }),
+          2,
+          400
+        );
+        if (error) {
+          const msg = mapAuthError(error);
+          if (looksLikeNetworkFailureText(msg)) {
+            throw new Error(humanizeSupabaseTransportMessage());
+          }
+          throw new Error(msg);
         }
-        throw new Error(msg);
+        return normalizeSession(data.session);
+      } catch (e) {
+        if (isAbortError(e)) {
+          throw new Error("Sign-in was interrupted. Please try again.");
+        }
+        throw e;
       }
-      return normalizeSession(data.session);
     };
 
     if (!shouldUseNodeAuthApi()) {
@@ -312,6 +319,9 @@ const SupabaseAuthService = {
         return signInDirect();
       }
       if (err instanceof Error) {
+        if (isAbortError(err)) {
+          throw new Error("Sign-in was interrupted. Please try again.");
+        }
         throw err;
       }
       throw new Error(String(err?.message || "Login failed"));

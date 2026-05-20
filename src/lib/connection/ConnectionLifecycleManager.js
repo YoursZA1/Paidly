@@ -293,5 +293,7 @@ export function createConnectionLifecycleManager({ sessionManager }) {
     },
   };
 
+  api.connectionMonitor = sessionManager.ConnectionMonitor;
+
   return api;
 }

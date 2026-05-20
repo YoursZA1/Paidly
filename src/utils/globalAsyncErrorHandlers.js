@@ -44,6 +44,14 @@ export function isLikelyStaleChunkFailure(reason) {
 const RESIZE_OBSERVER_LOOP_RE =
   /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)/i;
 
+/** Chrome extensions often reject with this when the port closes — not app code. */
+function isLikelyBrowserExtensionMessageRejection(reason) {
+  const msg = String(
+    reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : reason?.message ?? ''
+  );
+  return /message channel closed before a response was received/i.test(msg);
+}
+
 function logUnhandledRejection(reason) {
   const page = getCurrentPage();
   if (reason instanceof Error) {
@@ -107,6 +115,11 @@ export function installGlobalAsyncErrorHandlers() {
 
     // Expected when leaving the page or tearing down (e.g. html2canvas / fetch abort) — not an app bug.
     if (isAbortError(reason)) {
+      event.preventDefault();
+      return;
+    }
+
+    if (isLikelyBrowserExtensionMessageRejection(reason)) {
       event.preventDefault();
       return;
     }

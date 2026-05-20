@@ -38,7 +38,7 @@ class CustomAPIClient {
 
     this.auth.login = async (credentials) => {
       const user = await originalLogin(credentials);
-      this.updateEntitiesForUser(user.id);
+      this.updateEntitiesForUser(user?.id ?? null);
       return user;
     };
 

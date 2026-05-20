@@ -11,7 +11,6 @@ import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionSto
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSessionManager } from "@/contexts/SessionManagerContext";
 import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 import { useAuthGatedConnectedSignal } from "@/lib/connection/connectionLifecycleStore";
 
@@ -28,8 +27,10 @@ const CONNECTED_VISIBLE_MS = 3200;
  */
 export default function ConnectionMonitor() {
   const { isAuthenticated } = useAuth();
-  const sessionManager = useSessionManager();
   const connectionLifecycle = useConnectionLifecycle();
+  const sessionManager = connectionLifecycle?.connectionMonitor
+    ? { ConnectionMonitor: connectionLifecycle.connectionMonitor }
+    : null;
   const sessionStatus = useSessionHealthStore((s) => s.status);
   const sessionReason = useSessionHealthStore((s) => s.reason);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);

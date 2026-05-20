@@ -15,6 +15,7 @@ import {
 } from "@/utils/loginRateLimit";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { patchAuthSession } from "@/stores/authSessionStore";
+import { isAbortError } from "@/utils/retryOnAbort";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -70,7 +71,11 @@ export default function Login() {
         setShowVerifyDialog(true);
         setError("");
       } else {
-        setError(err?.message || "Sign in failed. Please check your credentials.");
+        setError(
+          isAbortError(err)
+            ? "Sign-in was interrupted. Please try again."
+            : err?.message || "Sign in failed. Please check your credentials."
+        );
       }
     } finally {
       submitLockRef.current = false;

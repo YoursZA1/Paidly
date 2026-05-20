@@ -17,7 +17,7 @@ import {
   reportSupabaseGetSessionFailure,
   reportSupabaseGetSessionRecovered,
 } from "@/lib/authSessionReconnectToast";
-import { msUntilProactiveRefresh, isRefreshTokenFatalError, refreshSupabaseSessionWithRecovery } from "@/lib/supabaseAuthRefresh";
+import { isRefreshTokenFatalError } from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
 import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
 import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
@@ -26,7 +26,6 @@ import { getAuthUserId } from "@/lib/authUserId";
 import { SESSION_STATUS, applySessionHealthFromAuthority, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { createAuthTabSyncChannel } from "@/lib/authTabSync";
 import { createSessionOrchestrator } from "@/lib/session/SessionOrchestrator";
-import { SessionManagerContext } from "@/contexts/SessionManagerContext";
 import { registerSessionAuthority } from "@/lib/session/sessionAuthorityRegistry";
 import { createConnectionLifecycleManager } from "@/lib/connection/ConnectionLifecycleManager";
 import { registerConnectionLifecycleManager } from "@/lib/connection/connectionLifecycleRegistry";
@@ -40,7 +39,7 @@ import {
   checkRealtimeOnVisibilityRestore,
 } from "@/lib/realtime/authRealtimeCoordinator";
 import { createReconnectEscalationController } from "@/lib/auth/authReconnectEscalation";
-import { runAuthRefreshQueueJob } from "@/lib/auth/authRefreshQueueJob";
+import { syncSessionFromSupabase } from "@/lib/auth/syncSessionFromSupabase";
 import { runSessionRefreshExecutorPipeline } from "@/lib/auth/authSessionResyncPipeline";
 import {
   initRuntimeCoordinatorTelemetry,
@@ -227,7 +226,7 @@ export function AuthProvider({ children }) {
       routeInvariantTimerRef.current = null;
     }
   }, []);
-  const sessionManager = useMemo(
+  const sessionOrchestrator = useMemo(
     () =>
       createSessionOrchestrator({
         getBelievedSignedIn: () => Boolean(userIdRef.current || sessionUserIdRef.current),
@@ -257,8 +256,8 @@ export function AuthProvider({ children }) {
   );
 
   const connectionLifecycle = useMemo(
-    () => createConnectionLifecycleManager({ sessionManager }),
-    [sessionManager]
+    () => createConnectionLifecycleManager({ sessionManager: sessionOrchestrator }),
+    [sessionOrchestrator]
   );
 
   useEffect(() => {
@@ -309,29 +308,11 @@ export function AuthProvider({ children }) {
 
   reconnectEscalationDepsRef.current = {
     connectionLifecycle,
-    sessionManager,
     isTerminalRefreshFailure,
     readSessionSafe,
-    normalizeSessionFromClient,
     isSessionValid,
     patchAuthSession,
-    // Route through refreshSupabaseSessionWithRecovery instead of the raw Supabase client so
-    // the escalation shares the in-memory mutex AND the isFreshEnough guard.
-    // Without this, a concurrent GoTrue autoRefreshToken rotation would already have consumed
-    // the refresh token; the direct call would get "refresh_token_not_found" → handleFatal → forced logout.
-    supabaseRefreshSession: async () => {
-      const result = await refreshSupabaseSessionWithRecovery();
-      const rawSession =
-        result.ok && result.session
-          ? {
-              access_token: result.session.accessToken,
-              refresh_token: result.session.refreshToken,
-              expires_at: result.session.expiresAt,
-              user: result.session.user,
-            }
-          : null;
-      return { data: { session: rawSession }, error: result.error ?? null };
-    },
+    handleRefreshFatal: (reason) => connectionLifecycle.handleRefreshFatal(reason),
     getSessionHealthStatus: () => useSessionHealthStore.getState().status,
   };
   if (reconnectEscalationCtlRef.current == null) {
@@ -428,7 +409,7 @@ export function AuthProvider({ children }) {
         if (gsErr) {
           if (isTerminalRefreshFailure(gsErr) && (userIdRef.current || sessionUserIdRef.current)) {
             AppRecoveryLock.begin("refresh_token_invalid");
-            await sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
+            await connectionLifecycle.handleRefreshFatal("refresh_token_invalid");
             return;
           }
           reportSupabaseGetSessionFailure();
@@ -473,7 +454,7 @@ export function AuthProvider({ children }) {
         else reportSupabaseGetSessionRecovered();
         if (error && isTerminalRefreshFailure(error) && (userIdRef.current || sessionUserIdRef.current)) {
           AppRecoveryLock.begin("refresh_token_invalid");
-          await sessionManager.RefreshManager.handleFatal("refresh_token_invalid");
+          await connectionLifecycle.handleRefreshFatal("refresh_token_invalid");
           return;
         }
         const su = !error && data?.session?.user ? data.session.user : null;
@@ -522,86 +503,73 @@ export function AuthProvider({ children }) {
     reconnectEscalationCtlRef.current?.schedule();
   }, [isRecoveryCircuitOpen]);
 
-  const refreshSession = useCallback(async (opts = {}) => {
-    const silent = Boolean(opts?.silent);
-    const bypassThrottle = Boolean(opts?.bypassThrottle);
-    /** When true, concurrent callers get `retrying` + REFRESH_RETRYING; default joins the in-flight promise (wake/resync/reconnect must await the real outcome). */
-    const coalesceOnly = Boolean(opts?.coalesceOnly);
-    const queueSource = typeof opts?.source === "string" ? opts.source : "auth_context_refresh";
-    if (isRecoveryCircuitOpen()) {
-      const skipped = refreshSkipped("session_health_expired");
-      connectionLifecycle.report({
-        type: LifecycleSignalType.REFRESH_SKIPPED,
-        reason: skipped.reason,
-      });
-      return skipped;
-    }
-    const out = await sessionManager.RetryController.enqueue(
-      () =>
-        runAuthRefreshQueueJob({
-          source: queueSource,
-          believedSignedIn: Boolean(userIdRef.current || sessionUserIdRef.current),
-          silent,
-          connectionLifecycle,
-          sessionManager,
-          isTerminalRefreshFailure,
-          readSessionSafe,
-          isSessionValid,
-          patchAuthSession,
-          touchAuthHeartbeatIfValid,
-          cancelReconnectEscalation: () => reconnectEscalationCtlRef.current?.cancel(),
-          scheduleReconnectEscalation: triggerReconnect,
-          enableTerminalMutationLock: (terminalReason = "refresh_token_invalid") => {
-            AppRecoveryLock.begin(terminalReason);
-          },
-          publishAuthTabSync: (type, payload) => authTabSyncRef.current?.publish(type, payload),
-          reconcileRealtimeJwt,
-        }),
-      { source: queueSource, bypassThrottle, returnRetryingOnJoin: coalesceOnly }
-    );
-    if (isRefreshSkipped(out)) {
-      connectionLifecycle.report({
-        type: LifecycleSignalType.REFRESH_SKIPPED,
-        reason: out.reason,
-      });
-    } else if (isRefreshRetrying(out)) {
-      connectionLifecycle.report({
-        type: LifecycleSignalType.REFRESH_RETRYING,
-        reason: out.reason,
-      });
-    }
-    return out;
-  }, [connectionLifecycle, isRecoveryCircuitOpen, isTerminalRefreshFailure, sessionManager, triggerReconnect]);
+  const syncSession = useCallback(
+    async (opts = {}) => {
+      const silent = Boolean(opts?.silent);
+      const bypassThrottle = Boolean(opts?.bypassThrottle);
+      const coalesceOnly = Boolean(opts?.coalesceOnly);
+      const queueSource = typeof opts?.source === "string" ? opts.source : "session_sync";
+      if (isRecoveryCircuitOpen()) {
+        const skipped = refreshSkipped("session_health_expired");
+        connectionLifecycle.report({
+          type: LifecycleSignalType.REFRESH_SKIPPED,
+          reason: skipped.reason,
+        });
+        return skipped;
+      }
+      const out = await sessionOrchestrator.RetryController.enqueue(
+        () =>
+          syncSessionFromSupabase({
+            source: queueSource,
+            believedSignedIn: Boolean(userIdRef.current || sessionUserIdRef.current),
+            silent,
+            connectionLifecycle,
+            isTerminalRefreshFailure,
+            readSessionSafe,
+            isSessionValid,
+            patchAuthSession,
+            touchAuthHeartbeatIfValid,
+            cancelReconnectEscalation: () => reconnectEscalationCtlRef.current?.cancel(),
+            scheduleReconnectEscalation: triggerReconnect,
+            handleRefreshFatal: (reason) => connectionLifecycle.handleRefreshFatal(reason),
+            enableTerminalMutationLock: (terminalReason = "refresh_token_invalid") => {
+              AppRecoveryLock.begin(terminalReason);
+            },
+          }),
+        { source: queueSource, bypassThrottle, returnRetryingOnJoin: coalesceOnly }
+      );
+      if (isRefreshSkipped(out)) {
+        connectionLifecycle.report({
+          type: LifecycleSignalType.REFRESH_SKIPPED,
+          reason: out.reason,
+        });
+      } else if (isRefreshRetrying(out)) {
+        connectionLifecycle.report({
+          type: LifecycleSignalType.REFRESH_RETRYING,
+          reason: out.reason,
+        });
+      }
+      return out;
+    },
+    [connectionLifecycle, isRecoveryCircuitOpen, isTerminalRefreshFailure, sessionOrchestrator, triggerReconnect]
+  );
 
-  /**
-   * Proactive JWT refresh before expiry (tab timers can lag after sleep / backgrounding).
-   * Works with GoTrue autoRefreshToken; avoids surprise 401 bursts on API calls.
-   */
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const exp = session?.expiresAt;
-    const ms = msUntilProactiveRefresh(exp);
-    if (ms == null) return undefined;
-    const id = window.setTimeout(() => {
-      void (async () => {
-        const { data: snap } = await supabase.auth.getSession();
-        if (!snap?.session?.refresh_token) return;
-        requestSessionRefreshGuarded({ source: "proactive", silent: true, debounceMs: 0 });
-      })();
-    }, ms);
-    return () => clearTimeout(id);
-  }, [requestSessionRefreshGuarded, session?.expiresAt, session?.accessToken]);
+  /** @deprecated Prefer relying on Supabase auto-refresh; mirrors session from storage only. */
+  const refreshSession = syncSession;
 
   const retryAuthBootstrap = useCallback(async () => {
     patchAuthSession({ authLoadingTimedOut: false, loading: true });
     try {
       await consumeAuthCallbackFromUrl();
-      await refreshSession();
+      const s = await readSessionSafe(false);
+      if (s?.user && isSessionValid(s)) {
+        patchAuthSession({ session: s });
+      }
       await refreshUser();
     } finally {
       patchAuthSession({ loading: false });
     }
-  }, [refreshSession, refreshUser]);
+  }, [refreshUser]);
 
   // Initialize: one getSession, then restore user from profile (avoids duplicate getSession + User.me round trips)
   useEffect(() => {
@@ -750,7 +718,7 @@ export function AuthProvider({ children }) {
       await runSessionRefreshExecutorPipeline({
         silent,
         bypassThrottle,
-        refreshSession,
+        syncSession,
         refreshUser,
         afterProfileHydrated: async () => {
           const path =
@@ -773,7 +741,7 @@ export function AuthProvider({ children }) {
       });
     });
     return () => unregisterSessionRefreshExecutor();
-  }, [isRecoveryCircuitOpen, refreshSession, refreshUser]);
+  }, [isRecoveryCircuitOpen, syncSession, refreshUser]);
 
   const runWakeRecoverySequence = useCallback(
     async ({ hiddenAtMs: _hiddenAtMs, reason }) => {
@@ -793,7 +761,7 @@ export function AuthProvider({ children }) {
 
         const pipelineResult = await runWakeRecoveryPipeline({
           reason: reason || "wake_recovery",
-          refreshSession,
+          refreshSession: syncSession,
           readSessionSafe,
           isSessionValid,
           patchAuthSession,
@@ -860,7 +828,7 @@ export function AuthProvider({ children }) {
         wakeRecoveryInFlightRef.current = false;
       }
     },
-    [connectionLifecycle, isRecoveryCircuitOpen, refreshSession, refreshUser, requestSessionRefreshGuarded]
+    [connectionLifecycle, isRecoveryCircuitOpen, syncSession, refreshUser, requestSessionRefreshGuarded]
   );
 
   useEffect(() => {
@@ -1222,7 +1190,18 @@ export function AuthProvider({ children }) {
 
     // At this point email is verified — surface the session in React state immediately.
     // Do not await profiles upsert: a stuck network/DB write must not freeze the sign-in button or RequireAuth.
-    const currentUser = await User.getCurrentUser();
+    let currentUser = null;
+    try {
+      currentUser = await User.getCurrentUser();
+    } catch (e) {
+      if (import.meta.env?.DEV) {
+        console.warn("[Auth] getCurrentUser after login:", e?.message || e);
+      }
+      currentUser = null;
+    }
+    if (!currentUser && session?.user) {
+      currentUser = minimalUserFromJwtUser(session.user);
+    }
     patchAuthSession({ user: currentUser ?? null });
     const normAfterLogin = useAuthSessionStore.getState().session;
     touchAuthHeartbeatIfValid(normAfterLogin);
@@ -1346,7 +1325,7 @@ export function AuthProvider({ children }) {
         } catch {
           // ignore
         }
-        await sessionManager.RefreshManager.handleFatal(reason || "refresh_token_invalid");
+        await connectionLifecycle.handleRefreshFatal(reason || "refresh_token_invalid");
         purgeSupabaseAuthStorage();
         try {
           await purgeQueryClientAfterLogout(getOrCreateAppQueryClient());
@@ -1364,7 +1343,7 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const { forceTerminalLogout } = sessionManager.RefreshManager.escalateRecoverableSession(
+      const { forceTerminalLogout } = connectionLifecycle.escalateRecoverableSession(
         reason || "unauthorized"
       );
       if (!forceTerminalLogout) {
@@ -1392,7 +1371,7 @@ export function AuthProvider({ children }) {
         /* ignore */
       }
     },
-    [connectionLifecycle, purgeSupabaseAuthStorage, requestSessionRefreshGuarded, sessionManager]
+    [connectionLifecycle, purgeSupabaseAuthStorage, requestSessionRefreshGuarded]
   );
 
   useEffect(() => {
@@ -1513,10 +1492,9 @@ export function AuthProvider({ children }) {
   ]);
 
   return (
-    <SessionManagerContext.Provider value={sessionManager}>
-      <ConnectionLifecycleContext.Provider value={connectionLifecycle}>
-        <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-        <WakeRecoveryOverlay />
+    <ConnectionLifecycleContext.Provider value={connectionLifecycle}>
+      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+      <WakeRecoveryOverlay />
       {/* Email not verified dialog (global) — works when user was cleared after blocking unverified sign-in */}
       {showVerifyDialog && (user?.email || verifyGateEmail) ? (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/40 backdrop-blur-[2px] px-4">
@@ -1549,8 +1527,7 @@ export function AuthProvider({ children }) {
           </div>
         </div>
       ) : null}
-      </ConnectionLifecycleContext.Provider>
-    </SessionManagerContext.Provider>
+    </ConnectionLifecycleContext.Provider>
   );
 }
 

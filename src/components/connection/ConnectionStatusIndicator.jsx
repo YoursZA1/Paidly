@@ -6,7 +6,7 @@ import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { CONNECTION_STATUS, useConnectionStore } from "@/stores/useConnectionStore";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSessionManager } from "@/contexts/SessionManagerContext";
+import { useConnectionLifecycle } from "@/contexts/ConnectionLifecycleContext";
 import { runSupabaseHealthCheck } from "@/components/connection/connectionHealth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,10 @@ export default function ConnectionStatusIndicator({ className }) {
   const lastError = useConnectionStore((s) => s.lastError);
   const suppressConnectedIndicator = useConnectionStore((s) => s.suppressConnectedIndicator);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
-  const sessionManager = useSessionManager();
+  const connectionLifecycle = useConnectionLifecycle();
+  const sessionManager = connectionLifecycle?.connectionMonitor
+    ? { ConnectionMonitor: connectionLifecycle.connectionMonitor }
+    : null;
   const canShowConnected = useAuthGatedConnectedSignal();
 
   const sessionStatus = useSessionHealthStore((s) => s.status);

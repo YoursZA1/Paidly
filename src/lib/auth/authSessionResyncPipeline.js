@@ -3,37 +3,37 @@ import { useRuntimeCoordinator } from "@/core/runtime/RuntimeCoordinator";
 
 /**
  * Body registered with {@link registerSessionRefreshExecutor} in AuthProvider.
+ * Syncs session from Supabase storage (no manual refreshSession).
  *
  * @param {object} o
  * @param {boolean} o.silent
- * @param {(opts?: object) => Promise<unknown>} o.refreshSession
+ * @param {(opts?: object) => Promise<unknown>} o.syncSession
  * @param {() => Promise<void>} o.refreshUser
- * @param {() => void | Promise<void>} o.afterProfileHydrated — realtime nudge + route invariant
+ * @param {() => void | Promise<void>} o.afterProfileHydrated
  */
 export async function runSessionRefreshExecutorPipeline({
   silent,
   bypassThrottle = false,
-  refreshSession,
+  syncSession,
   refreshUser,
   afterProfileHydrated,
 }) {
   const rc = useRuntimeCoordinator.getState();
   const startedRecovery = rc.beginAuthRecovery();
   try {
-    const refreshResult = await refreshSession({ silent, bypassThrottle });
-    // Terminal or non-success refresh outcomes must not fan out into resync/bootstrap/entity work.
-    if (!isRefreshSuccess(refreshResult)) {
+    const syncResult = await syncSession({ silent, bypassThrottle });
+    if (!isRefreshSuccess(syncResult)) {
       if (startedRecovery && useRuntimeCoordinator.getState().phase === "AUTH_RECOVERING") {
         rc.endAuthRecoverySuccess();
       }
-      return refreshResult;
+      return syncResult;
     }
     await refreshUser();
     await afterProfileHydrated();
     if (startedRecovery) {
       rc.endAuthRecoverySuccess();
     }
-    return refreshResult;
+    return syncResult;
   } catch (e) {
     if (startedRecovery) {
       rc.endAuthRecoveryFatal(e?.message || "session_resync_failed");
