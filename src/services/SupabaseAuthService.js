@@ -246,26 +246,42 @@ const SupabaseAuthService = {
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
 
+    const SIGN_IN_DIRECT_TIMEOUT_MS = 20_000;
     const signInDirect = async () => {
-      try {
-        const { data, error } = await retryOnAbort(
-          () =>
-            supabase.auth.signInWithPassword({
-              email: normalized,
-              password,
-            }),
-          2,
-          400
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error("Sign-in timed out. Check your connection and try again.")),
+          SIGN_IN_DIRECT_TIMEOUT_MS
         );
-        if (error) {
-          throwIfSupabaseAuthError(error, { abortMessage: "Sign-in was interrupted. Please try again." });
-        }
-        return normalizeSession(data.session);
+      });
+      try {
+        const result = await Promise.race([
+          (async () => {
+            const { data, error } = await retryOnAbort(
+              () =>
+                supabase.auth.signInWithPassword({
+                  email: normalized,
+                  password,
+                }),
+              2,
+              400
+            );
+            if (error) {
+              throwIfSupabaseAuthError(error, { abortMessage: "Sign-in was interrupted. Please try again." });
+            }
+            return normalizeSession(data.session);
+          })(),
+          timeoutPromise,
+        ]);
+        return result;
       } catch (e) {
         if (isAbortError(e)) {
           throw new Error("Sign-in was interrupted. Please try again.");
         }
         throw e;
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
@@ -284,18 +300,36 @@ const SupabaseAuthService = {
       );
 
       if (status === 200 && data?.access_token && data?.refresh_token) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
+        const SESSION_OPS_TIMEOUT_MS = 10_000;
+        let sessionOpsTimeoutId;
+        const sessionOpsTimeout = new Promise((_, reject) => {
+          sessionOpsTimeoutId = setTimeout(
+            () => reject(new Error("Sign-in timed out while activating session. Please try again.")),
+            SESSION_OPS_TIMEOUT_MS
+          );
         });
-        if (sessionError) {
-          throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-in was interrupted. Please try again." });
+        try {
+          const session = await Promise.race([
+            (async () => {
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: data.access_token,
+                refresh_token: data.refresh_token,
+              });
+              if (sessionError) {
+                throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-in was interrupted. Please try again." });
+              }
+              const { data: sessionData, error: getErr } = await supabase.auth.getSession();
+              if (getErr) {
+                throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-in was interrupted. Please try again." });
+              }
+              return normalizeSession(sessionData.session);
+            })(),
+            sessionOpsTimeout,
+          ]);
+          return session;
+        } finally {
+          clearTimeout(sessionOpsTimeoutId);
         }
-        const { data: sessionData, error: getErr } = await supabase.auth.getSession();
-        if (getErr) {
-          throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-in was interrupted. Please try again." });
-        }
-        return normalizeSession(sessionData.session);
       }
 
       if (status === 429) {

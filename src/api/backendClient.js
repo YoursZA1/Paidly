@@ -124,6 +124,8 @@ export const backendApi = axios.create({
 installBackendApiResilience(backendApi);
 
 backendApi.interceptors.request.use(async (config) => {
+  // __paidlyCritical requests (sign-in, sign-up) bypass both the concurrency gate and the
+  // recovery-circuit check so an expired session can never block new authentication attempts.
   if (!config?.__paidlyCritical) {
     const coordinator = getSharedRequestCoordinator();
     await coordinator.waitUntilUnpaused();
@@ -131,26 +133,27 @@ backendApi.interceptors.request.use(async (config) => {
     // The slot is released in the response/error interceptor via __paidlySlotAcquired flag.
     await coordinator.acquireSlot();
     config.__paidlySlotAcquired = true;
-  }
-  if (!isRecoveryCircuitOpen()) return config;
-  await triggerUnauthorizedSession("terminal_auth_state", {
-    source: "backend_api",
-    refreshFatal: true,
-    believedSignedIn: true,
-  });
-  throw new axios.AxiosError(
-    "Session requires reauthentication",
-    "ERR_UNAUTHORIZED",
-    config,
-    null,
-    {
-      status: 401,
-      statusText: "Unauthorized",
-      headers: {},
+    if (!isRecoveryCircuitOpen()) return config;
+    await triggerUnauthorizedSession("terminal_auth_state", {
+      source: "backend_api",
+      refreshFatal: true,
+      believedSignedIn: true,
+    });
+    throw new axios.AxiosError(
+      "Session requires reauthentication",
+      "ERR_UNAUTHORIZED",
       config,
-      data: null,
-    }
-  );
+      null,
+      {
+        status: 401,
+        statusText: "Unauthorized",
+        headers: {},
+        config,
+        data: null,
+      }
+    );
+  }
+  return config;
 });
 
 backendApi.interceptors.response.use(
