@@ -9,8 +9,11 @@ import { backendApi, shouldUseNodeAuthApi } from "@/api/backendClient";
 /** Seconds before JWT expiry to force a refresh (clock skew + network latency). */
 export const PROACTIVE_REFRESH_BUFFER_SEC = 300;
 
-/** Hard timeout on a single refresh attempt. Prevents indefinitely hung requests. */
-const REFRESH_ATTEMPT_TIMEOUT_MS = 15_000;
+/** Hard timeout on a single refresh attempt. Covers cold-start Vercel (~8s) + server Supabase call + direct fallback. */
+const REFRESH_ATTEMPT_TIMEOUT_MS = 25_000;
+
+/** Per-call Axios timeout for the Node API refresh path; triggers fallback to direct Supabase on slow cold starts. */
+const NODE_REFRESH_CALL_TIMEOUT_MS = 11_000;
 
 /**
  * @param {unknown} error — Supabase AuthError or similar
@@ -134,7 +137,7 @@ async function performSingleRefreshAttempt() {
       const response = await backendApi.post(
         "/api/auth/refresh",
         { refresh_token: before.session.refresh_token },
-        { __paidlySilent: true, validateStatus: () => true }
+        { __paidlySilent: true, validateStatus: () => true, timeout: NODE_REFRESH_CALL_TIMEOUT_MS }
       );
       if (
         response.status === 200 &&
