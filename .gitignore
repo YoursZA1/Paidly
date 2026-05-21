@@ -63,3 +63,4 @@ playwright/.auth/
 
 # Vercel `vercel env pull` output (secrets)
 .env.vercel
+.claude/

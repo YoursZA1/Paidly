@@ -10,7 +10,27 @@ import { retryOnAbort, isAbortError } from "@/utils/retryOnAbort";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
+/**
+ * Supabase JS often returns `{ error }` instead of throwing. Abort/cancel still appears on that
+ * object (e.g. message "signal is aborted without reason") and must not be passed through mapAuthError raw.
+ */
+function throwIfSupabaseAuthError(error, opts = {}) {
+  if (!error) return;
+  const abortMessage = opts.abortMessage ?? "This action was interrupted. Please try again.";
+  if (isAbortError(error)) {
+    throw new Error(abortMessage);
+  }
+  const msg = mapAuthError(error);
+  if (opts.skipNetworkHumanize !== true && looksLikeNetworkFailureText(msg)) {
+    throw new Error(humanizeSupabaseTransportMessage());
+  }
+  throw new Error(msg);
+}
+
 function mapOAuthProviderError(error, provider) {
+  if (isAbortError(error)) {
+    return "Sign-in was interrupted. Please try again.";
+  }
   const raw = String(error?.message || error?.msg || "").trim();
   const low = raw.toLowerCase();
   const p = String(provider || "").toLowerCase();
@@ -121,11 +141,7 @@ const SupabaseAuthService = {
         options: { data: profile, emailRedirectTo: emailRedirectTo || undefined },
       });
       if (error) {
-        const msg = mapAuthError(error);
-        if (looksLikeNetworkFailureText(msg)) {
-          throw new Error(humanizeSupabaseTransportMessage());
-        }
-        throw new Error(msg);
+        throwIfSupabaseAuthError(error, { abortMessage: "Sign-up was interrupted. Please try again." });
       }
       return {
         session: normalizeSession(data.session),
@@ -156,10 +172,14 @@ const SupabaseAuthService = {
             access_token: sess.access_token,
             refresh_token: sess.refresh_token,
           });
-          if (sessionError) throw new Error(mapAuthError(sessionError));
+          if (sessionError) {
+            throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-up was interrupted. Please try again." });
+          }
         }
         const { data: sessionData, error: getErr } = await supabase.auth.getSession();
-        if (getErr) throw new Error(mapAuthError(getErr));
+        if (getErr) {
+          throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-up was interrupted. Please try again." });
+        }
         return {
           session: normalizeSession(sessionData?.session ?? null),
           user: data.user ?? null,
@@ -215,7 +235,7 @@ const SupabaseAuthService = {
       type: "signup",
       email: (email || "").trim().toLowerCase(),
     });
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Could not resend the email. Please try again." });
     return true;
   },
 
@@ -226,30 +246,42 @@ const SupabaseAuthService = {
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
 
+    const SIGN_IN_DIRECT_TIMEOUT_MS = 20_000;
     const signInDirect = async () => {
-      try {
-        const { data, error } = await retryOnAbort(
-          () =>
-            supabase.auth.signInWithPassword({
-              email: normalized,
-              password,
-            }),
-          2,
-          400
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error("Sign-in timed out. Check your connection and try again.")),
+          SIGN_IN_DIRECT_TIMEOUT_MS
         );
-        if (error) {
-          const msg = mapAuthError(error);
-          if (looksLikeNetworkFailureText(msg)) {
-            throw new Error(humanizeSupabaseTransportMessage());
-          }
-          throw new Error(msg);
-        }
-        return normalizeSession(data.session);
+      });
+      try {
+        const result = await Promise.race([
+          (async () => {
+            const { data, error } = await retryOnAbort(
+              () =>
+                supabase.auth.signInWithPassword({
+                  email: normalized,
+                  password,
+                }),
+              2,
+              400
+            );
+            if (error) {
+              throwIfSupabaseAuthError(error, { abortMessage: "Sign-in was interrupted. Please try again." });
+            }
+            return normalizeSession(data.session);
+          })(),
+          timeoutPromise,
+        ]);
+        return result;
       } catch (e) {
         if (isAbortError(e)) {
           throw new Error("Sign-in was interrupted. Please try again.");
         }
         throw e;
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
@@ -268,14 +300,36 @@ const SupabaseAuthService = {
       );
 
       if (status === 200 && data?.access_token && data?.refresh_token) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
+        const SESSION_OPS_TIMEOUT_MS = 10_000;
+        let sessionOpsTimeoutId;
+        const sessionOpsTimeout = new Promise((_, reject) => {
+          sessionOpsTimeoutId = setTimeout(
+            () => reject(new Error("Sign-in timed out while activating session. Please try again.")),
+            SESSION_OPS_TIMEOUT_MS
+          );
         });
-        if (sessionError) throw new Error(mapAuthError(sessionError));
-        const { data: sessionData, error: getErr } = await supabase.auth.getSession();
-        if (getErr) throw new Error(mapAuthError(getErr));
-        return normalizeSession(sessionData.session);
+        try {
+          const session = await Promise.race([
+            (async () => {
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: data.access_token,
+                refresh_token: data.refresh_token,
+              });
+              if (sessionError) {
+                throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-in was interrupted. Please try again." });
+              }
+              const { data: sessionData, error: getErr } = await supabase.auth.getSession();
+              if (getErr) {
+                throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-in was interrupted. Please try again." });
+              }
+              return normalizeSession(sessionData.session);
+            })(),
+            sessionOpsTimeout,
+          ]);
+          return session;
+        } finally {
+          clearTimeout(sessionOpsTimeoutId);
+        }
       }
 
       if (status === 429) {
@@ -345,7 +399,7 @@ const SupabaseAuthService = {
       options: { emailRedirectTo: safeRedirectTo }
     });
 
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Magic link sign-in was interrupted. Please try again." });
     return true;
   },
 
@@ -363,18 +417,18 @@ const SupabaseAuthService = {
 
   async signOut() {
     const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Sign-out was interrupted. Please try again." });
   },
 
   async getSession() {
     const { data, error } = await retryOnAbort(() => supabase.auth.getSession(), 3, 400);
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Could not load session. Please try again." });
     return normalizeSession(data.session);
   },
 
   async getUser() {
     const { data, error } = await retryOnAbort(() => supabase.auth.getUser(), 3, 400);
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Could not verify your account. Please try again." });
     return data?.user ?? null;
   },
 
@@ -412,7 +466,7 @@ const SupabaseAuthService = {
     const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
       redirectTo: to
     });
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Password reset request was interrupted. Please try again." });
     return true;
   },
 
@@ -422,7 +476,7 @@ const SupabaseAuthService = {
    */
   async updatePassword(newPassword) {
     const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) throw new Error(mapAuthError(error));
+    if (error) throwIfSupabaseAuthError(error, { abortMessage: "Password update was interrupted. Please try again." });
     return normalizeSession(data?.session);
   },
 };
