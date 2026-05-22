@@ -54,28 +54,34 @@ export const CONTENT_HEIGHT_PX = Math.floor(CONTENT_HEIGHT * PX_PER_MM); // ≈ 
  * below are estimates; this buffer absorbs estimation error so a page never
  * *slightly* exceeds the printable height and triggers an html2pdf re-slice.
  */
-export const OVERFLOW_SAFETY_PX = 28;
+export const OVERFLOW_SAFETY_PX = 36;
 
 /**
  * Estimated rendered heights (px) of the fixed regions the engine must reserve
- * space for. Deliberately conservative (estimated slightly high): over-reserving
- * only adds whitespace, whereas under-reserving bleeds content into the footer.
- * This is the single place to tune pagination — never inline these numbers.
+ * space for.
+ *
+ * BIAS HIGH ON PURPOSE. Section margins, borders and wrapped text make real
+ * heights larger than a naive count. Over-reserving only triggers a page break
+ * slightly early (a little whitespace); under-reserving bleeds content into the
+ * footer and lets html2pdf hard-slice a paragraph mid-sentence. Tune here only.
  */
 export const HEADER_HEIGHT = {
-  first: 132, // full header (logo + title + accent rule / colour band) — page 1
-  continuation: 84, // compact "continued" header — page 2+
+  first: 148, // full header (logo + title + accent rule / colour band) — page 1
+  continuation: 88, // compact "continued" header — page 2+
 };
 export const FOOTER_HEIGHT = {
-  running: 48, // slim footer (company name + page number) — non-final pages
-  detailed: 96, // full footer (contact details + page number) — final page
+  running: 54, // slim footer (company name + page number) — non-final pages
+  detailed: 106, // full footer (contact details + page number) — final page
 };
 export const REGION_HEIGHT = {
-  billToBand: 152, // invoice-to / ship-to band — page 1 only
-  tableHeader: 40, // column-header row — repeats on every table page
-  totalsBlock: 312, // payment details + totals + notes + terms — final page
-  rowBase: 34, // a single-line line-item row
-  rowWrapLine: 16, // extra height per wrapped line of description text
+  billToBand: 172, // invoice-to / ship-to band (+ section margin) — page 1 only
+  tableHeader: 44, // column-header row — repeats on every table page
+  // Payment details + payment structure + totals + notes + terms, including
+  // every section's margin/border. This whole group lives on the final page
+  // and is reserved as one indivisible block so it can never be split.
+  totalsBlock: 384,
+  rowBase: 38, // a single-line line-item row (+ row border + padding)
+  rowWrapLine: 17, // extra height per wrapped line of description text
 };
 
 /** Description characters that fit on one visual line in the 50%-width column. */

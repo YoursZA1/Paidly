@@ -110,10 +110,15 @@
 .invoice-template-doc .section {
     margin-bottom: 28px;
 }
-/* Long notes / terms may continue on the next page instead of clipping */
+/*
+ * Notes / Terms: keep each block whole — never split a paragraph mid-sentence
+ * across a page boundary. The pagination engine reserves space for this group
+ * on the final page; if a block still cannot fit, html2pdf moves it whole to
+ * the next page rather than slicing it.
+ */
 .invoice-template-doc .unified-invoice-template .invoice-flow-section {
-    page-break-inside: auto;
-    break-inside: auto;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
 }
 /*
  * Terms: do NOT use -webkit-line-clamp here — html2canvas/html2pdf clips the last line (half-glyphs).
