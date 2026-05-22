@@ -163,6 +163,7 @@ function CompanyProfileSettings() {
     const [logoFile, setLogoFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
     // Sync Name/Email from auth as soon as authUser is available
     useEffect(() => {
@@ -451,7 +452,16 @@ function CompanyProfileSettings() {
     const isBrandingComplete =
         formData.company_name && formData.company_address && resolveProfileLogoUrl(formData);
 
-    const handlePreviewTemplate = () => {
+    /**
+     * Open a sample invoice PDF in a new tab. Pass a templateId to preview a
+     * specific template without changing the saved selection; omit it to
+     * preview the currently selected template.
+     */
+    const handlePreviewTemplate = (templateIdOverride) => {
+        const previewTemplateId =
+            (typeof templateIdOverride === "string" && templateIdOverride) ||
+            formData.invoice_template ||
+            DEFAULT_INVOICE_TEMPLATE;
         const previewBusiness = compactBusinessForProfile(formData);
         const draftUser = {
             id: authUser?.id,
@@ -463,7 +473,7 @@ function CompanyProfileSettings() {
             company_website: (formData.company_website || "").trim(),
             logo_url: resolveProfileLogoUrl(formData),
             currency: formData.currency || "ZAR",
-            invoice_template: formData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
+            invoice_template: previewTemplateId,
             invoice_header: formData.invoice_header || "",
             document_brand_primary: parseDocumentBrandHex(formData.document_brand_primary) ?? null,
             document_brand_secondary: parseDocumentBrandHex(formData.document_brand_secondary) ?? null,
@@ -492,6 +502,69 @@ function CompanyProfileSettings() {
             window.open(createPageUrl("InvoicePDF") + "?draft=1", "_blank", "noopener,noreferrer");
         } catch (e) {
             console.error("Preview failed:", e);
+        }
+    };
+
+    /**
+     * Persist only the document template + accent colours, without saving the whole
+     * profile form. Lets the user lock in a template choice immediately from the picker.
+     */
+    const handleSaveInvoiceTemplate = async () => {
+        if (isSavingTemplate) return;
+        const userId = authUser?.id;
+        if (!userId) {
+            toast({
+                title: "Not signed in",
+                description: "You must be signed in to save your template.",
+                variant: "destructive",
+            });
+            return;
+        }
+        setIsSavingTemplate(true);
+        try {
+            const templatePayload = {
+                invoice_template: formData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
+                document_brand_primary:
+                    formData.document_brand_primary?.trim?.() === ""
+                        ? null
+                        : parseDocumentBrandHex(formData.document_brand_primary) ?? null,
+                document_brand_secondary:
+                    formData.document_brand_secondary?.trim?.() === ""
+                        ? null
+                        : parseDocumentBrandHex(formData.document_brand_secondary) ?? null,
+            };
+            await User.updateMyUserData(templatePayload);
+            const { error: directSaveError } = await supabase
+                .from("profiles")
+                .upsert(
+                    { id: userId, ...templatePayload, updated_at: new Date().toISOString() },
+                    { onConflict: "id" }
+                );
+            if (directSaveError) throw directSaveError;
+            setFormData((prev) => ({
+                ...prev,
+                ...templatePayload,
+                document_brand_primary: templatePayload.document_brand_primary || "",
+                document_brand_secondary: templatePayload.document_brand_secondary || "",
+            }));
+            await refreshUser();
+            const templateName =
+                DOCUMENT_TEMPLATES.find((t) => t.id === templatePayload.invoice_template)?.name ||
+                "Template";
+            toast({
+                title: "✓ Template saved",
+                description: `"${templateName}" is now your document template for invoices and quotes.`,
+                variant: "success",
+            });
+        } catch (error) {
+            console.error("Error saving template:", error);
+            toast({
+                title: "✗ Error",
+                description: `Failed to save template: ${error.message || "Please try again."}`,
+                variant: "destructive",
+            });
+        } finally {
+            setIsSavingTemplate(false);
         }
     };
 
@@ -732,21 +805,31 @@ function CompanyProfileSettings() {
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0" role="radiogroup" aria-label="Document templates">
-                            {DOCUMENT_TEMPLATES.map((template) => (
-                                <button
-                                    type="button"
+                            {DOCUMENT_TEMPLATES.map((template) => {
+                                const isSelected = formData.invoice_template === template.id;
+                                const selectTemplate = () => handleInputChange("invoice_template", template.id);
+                                return (
+                                <div
                                     key={template.id}
-                                    onClick={() => handleInputChange("invoice_template", template.id)}
-                                    aria-checked={formData.invoice_template === template.id}
                                     role="radio"
-                                    className={`relative text-left rounded-xl border-2 p-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
-                                        formData.invoice_template === template.id
+                                    tabIndex={0}
+                                    aria-checked={isSelected}
+                                    aria-label={`${template.name} template`}
+                                    onClick={selectTemplate}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            selectTemplate();
+                                        }
+                                    }}
+                                    className={`relative cursor-pointer text-left rounded-xl border-2 p-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
+                                        isSelected
                                             ? "border-orange-500 ring-2 ring-orange-500/30"
                                             : "border-border hover:border-primary/40"
                                     }`}
                                 >
-                                    {formData.invoice_template === template.id && (
-                                        <div className="absolute top-2 right-2 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                                    {isSelected && (
+                                        <div className="absolute top-2 right-2 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center z-10">
                                             <Check className="w-3 h-3 text-white" strokeWidth={2.5} />
                                         </div>
                                     )}
@@ -773,8 +856,20 @@ function CompanyProfileSettings() {
                                     </div>
                                     <p className="text-sm font-medium text-foreground text-center">{template.name}</p>
                                     <p className="text-[11px] text-muted-foreground text-center mt-0.5">{template.description}</p>
-                                </button>
-                            ))}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePreviewTemplate(template.id);
+                                        }}
+                                        className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                                    >
+                                        <FileText className="w-3.5 h-3.5" />
+                                        Preview
+                                    </button>
+                                </div>
+                                );
+                            })}
                         </div>
 
                         <div className="rounded-xl border border-border bg-muted/50 p-4 space-y-3">
@@ -842,16 +937,35 @@ function CompanyProfileSettings() {
                             </div>
                         </div>
 
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handlePreviewTemplate}
-                            className="mt-2 border-border text-muted-foreground hover:bg-muted/60"
-                        >
-                            <FileText className="w-4 h-4 mr-2" />
-                            Preview with my data
-                        </Button>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleSaveInvoiceTemplate}
+                                disabled={isSavingTemplate}
+                                className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white disabled:opacity-70"
+                            >
+                                <Save className="w-4 h-4 mr-2" />
+                                {isSavingTemplate ? "Saving..." : "Save template"}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePreviewTemplate}
+                                className="border-border text-muted-foreground hover:bg-muted/60"
+                            >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Preview with my data
+                            </Button>
+                            {(authUser?.invoice_template || DEFAULT_INVOICE_TEMPLATE) !==
+                                (formData.invoice_template || DEFAULT_INVOICE_TEMPLATE) && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                    Unsaved template change
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </SettingsCard>

@@ -11,8 +11,13 @@ import { createPageUrl } from "@/utils";
 import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import DocumentPreview from "@/components/DocumentPreview";
-import { buildInvoiceTemplatePdfCaptureProps } from "@/components/pdf/InvoiceTemplatePdfCapture";
+import {
+  buildInvoiceTemplatePdfCaptureProps,
+  safeFormatDate,
+} from "@/components/pdf/InvoiceTemplatePdfCapture";
+import InvoiceTemplateDocument from "@/components/pdf/InvoiceTemplateDocument";
 import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
+import { DOCUMENT_TEMPLATE_KEY } from "@/utils/invoiceTemplateData";
 
 import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
 import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
@@ -187,15 +192,31 @@ function InvoicePreview({
     }
   };
 
-  const templateDocument = previewDoc ? (
-    <DocumentPreview
-      doc={previewDoc}
-      docType="invoice"
-      clients={clientList}
+  // `document` (Paidly Document) → DocumentPreview engine; all other keys →
+  // the selected variant template (Classic / Modern / Minimal / Bold / Paidly Pro).
+  const isDocumentStyle = !pack || pack.templateKey === DOCUMENT_TEMPLATE_KEY;
+  const templateDocument = !pack ? null : isDocumentStyle ? (
+    previewDoc ? (
+      <DocumentPreview
+        doc={previewDoc}
+        docType="invoice"
+        clients={clientList}
+        user={pack.resolvedUser}
+        bankingDetail={bankingDetail}
+      />
+    ) : null
+  ) : (
+    <InvoiceTemplateDocument
+      TemplateComponent={pack.TemplateComponent}
+      invoice={pack.templateInvoice}
+      client={pack.clientForTemplate}
       user={pack.resolvedUser}
-      bankingDetail={bankingDetail}
+      bankingDetail={pack.bankingForTemplate}
+      userCurrency={pack.userCurrency}
+      safeFormatDate={safeFormatDate}
+      embeddedChrome
     />
-  ) : null;
+  );
 
   if (embedded) {
     return <div className="w-full min-w-0 text-card-foreground">{templateDocument}</div>;

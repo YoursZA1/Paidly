@@ -22,7 +22,7 @@ const TEMPLATES = {
   paidlypro: PaidlyProTemplate,
 };
 
-function safeFormatDate(dateStr) {
+export function safeFormatDate(dateStr) {
   if (!dateStr) return "N/A";
   const date =
     typeof dateStr === "string"
@@ -97,6 +97,7 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
 
   return {
     TemplateComponent,
+    templateKey,
     templateInvoice,
     resolvedUser,
     userCurrency,

@@ -6,8 +6,12 @@ import { getPublicInvoiceViewerToken } from '@/lib/publicInvoiceViewerStorage';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
-import { buildInvoiceTemplatePdfCaptureProps } from '@/components/pdf/InvoiceTemplatePdfCapture';
-import { mapInvoiceDataForTemplate } from '@/utils/invoiceTemplateData';
+import {
+  buildInvoiceTemplatePdfCaptureProps,
+  safeFormatDate as templateSafeFormatDate,
+} from '@/components/pdf/InvoiceTemplatePdfCapture';
+import InvoiceTemplateDocument from '@/components/pdf/InvoiceTemplateDocument';
+import { mapInvoiceDataForTemplate, DOCUMENT_TEMPLATE_KEY } from '@/utils/invoiceTemplateData';
 import DocumentPreview from '@/components/DocumentPreview';
 import { recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
 import { readInvoiceDraftRaw } from '@/utils/invoiceDraftStorage';
@@ -313,16 +317,29 @@ export default function InvoicePDF() {
                     <div className="print-container pdf-page bg-white shadow-lg rounded-lg p-4 sm:p-8 print:shadow-none print:rounded-none overflow-x-auto max-w-[210mm] mx-auto">
                         <div className="pdf-content">
                             <div ref={printRef}>
-                                {previewDoc ? (
-                                    <DocumentPreview
-                                        doc={previewDoc}
-                                        docType="invoice"
-                                        clients={clientsForPreview}
+                                {pdfPack.templateKey === DOCUMENT_TEMPLATE_KEY ? (
+                                    previewDoc ? (
+                                        <DocumentPreview
+                                            doc={previewDoc}
+                                            docType="invoice"
+                                            clients={clientsForPreview}
+                                            user={pdfPack.resolvedUser}
+                                            bankingDetail={bankingDetail}
+                                            hideStatus
+                                        />
+                                    ) : null
+                                ) : (
+                                    <InvoiceTemplateDocument
+                                        TemplateComponent={pdfPack.TemplateComponent}
+                                        invoice={pdfPack.templateInvoice}
+                                        client={pdfPack.clientForTemplate}
                                         user={pdfPack.resolvedUser}
-                                        bankingDetail={bankingDetail}
-                                        hideStatus
+                                        bankingDetail={pdfPack.bankingForTemplate}
+                                        userCurrency={pdfPack.userCurrency}
+                                        safeFormatDate={templateSafeFormatDate}
+                                        embeddedChrome
                                     />
-                                ) : null}
+                                )}
                             </div>
                         </div>
                     </div>

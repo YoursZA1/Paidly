@@ -6,12 +6,15 @@ import {
 import LogoImage from "@/components/shared/LogoImage";
 
 /**
- * Typography scale (print + PDF): title 20px, section headers 12px, body 12–13px,
- * table 12px, notes/terms 11px (headers 12px). Terms use block wrap (no line-clamp) for PDF fidelity.
+ * Typography scale (print + PDF): title 20–24px, section headers 11–12px, body 12–13px,
+ * table 12px, notes/terms 11px. Terms use block wrap (no line-clamp) for PDF fidelity.
  * Line items paginate via chunkRows for A4 flow.
+ *
+ * Each `variant` renders a genuinely distinct layout (header treatment, table style,
+ * accent colour) so the rendered invoice matches its Settings picker thumbnail.
  */
 
-/** Normalize whitespace so terms wrap predictably inside the 400px-wide block (PDF-safe; no line-clamp). */
+/** Normalize whitespace so terms wrap predictably inside the block (PDF-safe; no line-clamp). */
 function termsForDisplay(raw) {
   return String(raw ?? "")
     .replace(/\s+/g, " ")
@@ -23,72 +26,96 @@ const NOTES_PAYMENT_MILESTONES_COPY =
   "Payment milestones may apply (for example 50% when work is started, if required). " +
   "Specific amounts, timing, and any other conditions are as agreed in writing.";
 
+/** Ensures background colours render in printed/PDF output. */
+const PRINT_EXACT = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
+
+/**
+ * Per-variant design language. `headerKind` and `bandStyle` drive real structural
+ * differences; `accent` colours section labels, totals and rules.
+ */
 const VARIANT_CONFIG = {
   classic: {
-    band: "bg-[#F2F2F2]",
-    hatchBg: "#E5E5E5",
-    title: "text-black",
-    rule: "border-black/25",
-    logoFallback: "bg-black",
-    totalRowBorder: "border-t border-black/20",
-    totalRowText: "",
+    headerKind: "rule",
+    headerColor: "#1e293b",
+    accent: "#3b82f6",
+    sectionBg: "#f1f5f9",
+    titleColor: "#1e293b",
+    bandStyle: "filled",
+    tableHead: "filled",
+    tableHeadFill: "#1e293b",
+    tableHeadText: "#ffffff",
+    zebra: "#f1f5f9",
+    rule: "border-slate-300",
   },
   modern: {
-    band: "bg-[#FFF5F0]",
-    hatchBg: "#fde8dc",
-    title: "text-[#f24e00]",
-    rule: "border-[#f24e00]/35",
-    headerAccent: "border-b-[3px] border-[#f24e00] pb-5",
-    logoFallback: "bg-[#f24e00]",
-    totalRowBorder: "border-t-2 border-[#f24e00]/50",
-    totalRowText: "text-[#f24e00]",
+    headerKind: "band",
+    headerColor: "#7c3aed",
+    headerGradient: "linear-gradient(135deg,#7c3aed 0%,#a855f7 100%)",
+    accent: "#7c3aed",
+    sectionBg: "#faf5ff",
+    titleColor: "#ffffff",
+    bandStyle: "filled",
+    tableHead: "filled",
+    tableHeadFill: "#7c3aed",
+    tableHeadText: "#ffffff",
+    zebra: "#faf5ff",
+    rule: "border-purple-200",
   },
   minimal: {
-    band: "bg-neutral-50",
-    hatchBg: "#e5e5e5",
-    title: "text-neutral-800 font-medium",
+    headerKind: "minimal",
+    headerColor: "#18181b",
+    accent: "#71717a",
+    sectionBg: "#ffffff",
+    titleColor: "#18181b",
+    bandStyle: "none",
+    tableHead: "plain",
+    zebra: null,
     rule: "border-neutral-200",
-    logoFallback: "bg-neutral-800",
     sparse: true,
-    totalRowBorder: "border-t border-neutral-300",
-    totalRowText: "",
   },
   bold: {
-    band: "bg-neutral-200",
-    hatchBg: "#d4d4d4",
-    title: "text-black font-black",
-    rule: "border-black",
-    logoFallback: "bg-black",
+    headerKind: "band",
+    headerColor: "#0f766e",
+    accent: "#0f766e",
+    sectionBg: "#f0fdfa",
+    titleColor: "#ffffff",
+    bandStyle: "filled",
+    tableHead: "filled",
+    tableHeadFill: "#0f766e",
+    tableHeadText: "#ffffff",
+    zebra: "#f0fdfa",
+    rule: "border-teal-700",
     heavy: true,
-    totalRowBorder: "border-t-2 border-black",
-    totalRowText: "",
   },
   paidlypro: {
-    band: "bg-orange-50",
-    hatchBg: "#fed7aa",
-    title: "text-orange-700",
-    rule: "border-orange-300",
-    logoFallback: "bg-orange-600",
+    headerKind: "card",
+    headerColor: "#ea580c",
+    accent: "#ea580c",
+    sectionBg: "#f8fafc",
+    titleColor: "#0f172a",
+    bandStyle: "card",
+    tableHead: "filled",
+    tableHeadFill: "#0f172a",
+    tableHeadText: "#ffffff",
+    zebra: "#f8fafc",
+    rule: "border-orange-200",
     font: "font-geist antialiased",
-    headerAccent: "border-b-[3px] border-orange-500 pb-5",
-    totalRowBorder: "border-t-2 border-orange-400",
-    totalRowText: "text-orange-700",
+    cards: true,
   },
 };
 
-function InvoiceDatesColumn({ issueDate, deliveryDate, dueLabel, heavy }) {
-  const labelCls = `text-[10px] uppercase tracking-[0.1em] mb-1 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`;
+function InvoiceDatesColumn({ issueDate, deliveryDate, dueLabel, heavy, accent }) {
+  const labelCls = `text-[10px] uppercase tracking-[0.1em] mb-1 ${heavy ? "font-black" : "font-semibold"}`;
   const valueCls = `text-[12px] text-gray-800 ${heavy ? "font-bold" : "font-semibold"}`;
-  const dueHeading =
-    dueLabel === "Valid until" ? "Valid Until:" : "Due date";
+  const dueHeading = dueLabel === "Valid until" ? "Valid Until:" : "Due date";
   return (
     <div className="space-y-1.5 leading-[1.35] text-right">
       <div>
-        <p className={labelCls}>Date of issue</p>
+        <p className={labelCls} style={{ color: accent }}>Date of issue</p>
         <p className={valueCls}>{issueDate}</p>
       </div>
       <div>
-        <p className={labelCls}>{dueHeading}</p>
+        <p className={labelCls} style={{ color: accent }}>{dueHeading}</p>
         <p className={valueCls}>{deliveryDate}</p>
       </div>
     </div>
@@ -153,34 +180,31 @@ function accountDetailsBankRows(bankingDetail, user) {
   return rows;
 }
 
+function SectionLabel({ children, heavy, accent, className = "" }) {
+  return (
+    <h3
+      className={`text-[10px] uppercase tracking-[0.1em] mb-2 ${heavy ? "font-black" : "font-semibold"} ${className}`}
+      style={{ color: accent }}
+    >
+      {children}
+    </h3>
+  );
+}
+
 /** Product / material lines → ship-to. Otherwise → date of issue & due date (no physical shipment). */
-function ShipToBlock({
-  client,
-  heavy,
-  itemsRequireShipping,
-  issueDate,
-  deliveryDate,
-  dueLabel,
-}) {
+function ShipToBlock({ client, heavy, accent, itemsRequireShipping, issueDate, deliveryDate, dueLabel }) {
   const lines = clientLines(client);
 
   if (itemsRequireShipping) {
     return (
       <div>
-        <h3
-          className={`text-[10px] uppercase tracking-[0.1em] mb-2 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`}
-        >
-          Ship to
-        </h3>
+        <SectionLabel heavy={heavy} accent={accent}>Ship to</SectionLabel>
         {lines.length === 0 ? (
           <p className="text-neutral-500 text-[12px] leading-[1.4]">Same as invoice address</p>
         ) : (
           <div className="space-y-0.5 text-[12px] leading-[1.4]">
             {lines.map(({ key, text, bold }) => (
-              <p
-                key={key}
-                className={`${bold ? "font-bold" : "text-neutral-700"} ${heavy && bold ? "font-black" : ""}`}
-              >
+              <p key={key} className={`${bold ? "font-bold" : "text-neutral-700"} ${heavy && bold ? "font-black" : ""}`}>
                 {text}
               </p>
             ))}
@@ -196,28 +220,22 @@ function ShipToBlock({
       deliveryDate={deliveryDate}
       dueLabel={dueLabel}
       heavy={heavy}
+      accent={accent}
     />
   );
 }
 
-function InvoiceToBlock({ client, heavy }) {
+function InvoiceToBlock({ client, heavy, accent }) {
   const lines = clientLines(client);
   return (
     <div>
-      <h3
-        className={`text-[10px] uppercase tracking-[0.1em] mb-2 text-neutral-400 ${heavy ? "font-black" : "font-semibold"}`}
-      >
-        Invoice to
-      </h3>
+      <SectionLabel heavy={heavy} accent={accent}>Invoice to</SectionLabel>
       <div className="space-y-0.5 text-[12px] leading-[1.4]">
         {lines.length === 0 ? (
           <p className="text-neutral-500">—</p>
         ) : (
           lines.map(({ key, text, bold }) => (
-            <p
-              key={key}
-              className={`${bold ? "font-bold" : "text-neutral-700"} ${heavy && bold ? "font-black" : ""}`}
-            >
+            <p key={key} className={`${bold ? "font-bold" : "text-neutral-700"} ${heavy && bold ? "font-black" : ""}`}>
               {text}
             </p>
           ))
@@ -227,8 +245,196 @@ function InvoiceToBlock({ client, heavy }) {
   );
 }
 
-/** Tuned for 12px table body + description wrap — fewer rows per page than 11px era. */
-/** Denser rows (6px vertical padding) allow more lines per A4 page. */
+/** Variant-specific document header (logo + title + number). */
+function InvoiceHeader({ cfg, logoPath, resolvedTitle, numberLabel, displayNumber }) {
+  const fallbackBox = (onBand) => (
+    <div
+      className="h-12 w-12 shrink-0 rounded"
+      style={onBand ? { background: "rgba(255,255,255,0.25)" } : { background: cfg.headerColor, ...PRINT_EXACT }}
+      aria-hidden
+    />
+  );
+  const logoEl = (maxH = 56, maxW = 170) =>
+    logoPath ? (
+      <LogoImage
+        src={logoPath}
+        alt=""
+        className="h-auto w-auto object-contain object-left shrink-0"
+        style={{ maxHeight: maxH, maxWidth: maxW }}
+      />
+    ) : null;
+
+  // Modern / Bold — full-width colour band with the title reversed out in white.
+  if (cfg.headerKind === "band") {
+    return (
+      <header className="no-break mb-6" aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}>
+        <div
+          className="flex flex-row items-center justify-between gap-3 rounded-lg px-6 py-5"
+          style={{ background: cfg.headerGradient || cfg.headerColor, ...PRINT_EXACT }}
+        >
+          <div className="flex min-w-0 items-center">
+            {logoPath ? (
+              <div className="rounded-md bg-white px-2.5 py-1.5" style={PRINT_EXACT}>
+                {logoEl(44, 150)}
+              </div>
+            ) : (
+              fallbackBox(true)
+            )}
+          </div>
+          <div className="text-right shrink-0">
+            <h2 className="text-[24px] font-black uppercase tracking-tight text-white">{resolvedTitle}</h2>
+            <p className="mt-0.5 text-[12px] uppercase tracking-[0.12em] font-semibold text-white/85">
+              {numberLabel}: {displayNumber}
+            </p>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // Minimal — hairline rule, restrained weights, generous whitespace.
+  if (cfg.headerKind === "minimal") {
+    const niceTitle = resolvedTitle === "QUOTE" ? "Quote" : "Invoice";
+    return (
+      <header className="no-break mb-8" aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}>
+        <div className="flex flex-row items-baseline justify-between gap-3 border-b border-neutral-200 pb-4">
+          <div className="flex min-w-0 items-center">{logoPath ? logoEl(40, 150) : fallbackBox(false)}</div>
+          <div className="text-right shrink-0">
+            <h2 className="text-[21px] font-medium tracking-tight text-neutral-900">{niceTitle}</h2>
+            <p className="mt-0.5 text-[11px] tracking-[0.08em] text-neutral-400">
+              {numberLabel}: {displayNumber}
+            </p>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // Paidly Pro — refined card style with a slim accent bar.
+  if (cfg.headerKind === "card") {
+    return (
+      <header className="no-break mb-6" aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}>
+        <div className="mb-5 h-1.5 w-full rounded-full" style={{ background: cfg.headerColor, ...PRINT_EXACT }} />
+        <div className="flex flex-row items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center">{logoPath ? logoEl(56, 170) : fallbackBox(false)}</div>
+          <div className="text-right shrink-0">
+            <h2 className="text-[24px] font-semibold tracking-tight" style={{ color: cfg.titleColor }}>
+              {resolvedTitle}
+            </h2>
+            <p className="mt-1 text-[12px] uppercase tracking-[0.12em] font-semibold" style={{ color: cfg.accent }}>
+              {numberLabel}: {displayNumber}
+            </p>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // Classic (default) — logo + title with a solid accent rule beneath.
+  return (
+    <header className="no-break mb-6" aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}>
+      <div className="flex flex-row items-start justify-between gap-3 pb-4">
+        <div className="flex min-w-0 items-center">{logoPath ? logoEl(56, 170) : fallbackBox(false)}</div>
+        <div className="text-right shrink-0">
+          <h2 className="text-[24px] font-semibold uppercase tracking-tight" style={{ color: cfg.titleColor }}>
+            {resolvedTitle}
+          </h2>
+          <p className="mt-1 text-[12px] uppercase tracking-[0.12em] font-semibold" style={{ color: cfg.accent }}>
+            {numberLabel}: {displayNumber}
+          </p>
+        </div>
+      </div>
+      <div className="h-[2.5px] w-full rounded-full" style={{ background: cfg.headerColor, ...PRINT_EXACT }} />
+    </header>
+  );
+}
+
+/** Compact running header for continuation pages (page 2+) so every page is identifiable. */
+function ContinuationHeader({ cfg, logoPath, resolvedTitle, numberLabel, displayNumber }) {
+  // Band variants reverse the title to white; on a white continuation header use the band colour instead.
+  const titleColor = cfg.titleColor === "#ffffff" ? cfg.headerColor : cfg.titleColor;
+  return (
+    <header
+      className="no-break mb-5"
+      aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber} (continued)`}
+    >
+      <div
+        className="flex flex-row items-center justify-between gap-3 pb-3"
+        style={{ borderBottom: `1.5px solid ${cfg.headerColor}`, ...PRINT_EXACT }}
+      >
+        <div className="flex items-center">
+          {logoPath ? (
+            <LogoImage
+              src={logoPath}
+              alt=""
+              className="h-auto w-auto object-contain object-left shrink-0"
+              style={{ maxHeight: 32, maxWidth: 120 }}
+            />
+          ) : (
+            <div
+              className="h-8 w-8 shrink-0 rounded"
+              style={{ background: cfg.headerColor, ...PRINT_EXACT }}
+              aria-hidden
+            />
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[13px] font-semibold uppercase tracking-tight" style={{ color: titleColor }}>
+            {resolvedTitle} · {displayNumber}
+          </p>
+          <p className="text-[9.5px] uppercase tracking-[0.14em]" style={{ color: cfg.accent }}>
+            Continued
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/** Slim footer for non-final pages — company name + page position. */
+function RunningFooter({ user, cfg, pageLabel }) {
+  return (
+    <footer
+      className="footer no-break pt-3 text-[10px] leading-snug text-neutral-500"
+      style={{ borderTop: `1.5px solid ${cfg.headerColor}`, ...PRINT_EXACT }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate font-semibold" style={{ color: cfg.accent }}>
+          {user?.company_name || ""}
+        </span>
+        {pageLabel ? <span className="shrink-0 text-neutral-400">{pageLabel}</span> : null}
+      </div>
+    </footer>
+  );
+}
+
+/** Full footer for the final page — company contact details + page position. */
+function DetailedFooter({ user, cfg, pageLabel }) {
+  return (
+    <footer
+      className="footer no-break invoice-section pt-4 text-[10.5px] leading-snug text-neutral-500"
+      style={{ borderTop: `2px solid ${cfg.headerColor}`, ...PRINT_EXACT }}
+    >
+      <div className="flex justify-between items-end gap-3">
+        <div className="min-w-0 space-y-0.5">
+          {user?.company_name ? (
+            <p className="font-semibold" style={{ color: cfg.accent }}>{user.company_name}</p>
+          ) : null}
+          {user?.company_address ? <p className="whitespace-pre-line">{user.company_address}</p> : null}
+          {user?.website ? <p className="mt-0.5">{user.website}</p> : null}
+        </div>
+        <div className="text-right shrink-0 space-y-0.5">
+          {user?.phone ? <p>{user.phone}</p> : null}
+          {user?.email ? <p>{user.email}</p> : null}
+          <p className="mt-1 text-neutral-400 text-[10px]">Thank you for your business.</p>
+          {pageLabel ? <p className="text-neutral-400 text-[10px]">{pageLabel}</p> : null}
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/** Tuned for 12px table body + description wrap. */
 const ROWS_PER_PAGE = 18;
 const PAGE_HEIGHT_BUDGET = 340;
 
@@ -266,8 +472,8 @@ function chunkRows(rows, maxRows = ROWS_PER_PAGE, maxHeight = PAGE_HEIGHT_BUDGET
 }
 
 /**
- * Shared invoice / quote layout: header, gray band (invoice to | ship-to or dates),
- * optional dates row when shipping goods, line table, payment details | totals row, footer.
+ * Shared invoice / quote engine. The `variant` prop selects a distinct design
+ * (header, table style, accent) while pagination and data shaping stay common.
  */
 export default function UnifiedInvoiceTemplate({
   variant = "classic",
@@ -280,15 +486,14 @@ export default function UnifiedInvoiceTemplate({
   documentTitle,
 }) {
   const cfg = VARIANT_CONFIG[variant] || VARIANT_CONFIG.classic;
+  const accent = cfg.accent;
+  const heavy = Boolean(cfg.heavy);
   const issueDate = safeFormatDate(invoice.created_date);
-  const resolvedTitle =
-    documentTitle || (invoice.type === "QUOTE" ? "QUOTE" : "INVOICE");
+  const resolvedTitle = documentTitle || (invoice.type === "QUOTE" ? "QUOTE" : "INVOICE");
   const isQuote = resolvedTitle === "QUOTE";
   const deliveryDate = safeFormatDate(
     isQuote ? invoice.valid_until ?? invoice.delivery_date : invoice.delivery_date
   );
-  // Template safeFormatDate is typically month-first ("March 30, 2026").
-  // For QUOTE, the design spec expects day-first: "30 March 2026".
   const deliveryDateLabel = (() => {
     if (!isQuote) return deliveryDate;
     const s = String(deliveryDate || "").trim();
@@ -311,18 +516,33 @@ export default function UnifiedInvoiceTemplate({
     null;
   const businessContactRows = accountInfoRowsFromUser(user);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
-  const hasAccountDetailsSection =
-    accountBankRows.length > 0 || businessContactRows.length > 0;
+  const hasAccountDetailsSection = accountBankRows.length > 0 || businessContactRows.length > 0;
 
   const items = Array.isArray(invoice.items) ? invoice.items : [];
-  /** Empty drafts: show issue/due dates, not Ship to (`invoiceItemsRequireShipping` is false for []). */
   const itemsRequireShipping = invoiceItemsRequireShipping(items);
   const hasItemTax = items.some((item) => Number(item.item_tax_rate) > 0);
   const discountAmt = Number(invoice.discount_amount || 0);
   const paymentStructureTotal = Number(invoice.total_amount ?? 0);
   const itemPages = chunkRows(items, ROWS_PER_PAGE, PAGE_HEIGHT_BUDGET);
 
-  const pyBand = cfg.sparse ? "py-4 px-5" : "py-5 px-5";
+  // Invoice-to / ship-to block styling per variant.
+  const bandClass =
+    cfg.bandStyle === "card"
+      ? `rounded-lg border ${cfg.rule}`
+      : cfg.bandStyle === "none"
+        ? ""
+        : "rounded-lg";
+  const bandStyle =
+    cfg.bandStyle === "filled" ? { background: cfg.sectionBg, ...PRINT_EXACT } : undefined;
+  const bandPad = cfg.bandStyle === "none" ? "py-3" : cfg.sparse ? "p-4" : "p-5";
+
+  const tableFilled = cfg.tableHead === "filled";
+  /**
+   * Cell padding is applied inline because the scoped rule
+   * `.unified-invoice-line-table th,td { padding: 6px 0 }` outranks Tailwind
+   * utilities (no `important` in the Tailwind config). Inline styles win.
+   */
+  const cellPadX = tableFilled ? 12 : 0;
 
   return (
     <div
@@ -332,44 +552,45 @@ export default function UnifiedInvoiceTemplate({
         {itemPages.map((pageRows, index) => {
           const isFirst = index === 0;
           const isLast = index === itemPages.length - 1;
+          const pageLabel =
+            itemPages.length > 1 ? `Page ${index + 1} of ${itemPages.length}` : "";
           return (
-            <section className="page" key={`page-${index}`}>
+            <section
+              className="page"
+              key={`page-${index}`}
+              style={{ display: "flex", flexDirection: "column" }}
+            >
+              {/* Header — full layout on page 1, compact running header on continuation pages. */}
+              {isFirst ? (
+                <InvoiceHeader
+                  cfg={cfg}
+                  logoPath={logoPath}
+                  resolvedTitle={resolvedTitle}
+                  numberLabel={numberLabel}
+                  displayNumber={displayNumber}
+                />
+              ) : (
+                <ContinuationHeader
+                  cfg={cfg}
+                  logoPath={logoPath}
+                  resolvedTitle={resolvedTitle}
+                  numberLabel={numberLabel}
+                  displayNumber={displayNumber}
+                />
+              )}
+
               {isFirst ? (
                 <>
-                  <header
-                    className={`no-break mb-6 ${cfg.headerAccent || ""}`}
-                    aria-label={`${resolvedTitle} ${numberLabel}: ${displayNumber}`}
+                  <section
+                    className={`section no-break invoice-section ${bandClass} ${bandPad} mb-4`}
+                    style={bandStyle}
                   >
-                    <div className={`flex flex-row justify-between items-start ${isQuote ? "gap-2" : "gap-3"}`}>
-                      <div className="flex min-w-0 items-start">
-                        {logoPath ? (
-                          <LogoImage
-                            src={logoPath}
-                            alt=""
-                            className="h-auto w-auto object-contain object-left shrink-0 max-h-[64px] max-w-[180px]"
-                            style={{ maxHeight: 64, maxWidth: 180 }}
-                          />
-                        ) : (
-                          <div className={`h-16 w-16 shrink-0 rounded-sm ${cfg.logoFallback}`} aria-hidden />
-                        )}
-                      </div>
-                      <div className="invoice-doc-title-block text-right shrink-0">
-                        <h2 className={`text-[20px] uppercase tracking-tight ${cfg.title} ${cfg.heavy ? "font-black" : "font-semibold"}`}>
-                          {resolvedTitle}
-                        </h2>
-                        <p className={`text-foreground text-[13px] mt-1 uppercase tracking-wide ${cfg.heavy ? "font-black" : "font-semibold"}`}>
-                          {numberLabel}: {displayNumber}
-                        </p>
-                      </div>
-                    </div>
-                  </header>
-
-                  <section className={`section no-break invoice-section ${cfg.band} ${pyBand}`}>
                     <div className="grid grid-cols-2 gap-4">
-                      <InvoiceToBlock client={client} heavy={cfg.heavy} />
+                      <InvoiceToBlock client={client} heavy={heavy} accent={accent} />
                       <ShipToBlock
                         client={client}
-                        heavy={cfg.heavy}
+                        heavy={heavy}
+                        accent={accent}
                         itemsRequireShipping={itemsRequireShipping}
                         issueDate={issueDate}
                         deliveryDate={deliveryDateLabel}
@@ -384,7 +605,8 @@ export default function UnifiedInvoiceTemplate({
                         issueDate={issueDate}
                         deliveryDate={deliveryDateLabel}
                         dueLabel={dueLabel}
-                        heavy={cfg.heavy}
+                        heavy={heavy}
+                        accent={accent}
                       />
                     </div>
                   ) : null}
@@ -392,7 +614,9 @@ export default function UnifiedInvoiceTemplate({
               ) : null}
 
               <section className="section">
-                <table className={`items invoice-table unified-invoice-line-table w-full text-[12px] leading-[1.35] border-collapse table-fixed border-t border-b ${cfg.rule}`}>
+                <table
+                  className={`items invoice-table unified-invoice-line-table w-full text-[12px] leading-[1.35] border-collapse table-fixed ${tableFilled ? "" : `border-t border-b ${cfg.rule}`}`}
+                >
                   <colgroup>
                     <col className="min-w-0" style={{ width: "50%" }} />
                     <col style={{ width: "11%" }} />
@@ -400,33 +624,83 @@ export default function UnifiedInvoiceTemplate({
                     <col style={{ width: "19.5%" }} />
                   </colgroup>
                   <thead className="no-break">
-                    <tr className={`border-b ${cfg.rule}`}>
-                      <th className={`py-2.5 px-0 text-left text-[11px] uppercase tracking-[0.08em] ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Description</th>
-                      <th className={`py-2.5 px-0 text-center text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Qty</th>
-                      <th className={`py-2.5 px-0 text-right text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Price</th>
-                      <th className={`py-2.5 px-0 text-right text-[11px] uppercase tracking-[0.08em] whitespace-nowrap ${cfg.heavy ? "font-black" : "font-semibold"} text-neutral-500`}>Total</th>
+                    <tr
+                      style={tableFilled ? { background: cfg.tableHeadFill, ...PRINT_EXACT } : undefined}
+                      className={tableFilled ? "" : `border-b ${cfg.rule}`}
+                    >
+                      {["Description", "Qty", "Price", "Total"].map((label, i) => (
+                        <th
+                          key={label}
+                          className={`text-[11px] uppercase tracking-[0.08em] ${heavy ? "font-black" : "font-semibold"} ${
+                            i === 0 ? "text-left" : i === 1 ? "text-center" : "text-right"
+                          } ${i > 0 ? "whitespace-nowrap" : ""}`}
+                          style={{
+                            paddingLeft: cellPadX,
+                            paddingRight: cellPadX,
+                            paddingTop: 10,
+                            paddingBottom: 10,
+                            color: tableFilled ? cfg.tableHeadText : "#737373",
+                          }}
+                        >
+                          {label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.length > 0 ? pageRows.map((item, rowIndex) => {
-                      const lineLabel = formatLineItemNameAndDescription(item);
-                      return (
-                        <tr key={`${index}-${rowIndex}`} className="border-b border-black/[0.07]">
-                          <td className="py-2 px-0 align-top min-w-0">
-                            <p
-                              className={`unified-invoice-line-description text-[12px] text-gray-900 leading-snug ${cfg.heavy ? "font-bold" : "font-medium"}`}
+                    {pageRows.length > 0 ? (
+                      pageRows.map((item, rowIndex) => {
+                        const lineLabel = formatLineItemNameAndDescription(item);
+                        const zebra = cfg.zebra && rowIndex % 2 === 1;
+                        const tdStyle = {
+                          paddingLeft: cellPadX,
+                          paddingRight: cellPadX,
+                          paddingTop: 8,
+                          paddingBottom: 8,
+                        };
+                        return (
+                          <tr
+                            key={`${index}-${rowIndex}`}
+                            className="border-b border-black/[0.07]"
+                            style={zebra ? { background: cfg.zebra, ...PRINT_EXACT } : undefined}
+                          >
+                            <td className="align-top min-w-0" style={tdStyle}>
+                              <p
+                                className={`unified-invoice-line-description text-[12px] text-gray-900 leading-snug ${heavy ? "font-bold" : "font-medium"}`}
+                              >
+                                {lineLabel}
+                              </p>
+                            </td>
+                            <td
+                              className="align-top text-center tabular-nums text-[12px] text-gray-700"
+                              style={tdStyle}
                             >
-                              {lineLabel}
-                            </p>
-                          </td>
-                          <td className="py-2 px-0 align-top text-center tabular-nums text-[12px] text-gray-700">{item.quantity}</td>
-                          <td className="py-2 px-0 align-top text-right tabular-nums currency-value text-[12px] text-gray-700 whitespace-nowrap">{formatCurrency(item.unit_price, userCurrency)}</td>
-                          <td className="py-2 px-0 align-top text-right tabular-nums currency-value text-[12px] text-gray-900 font-semibold whitespace-nowrap">{formatCurrency(item.total_price || 0, userCurrency)}</td>
-                        </tr>
-                      );
-                    }) : (
+                              {item.quantity}
+                            </td>
+                            <td
+                              className="align-top text-right tabular-nums currency-value text-[12px] text-gray-700 whitespace-nowrap"
+                              style={tdStyle}
+                            >
+                              {formatCurrency(item.unit_price, userCurrency)}
+                            </td>
+                            <td
+                              className="align-top text-right tabular-nums currency-value text-[12px] text-gray-900 font-semibold whitespace-nowrap"
+                              style={tdStyle}
+                            >
+                              {formatCurrency(item.total_price || 0, userCurrency)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
                       <tr>
-                        <td colSpan={4} className="py-3 px-0 text-center text-neutral-400 text-[12px]">No items found</td>
+                        <td
+                          colSpan={4}
+                          className="text-center text-neutral-400 text-[12px]"
+                          style={{ paddingTop: 12, paddingBottom: 12 }}
+                        >
+                          No items found
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -436,12 +710,12 @@ export default function UnifiedInvoiceTemplate({
               {isLast ? (
                 <>
                   <section
-                    className={`section no-break invoice-section unified-invoice-totals grid grid-cols-2 ${isQuote ? "gap-6" : "gap-8"} gap-y-6 border-t border-black/[0.08] pt-6 mb-4 min-w-0 items-start text-[12px]`}
+                    className={`section no-break invoice-section unified-invoice-totals grid grid-cols-2 ${isQuote ? "gap-6" : "gap-8"} gap-y-6 pt-6 mb-4 min-w-0 items-start text-[12px]`}
                   >
                     <div className="min-w-0 no-break">
-                      <h3 className={`text-[11px] uppercase tracking-[0.08em] mb-2.5 text-neutral-500 ${cfg.heavy ? "font-black" : "font-semibold"}`}>
+                      <SectionLabel heavy={heavy} accent={accent} className="mb-2.5">
                         Payment details
-                      </h3>
+                      </SectionLabel>
                       <div className="space-y-3 text-neutral-700">
                         {hasAccountDetailsSection ? (
                           accountBankRows.length > 0 ? (
@@ -466,7 +740,9 @@ export default function UnifiedInvoiceTemplate({
                           <p className="text-neutral-400 text-[10px] leading-[1.45]">—</p>
                         )}
                         <div>
-                          <p className="text-[10px] text-neutral-400 mb-1.5 font-medium uppercase tracking-[0.06em]">Payment structure</p>
+                          <p className="text-[10px] text-neutral-400 mb-1.5 font-medium uppercase tracking-[0.06em]">
+                            Payment structure
+                          </p>
                           <ul className="space-y-1 text-[11px] leading-[1.4]">
                             {[
                               { pct: "25%", value: paymentStructureTotal * 0.25 },
@@ -475,7 +751,9 @@ export default function UnifiedInvoiceTemplate({
                             ].map(({ pct, value }) => (
                               <li key={pct} className="flex flex-nowrap items-baseline justify-start gap-2 tabular-nums">
                                 <span className="text-neutral-500 shrink-0 w-8">{pct}</span>
-                                <span className="font-semibold text-gray-800 currency-value">{formatCurrency(value, userCurrency)}</span>
+                                <span className="font-semibold text-gray-800 currency-value">
+                                  {formatCurrency(value, userCurrency)}
+                                </span>
                               </li>
                             ))}
                           </ul>
@@ -486,38 +764,51 @@ export default function UnifiedInvoiceTemplate({
                       <div className="ml-auto w-full max-w-xs space-y-1.5 text-[12px]">
                         <div className="flex justify-between gap-4">
                           <span className="text-neutral-500">Subtotal</span>
-                          <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.subtotal, userCurrency)}</span>
+                          <span className="font-medium tabular-nums currency-value text-gray-800">
+                            {formatCurrency(invoice.subtotal, userCurrency)}
+                          </span>
                         </div>
                         {discountAmt > 0 && (
                           <div className="flex justify-between gap-4">
                             <span className="text-neutral-500">
                               Discount{invoice.discount_type === "percentage" ? ` (${invoice.discount_value}%)` : ""}
                             </span>
-                            <span className="font-medium tabular-nums currency-value text-red-500">−{formatCurrency(discountAmt, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value text-red-500">
+                              −{formatCurrency(discountAmt, userCurrency)}
+                            </span>
                           </div>
                         )}
                         {hasItemTax && (
                           <div className="flex justify-between gap-4">
                             <span className="text-neutral-500">Item taxes</span>
-                            <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.item_taxes || 0, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value text-gray-800">
+                              {formatCurrency(invoice.item_taxes || 0, userCurrency)}
+                            </span>
                           </div>
                         )}
                         {Number(invoice.tax_rate) > 0 && (
                           <div className="flex justify-between gap-4">
                             <span className="text-neutral-500">Tax ({invoice.tax_rate}%)</span>
-                            <span className="font-medium tabular-nums currency-value text-gray-800">{formatCurrency(invoice.tax_amount, userCurrency)}</span>
+                            <span className="font-medium tabular-nums currency-value text-gray-800">
+                              {formatCurrency(invoice.tax_amount, userCurrency)}
+                            </span>
                           </div>
                         )}
-                        <div className={`flex justify-between gap-4 mt-3 pt-2.5 ${cfg.totalRowBorder} ${cfg.heavy ? "font-black" : "font-bold"} text-[13px] ${cfg.totalRowText}`}>
+                        <div
+                          className={`flex justify-between gap-4 mt-3 px-3 py-2.5 rounded-md ${heavy ? "font-black" : "font-bold"} text-[13px]`}
+                          style={{ background: cfg.sectionBg, color: cfg.accent, ...PRINT_EXACT }}
+                        >
                           <span>{isQuote ? "Total" : "Total due"}</span>
-                          <span className="tabular-nums currency-value">{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                          <span className="tabular-nums currency-value">
+                            {formatCurrency(invoice.total_amount, userCurrency)}
+                          </span>
                         </div>
                       </div>
                     </div>
                   </section>
 
                   <section className="section invoice-flow-section border-t border-black/10 pt-3 text-[12px]">
-                    <h3 className={`text-[11px] uppercase tracking-[0.08em] mb-2 text-neutral-400 ${cfg.heavy ? "font-black" : "font-semibold"}`}>Notes</h3>
+                    <SectionLabel heavy={heavy} accent={accent}>Notes</SectionLabel>
                     <p className="text-neutral-500 text-[10.5px] leading-relaxed mb-3">{NOTES_PAYMENT_MILESTONES_COPY}</p>
                     {invoice.notes ? (
                       <p className="text-neutral-700 text-[11px] leading-relaxed whitespace-pre-line border-t border-black/[0.07] pt-3 mt-3 break-words">
@@ -529,11 +820,9 @@ export default function UnifiedInvoiceTemplate({
                   {invoice.terms_conditions ? (
                     <section className="section invoice-flow-section border-t border-black/10 pt-2.5 min-w-0">
                       <div className="invoice-terms-stack min-w-0">
-                        <p
-                          className={`mb-1.5 text-[11px] uppercase tracking-[0.08em] text-neutral-400 ${cfg.heavy ? "font-black" : "font-semibold"}`}
-                        >
+                        <SectionLabel heavy={heavy} accent={accent} className="mb-1.5">
                           Terms &amp; Conditions
-                        </p>
+                        </SectionLabel>
                         <p className="invoice-terms-body" title={String(invoice.terms_conditions).trim()}>
                           {termsForDisplay(invoice.terms_conditions)}
                         </p>
@@ -541,25 +830,16 @@ export default function UnifiedInvoiceTemplate({
                     </section>
                   ) : null}
 
-                  <footer className="footer no-break invoice-section border-t border-black/15 pt-4 mt-4 text-[10.5px] leading-snug text-neutral-500">
-                    <div className="flex justify-between items-end gap-3">
-                      <div className="min-w-0 space-y-0.5">
-                        {user?.company_name ? <p className="font-semibold text-neutral-700">{user.company_name}</p> : null}
-                        {user?.company_address ? <p className="whitespace-pre-line">{user.company_address}</p> : null}
-                        {user?.website ? <p className="mt-0.5">{user.website}</p> : null}
-                      </div>
-                      <div className="text-right shrink-0 space-y-0.5">
-                        {user?.phone ? <p>{user.phone}</p> : null}
-                        {user?.email ? <p>{user.email}</p> : null}
-                        <p className="mt-1 text-neutral-400 text-[10px]">Thank you for your business.</p>
-                      </div>
-                    </div>
-                  </footer>
                 </>
               ) : null}
 
-              <div className="mt-4 pt-2 text-[10px] text-gray-400 text-right">
-                Page {index + 1} of {itemPages.length}
+              {/* Footer — present on every page, pinned to the page bottom. */}
+              <div className="mt-auto">
+                {isLast ? (
+                  <DetailedFooter user={user} cfg={cfg} pageLabel={pageLabel} />
+                ) : (
+                  <RunningFooter user={user} cfg={cfg} pageLabel={pageLabel} />
+                )}
               </div>
             </section>
           );

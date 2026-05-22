@@ -31,11 +31,12 @@ const InvoiceTemplateDocument = forwardRef(function InvoiceTemplateDocument(
         className={outerClass}
         style={embeddedChrome ? undefined : { maxWidth: "210mm" }}
       >
-        {/* A4 inner margins for preview + html2pdf capture. Print margins are handled by @page in CSS. */}
-        <div
-          className="pdf-content invoice-container min-w-0"
-          style={{ padding: "40px 48px" }}
-        >
+        {/*
+          No padding here: UnifiedInvoiceTemplate renders its own `.page` blocks
+          which already apply A4 margins (40px 48px) via invoiceTemplateDocument.css.
+          Adding padding here too would double-inset content and overflow A4 width.
+        */}
+        <div className="pdf-content invoice-container min-w-0">
           <TemplateComponent
             invoice={invoice}
             client={client}

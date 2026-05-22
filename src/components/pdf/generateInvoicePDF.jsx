@@ -2,6 +2,12 @@ import { createRoot } from "react-dom/client";
 import DocumentPreview from "@/components/DocumentPreview";
 import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
 import { profileForQuotePreview, recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
+import {
+  buildInvoiceTemplatePdfCaptureProps,
+  safeFormatDate,
+} from "@/components/pdf/InvoiceTemplatePdfCapture";
+import InvoiceTemplateDocument from "@/components/pdf/InvoiceTemplateDocument";
+import { DOCUMENT_TEMPLATE_KEY } from "@/utils/invoiceTemplateData";
 
 async function waitForImages(container) {
   const imgs = [...container.querySelectorAll("img")];
@@ -64,19 +70,36 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
       client && typeof client === "object"
         ? client
         : { name: invoice?.client_name || "Client", id: invoice?.client_id };
-    const profile = profileForQuotePreview(invoice, user);
-    const previewDoc = recordToStyledPreviewDoc(invoice, resolvedClient, "invoice", profile);
+    const pack = buildInvoiceTemplatePdfCaptureProps(invoice, resolvedClient, user, bankingDetail);
 
-    root.render(
-      <DocumentPreview
-        doc={previewDoc}
-        docType="invoice"
-        clients={[resolvedClient]}
-        user={profile}
-        bankingDetail={bankingDetail}
-        hideStatus
-      />
-    );
+    if (pack.templateKey === DOCUMENT_TEMPLATE_KEY) {
+      // Paidly Document — DocumentPreview engine (single-flow, html2pdf-safe).
+      const profile = profileForQuotePreview(invoice, user);
+      const previewDoc = recordToStyledPreviewDoc(invoice, resolvedClient, "invoice", profile);
+      root.render(
+        <DocumentPreview
+          doc={previewDoc}
+          docType="invoice"
+          clients={[resolvedClient]}
+          user={profile}
+          bankingDetail={bankingDetail}
+          hideStatus
+        />
+      );
+    } else {
+      // Classic / Modern / Minimal / Bold / Paidly Pro — variant template.
+      root.render(
+        <InvoiceTemplateDocument
+          TemplateComponent={pack.TemplateComponent}
+          invoice={pack.templateInvoice}
+          client={pack.clientForTemplate}
+          user={pack.resolvedUser}
+          bankingDetail={pack.bankingForTemplate}
+          userCurrency={pack.userCurrency}
+          safeFormatDate={safeFormatDate}
+        />
+      );
+    }
 
     await flushLayout();
     const el = await waitForCaptureNode(host);
