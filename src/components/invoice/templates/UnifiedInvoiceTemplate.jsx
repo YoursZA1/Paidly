@@ -4,6 +4,7 @@ import {
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
 import LogoImage from "@/components/shared/LogoImage";
+import { paginateInvoice } from "./invoicePageLayout";
 
 /**
  * Typography scale (print + PDF): title 20–24px, section headers 11–12px, body 12–13px,
@@ -434,43 +435,6 @@ function DetailedFooter({ user, cfg, pageLabel }) {
   );
 }
 
-/** Tuned for 12px table body + description wrap. */
-const ROWS_PER_PAGE = 18;
-const PAGE_HEIGHT_BUDGET = 340;
-
-function estimateRowHeight(text) {
-  const base = 20;
-  const extra = Math.ceil(String(text || "").length / 68) * 11;
-  return base + extra;
-}
-
-function chunkRows(rows, maxRows = ROWS_PER_PAGE, maxHeight = PAGE_HEIGHT_BUDGET) {
-  const input = Array.isArray(rows) ? rows : [];
-  if (input.length === 0) return [[]];
-  const pages = [];
-  let current = [];
-  let currentHeight = 0;
-
-  for (const row of input) {
-    const label = formatLineItemNameAndDescription(row);
-    const rowHeight = estimateRowHeight(label);
-    const wouldOverflowCount = current.length >= maxRows;
-    const wouldOverflowHeight = currentHeight + rowHeight > maxHeight;
-
-    if (current.length > 0 && (wouldOverflowCount || wouldOverflowHeight)) {
-      pages.push(current);
-      current = [];
-      currentHeight = 0;
-    }
-
-    current.push(row);
-    currentHeight += rowHeight;
-  }
-
-  if (current.length > 0) pages.push(current);
-  return pages;
-}
-
 /**
  * Shared invoice / quote engine. The `variant` prop selects a distinct design
  * (header, table style, accent) while pagination and data shaping stay common.
@@ -523,7 +487,10 @@ export default function UnifiedInvoiceTemplate({
   const hasItemTax = items.some((item) => Number(item.item_tax_rate) > 0);
   const discountAmt = Number(invoice.discount_amount || 0);
   const paymentStructureTotal = Number(invoice.total_amount ?? 0);
-  const itemPages = chunkRows(items, ROWS_PER_PAGE, PAGE_HEIGHT_BUDGET);
+  // Height-aware pagination — each entry is one printable A4 page (rows that
+  // fit, plus whether the line-item table renders on it). The totals block is
+  // pinned to the final page and never splits. See invoicePageLayout.js.
+  const itemPages = paginateInvoice(items, { getLabel: formatLineItemNameAndDescription });
 
   // Invoice-to / ship-to block styling per variant.
   const bandClass =
@@ -546,10 +513,12 @@ export default function UnifiedInvoiceTemplate({
 
   return (
     <div
-      className={`invoice invoice-root unified-invoice-template max-w-[720px] mx-auto bg-white text-gray-900 text-[12px] leading-[1.4] box-border ${cfg.font || ""}`}
+      className={`invoice invoice-root unified-invoice-template mx-auto bg-white text-gray-900 text-[12px] leading-[1.4] box-border ${cfg.font || ""}`}
     >
       <main aria-label="Invoice details">
-        {itemPages.map((pageRows, index) => {
+        {itemPages.map((page, index) => {
+          const pageRows = page.rows;
+          const { hasTable } = page;
           const isFirst = index === 0;
           const isLast = index === itemPages.length - 1;
           const pageLabel =
@@ -613,6 +582,9 @@ export default function UnifiedInvoiceTemplate({
                 </>
               ) : null}
 
+              {/* Line-item table — its column header repeats on every table
+                  page. Suppressed on a trailing totals-only page (hasTable). */}
+              {hasTable ? (
               <section className="section">
                 <table
                   className={`items invoice-table unified-invoice-line-table w-full text-[12px] leading-[1.35] border-collapse table-fixed ${tableFilled ? "" : `border-t border-b ${cfg.rule}`}`}
@@ -706,7 +678,10 @@ export default function UnifiedInvoiceTemplate({
                   </tbody>
                 </table>
               </section>
+              ) : null}
 
+              {/* Totals + notes + terms — rendered once, on the final page,
+                  as one no-break group so they never split across pages. */}
               {isLast ? (
                 <>
                   <section

@@ -76,9 +76,9 @@
     vertical-align: top;
 }
 .invoice-template-doc .unified-invoice-template {
-    /* Keep invoice/quote constrained to A4-friendly width in screen preview. */
+    /* Fluid: the `.page` children own A4 sizing. A hard max-width here (720px)
+       was narrower than the 210mm page and clipped right-side content. */
     width: 100%;
-    max-width: 720px;
 }
 .invoice-template-doc .unified-invoice-totals {
     align-items: start;
@@ -138,9 +138,14 @@
     overflow-wrap: anywhere;
     overflow: visible;
 }
-/* Explicit fixed page containers for deterministic PDF flow. */
+/*
+ * Page container. Width is fluid (100%) so it fills the export content box
+ * (A4 minus margins) or the on-screen container — a hard 210mm overflowed the
+ * padded PDF wrapper and clipped right-side content. On-screen it keeps an A4
+ * min-height + inner padding so the preview reads as a page.
+ */
 .invoice-template-doc .unified-invoice-template .page {
-    width: 210mm;
+    width: 100%;
     min-height: 297mm;
     padding: 40px 48px;
     box-sizing: border-box;
@@ -149,6 +154,15 @@
 }
 .invoice-template-doc .unified-invoice-template .page:last-child {
     page-break-after: auto;
+}
+/*
+ * PDF export: html2pdf supplies page margins on every page, so the page block
+ * drops its own padding and fixed height — content flows and each physical
+ * page (page 1 and continuations) gets identical margins.
+ */
+.invoice-pdf-export .unified-invoice-template .page {
+    min-height: 0;
+    padding: 0;
 }
 .invoice-template-doc .no-break {
     page-break-inside: avoid !important;
@@ -247,9 +261,11 @@
 }
 @media print {
     .invoice-template-doc .unified-invoice-template .page {
-        width: 210mm;
-        min-height: 297mm;
-        padding: 40px 48px;
+        /* @page (below) supplies the printable margins — the page block is a
+           fluid content block so it never overflows the printable area. */
+        width: 100%;
+        min-height: 0;
+        padding: 0;
         page-break-after: always;
     }
     .invoice-template-doc .unified-invoice-template .page:last-child {

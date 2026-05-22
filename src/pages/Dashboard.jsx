@@ -30,10 +30,11 @@ import {
   Users as UsersIcon,
   Plus,
   Headset,
-  DollarSign,
   TrendingUp,
   Receipt,
   Landmark,
+  Clock,
+  ArrowRightLeft,
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
@@ -1675,18 +1676,18 @@ export default function Dashboard() {
             {/* Mobile: Framer Motion carousel */}
             <div className="md:hidden">
               <KPICarousel>
-                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
-                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" />
-                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" />
-                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} />
+                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
+                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={Clock} isLoading={isLoading} fintech accent="purple" />
+                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" />
+                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={ArrowRightLeft} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} />
               </KPICarousel>
             </div>
             {/* Desktop: grid */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} iconImageSrc="https://img.icons8.com/liquid-glass/48/economic-improvement.png" iconImageAlt="economic-improvement" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={DollarSign} iconImageSrc="https://img.icons8.com/liquid-glass/48/payment-history.png" iconImageAlt="payment-history" isLoading={isLoading} fintech accent="purple" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} iconImageSrc="https://img.icons8.com/liquid-glass/48/accounting.png" iconImageAlt="accounting" isLoading={isLoading} fintech accent="amber" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={Receipt} iconImageSrc="https://img.icons8.com/liquid-glass/48/flow-chart.png" iconImageAlt="flow-chart" isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={Clock} isLoading={isLoading} fintech accent="purple" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" /></motion.div>
+              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={ArrowRightLeft} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} /></motion.div>
             </motion.div>
           </div>
         </div>

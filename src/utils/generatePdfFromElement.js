@@ -39,7 +39,9 @@ function html2CanvasOnClone(clonedDoc) {
 
 function buildHtml2PdfOptions(filename) {
   return {
-    margin: 0,
+    // Applied by html2pdf to EVERY page (incl. continuation pages) so margins
+    // are identical on page 1 and page 2+. [top, left, bottom, right] in mm.
+    margin: PDF_PAGE_MARGIN_MM,
     filename,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: {
@@ -65,11 +67,16 @@ async function withInvoicePdfElementStyles(element, filename, run) {
 
   try {
     element.classList.add("invoice-pdf-export");
-    element.style.width = `${A4_WIDTH_MM}mm`;
-    element.style.maxWidth = `${A4_WIDTH_MM}mm`;
+    // Element width = printable content width (A4 minus left + right margins).
+    // Margins are now applied by html2pdf on every page, so the element itself
+    // carries no padding — this keeps margins consistent across all pages and
+    // stops fixed-width children (210mm) from overflowing the printable area.
+    const contentWidthMm = A4_WIDTH_MM - PDF_PAGE_MARGIN_MM[1] - PDF_PAGE_MARGIN_MM[3];
+    element.style.width = `${contentWidthMm}mm`;
+    element.style.maxWidth = `${contentWidthMm}mm`;
     element.style.boxSizing = "border-box";
     element.style.backgroundColor = "#ffffff";
-    element.style.padding = `${PDF_PAGE_MARGIN_MM[0]}mm ${PDF_PAGE_MARGIN_MM[1]}mm ${PDF_PAGE_MARGIN_MM[2]}mm ${PDF_PAGE_MARGIN_MM[3]}mm`;
+    element.style.padding = "0";
 
     const html2pdf = (await import("html2pdf.js")).default;
     const options = buildHtml2PdfOptions(filename);
