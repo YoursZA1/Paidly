@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import TablePagination from '@/components/ui/TablePagination';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
@@ -39,6 +40,7 @@ export default function AffiliatesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewingApp, setViewingApp] = useState(null);
   const [calculatingFor, setCalculatingFor] = useState(null);
+  const [affiliatesPage, setAffiliatesPage] = useState(0);
   /** Set after successful POST /api/admin/approve — admin confirmation + same link emailed to the affiliate. */
   const [approvalNotice, setApprovalNotice] = useState(null);
   const queryClient = useQueryClient();
@@ -236,6 +238,8 @@ export default function AffiliatesPage() {
     return map;
   }, [payouts]);
 
+  useEffect(() => { setAffiliatesPage(0); }, [search, statusFilter]);
+
   const filtered = useMemo(() => {
     return affiliates.filter((a) => {
       const matchSearch =
@@ -246,6 +250,10 @@ export default function AffiliatesPage() {
       return matchSearch && matchStatus;
     });
   }, [affiliates, search, statusFilter]);
+
+  const AFFILIATES_PAGE_SIZE = 20;
+  const totalAffiliatesPages = Math.max(1, Math.ceil(filtered.length / AFFILIATES_PAGE_SIZE));
+  const pagedFiltered = filtered.slice(affiliatesPage * AFFILIATES_PAGE_SIZE, (affiliatesPage + 1) * AFFILIATES_PAGE_SIZE);
 
   const pendingCount = affiliateStatusCounts.pending;
   const pendingPayoutsTotal = useMemo(
@@ -366,7 +374,7 @@ export default function AffiliatesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((aff, affIdx) => {
+                  {pagedFiltered.map((aff, affIdx) => {
                     const rowKey = stableEntityRowKey(aff, affIdx);
                     const payoutKey = String(aff.affiliate_partner_id || '');
                     const affPayouts = (payoutKey && payoutsByAffiliateId.get(payoutKey)) || [];
@@ -487,7 +495,7 @@ export default function AffiliatesPage() {
                       </tr>
                     );
                   })}
-                  {filtered.length === 0 && (
+                  {pagedFiltered.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-6 py-12 text-center text-muted-foreground text-sm">
                         {isLoading ? (
@@ -512,6 +520,13 @@ export default function AffiliatesPage() {
                   )}
                 </tbody>
               </table>
+              <TablePagination
+                page={affiliatesPage}
+                totalPages={totalAffiliatesPages}
+                onPageChange={setAffiliatesPage}
+                totalItems={filtered.length}
+                itemLabel="affiliates"
+              />
             </div>
           </div>
         </TabsContent>

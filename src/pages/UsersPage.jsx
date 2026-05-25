@@ -38,8 +38,10 @@ import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS } from '@/lib/plans.js';
 import { bulkUpdateUsers } from '@/api/userManagement';
+import TablePagination from '@/components/ui/TablePagination';
 
 const EMPTY_PLAN = '__empty__';
+const USERS_PAGE_SIZE = 20;
 const USERS_PAGE_REFETCH_MS = 90000;
 const USERS_PAGE_STALE_MS = 60000;
 
@@ -111,6 +113,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState(null);
   const [bulkSuspendOpen, setBulkSuspendOpen] = useState(false);
   const [bulkSuspendIds, setBulkSuspendIds] = useState([]);
+  const [usersPage, setUsersPage] = useState(0);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -439,6 +442,11 @@ export default function UsersPage() {
     });
   };
 
+  useEffect(() => { setUsersPage(0); }, [search, statusFilter, confirmationFilter, packageFilter, planSlugFilter, profileFilter, roleFilter]);
+
+  const totalUsersPages = Math.max(1, Math.ceil(filtered.length / USERS_PAGE_SIZE));
+  const pagedFiltered = filtered.slice(usersPage * USERS_PAGE_SIZE, (usersPage + 1) * USERS_PAGE_SIZE);
+
   const colCount = 10;
 
   return (
@@ -650,7 +658,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u, rowIdx) => {
+              {pagedFiltered.map((u, rowIdx) => {
                 const rowId = adminRowPrimaryId(u);
                 const { primary, secondary } = adminUserNameEmailLines(u.full_name, u.email);
                 const slug = rawPlanSlug(u);
@@ -795,6 +803,13 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={usersPage}
+          totalPages={totalUsersPages}
+          onPageChange={setUsersPage}
+          totalItems={filtered.length}
+          itemLabel="users"
+        />
       </div>
 
       <AlertDialog

@@ -20,7 +20,9 @@ function sanitizePlatformUserList(rows) {
 /** @param {number} [limit] — server accepts up to 2000 for GET /api/admin/platform-users */
 export async function platformUsersQueryFn(limit = 2000) {
   if (viteEnvFlag("VITE_SUPABASE_ONLY")) {
-    return sanitizePlatformUserList(await fetchAdminPlatformUsers(limit));
+    return sanitizePlatformUserList(
+      await paidly.entities.PlatformUser.list('-created_date', limit)
+    );
   }
   try {
     return sanitizePlatformUserList(await fetchAdminPlatformUsers(limit));

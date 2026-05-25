@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useIsFetching, useMutation } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
@@ -15,8 +15,16 @@ import {
   FileText,
   ScrollText,
   Banknote,
+  Wifi,
+  UserX,
+  UserCheck,
+  TrendingUp,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
+  MoreHorizontal,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow, subDays, isAfter } from 'date-fns';
 import StatCard from '@/components/dashboard/StatCard';
 import PageHeader from '@/components/dashboard/PageHeader';
 import StatusBadge from '@/components/dashboard/StatusBadge';
@@ -45,6 +53,14 @@ import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import TablePagination from '@/components/ui/TablePagination';
 
 const DASHBOARD_QUERY_KEYS = [
   'platform-users',
@@ -57,6 +73,9 @@ const DASHBOARD_QUERY_KEYS = [
 ];
 const ADMIN_DASHBOARD_REFETCH_MS = 120000;
 const ADMIN_DASHBOARD_STALE_MS = 60000;
+const DORMANT_DAYS = 30;
+const SUBS_PER_PAGE = 10;
+const BEHAVIOR_PAGE_SIZE = 25;
 
 function burstWindowMinutes(securityEvents, kind) {
   const ms = securityEvents?.bursts?.windowsMs?.[kind];
@@ -66,13 +85,50 @@ function burstWindowMinutes(securityEvents, kind) {
   return 10;
 }
 
+function relativeTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return '—';
+  try {
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return '—';
+  }
+}
+
+function SortTh({ col, label, sort, onSort, className = '' }) {
+  const active = sort.col === col;
+  return (
+    <th
+      className={`px-6 py-3 text-left font-medium cursor-pointer select-none group hover:text-foreground transition-colors ${className}`}
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          sort.dir === 'desc'
+            ? <ChevronDown className="h-3 w-3 text-primary" />
+            : <ChevronUp className="h-3 w-3 text-primary" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-25 group-hover:opacity-60" />
+        )}
+      </span>
+    </th>
+  );
+}
+
 export default function AdminV2Dashboard() {
   const { user: currentUser } = useCurrentUser();
+  const adminSelfId = currentUser?.id || currentUser?.supabase_id || null;
   const queryClient = useQueryClient();
   const [tick, setTick] = useState(Date.now());
   const [showSecurityDetails, setShowSecurityDetails] = useState(false);
   const [affiliateApprovalNotice, setAffiliateApprovalNotice] = useState(null);
   const [busyAffiliateId, setBusyAffiliateId] = useState(null);
+  const [behaviorSort, setBehaviorSort] = useState({ col: 'activity_score', dir: 'desc' });
+  const [behaviorPage, setBehaviorPage] = useState(0);
+  const [subsPage, setSubsPage] = useState(0);
+
   const dashboardRefreshing =
     useIsFetching({
       predicate: (q) => DASHBOARD_QUERY_KEYS.includes(String(q.queryKey[0])),
@@ -80,6 +136,15 @@ export default function AdminV2Dashboard() {
 
   const handleRefresh = () => {
     DASHBOARD_QUERY_KEYS.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  };
+
+  const toggleBehaviorSort = (col) => {
+    setBehaviorSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+        : { col, dir: 'desc' }
+    );
+    setBehaviorPage(0);
   };
 
   const {
@@ -296,6 +361,15 @@ export default function AdminV2Dashboard() {
     retry: false,
   });
 
+  const behaviorStatusMutation = useMutation({
+    mutationFn: ({ id, status }) => paidly.entities.PlatformUser.update(id, { status }),
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      toast.success(`User ${status === 'active' ? 'reactivated' : status}`);
+    },
+    onError: (err) => toast.error(err?.message || 'Update failed'),
+  });
+
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 1000);
     return () => clearInterval(id);
@@ -337,7 +411,6 @@ export default function AdminV2Dashboard() {
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
   const verifiedUsers = users.filter((u) => u.email_verified === true);
   const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
-  /** Pending count from `affiliate_applications` via GET /api/admin/affiliates (not a client-side filter on a truncated list). */
   const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
@@ -355,6 +428,32 @@ export default function AdminV2Dashboard() {
       notes.includes("before subscription billing date")
     );
   }).length;
+
+  const thirtyDaysAgo = useMemo(() => subDays(new Date(), DORMANT_DAYS), []);
+
+  const onlineNowCount = useMemo(() => users.filter((u) => u.is_online).length, [users]);
+
+  const newThisMonthCount = useMemo(() => {
+    return users.filter((u) => {
+      const d = u.created_date || u.created_at;
+      if (!d) return false;
+      return isAfter(new Date(d), thirtyDaysAgo);
+    }).length;
+  }, [users, thirtyDaysAgo]);
+
+  const unverifiedCount = useMemo(
+    () => users.filter((u) => u.email_verified === false).length,
+    [users]
+  );
+
+  const dormantCount = useMemo(() => {
+    return users.filter((u) => {
+      if (u.is_online) return false;
+      if (!u.last_active_at) return true;
+      return !isAfter(new Date(u.last_active_at), thirtyDaysAgo);
+    }).length;
+  }, [users, thirtyDaysAgo]);
+
   const userBehaviorRows = useMemo(() => {
     const usersWithInvoiceCounts = mergeUsersWithInvoiceCounts(users, invoices);
     const subByUserId = new Map();
@@ -371,39 +470,69 @@ export default function AdminV2Dashboard() {
     );
     const quoteCountByUser = countByUserId(quotes);
     const payslipCountByUser = countByUserId(payslips);
-    return usersWithInvoiceCounts
-      .map((u) => {
-        const email = String(u.email || '').toLowerCase();
-        const sub =
-          subByUserId.get(String(u.id)) ||
-          (email ? subByEmail.get(email) : null) ||
-          null;
-        const profilePlan = u.plan || u.subscription_plan || '';
-        const subSt = String(sub?.status || '').toLowerCase();
-        const planFromSub =
-          sub && subSt === 'active' && sub.plan ? String(sub.plan).trim() : '';
-        return {
-          id: u.id,
-          full_name: u.full_name || '—',
-          email: u.email || '—',
-          email_verified: u.email_verified,
-          company_name: u.company_name || u.company || '—',
-          plan: planFromSub || profilePlan || 'none',
-          status: u.status || 'active',
-          invoices_sent: Number(u.invoices_sent || 0),
-          quotes_created: Number(quoteCountByUser.get(String(u.id)) || 0),
-          payslips_created: Number(payslipCountByUser.get(String(u.id)) || 0),
-          subscription_status: sub?.status || 'none',
-          next_billing_date: sub?.next_billing_date || null,
-          updated_at: u.updated_at || null,
-          last_active_at: u.last_active_at || null,
-          is_online: Boolean(u.is_online),
-          last_active_path: u.last_active_path || null,
-          created_date: u.created_date || u.created_at || null,
-        };
-      })
-      .sort((a, b) => b.invoices_sent - a.invoices_sent);
+    return usersWithInvoiceCounts.map((u) => {
+      const email = String(u.email || '').toLowerCase();
+      const sub =
+        subByUserId.get(String(u.id)) ||
+        (email ? subByEmail.get(email) : null) ||
+        null;
+      const profilePlan = u.plan || u.subscription_plan || '';
+      const subSt = String(sub?.status || '').toLowerCase();
+      const planFromSub =
+        sub && subSt === 'active' && sub.plan ? String(sub.plan).trim() : '';
+      const invoices_sent = Number(u.invoices_sent || 0);
+      const quotes_created = Number(quoteCountByUser.get(String(u.id)) || 0);
+      const payslips_created = Number(payslipCountByUser.get(String(u.id)) || 0);
+      return {
+        id: u.id,
+        full_name: u.full_name || '—',
+        email: u.email || '—',
+        email_verified: u.email_verified,
+        company_name: u.company_name || u.company || '—',
+        plan: planFromSub || profilePlan || 'none',
+        status: u.status || 'active',
+        invoices_sent,
+        quotes_created,
+        payslips_created,
+        activity_score: invoices_sent + quotes_created + payslips_created,
+        subscription_status: sub?.status || 'none',
+        next_billing_date: sub?.next_billing_date || null,
+        updated_at: u.updated_at || null,
+        last_active_at: u.last_active_at || null,
+        is_online: Boolean(u.is_online),
+        last_active_path: u.last_active_path || null,
+        created_date: u.created_date || u.created_at || null,
+      };
+    });
   }, [users, subscriptions, invoices, quotes, payslips]);
+
+  const sortedBehaviorRows = useMemo(() => {
+    const { col, dir } = behaviorSort;
+    return [...userBehaviorRows].sort((a, b) => {
+      let av = a[col];
+      let bv = b[col];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (col === 'last_active_at' || col === 'created_date') {
+        av = String(av);
+        bv = String(bv);
+      }
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [userBehaviorRows, behaviorSort]);
+
+  const totalBehaviorPages = Math.max(1, Math.ceil(sortedBehaviorRows.length / BEHAVIOR_PAGE_SIZE));
+  const pagedBehaviorRows = sortedBehaviorRows.slice(behaviorPage * BEHAVIOR_PAGE_SIZE, (behaviorPage + 1) * BEHAVIOR_PAGE_SIZE);
+
+  const topActiveUsers = useMemo(() => {
+    return [...userBehaviorRows]
+      .filter((u) => u.activity_score > 0)
+      .sort((a, b) => b.activity_score - a.activity_score)
+      .slice(0, 5);
+  }, [userBehaviorRows]);
 
   const securitySpike = useMemo(() => {
     if (!securityEvents?.counts || !securityEvents?.bursts?.thresholds || !securityEvents?.bursts?.activeIps) {
@@ -454,7 +583,8 @@ export default function AdminV2Dashboard() {
         </Alert>
       ) : null}
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Primary stats */}
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Users"
           value={users.length}
@@ -487,7 +617,8 @@ export default function AdminV2Dashboard() {
         />
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Document stats */}
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Quotes (platform)"
           value={totalQuotes}
@@ -504,6 +635,32 @@ export default function AdminV2Dashboard() {
           title="Pre-bill invoices (today)"
           value={prebillInvoicesToday}
           icon={FileText}
+        />
+      </div>
+
+      {/* Activity / engagement stats */}
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard
+          title="Online Now"
+          value={onlineNowCount}
+          icon={Wifi}
+        />
+        <StatCard
+          title={`New (last ${DORMANT_DAYS}d)`}
+          value={newThisMonthCount}
+          change={newThisMonthCount > 0 ? `+${newThisMonthCount}` : undefined}
+          icon={UserCheck}
+        />
+        <StatCard
+          title="Unverified Email"
+          value={unverifiedCount}
+          change={unverifiedCount > 0 ? `−${unverifiedCount}` : undefined}
+          icon={ShieldAlert}
+        />
+        <StatCard
+          title={`Dormant (${DORMANT_DAYS}d+)`}
+          value={dormantCount}
+          icon={UserX}
         />
       </div>
 
@@ -537,6 +694,72 @@ export default function AdminV2Dashboard() {
         />
       </div>
 
+      {/* Top Active Users leaderboard */}
+      <div className="mb-8 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-4 sm:px-6">
+          <h2 className="font-semibold inline-flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            Top Active Users
+            {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Ranked by total documents created (invoices + quotes + payslips).
+          </p>
+        </div>
+        {topActiveUsers.length === 0 ? (
+          <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+            No activity data yet
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {topActiveUsers.map((row, i) => {
+              const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
+              return (
+                <li key={row.id || i} className="flex items-center gap-4 px-4 py-3 sm:px-6 hover:bg-muted/30 transition-colors">
+                  <span className="w-6 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                    {(primary || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-medium">{primary}</p>
+                      {row.is_online ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Online
+                        </span>
+                      ) : null}
+                    </div>
+                    {secondary ? (
+                      <p className="truncate text-xs text-muted-foreground">{secondary}</p>
+                    ) : null}
+                    <p className="text-[11px] text-muted-foreground">
+                      {row.invoices_sent} inv · {row.quotes_created} quot · {row.payslips_created} pay
+                    </p>
+                  </div>
+                  <div className="hidden shrink-0 sm:block">
+                    <PlanBadge plan={row.plan} />
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-base font-bold tabular-nums text-foreground">
+                      {row.activity_score}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {row.last_active_at
+                        ? relativeTime(row.last_active_at)
+                        : '—'}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Security Events */}
       <div
         className={`mb-8 overflow-hidden rounded-xl border bg-card ${
           securitySpike ? 'border-red-500/50 bg-red-500/5' : 'border-border'
@@ -641,102 +864,179 @@ export default function AdminV2Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-4 py-4 sm:px-6">
-          <h2 className="font-semibold inline-flex items-center gap-2">
-            Recent Subscriptions
-            {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
-          </h2>
-        </div>
-        <div className="space-y-3 p-4 sm:hidden">
-          {subscriptions.slice(0, 5).map((sub, idx) => (
-            <article key={stableEntityRowKey(sub, idx)} className="rounded-lg border border-border bg-card p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{sub.user_name || 'Unknown'}</p>
-                  <p className="truncate text-xs text-muted-foreground">{sub.user_email || '—'}</p>
-                </div>
-                <StatusBadge status={sub.status} />
+      {/* Recent Subscriptions — paginated */}
+      {(() => {
+        const totalSubsPages = Math.max(1, Math.ceil(subscriptions.length / SUBS_PER_PAGE));
+        const safePage = Math.min(subsPage, totalSubsPages - 1);
+        const pageSlice = subscriptions.slice(safePage * SUBS_PER_PAGE, (safePage + 1) * SUBS_PER_PAGE);
+        const pageNumbers = Array.from({ length: totalSubsPages }, (_, i) => i);
+
+        return (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="border-b border-border px-4 py-4 sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-semibold inline-flex items-center gap-2">
+                  Recent Subscriptions
+                  {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {subscriptions.length} total · page {safePage + 1} of {totalSubsPages}
+                </p>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Plan</p>
-                  <div className="mt-1"><PlanBadge plan={sub.plan || 'none'} /></div>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Amount</p>
-                  <p className="mt-1 font-medium">R {sub.amount}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-muted-foreground">Date</p>
-                  <p className="mt-1 text-sm">
-                    {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
-                  </p>
-                </div>
-              </div>
-            </article>
-          ))}
-          {subscriptions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No subscriptions yet</p>
-          ) : null}
-        </div>
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="px-6 py-3 text-left font-medium">User</th>
-                <th className="px-6 py-3 text-left font-medium">Plan</th>
-                <th className="px-6 py-3 text-left font-medium">Amount</th>
-                <th className="px-6 py-3 text-left font-medium">Status</th>
-                <th className="px-6 py-3 text-left font-medium">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subscriptions.slice(0, 5).map((sub, idx) => (
-                <tr key={stableEntityRowKey(sub, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="text-sm font-medium">{sub.user_name || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground">{sub.user_email}</p>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="space-y-3 p-4 sm:hidden">
+              {pageSlice.map((sub, idx) => (
+                <article key={stableEntityRowKey(sub, safePage * SUBS_PER_PAGE + idx)} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{sub.user_name || 'Unknown'}</p>
+                      <p className="truncate text-xs text-muted-foreground">{sub.user_email || '—'}</p>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <PlanBadge plan={sub.plan || 'none'} />
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">R {sub.amount}</td>
-                  <td className="px-6 py-4">
                     <StatusBadge status={sub.status} />
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
-                  </td>
-                </tr>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Plan</p>
+                      <div className="mt-1"><PlanBadge plan={sub.plan || 'none'} /></div>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Amount</p>
+                      <p className="mt-1 font-medium">R {sub.amount}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-muted-foreground">Date</p>
+                      <p className="mt-1 text-sm">
+                        {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </article>
               ))}
               {subscriptions.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-sm text-muted-foreground">
-                    No subscriptions yet
-                  </td>
-                </tr>
+                <p className="py-8 text-center text-sm text-muted-foreground">No subscriptions yet</p>
               ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
 
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="px-6 py-3 text-left font-medium">#</th>
+                    <th className="px-6 py-3 text-left font-medium">User</th>
+                    <th className="px-6 py-3 text-left font-medium">Plan</th>
+                    <th className="px-6 py-3 text-left font-medium">Amount</th>
+                    <th className="px-6 py-3 text-left font-medium">Status</th>
+                    <th className="px-6 py-3 text-left font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageSlice.map((sub, idx) => {
+                    const rowNum = safePage * SUBS_PER_PAGE + idx + 1;
+                    return (
+                      <tr key={stableEntityRowKey(sub, rowNum)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                        <td className="px-6 py-4 text-xs tabular-nums text-muted-foreground">{rowNum}</td>
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="text-sm font-medium">{sub.user_name || 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground">{sub.user_email}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <PlanBadge plan={sub.plan || 'none'} />
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium">R {sub.amount}</td>
+                        <td className="px-6 py-4">
+                          <StatusBadge status={sub.status} />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-muted-foreground">
+                          {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {subscriptions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                        No subscriptions yet
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination controls */}
+            {totalSubsPages > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 sm:px-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safePage === 0}
+                  onClick={() => setSubsPage((p) => Math.max(0, p - 1))}
+                >
+                  ← Previous
+                </Button>
+
+                <div className="flex flex-wrap items-center gap-1">
+                  {pageNumbers.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSubsPage(n)}
+                      className={`h-8 min-w-[2rem] rounded-md px-2.5 text-sm font-medium transition-colors ${
+                        n === safePage
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {n + 1}
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safePage >= totalSubsPages - 1}
+                  onClick={() => setSubsPage((p) => Math.min(totalSubsPages - 1, p + 1))}
+                >
+                  Next →
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {/* User Behavior — sortable table with inline actions */}
       <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border px-4 py-4 sm:px-6">
-          <h2 className="font-semibold inline-flex items-center gap-2">
-            User Behavior
-            {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Per-user activity from invoices, quotes, and payslips (linked by user id), plus plan and billing.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold inline-flex items-center gap-2">
+                User Behavior
+                {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Per-user activity from invoices, quotes, and payslips. Click column headers to sort.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground self-center">
+              {sortedBehaviorRows.length} user{sortedBehaviorRows.length !== 1 ? 's' : ''}
+            </p>
+          </div>
         </div>
+
+        {/* Mobile cards */}
         <div className="space-y-3 p-4 sm:hidden">
-          {userBehaviorRows.slice(0, 20).map((row, idx) => {
+          {pagedBehaviorRows.map((row, idx) => {
             const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
+            const isSelf = row.id && row.id === adminSelfId;
             return (
               <article key={stableDirectoryRowKey(row, idx)} className="rounded-lg border border-border bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -750,12 +1050,12 @@ export default function AdminV2Dashboard() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <p className="text-muted-foreground">Company</p>
-                    <p className="mt-1 truncate text-sm">{row.company_name}</p>
-                  </div>
-                  <div>
                     <p className="text-muted-foreground">Plan</p>
                     <div className="mt-1"><PlanBadge plan={row.plan} /></div>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Activity score</p>
+                    <p className="mt-1 text-sm font-bold">{row.activity_score}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Invoices</p>
@@ -774,7 +1074,19 @@ export default function AdminV2Dashboard() {
                     <div className="mt-1"><StatusBadge status={row.subscription_status} /></div>
                   </div>
                   <div className="col-span-2">
-                    <p className="text-muted-foreground">Email confirmation</p>
+                    <p className="text-muted-foreground">Last active</p>
+                    <p className="mt-1 text-sm">
+                      {row.is_online ? (
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">Online now</span>
+                      ) : row.last_active_at ? (
+                        <span title={format(new Date(row.last_active_at), 'dd MMM yyyy HH:mm')}>
+                          {relativeTime(row.last_active_at)}
+                        </span>
+                      ) : '—'}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Email</p>
                     <div className="mt-1">
                       {row.email_verified === false ? (
                         <StatusBadge status="unverified" />
@@ -785,97 +1097,219 @@ export default function AdminV2Dashboard() {
                       )}
                     </div>
                   </div>
+                  {!isSelf ? (
+                    <div className="col-span-2 mt-1 flex gap-2">
+                      {row.status !== 'active' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={behaviorStatusMutation.isPending}
+                          onClick={() => row.id && behaviorStatusMutation.mutate({ id: row.id, status: 'active' })}
+                        >
+                          Reactivate
+                        </Button>
+                      ) : null}
+                      {row.status !== 'suspended' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          disabled={behaviorStatusMutation.isPending}
+                          onClick={() => {
+                            if (!row.id) return;
+                            if (window.confirm(`Suspend ${row.email}?`)) {
+                              behaviorStatusMutation.mutate({ id: row.id, status: 'suspended' });
+                            }
+                          }}
+                        >
+                          Suspend
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </article>
             );
           })}
-          {userBehaviorRows.length > 20 ? (
-            <p className="text-xs text-muted-foreground">
-              Showing top 20 users on mobile. View desktop for the full user behavior table.
-            </p>
-          ) : null}
-          {userBehaviorRows.length === 0 ? (
+          <TablePagination
+            page={behaviorPage}
+            totalPages={totalBehaviorPages}
+            onPageChange={setBehaviorPage}
+            totalItems={sortedBehaviorRows.length}
+            itemLabel="users"
+          />
+          {sortedBehaviorRows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No user behavior data yet</p>
           ) : null}
         </div>
+
+        {/* Desktop table */}
         <div className="hidden overflow-x-auto sm:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="px-6 py-3 text-left font-medium">User</th>
+                <SortTh col="full_name" label="User" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <th className="px-6 py-3 text-left font-medium">Company</th>
-                <th className="px-6 py-3 text-left font-medium">Plan</th>
+                <SortTh col="plan" label="Plan" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <th className="px-6 py-3 text-left font-medium">Profile</th>
                 <th className="px-6 py-3 text-left font-medium">Email</th>
-                <th className="px-6 py-3 text-left font-medium">Invoices</th>
-                <th className="px-6 py-3 text-left font-medium">Quotes</th>
-                <th className="px-6 py-3 text-left font-medium">Payslips</th>
-                <th className="px-6 py-3 text-left font-medium">Subscription</th>
-                <th className="px-6 py-3 text-left font-medium">Next Billing</th>
-                <th className="px-6 py-3 text-left font-medium">Created</th>
-                <th className="px-6 py-3 text-left font-medium">Last Activity</th>
+                <SortTh col="activity_score" label="Score" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <SortTh col="invoices_sent" label="Inv" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <SortTh col="quotes_created" label="Quot" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <SortTh col="payslips_created" label="Pay" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <SortTh col="subscription_status" label="Sub" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <th className="px-6 py-3 text-left font-medium">Next billing</th>
+                <SortTh col="created_date" label="Joined" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <SortTh col="last_active_at" label="Last active" sort={behaviorSort} onSort={toggleBehaviorSort} />
+                <th className="px-6 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {userBehaviorRows.map((row, idx) => {
+              {pagedBehaviorRows.map((row, idx) => {
                 const { primary, secondary } = adminUserNameEmailLines(row.full_name, row.email);
+                const isSelf = row.id && row.id === adminSelfId;
                 return (
-                <tr key={stableDirectoryRowKey(row, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-medium">{primary}</p>
-                    {secondary ? (
-                      <p className="text-xs text-muted-foreground">{secondary}</p>
-                    ) : null}
-                  </td>
-                  <td className="px-6 py-4 text-sm">{row.company_name}</td>
-                  <td className="px-6 py-4">
-                    <PlanBadge plan={row.plan} />
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td className="px-6 py-4">
-                    {row.email_verified === false ? (
-                      <StatusBadge status="unverified" />
-                    ) : row.email_verified === true ? (
-                      <StatusBadge status="verified" />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">{row.invoices_sent}</td>
-                  <td className="px-6 py-4 text-sm font-medium">{row.quotes_created}</td>
-                  <td className="px-6 py-4 text-sm font-medium">{row.payslips_created}</td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={row.subscription_status} />
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {row.next_billing_date ? format(new Date(row.next_billing_date), 'dd MMM yyyy') : '—'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {row.created_date ? format(new Date(row.created_date), 'dd MMM yyyy') : '—'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {row.last_active_at
-                      ? `${row.is_online ? 'Online' : 'Last seen'} ${format(new Date(row.last_active_at), 'dd MMM yyyy HH:mm')}`
-                      : row.updated_at
-                        ? `Updated ${format(new Date(row.updated_at), 'dd MMM yyyy')}`
-                      : row.created_date
-                        ? `Joined ${format(new Date(row.created_date), 'dd MMM yyyy')}`
-                        : '—'}
-                  </td>
-                </tr>
-              );
+                  <tr key={stableDirectoryRowKey(row, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {row.is_online ? (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Online now" />
+                        ) : (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-border" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            {primary}
+                            {isSelf ? (
+                              <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">You</span>
+                            ) : null}
+                          </p>
+                          {secondary ? (
+                            <p className="text-xs text-muted-foreground">{secondary}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm">{row.company_name}</td>
+                    <td className="px-6 py-4">
+                      <PlanBadge plan={row.plan} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <StatusBadge status={row.status} />
+                    </td>
+                    <td className="px-6 py-4">
+                      {row.email_verified === false ? (
+                        <StatusBadge status="unverified" />
+                      ) : row.email_verified === true ? (
+                        <StatusBadge status="verified" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold tabular-nums">{row.activity_score}</span>
+                    </td>
+                    <td className="px-6 py-4 text-sm tabular-nums">{row.invoices_sent}</td>
+                    <td className="px-6 py-4 text-sm tabular-nums">{row.quotes_created}</td>
+                    <td className="px-6 py-4 text-sm tabular-nums">{row.payslips_created}</td>
+                    <td className="px-6 py-4">
+                      <StatusBadge status={row.subscription_status} />
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {row.next_billing_date ? format(new Date(row.next_billing_date), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {row.created_date ? format(new Date(row.created_date), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {row.is_online ? (
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">Online now</span>
+                      ) : row.last_active_at ? (
+                        <span
+                          className="text-muted-foreground"
+                          title={format(new Date(row.last_active_at), 'dd MMM yyyy HH:mm')}
+                        >
+                          {relativeTime(row.last_active_at)}
+                        </span>
+                      ) : row.updated_at ? (
+                        <span className="text-muted-foreground" title={format(new Date(row.updated_at), 'dd MMM yyyy HH:mm')}>
+                          {relativeTime(row.updated_at)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {!isSelf ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={behaviorStatusMutation.isPending}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {row.status !== 'active' ? (
+                              <DropdownMenuItem
+                                disabled={!row.id}
+                                onClick={() => row.id && behaviorStatusMutation.mutate({ id: row.id, status: 'active' })}
+                              >
+                                Reactivate
+                              </DropdownMenuItem>
+                            ) : null}
+                            {row.status === 'active' ? (
+                              <DropdownMenuItem
+                                disabled={!row.id}
+                                onClick={() => row.id && behaviorStatusMutation.mutate({ id: row.id, status: 'paused' })}
+                              >
+                                Pause
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuSeparator />
+                            {row.status !== 'suspended' ? (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                disabled={!row.id}
+                                onClick={() => {
+                                  if (!row.id) return;
+                                  if (window.confirm(`Suspend ${row.email}?`)) {
+                                    behaviorStatusMutation.mutate({ id: row.id, status: 'suspended' });
+                                  }
+                                }}
+                              >
+                                Suspend
+                              </DropdownMenuItem>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
               })}
-              {userBehaviorRows.length === 0 ? (
+              {sortedBehaviorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={14} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No user behavior data yet
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+          <TablePagination
+            page={behaviorPage}
+            totalPages={totalBehaviorPages}
+            onPageChange={setBehaviorPage}
+            totalItems={sortedBehaviorRows.length}
+            itemLabel="users"
+          />
         </div>
       </div>
     </div>

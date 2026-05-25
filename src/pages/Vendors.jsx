@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import TablePagination from '@/components/ui/TablePagination';
+
+const VENDORS_PAGE_SIZE = 12;
 import { Vendor, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +23,7 @@ export default function VendorsPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingVendor, setEditingVendor] = useState(null);
     const [formData, setFormData] = useState({});
+    const [vendorsPage, setVendorsPage] = useState(0);
 
     useEffect(() => {
         loadVendors();
@@ -85,10 +89,15 @@ export default function VendorsPage() {
         setShowForm(true);
     };
 
-    const filteredVendors = vendors.filter(v => 
+    const filteredVendors = vendors.filter(v =>
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (v.email && v.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    useEffect(() => { setVendorsPage(0); }, [searchTerm]);
+
+    const totalVendorsPages = Math.max(1, Math.ceil(filteredVendors.length / VENDORS_PAGE_SIZE));
+    const pagedVendors = filteredVendors.slice(vendorsPage * VENDORS_PAGE_SIZE, (vendorsPage + 1) * VENDORS_PAGE_SIZE);
 
     const categories = [
         "office", "travel", "utilities", "supplies", "salary", 
@@ -156,7 +165,7 @@ export default function VendorsPage() {
                             </Card>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {filteredVendors.map(vendor => (
+                                {pagedVendors.map(vendor => (
                                     <div key={vendor.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex items-center gap-2">
@@ -202,6 +211,13 @@ export default function VendorsPage() {
                                     </div>
                                 ))}
                             </div>
+                            <TablePagination
+                                page={vendorsPage}
+                                totalPages={totalVendorsPages}
+                                onPageChange={setVendorsPage}
+                                totalItems={filteredVendors.length}
+                                itemLabel="vendors"
+                            />
                         )}
                     </CardContent>
                 </Card>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { format } from 'date-fns';
@@ -28,6 +28,9 @@ import PageHeader from '@/components/dashboard/PageHeader';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAuditLogsSupabaseTableMissing } from '@/lib/auditLogsSupabaseStatus';
+import TablePagination from '@/components/ui/TablePagination';
+
+const AUDIT_PAGE_SIZE = 25;
 
 const CATEGORY_META = {
   users: { label: 'Users', icon: Users, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -184,6 +187,7 @@ export default function AuditLogPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [auditPage, setAuditPage] = useState(0);
 
   useEffect(() => {
     document.title = `${PAGE_TITLE} · Paidly`;
@@ -220,12 +224,20 @@ export default function AuditLogPage() {
     return matchCategory && matchSearch && matchDate;
   });
 
+  useEffect(() => { setAuditPage(0); }, [search, categoryFilter, dateFrom, dateTo]);
+
   const clearFilters = () => {
     setSearch('');
     setCategoryFilter('all');
     setDateFrom('');
     setDateTo('');
   };
+
+  const totalAuditPages = Math.max(1, Math.ceil(filtered.length / AUDIT_PAGE_SIZE));
+  const pagedLogs = useMemo(
+    () => filtered.slice(auditPage * AUDIT_PAGE_SIZE, (auditPage + 1) * AUDIT_PAGE_SIZE),
+    [filtered, auditPage]
+  );
 
   const handleExportCsv = () => {
     const rows = filtered.length > 0 ? filtered : logs;
@@ -412,13 +424,21 @@ export default function AuditLogPage() {
             }
           />
         ) : (
-          filtered.map((log) => <LogRow key={log.id} log={log} />)
+          pagedLogs.map((log) => <LogRow key={log.id} log={log} />)
         )}
+        {!isLoading && filtered.length > 0 ? (
+          <TablePagination
+            page={auditPage}
+            totalPages={totalAuditPages}
+            onPageChange={setAuditPage}
+            totalItems={filtered.length}
+            itemLabel="events"
+          />
+        ) : null}
       </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        Showing {filtered.length} of {logs.length} internal audit event{logs.length === 1 ? '' : 's'} (server cap:
-        200)
+        Showing {filtered.length} of {logs.length} internal audit event{logs.length === 1 ? '' : 's'} (server cap: 200)
       </p>
     </div>
   );

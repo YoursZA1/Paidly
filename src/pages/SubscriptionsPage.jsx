@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
@@ -25,8 +25,10 @@ import SubscriptionFormDialog, {
 } from '@/components/subscriptions/SubscriptionFormDialog';
 import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
+import TablePagination from '@/components/ui/TablePagination';
 
 const LIST_LIMIT = 500;
+const SUBS_PAGE_SIZE = 15;
 
 function pickLatestSubscriptionForUser(subs, userId) {
   const uid = String(userId);
@@ -89,6 +91,7 @@ export default function SubscriptionsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
+  const [subsPage, setSubsPage] = useState(0);
   const queryClient = useQueryClient();
 
   const { data: subscriptions = [], isLoading: subsLoading, refetch } = useQuery({
@@ -127,6 +130,8 @@ export default function SubscriptionsPage() {
     onError: (err) => toast.error(err?.message || 'Update failed'),
   });
 
+  useEffect(() => { setSubsPage(0); }, [search, planFilter, statusFilter]);
+
   const filtered = rows.filter((s) => {
     const matchSearch =
       !search ||
@@ -138,6 +143,9 @@ export default function SubscriptionsPage() {
     const matchStatus = statusFilter === 'all' || s.status === statusFilter;
     return matchSearch && matchPlan && matchStatus;
   });
+
+  const totalSubsPages = Math.max(1, Math.ceil(filtered.length / SUBS_PAGE_SIZE));
+  const pagedFiltered = filtered.slice(subsPage * SUBS_PAGE_SIZE, (subsPage + 1) * SUBS_PAGE_SIZE);
 
   const handleStatusChange = (sub, newStatus) => {
     const prevStatus = sub.status;
@@ -264,7 +272,7 @@ export default function SubscriptionsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((sub) => (
+              {pagedFiltered.map((sub) => (
                 <tr
                   key={sub._rowKey || sub.id}
                   className="border-b border-border/50 transition-colors hover:bg-muted/30"
@@ -362,6 +370,13 @@ export default function SubscriptionsPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={subsPage}
+          totalPages={totalSubsPages}
+          onPageChange={setSubsPage}
+          totalItems={filtered.length}
+          itemLabel="subscriptions"
+        />
       </div>
 
       <SubscriptionFormDialog

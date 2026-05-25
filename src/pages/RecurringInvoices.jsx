@@ -21,6 +21,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { RecurringInvoiceService } from '../services/RecurringInvoiceService';
+import TablePagination from '@/components/ui/TablePagination';
+
+const RI_PAGE_SIZE = 9;
 import CreateRecurringInvoice from '../components/recurring/CreateRecurringInvoice';
 import RecurringInvoiceCard from '../components/recurring/RecurringInvoiceCard';
 import RecurringInvoiceAnalytics from '../components/recurring/RecurringInvoiceAnalytics';
@@ -64,6 +67,9 @@ export default function RecurringInvoices() {
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [selectedInvoiceForEdit, setSelectedInvoiceForEdit] = useState(null);
     const [selectedInvoiceForHistory, setSelectedInvoiceForHistory] = useState(null);
+    const [activePage, setActivePage] = useState(0);
+    const [pausedPage, setPausedPage] = useState(0);
+    const [endedPage, setEndedPage] = useState(0);
     const [isCycleHistoryOpen, setIsCycleHistoryOpen] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const recurringFileInputRef = useRef(null);
@@ -324,22 +330,18 @@ export default function RecurringInvoices() {
                                                     <CheckCircle className="w-5 h-5 text-green-600" />
                                                     Active Templates
                                                 </h3>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {recurringInvoices
-                                                        .filter(ri => ri.status === 'active')
-                                                        .map(ri => (
-                                                            <RecurringInvoiceCard
-                                                                key={ri.id}
-                                                                recurringInvoice={ri}
-                                                                clientName={getClientName(ri.client_id)}
-                                                                onEdit={(invoice) => {
-                                                                    navigate(createPageUrl("edit-recurring-invoice") + `?id=${invoice.id}`);
-                                                                }}
-                                                                onViewCycleHistory={handleViewCycleHistory}
-                                                                onRefresh={handleRefreshCard}
-                                                            />
-                                                        ))}
-                                                </div>
+                                                {(() => {
+                                                    const allActive = recurringInvoices.filter(ri => ri.status === 'active');
+                                                    const pagedActive = allActive.slice(activePage * RI_PAGE_SIZE, (activePage + 1) * RI_PAGE_SIZE);
+                                                    return (<>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                            {pagedActive.map(ri => (
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                            ))}
+                                                        </div>
+                                                        <TablePagination page={activePage} totalPages={Math.max(1, Math.ceil(allActive.length / RI_PAGE_SIZE))} onPageChange={setActivePage} totalItems={allActive.length} itemLabel="active templates" />
+                                                    </>);
+                                                })()}
                                             </div>
                                         </div>
                                     )}
@@ -352,22 +354,18 @@ export default function RecurringInvoices() {
                                                     <AlertCircle className="w-5 h-5 text-amber-600" />
                                                     Paused Templates
                                                 </h3>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {recurringInvoices
-                                                        .filter(ri => ri.status === 'paused')
-                                                        .map(ri => (
-                                                            <RecurringInvoiceCard
-                                                                key={ri.id}
-                                                                recurringInvoice={ri}
-                                                                clientName={getClientName(ri.client_id)}
-                                                                onEdit={(invoice) => {
-                                                                    navigate(createPageUrl("edit-recurring-invoice") + `?id=${invoice.id}`);
-                                                                }}
-                                                                onViewCycleHistory={handleViewCycleHistory}
-                                                                onRefresh={handleRefreshCard}
-                                                            />
-                                                        ))}
-                                                </div>
+                                                {(() => {
+                                                    const allPaused = recurringInvoices.filter(ri => ri.status === 'paused');
+                                                    const pagedPaused = allPaused.slice(pausedPage * RI_PAGE_SIZE, (pausedPage + 1) * RI_PAGE_SIZE);
+                                                    return (<>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                            {pagedPaused.map(ri => (
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                            ))}
+                                                        </div>
+                                                        <TablePagination page={pausedPage} totalPages={Math.max(1, Math.ceil(allPaused.length / RI_PAGE_SIZE))} onPageChange={setPausedPage} totalItems={allPaused.length} itemLabel="paused templates" />
+                                                    </>);
+                                                })()}
                                             </div>
                                         </div>
                                     )}
@@ -380,22 +378,18 @@ export default function RecurringInvoices() {
                                                     <AlertCircle className="w-5 h-5 text-gray-600" />
                                                     Ended Templates
                                                 </h3>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {recurringInvoices
-                                                        .filter(ri => ri.status === 'ended')
-                                                        .map(ri => (
-                                                            <RecurringInvoiceCard
-                                                                key={ri.id}
-                                                                recurringInvoice={ri}
-                                                                clientName={getClientName(ri.client_id)}
-                                                                onEdit={(invoice) => {
-                                                                    navigate(createPageUrl("edit-recurring-invoice") + `?id=${invoice.id}`);
-                                                                }}
-                                                                onViewCycleHistory={handleViewCycleHistory}
-                                                                onRefresh={handleRefreshCard}
-                                                            />
-                                                        ))}
-                                                </div>
+                                                {(() => {
+                                                    const allEnded = recurringInvoices.filter(ri => ri.status === 'ended');
+                                                    const pagedEnded = allEnded.slice(endedPage * RI_PAGE_SIZE, (endedPage + 1) * RI_PAGE_SIZE);
+                                                    return (<>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                            {pagedEnded.map(ri => (
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                            ))}
+                                                        </div>
+                                                        <TablePagination page={endedPage} totalPages={Math.max(1, Math.ceil(allEnded.length / RI_PAGE_SIZE))} onPageChange={setEndedPage} totalItems={allEnded.length} itemLabel="ended templates" />
+                                                    </>);
+                                                })()}
                                             </div>
                                         </div>
                                     )}
