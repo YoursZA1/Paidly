@@ -6,8 +6,8 @@ import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 /** Page size for infinite invoice lists (hooks + UI consume via service). */
 export const INVOICE_LIST_PAGE_SIZE = 40;
 
-const LIST_OPTS = { maxWaitMs: 60000 };
-const PER_PAGE_TIMEOUT_MS = 120000;
+const LIST_OPTS = { maxWaitMs: 20000 };
+const PER_PAGE_TIMEOUT_MS = 30000;
 const PER_PAGE_RETRIES = 1;
 const SIDE_DATA_LIMIT = 100;
 const SIDE_DATA_REFRESH_TIMEOUT_MS = 12000;

@@ -220,11 +220,9 @@ export function useAutoDraft({ enabled, userId, documentType, draftKey, formData
       const remoteTs = remote?.draft?.last_updated ? Date.parse(remote.draft.last_updated) : 0;
       const chosen = remoteTs > localTs ? remote?.draft : local;
       if (!chosen?.form_data) return;
-      const proceed = window.confirm("You have an unsaved draft. Continue editing?");
-      if (!proceed) {
-        await clearDraft();
-        return;
-      }
+      // Auto-restore the draft without a blocking confirm dialog — the "Saved / conflict"
+      // status label and toast (set below) give the user enough context. They can always
+      // discard via the page's own Cancel/Discard action.
       lastKnownUpdatedAtRef.current = chosen.last_updated || null;
       onRestore?.(chosen.form_data);
       setStatus("saved");

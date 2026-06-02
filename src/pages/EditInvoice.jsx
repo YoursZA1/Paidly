@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Invoice, Client, BankingDetail, User } from "@/api/entities";
+import { Invoice, Client, BankingDetail } from "@/api/entities";
 import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, AlertCircle, ExternalLink, Send, Save, Loader2 } from "lucide-react";
@@ -15,7 +15,7 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import { Skeleton } from "@/components/ui/skeleton";
-import { queueSendInvoice } from "@/lib/syncQueueActions";
+import { queueSendInvoice, queueUpdateInvoice } from "@/lib/syncQueueActions";
 import InvoiceStatusBadge from "../components/invoice/InvoiceStatusBadge";
 import { canEditInvoice } from "@/logic";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -27,7 +27,7 @@ export default function EditInvoice() {
     const navigate = useNavigate();
     const location = useLocation();
     const { toast } = useToast();
-    const { authUserId } = useAuth();
+    const { authUserId, user } = useAuth();
     const [invoiceId, setInvoiceId] = useState(null);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
@@ -136,25 +136,10 @@ export default function EditInvoice() {
         }
     };
 
-    const calculatePayments = (totalAmount) => {
-        const upfront = totalAmount * 0.5;
-        const remaining = totalAmount - upfront;
-        const milestone = remaining * 0.5;
-        const final = remaining * 0.5;
-        
-        return { upfront, milestone, final };
-    };
-
     const handleUpdateInvoice = async (saveAsDraft = null) => {
         setIsSaving(true);
         try {
-            const payments = calculatePayments(invoiceData.total_amount);
             const invoiceDate = new Date(invoiceData.invoice_date || invoiceData.created_date);
-            const deliveryDate = new Date(invoiceData.delivery_date);
-            const milestoneDate = new Date(deliveryDate);
-            milestoneDate.setDate(milestoneDate.getDate() - 30);
-            const finalDate = new Date(deliveryDate);
-            finalDate.setDate(finalDate.getDate() + 30);
 
             // Determine the status based on saveAsDraft parameter
             let newStatus = invoiceData.status;
@@ -184,11 +169,6 @@ export default function EditInvoice() {
             const updatedInvoiceData = {
                 ...invoiceData,
                 created_date: invoiceDate.toISOString().split('T')[0],
-                upfront_payment: payments.upfront,
-                milestone_payment: payments.milestone,
-                final_payment: payments.final,
-                milestone_date: milestoneDate.toISOString().split('T')[0],
-                final_date: finalDate.toISOString().split('T')[0],
                 status: newStatus,
                 sent_date: (newStatus === 'sent' && originalStatus === 'draft') ? new Date().toISOString() : invoiceData.sent_date,
                 last_modified_date: new Date().toISOString(),
@@ -209,9 +189,15 @@ export default function EditInvoice() {
 
             updatedInvoiceData.version_history = appendHistory(invoiceData.version_history, historyEntry);
 
-            const currentUser = await User.me().catch(() => null);
-            const brandPatch = currentUser ? snapshotDocumentBrandForPersist(currentUser) : {};
-            await Invoice.update(invoiceId, { ...updatedInvoiceData, ...brandPatch });
+            // Use auth context user (already loaded) — avoids an extra User.me() API call on every save.
+            const brandPatch = user ? snapshotDocumentBrandForPersist(user) : {};
+            // Queue the write so edits are optimistic, offline-capable, and retried on failure
+            // (mirrors the create path). The optimistic store update happens inside queueUpdateInvoice.
+            queueUpdateInvoice(
+                invoiceId,
+                { ...updatedInvoiceData, ...brandPatch },
+                { source: "edit-invoice", label: invoiceData.invoice_number }
+            );
 
             // Log the invoice update
             const clientName = clients.find(c => c.id === invoiceData.client_id)?.name || "Unknown";
@@ -221,8 +207,8 @@ export default function EditInvoice() {
               invoiceData.invoice_number,
               clientName,
               changesDescription || 'Invoice updated',
-              currentUser?.id || 'system',
-              currentUser?.full_name || 'System'
+              authUserId || 'system',
+              user?.full_name || 'System'
             );
 
             // Log status change if status was changed
@@ -233,8 +219,8 @@ export default function EditInvoice() {
                 clientName,
                 originalStatus,
                 newStatus,
-                currentUser?.id || 'system',
-                currentUser?.full_name || 'System'
+                authUserId || 'system',
+                user?.full_name || 'System'
               );
             }
 
@@ -273,7 +259,7 @@ export default function EditInvoice() {
             await clearDraft();
 
             setTimeout(() => {
-                navigate(createPageUrl("Invoices"));
+                if (mountedRef.current) navigate(createPageUrl("Invoices"));
             }, 1500);
         } catch (error) {
             console.error("Error updating invoice:", error);
