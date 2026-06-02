@@ -4,6 +4,7 @@ import { syncMutationCoordinator } from "@/lib/syncMutationCoordinator";
 
 export const SYNC_JOB_TYPES = {
   CREATE_INVOICE: "CREATE_INVOICE",
+  UPDATE_INVOICE: "UPDATE_INVOICE",
   SEND_INVOICE: "SEND_INVOICE",
   UPDATE_CLIENT: "UPDATE_CLIENT",
 };
@@ -24,6 +25,19 @@ export async function processSyncJob(job) {
         return syncMutationCoordinator.runOnce(operationId, runCreate);
       }
       return runCreate();
+    }
+    case SYNC_JOB_TYPES.UPDATE_INVOICE: {
+      const invoiceId = job.payload?.invoiceId;
+      if (!invoiceId) throw new Error("Missing invoiceId for UPDATE_INVOICE");
+      const operationId = job.meta?.operationId;
+      const runUpdate = async () => {
+        const updated = await Invoice.update(invoiceId, job.payload?.invoiceData || {});
+        return { id: updated?.id || invoiceId };
+      };
+      if (operationId) {
+        return syncMutationCoordinator.runOnce(operationId, runUpdate);
+      }
+      return runUpdate();
     }
     case SYNC_JOB_TYPES.SEND_INVOICE: {
       const invoiceId = job.payload?.invoiceId;

@@ -32,6 +32,25 @@ export function queueCreateInvoice(invoiceData, meta = {}) {
   );
 }
 
+export function queueUpdateInvoice(invoiceId, invoiceData, meta = {}) {
+  if (invoiceId) {
+    useAppStore.getState().setInvoice(invoiceId, {
+      ...invoiceData,
+      sync_state: "queued",
+    });
+  }
+  return useSyncQueueStore.getState().addToQueue(
+    SYNC_JOB_TYPES.UPDATE_INVOICE,
+    { invoiceId, invoiceData },
+    {
+      ...meta,
+      maxRetries: 5,
+      conflictKey: `invoice:update:${invoiceId || "unknown"}`,
+      operationId: meta.operationId ?? makeOperationId(),
+    }
+  );
+}
+
 export function queueSendInvoice(invoiceId, options = {}, meta = {}) {
   if (invoiceId) {
     useAppStore.getState().setInvoice(invoiceId, {

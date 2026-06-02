@@ -33,6 +33,23 @@ import {
 } from "@/api/entity/entityShared.js";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
 
+/**
+ * Maps app-shape line items to `invoice_items` / `quote_items` rows for a given parent.
+ * Centralizes the mapping previously duplicated between create() and update() so the
+ * two write paths stay in lock-step.
+ */
+function buildChildItemRows(parentIdField, parentId, items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    [parentIdField]: parentId,
+    service_name: item.service_name || item.name,
+    description: item.description || '',
+    quantity: Number(item.quantity || item.qty || 1),
+    unit_price: Number(item.unit_price || item.rate || item.price || 0),
+    total_price: Number(item.total_price || item.total || 0),
+  }));
+}
+
 export class EntityManager {
   /** @type {{ auth: { user?: object } } | null} */
   static breakApiClient = null;
@@ -934,6 +951,28 @@ export class EntityManager {
           if (lookupErr) {
             console.warn("[EntityManager] invoice idempotency lookup failed:", lookupErr.message);
           } else if (existing?.id) {
+            // A prior attempt already inserted this parent row (idempotency hit). If that attempt
+            // failed before writing line items, the invoice would otherwise be returned stranded
+            // with zero items — heal it by attaching the items now before returning.
+            if (Array.isArray(data.items) && data.items.length > 0) {
+              const { data: existingItems, error: itemsCheckErr } = await supabase
+                .from("invoice_items")
+                .select("id")
+                .eq("invoice_id", existing.id)
+                .limit(1);
+              if (!itemsCheckErr && (!existingItems || existingItems.length === 0)) {
+                const healRows = buildChildItemRows("invoice_id", existing.id, data.items);
+                if (healRows.length > 0) {
+                  const { error: healErr } = await supabase.from("invoice_items").insert(healRows);
+                  if (healErr) {
+                    const healMsg = getSupabaseErrorMessage(healErr, "Insert items failed");
+                    console.error("[EntityManager] failed to heal invoice line items:", healMsg);
+                    alertSupabaseWriteFailure(healErr, "Heal invoice_items failed");
+                    throw new Error(`Failed to attach line items to invoice: ${healMsg}`);
+                  }
+                }
+              }
+            }
             return this.mapFromSupabase(existing);
           }
         } else {
@@ -1074,8 +1113,10 @@ export class EntityManager {
 
       EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
 
-      // Log for debugging
-      console.log(`Creating ${this.entityName}:`, { supabaseTable, supabaseData });
+      // Log for debugging (dev only — payload contains client PII, amounts, and addresses).
+      if (import.meta.env.DEV) {
+        console.log(`Creating ${this.entityName}:`, { supabaseTable, supabaseData });
+      }
 
       let createdRecord;
       if (supabaseTable) {
@@ -1129,14 +1170,7 @@ export class EntityManager {
         const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
         const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
         
-        const itemsToInsert = data.items.map(item => ({
-          [parentIdField]: record.id,
-          service_name: item.service_name || item.name,
-          description: item.description || '',
-          quantity: Number(item.quantity || item.qty || 1),
-          unit_price: Number(item.unit_price || item.rate || item.price || 0),
-          total_price: Number(item.total_price || item.total || 0)
-        }));
+        const itemsToInsert = buildChildItemRows(parentIdField, record.id, data.items);
 
         if (itemsToInsert.length > 0) {
           const { error: itemsError } = await supabase
@@ -1144,8 +1178,17 @@ export class EntityManager {
             .insert(itemsToInsert);
 
           if (itemsError) {
-            console.error(`Failed to create ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Create items failed"));
+            const msg = getSupabaseErrorMessage(itemsError, "Create items failed");
+            console.error(`Failed to create ${itemsTable}:`, msg);
             alertSupabaseWriteFailure(itemsError, `Create ${itemsTable} failed`);
+            // Invoices are created idempotently via the sync queue (client_operation_id). Throwing
+            // here lets the job retry and the idempotency guard above re-attach items to the existing
+            // parent — preventing both duplicate invoices and invoices stranded with zero line items.
+            // Quotes have no idempotency key, so throwing could duplicate the parent on retry; keep
+            // them log-only to preserve existing behavior.
+            if (supabaseTable === 'invoices') {
+              throw new Error(`Failed to save invoice line items: ${msg}`);
+            }
           }
         }
       }
@@ -1440,37 +1483,47 @@ export class EntityManager {
         this.data[id] = record;
         this.saveToStorage();
 
-        // Handle items update
+        // Handle items update.
+        // Insert the new set FIRST, then delete the previous rows. This guarantees the document is
+        // never left with zero line items if the insert fails (the old delete→insert ordering could
+        // wipe every item when the insert errored). Totals live on the parent row, so a failed delete
+        // only risks transient duplicate display rows that self-heal on the next save.
         if (itemsToUpdate) {
           const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
           const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
 
-          const { error: deleteItemsError } = await supabase
+          const { data: existingItems, error: existingItemsError } = await supabase
             .from(itemsTable)
-            .delete()
+            .select('id')
             .eq(parentIdField, id);
-          if (deleteItemsError) {
-            console.error(`Failed to delete existing ${itemsTable}:`, getSupabaseErrorMessage(deleteItemsError, "Delete items failed"));
-            alertSupabaseWriteFailure(deleteItemsError, `Delete ${itemsTable} failed`);
+          if (existingItemsError) {
+            console.error(`Failed to read existing ${itemsTable}:`, getSupabaseErrorMessage(existingItemsError, "Read items failed"));
           }
+          const oldItemIds = Array.isArray(existingItems) ? existingItems.map((r) => r.id) : [];
 
-          const itemsToInsert = itemsToUpdate.map(item => ({
-            [parentIdField]: id,
-            service_name: item.service_name || item.name,
-            description: item.description || '',
-            quantity: Number(item.quantity || item.qty || 1),
-            unit_price: Number(item.unit_price || item.rate || item.price || 0),
-            total_price: Number(item.total_price || item.total || 0)
-          }));
-
+          const itemsToInsert = buildChildItemRows(parentIdField, id, itemsToUpdate);
           if (itemsToInsert.length > 0) {
             const { error: itemsError } = await supabase
               .from(itemsTable)
               .insert(itemsToInsert);
 
             if (itemsError) {
-              console.error(`Failed to update ${itemsTable}:`, getSupabaseErrorMessage(itemsError, "Update items failed"));
+              const msg = getSupabaseErrorMessage(itemsError, "Update items failed");
+              console.error(`Failed to update ${itemsTable}:`, msg);
               alertSupabaseWriteFailure(itemsError, `Update ${itemsTable} failed`);
+              // Old items are still intact — surface the failure instead of silently dropping them.
+              throw new Error(`Failed to save line items: ${msg}`);
+            }
+          }
+
+          if (oldItemIds.length > 0) {
+            const { error: deleteItemsError } = await supabase
+              .from(itemsTable)
+              .delete()
+              .in('id', oldItemIds);
+            if (deleteItemsError) {
+              console.error(`Failed to delete previous ${itemsTable}:`, getSupabaseErrorMessage(deleteItemsError, "Delete items failed"));
+              alertSupabaseWriteFailure(deleteItemsError, `Delete ${itemsTable} failed`);
             }
           }
         }

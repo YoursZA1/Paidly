@@ -170,14 +170,28 @@ export async function withSupabaseErrorHandling(fn, fallbackContext = "Operation
 }
 
 /**
+ * Session cache of tables already verified to exist. Schema presence does not change within a
+ * session, so a positive result is reused to avoid a `SELECT id LIMIT 1` round-trip on every write.
+ * Only successful (`exists: true`) results are cached so a stale-cache / missing-table state can recover.
+ */
+const verifiedTableCache = new Map();
+
+/** Clear the verified-table cache (e.g. after a manual schema reload). */
+export function clearVerifiedTableCache() {
+  verifiedTableCache.clear();
+}
+
+/**
  * Verify that a Supabase table exists and is accessible.
- * Useful for checking schema before attempting operations.
+ * Useful for checking schema before attempting operations. Positive results are cached per session.
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase - Supabase client
  * @param {string} tableName - Name of the table to check
  * @returns {Promise<{exists: boolean, error?: string}>}
  */
 export async function verifyTableExists(supabase, tableName) {
   try {
+    const cached = verifiedTableCache.get(tableName);
+    if (cached?.exists) return cached;
     // Try a simple query that should work if table exists
     const { data, error } = await supabase
       .from(tableName)
@@ -197,10 +211,14 @@ export async function verifyTableExists(supabase, tableName) {
       }
       // Other errors (like permission) mean table exists but we can't access it
       // That's okay for verification purposes
-      return { exists: true };
+      const result = { exists: true };
+      verifiedTableCache.set(tableName, result);
+      return result;
     }
-    
-    return { exists: true };
+
+    const result = { exists: true };
+    verifiedTableCache.set(tableName, result);
+    return result;
   } catch (err) {
     const errorMsg = err?.message?.toLowerCase() || '';
     if (errorMsg.includes('schema cache') || 

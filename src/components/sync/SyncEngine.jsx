@@ -41,6 +41,9 @@ const JOB_TIMEOUT_MS = 30_000;
  *  Covers the edge case where the in-flight promise resolved without going through the finally block
  *  (e.g. during HMR in development, or if a future refactor removes the try/finally guard). */
 const STUCK_JOB_SWEEP_MS = 60_000;
+/** Max jobs drained in a single tick. Bounds work per tick so a large offline backlog can't block the
+ *  event loop, while still flushing batches promptly instead of one job per {@link SYNC_INTERVAL_MS}. */
+const MAX_JOBS_PER_TICK = 25;
 /** Admin dashboard previously listened to these tables only (not `clients` / `document_sends`). */
 const ADMIN_STORE_HYDRATION_ENTITIES = new Set(["invoices", "payments", "expenses", "quotes", "payslips"]);
 
@@ -200,12 +203,16 @@ export default function SyncEngine() {
     runningRef.current = true;
     useRuntimeCoordinator.getState().setSyncActive(true);
     try {
-      const now = Date.now();
-      const { queue: currentQueue } = useSyncQueueStore.getState();
-      const nextJob = currentQueue
-        .filter((job) => (job.status === "pending" || job.status === "processing") && job.nextAttemptAt <= now)
-        .sort((a, b) => a.createdAt - b.createdAt)[0];
-      if (!nextJob) return;
+      const pickNextJob = () => {
+        const now = Date.now();
+        const { queue } = useSyncQueueStore.getState();
+        return queue
+          .filter((job) => (job.status === "pending" || job.status === "processing") && job.nextAttemptAt <= now)
+          .sort((a, b) => a.createdAt - b.createdAt)[0];
+      };
+
+      // Bail before fetching the session when there's no ready work.
+      if (!pickNextJob()) return;
 
       const rawSession = await getStableSession();
       if (!rawSession) {
@@ -221,26 +228,48 @@ export default function SyncEngine() {
         return;
       }
 
-      markProcessing(nextJob.id);
-      try {
-        const result = await withJobTimeout(processSyncJob(nextJob), JOB_TIMEOUT_MS);
-        markDone(nextJob.id, result);
-        if (nextJob.type === "CREATE_INVOICE" && nextJob.meta?.optimisticTempId && result?.id) {
-          replaceOptimisticInvoice(nextJob.meta.optimisticTempId, {
-            id: result.id,
-            sync_state: "synced",
-          });
-        }
-        if (hasActiveSession()) {
-          const scopeKey = userIdRef.current ?? null;
-          if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE") {
-            invalidateInvoiceDomain(queryClient, { scopeKey });
-          } else if (nextJob.type === "UPDATE_CLIENT") {
-            invalidateClientDomain(queryClient, { scopeKey });
+      // Drain all currently-ready jobs this tick (capped) so an offline backlog flushes promptly
+      // instead of one job per SYNC_INTERVAL_MS. Failed jobs get a future nextAttemptAt (backoff)
+      // and are skipped until ready, so this loop terminates.
+      let processed = 0;
+      let nextJob = pickNextJob();
+      while (nextJob && processed < MAX_JOBS_PER_TICK) {
+        if (isRecoveryCircuitOpen()) break;
+        if (useWakeRecoveryStore.getState().blockMutations) break;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) break;
+        if (!hasActiveSession()) break;
+
+        markProcessing(nextJob.id);
+        try {
+          const result = await withJobTimeout(processSyncJob(nextJob), JOB_TIMEOUT_MS);
+          markDone(nextJob.id, result);
+          if (nextJob.type === "CREATE_INVOICE" && nextJob.meta?.optimisticTempId && result?.id) {
+            replaceOptimisticInvoice(nextJob.meta.optimisticTempId, {
+              id: result.id,
+              sync_state: "synced",
+            });
           }
+          if (nextJob.type === "UPDATE_INVOICE" && nextJob.payload?.invoiceId) {
+            useAppStore.getState().setInvoice(nextJob.payload.invoiceId, { sync_state: "synced" });
+          }
+          if (hasActiveSession()) {
+            const scopeKey = userIdRef.current ?? null;
+            if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE" || nextJob.type === "UPDATE_INVOICE") {
+              invalidateInvoiceDomain(queryClient, { scopeKey });
+            } else if (nextJob.type === "UPDATE_CLIENT") {
+              invalidateClientDomain(queryClient, { scopeKey });
+            }
+          }
+        } catch (error) {
+          markFailed(nextJob.id, error?.message || "Sync job failed", { retryable: true });
         }
-      } catch (error) {
-        markFailed(nextJob.id, error?.message || "Sync job failed", { retryable: true });
+
+        processed += 1;
+        const candidate = pickNextJob();
+        // Defensive: never re-pick the same job within a tick (avoids a tight loop if a job somehow
+        // stays "ready"). It will be retried on a later tick.
+        if (candidate && candidate.id === nextJob.id) break;
+        nextJob = candidate;
       }
     } finally {
       runningRef.current = false;
