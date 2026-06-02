@@ -4,6 +4,7 @@ import { Client, Quote, QuoteTemplate, BankingDetail, Service } from "@/api/enti
 import { supabase } from "@/lib/supabaseClient";
 import { verifyTableExists } from "@/utils/supabaseErrorUtils";
 import { queueCreateInvoice } from "@/lib/syncQueueActions";
+import { useSyncQueueStore } from "@/stores/useSyncQueueStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,43 @@ const CLIENT_SELECT_NONE = "__paidly_no_client__";
 const BANKING_SELECT_NONE = "__paidly_no_banking__";
 
 const quoteBankingPrefKey = (quoteId) => `paidly_quote_banking_pref_${quoteId}`;
+
+/**
+ * Resolve when a queued sync job reaches a terminal state.
+ * Resolves with the job result (e.g. `{ id }`) on success; rejects on failure or timeout.
+ * Used by "Send now" to wait for the optimistic invoice create to produce a real id before
+ * routing the user into the send flow.
+ */
+function waitForSyncJobResult(jobId, { timeoutMs = 30000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let unsubscribe = () => {};
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      try {
+        unsubscribe();
+      } catch {
+        /* noop */
+      }
+      clearTimeout(timer);
+      fn(arg);
+    };
+    const evaluate = (queue) => {
+      const job = queue.find((j) => j.id === jobId);
+      if (!job) return;
+      if (job.status === "done") finish(resolve, job.result);
+      else if (job.status === "failed") finish(reject, new Error(job.lastError || "Sync failed"));
+    };
+    const timer = setTimeout(
+      () => finish(reject, new Error("Timed out waiting for the invoice to sync")),
+      timeoutMs
+    );
+    unsubscribe = useSyncQueueStore.subscribe((state) => evaluate(state.queue));
+    // Catch a job that already finished before the subscription was attached.
+    evaluate(useSyncQueueStore.getState().queue);
+  });
+}
 
 function readQuoteBankingPreference(quoteId) {
   if (!quoteId) return "";
@@ -842,13 +880,25 @@ function CreateDocumentCore({ docType }) {
 
     if (sendNow) {
       toast({
-        title: "Invoice queued",
-        description:
-          "Create was queued for background sync. Once it appears in Invoices, you can send it with one click.",
+        title: "Creating invoice…",
+        description: "We'll open the send screen as soon as it syncs.",
         variant: "default",
       });
-      void queuedCreate;
-      setTimeout(() => navigate(createPageUrl("Invoices")), 1200);
+      try {
+        const result = await waitForSyncJobResult(queuedCreate.id, { timeoutMs: 30000 });
+        const newInvoiceId = result?.id;
+        if (!newInvoiceId) throw new Error("No invoice id returned from sync.");
+        // Route into the real send flow: ViewInvoice auto-opens the email send for a new draft.
+        navigate(`${createPageUrl("ViewInvoice")}?id=${encodeURIComponent(newInvoiceId)}&autosend=1`);
+      } catch (err) {
+        console.warn("Send-now auto-route failed:", err?.message || err);
+        toast({
+          title: "Invoice saved",
+          description: "It's queued in Invoices — open it there to send when you're ready.",
+          variant: "default",
+        });
+        setTimeout(() => navigate(createPageUrl("Invoices")), 1000);
+      }
       return;
     }
 

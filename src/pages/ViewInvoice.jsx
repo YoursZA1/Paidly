@@ -186,7 +186,26 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
             setIsSending(false);
         }
     };
-    
+
+    // Auto-send entry point: arriving from "Send now" on the create page (?autosend=1) fires the
+    // real send once invoice + client + company are loaded. Only for drafts (never re-send), and the
+    // flag is stripped from the URL so a refresh can't trigger another send.
+    const autoSendTriggeredRef = useRef(false);
+    useEffect(() => {
+        if (autoSendTriggeredRef.current) return;
+        if (new URLSearchParams(location.search).get('autosend') !== '1') return;
+        if (!invoice || !client || !company) return;
+        autoSendTriggeredRef.current = true;
+        const params = new URLSearchParams(location.search);
+        params.delete('autosend');
+        navigate({ search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
+        if (invoice.status === 'draft') {
+            void handleSendEmail();
+        }
+        // handleSendEmail is a stable closure for the loaded invoice; the ref guard ensures one run.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [invoice, client, company, location.search]);
+
     const handleDownloadPDF = () => {
         try {
             InvoiceService.downloadInvoicePDF(invoice.id, invoice.invoice_number, {
