@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { X, Save, Headset, DollarSign, Plus, Trash2, Lock } from "lucide-react";
+import { X, Save, Headset, DollarSign, Plus, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { renderIcon } from "@/utils/renderIcon";
@@ -157,10 +157,6 @@ export default function ServiceForm({
     const [showCustomCategory, setShowCustomCategory] = useState(
         service?.category && !predefinedCategories.includes(service.category)
     );
-    const [showOptionalFields, setShowOptionalFields] = useState(
-        (service?.description || service?.requirements) ? true : false
-    );
-
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
             ...prev,
@@ -273,7 +269,6 @@ export default function ServiceForm({
         onSave(finalData);
     };
 
-    const selectedPricingType = pricingTypes.find(type => type.value === formData.pricing_type);
     // BASE FIELDS VALIDATION: All must be present for save
     const hasName = formData.name.trim().length > 0;
     const hasItemType = formData.item_type && formData.item_type.length > 0;

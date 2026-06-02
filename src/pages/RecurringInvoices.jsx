@@ -1,17 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RecurringInvoice, Client } from '@/api/entities';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Plus, Repeat, AlertCircle, CheckCircle, Loader2, LayoutGrid, List, Zap, BarChart3, ArrowLeft, Download, Upload } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Plus, Repeat, AlertCircle, CheckCircle, Loader2, Zap, BarChart3, Download, Upload } from 'lucide-react';
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from '@/components/ui/use-toast';
 import { recurringInvoicesToCsv, parseRecurringInvoiceCsv, csvRowToRecurringInvoicePayload } from '@/utils/recurringInvoiceCsvMapping';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -43,12 +41,6 @@ async function fetchRecurringPageData() {
     };
 }
 
-const statusStyles = {
-    active: "bg-emerald-100 text-emerald-700",
-    paused: "bg-amber-100 text-amber-700",
-    ended: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
-};
-
 export default function RecurringInvoices() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -63,9 +55,7 @@ export default function RecurringInvoices() {
 
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationResult, setGenerationResult] = useState(null);
-    const [viewMode, setViewMode] = useState('cards');
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-    const [selectedInvoiceForEdit, setSelectedInvoiceForEdit] = useState(null);
     const [selectedInvoiceForHistory, setSelectedInvoiceForHistory] = useState(null);
     const [activePage, setActivePage] = useState(0);
     const [pausedPage, setPausedPage] = useState(0);

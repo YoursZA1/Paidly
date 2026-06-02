@@ -1,20 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { QuoteTemplate } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, Edit, Save, X, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, FileText } from 'lucide-react';
 import { EmptyState } from "@/components/ui/empty-state";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { createPageUrl } from '@/utils';
-import { useNavigate } from 'react-router-dom';
 
 export default function QuoteTemplates() {
     const [templates, setTemplates] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [currentTemplate, setCurrentTemplate] = useState(null);
-    const navigate = useNavigate();
 
     useEffect(() => {
         loadTemplates();

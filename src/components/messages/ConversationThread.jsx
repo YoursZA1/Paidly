@@ -1,15 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Send, Paperclip, FileText, ArrowLeft, Building2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import ReactQuill from 'react-quill';
-import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import { sanitizeMessageHtml, sanitizeHttpUrl } from '@/utils/htmlSecurity';
 
-export default function ConversationThread({ messages, client, invoice, user, onSendReply, onBack, onDeleteMessage }) {
+export default function ConversationThread({ messages, client, invoice, onSendReply, onBack, onDeleteMessage }) {
     const [replyContent, setReplyContent] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [messageToDelete, setMessageToDelete] = useState(null);

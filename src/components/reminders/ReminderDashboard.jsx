@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import PaymentReminderService from './PaymentReminderService';
-import { Bell, Send, Clock, AlertTriangle, CheckCircle, Mail } from 'lucide-react';
+import { Bell, Clock, AlertTriangle, CheckCircle, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ReminderDashboard() {

@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePersistedListFilters } from "@/hooks/usePersistedListFilters";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, X, CalendarIcon, ChevronDown } from "lucide-react";
+import { Search, Filter, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { industries } from "../clients/IndustryBadge";
 

@@ -17,7 +17,6 @@ import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Invoice, User, BankingDetail } from '@/api/entities';
-import { breakApi } from '@/api/apiClient';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
 import { RecordPaymentForm } from './RecordPaymentForm';
@@ -28,7 +27,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { sendDraftInvoice, recordDocumentSend, createTrackableInvoiceLink } from '@/services/InvoiceSendService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
-import { getAutoStatusUpdate, isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
+import { isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -70,8 +69,8 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
         },
     });
-    const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
-    const [isSending, setIsSending] = useState(false);
+    const [, setIsGeneratingShareLink] = useState(false);
+    const [, setIsSending] = useState(false);
     const [sendPhase, setSendPhase] = useState('idle'); // 'idle' | 'preparing' | 'sending' | 'success'
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showPaymentForm, setShowPaymentForm] = useState(false);

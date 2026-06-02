@@ -38,7 +38,6 @@ import {
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
-import InvoiceActions from "@/components/invoice/InvoiceActions";
 import ViewInvoice from "@/pages/ViewInvoice";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { NumberTicker } from "@/components/dashboard/NumberTicker";
@@ -59,7 +58,6 @@ import PlanBadge from "@/components/dashboard/PlanBadge";
 import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { runPaidConfetti } from '@/utils/confetti';
 import {
   registerAdminDashboardRealtimeRefresh,
   PAIDLY_APP_FETCH_ALL_SETTLED_EVENT,
@@ -305,9 +303,9 @@ export default function Dashboard() {
   const [paymentsState, setPaymentsState] = useState([]);
   const [userState, setUserState] = useState(null);
   const [userCurrencyPreference, setUserCurrencyPreference] = useState('ZAR');
-  const [hasBankingDetails, setHasBankingDetails] = useState(false);
+  const [, setHasBankingDetails] = useState(false);
   /** After first banking list attempt so we do not show “add banking” while the request is still in flight. */
-  const [bankingCheckResolved, setBankingCheckResolved] = useState(false);
+  const [, setBankingCheckResolved] = useState(false);
   const [isLoadingState, setIsLoadingState] = useState(true);
   const [adminStats, setAdminStats] = useState({
     totalUsers: 0,
@@ -389,7 +387,7 @@ export default function Dashboard() {
     : (dashboardPayslipsQuery.data && dashboardPayslipsQuery.data.length > 0 ? dashboardPayslipsQuery.data : payslips);
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
-  const payments = isAdmin ? paymentsState : storePayments;
+  const _payments = isAdmin ? paymentsState : storePayments;
   const user = isAdmin ? userState : profileFromQuery ?? authUser;
   useEffect(() => {
     if (isAdmin || !authUser?.id || !profileFromQuery) return;
@@ -847,7 +845,7 @@ export default function Dashboard() {
     }
   }, [toast]); // useCallback
 
-  const loadUserData = useCallback(async (hasCachedData = false, _authUserId = null) => {
+  const _loadUserData = useCallback(async (hasCachedData = false, _authUserId = null) => {
     if (!hasCachedData) setIsLoadingState(true);
     try {
       const userResult = profileFromQuery || authUser || null;

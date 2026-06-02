@@ -1,23 +1,13 @@
-import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Archive, CheckCircle, Clock, Lock } from "lucide-react";
+import { Edit, Lock } from "lucide-react";
 import { formatCurrency } from "../CurrencySelector";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { renderIcon } from "@/utils/renderIcon";
 
-const serviceTypeLabels = {
-    hourly: "Per Hour",
-    fixed: "Fixed Price",
-    per_item: "Per Item",
-    daily: "Per Day",
-    weekly: "Per Week",
-    monthly: "Per Month"
-};
-
-export default function ServiceList({ 
+export default function ServiceList({
     services, 
     onEdit, 
     selectedServices, 

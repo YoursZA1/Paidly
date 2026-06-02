@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User } from '@/api/entities';
 
@@ -54,7 +54,7 @@ export const formatCurrency = (amount, currencyCode = 'ZAR', decimals = 2) => {
             minimumFractionDigits: decimals,
             maximumFractionDigits: decimals
         }).format(amount);
-    } catch (error) {
+    } catch {
         // Fallback for unsupported currencies
         return `${currency.symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
     }
@@ -93,7 +93,7 @@ export const getCurrencySymbol = (currencyCode = 'ZAR') => {
     return currency ? currency.symbol : 'R';
 };
 
-export const parseCurrencyAmount = (amountString, currencyCode = 'ZAR') => {
+export const parseCurrencyAmount = (amountString, _currencyCode = 'ZAR') => {
     if (typeof amountString === 'number') return amountString;
     
     // Remove currency symbols and non-numeric characters except decimal points
@@ -102,7 +102,7 @@ export const parseCurrencyAmount = (amountString, currencyCode = 'ZAR') => {
 };
 
 export default function CurrencySelector({ value, onChange, className = "" }) {
-    const [detectedCountry, setDetectedCountry] = useState(null);
+    const [, setDetectedCountry] = useState(null);
     const [suggestedCurrency, setSuggestedCurrency] = useState('ZAR'); // Default to ZAR
 
     useEffect(() => {
@@ -115,7 +115,7 @@ export default function CurrencySelector({ value, onChange, className = "" }) {
                 if (cancelled) return;
                 if (data.country_code) {
                     setDetectedCountry(data.country_code);
-                    const suggested = Object.entries(currencyData).find(([code, info]) =>
+                    const suggested = Object.entries(currencyData).find(([, info]) =>
                         info.countries.includes(data.country_code)
                     );
                     if (suggested) {

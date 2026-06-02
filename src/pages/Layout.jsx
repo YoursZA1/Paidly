@@ -40,14 +40,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
-import { useToast } from "@/components/ui/use-toast";
 import Logo from "@/components/shared/Logo";
 import { useCompanyBrand } from "@/hooks/useCompanyBrand";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
-import { ROLES, STAFF_ROLES } from "@/lib/permissions";
 import { ADMIN_NAV_ITEMS } from "@/lib/adminNavConfig";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
@@ -73,16 +71,9 @@ import {
   Monitor,
   TrendingUp,
   Activity,
-  History,
-  Shield,
   Briefcase,
-  Building2,
-  BarChart3,
-  Wrench,
-  Terminal,
   Receipt,
   Handshake,
-  MessageCircle,
   Layers
 } from "lucide-react";
 
@@ -269,10 +260,6 @@ LockedNavItem.propTypes = {
   title: PropTypes.string.isRequired,
   requiredPlan: PropTypes.string
 };
-// Placeholder for QuoteReminderService to prevent errors
-const QuoteReminderService = {
-  checkAndSendReminders: async () => {}
-};
 
 const PRIMARY_NAV_PREFETCH_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-clients"]);
 
@@ -428,7 +415,7 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme, resolvedTheme }) => {
+const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme }) => {
   const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
   const managementIds = new Set([
     "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
@@ -559,8 +546,7 @@ MobileNav.propTypes = {
   navigate: PropTypes.func,
   handleLogout: PropTypes.func,
   theme: PropTypes.string,
-  setTheme: PropTypes.func,
-  resolvedTheme: PropTypes.string
+  setTheme: PropTypes.func
 };
 
 /** Routes without app chrome use document scroll and hash sections (e.g. /Signup#sign-up). */
@@ -646,7 +632,6 @@ export default function Layout({ children, currentPageName }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [user?.id, isCompactLayout]);
-  const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { fetchAll, lastFetchedAt, userProfile, resetStore } = useAppStore(
     useShallow((s) => ({
@@ -1011,7 +996,6 @@ export default function Layout({ children, currentPageName }) {
             handleLogout={handleLogout}
             theme={theme}
             setTheme={setTheme}
-            resolvedTheme={resolvedTheme}
           />
         </SheetContent>
       </Sheet>

@@ -33,7 +33,6 @@ import { ConnectionLifecycleContext } from "@/contexts/ConnectionLifecycleContex
 import { AppRecoveryLock, AppRecoveryPhase } from "@/lib/recovery/appRecoveryLock";
 import {
   awaitRealtimeRecoveryAndMainChannel,
-  reconcileRealtimeJwt,
   reconcileRealtimeJwtFromSupabaseAuthEvent,
   scheduleRealtimeRecoveryAfterAuth,
   checkRealtimeOnVisibilityRestore,
@@ -48,10 +47,7 @@ import {
 import { purgeQueryClientAfterLogout } from "@/core/query/persistedQueryClient";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
 import {
-  refreshFailed,
-  refreshFatal,
   refreshSkipped,
-  refreshSuccess,
   isRefreshSkipped,
   isRefreshRetrying,
 } from "@/lib/session/refreshResult";
@@ -104,11 +100,6 @@ function touchAuthHeartbeatIfValid(sessionNorm) {
   if (sessionNorm?.user && isSessionValid(sessionNorm)) {
     useWakeRecoveryStore.getState().touchHeartbeat();
   }
-}
-
-function isDocumentHidden() {
-  if (typeof document === "undefined") return false;
-  return document.visibilityState === "hidden";
 }
 
 /**

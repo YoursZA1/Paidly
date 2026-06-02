@@ -1,6 +1,6 @@
 
 import PropTypes from "prop-types";
-import { useState, Fragment, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowRight, DollarSign, Calendar, FileText, Plus, Trash2, Package, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "../CurrencySelector";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -26,8 +18,7 @@ import ClientForm from "../clients/ClientForm";
 import BankingForm from "../banking/BankingForm";
 import ServiceForm from "../services/ServiceForm";
 import { ItemTypeSelector, UnitTypeSelector } from "../invoice/ItemTypeSelector";
-import { getItemTypeIcon, getUnitLabel } from "../invoice/itemTypeHelpers";
-import TaxService from "@/services/TaxService";
+import { getUnitLabel } from "../invoice/itemTypeHelpers";
 import { mapCatalogToLineItem, canEditLineItemRate, validateRateAdjustment } from "@/services/CatalogSyncService";
 import { Client, BankingDetail, Service } from "@/api/entities";
 import { useAuth } from "@/contexts/AuthContext";
@@ -168,8 +159,7 @@ export default function ProjectDetails({
     setClients,
     bankingDetails,
     setBankingDetails,
-    services, 
-    setServices,
+    services,
     onNext,
     isRecurring = false,
     showNextButton = true,
@@ -2204,12 +2194,7 @@ export default function ProjectDetails({
                                         groupItems.forEach((item) => {
                                             const index = items.indexOf(item);
                                             const itemType = item.item_type || 'service';
-                                            const isProduct = itemType === 'product';
-                                            const isService = itemType === 'service';
-                                            const isLabor = itemType === 'labor';
-                                            const isMaterial = itemType === 'material';
-                                            const isExpense = itemType === 'expense';
-                                            
+
                                             result.push(
                                                 <div key={`item-${group.id}-${index}`} className={itemCardShellGrouped}>
                                                     <div className="flex justify-between items-center mb-4">
@@ -2754,7 +2739,6 @@ ProjectDetails.propTypes = {
         description: PropTypes.string,
         rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
     })).isRequired,
-    setServices: PropTypes.func,
     onNext: PropTypes.func,
     onRefreshCatalog: PropTypes.func,
     isRecurring: PropTypes.bool,

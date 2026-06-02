@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Send, Paperclip, X, FileText } from 'lucide-react';
@@ -26,7 +25,6 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
     const [isSending, setIsSending] = useState(false);
     const [attachInvoice, setAttachInvoice] = useState(false);
     const [attachQuote, setAttachQuote] = useState(false);
-    const [selectedTemplate, setSelectedTemplate] = useState('');
 
     const templates = [
         { label: 'Follow Up', subject: 'Following up', content: 'Hi, just wanted to follow up on my previous message. Let me know if you need anything else.' },
@@ -163,7 +161,6 @@ export default function MessageComposer({ open, onClose, onSend, clients = [], i
         setIsSending(false);
     };
 
-    const selectedClient = clients.find(c => c.id === formData.client_id);
     const clientInvoices = invoices.filter(inv => inv.client_id === formData.client_id);
     const clientQuotes = quotes.filter(q => q.client_id === formData.client_id);
 

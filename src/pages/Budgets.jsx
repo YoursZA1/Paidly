@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { startLoadingFailSafe } from '@/hooks/useLoadingFailSafe';
 import { Budget, Expense, Invoice } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Plus, AlertCircle } from 'lucide-react';
+import { ArrowUpRight, DollarSign, Plus, AlertCircle } from 'lucide-react';
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from '@/components/CurrencySelector';
-import { startOfMonth, endOfMonth, parseISO, isWithinInterval, subMonths, format, addMonths } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import BudgetForm from '@/components/budgets/BudgetForm';
 import ForecastingChart from '@/components/budgets/ForecastingChart';
 

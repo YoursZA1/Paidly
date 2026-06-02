@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Payroll } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -179,7 +179,7 @@ export default function EditPayslip() {
 
     const handleUpdatePayslip = async () => {
         try {
-            const { id, created_date, updated_date, created_by, ...updateData } = payslipData;
+            const { id: _id, created_date: _createdDate, updated_date: _updatedDate, created_by: _createdBy, ...updateData } = payslipData;
             
             await Payroll.update(payslipId, {
                 ...updateData,

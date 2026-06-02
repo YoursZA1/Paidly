@@ -2,12 +2,10 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, DollarSign, Clock, Archive, CheckCircle, Lock } from "lucide-react";
+import { Edit, Archive, CheckCircle, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatCurrency } from "../CurrencySelector";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
-import { getPriceLockStatus } from "@/services/ItemPermissionsService";
-import { getUsageBadge } from "@/services/ItemUsageService";
 import { renderIcon } from "@/utils/renderIcon";
 
 const serviceTypeLabels = {
@@ -19,7 +17,7 @@ const serviceTypeLabels = {
     monthly: "Per Month"
 };
 
-function ServiceCard({ service, onEdit, onToggleActive, delay = 0, userCurrency = 'USD' }) {
+function ServiceCard({ service, onEdit, delay = 0, userCurrency = 'USD' }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}

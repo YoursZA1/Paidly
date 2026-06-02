@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecurringInvoice, Client, BankingDetail } from '@/api/entities';
 import { useServicesCatalogQuery } from '@/hooks/useServicesCatalogQuery';
@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Save } from 'lucide-react';
 import ProjectDetails from '@/components/invoice/ProjectDetails'; // Re-using this component for item entry
 import HelpTooltip from '@/components/shared/HelpTooltip';
-import { formatISO, add } from 'date-fns';
 import { createPageUrl } from '@/utils';
 
 export default function CreateRecurringInvoice() {
@@ -58,7 +57,7 @@ export default function CreateRecurringInvoice() {
 
         try {
             // Remove fields from template that will be calculated on generation
-            const { subtotal, tax_amount, total_amount, ...template } = invoiceTemplate;
+            const { subtotal: _subtotal, tax_amount: _taxAmount, total_amount: _totalAmount, ...template } = invoiceTemplate;
 
             const payload = {
                 profile_name: profileName,
