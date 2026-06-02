@@ -59,6 +59,7 @@ export function isValidLogoStorageObjectKey(cleaned) {
   if (s.length > 768 || s.length < 1) return false;
   if (/\.\./.test(s)) return false;
   if (s.startsWith("/") || s.includes("//")) return false;
+  // eslint-disable-next-line no-control-regex -- intentionally rejects control chars in storage keys
   if (/[\u0000-\u001F\u007F]/.test(s)) return false;
   return /^[a-zA-Z0-9._\-/%+]+$/.test(s);
 }

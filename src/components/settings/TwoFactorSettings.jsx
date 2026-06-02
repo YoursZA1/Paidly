@@ -136,7 +136,7 @@ export default function TwoFactorSettings() {
             {status === "disabled" && (
                 <div className="rounded-xl border border-border p-4 space-y-3">
                     <p className="text-sm text-muted-foreground">
-                        Protect your account with a time-based one-time password. You'll be asked for a code from your authenticator app each time you sign in.
+                        Protect your account with a time-based one-time password. You&apos;ll be asked for a code from your authenticator app each time you sign in.
                     </p>
                     <Button onClick={handleStartEnroll} disabled={isWorking} className="rounded-xl h-9">
                         {isWorking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
@@ -201,7 +201,7 @@ export default function TwoFactorSettings() {
             {status === "enabled" && (
                 <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-4 space-y-3">
                     <p className="text-sm text-foreground">
-                        Your account is protected with two-factor authentication. You'll be prompted for a code when signing in from a new device.
+                        Your account is protected with two-factor authentication. You&apos;ll be prompted for a code when signing in from a new device.
                     </p>
                     <Button variant="outline" onClick={handleDisable} disabled={isWorking} className="rounded-xl h-9 text-destructive border-destructive/30 hover:bg-destructive/5">
                         {isWorking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldOff className="w-4 h-4 mr-2" />}

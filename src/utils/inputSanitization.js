@@ -34,7 +34,7 @@ export function isValidHttpUrl(url) {
 }
 
 // Accepts UUID v4 and URL-path-safe tokens (nanoid, base62, etc.) up to 256 chars.
-const TOKEN_RE = /^[a-zA-Z0-9_\-]{1,256}$/;
+const TOKEN_RE = /^[a-zA-Z0-9_-]{1,256}$/;
 
 export function isValidShareToken(token) {
   return typeof token === "string" && TOKEN_RE.test(token);

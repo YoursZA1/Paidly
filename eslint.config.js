@@ -12,6 +12,11 @@ export default [
       'supabase/.temp',
       'supabase/.temp/**',
       'supabase/functions/**/dist',
+      // Build artifacts and ephemeral worktrees — not source. Linting these produced
+      // false-positive "Unexpected token <" parsing errors that masked real errors.
+      '.vercel/**',
+      '.claude/worktrees/**',
+      '.playwright-browsers/**',
     ],
   },
   {

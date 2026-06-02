@@ -16,7 +16,9 @@ function getCaptureSecurityEvent() {
     // eslint-disable-next-line no-undef
     const mod = globalThis.__SECURITY_SENTRY_CAPTURE__;
     if (typeof mod === "function") _captureSecurityEvent = mod;
-  } catch {}
+  } catch {
+    /* optional dependency — ignore when unavailable */
+  }
   return _captureSecurityEvent;
 }
 
@@ -62,7 +64,9 @@ export function logSecurity(level, event, data = {}) {
     try {
       const capture = _captureSecurityEvent ?? getCaptureSecurityEvent();
       if (capture) capture(level, event, data);
-    } catch {}
+    } catch {
+      /* never let telemetry break the request path */
+    }
   }
 }
 
