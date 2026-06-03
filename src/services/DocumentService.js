@@ -292,23 +292,39 @@ async function replaceDocumentItems(documentId, rows) {
   }
 }
 
-/** Applies hub list filters (type/category/status/search/assignee/archived) to a documents query. */
-function applyHubFilters(q, { type, category, status, search, assignedUserId, includeArchived } = {}) {
+/** Applies assignee filter when the column is available. */
+function applyAssigneeFilter(q, assignedUserId) {
+  if (assignedUserId === "none") return q.is("assigned_user_id", null);
+  if (assignedUserId && assignedUserId !== "all") return q.eq("assigned_user_id", assignedUserId);
+  return q;
+}
+
+/** Core list filters safe before the full documents hub migration. */
+function applyCoreListFilters(q, { type, status, search, assignedUserId, includeAssignee = false } = {}) {
   if (type && type !== "all") q = q.eq("type", type);
-  if (category && category !== "all") q = q.eq("category_key", category);
-  if (status === "archived") {
-    q = q.not("archived_at", "is", null);
-  } else {
-    if (status && status !== "all") q = q.eq("status", status);
-    if (!includeArchived) q = q.is("archived_at", null);
+  if (status && status !== "all" && status !== "archived") {
+    q = q.eq("status", status);
   }
-  if (assignedUserId === "none") q = q.is("assigned_user_id", null);
-  else if (assignedUserId && assignedUserId !== "all") q = q.eq("assigned_user_id", assignedUserId);
+  if (includeAssignee) q = applyAssigneeFilter(q, assignedUserId);
   const term = String(search || "").trim();
   if (term) {
     const safe = term.replace(/[%,()]/g, " ");
     q = q.or(`document_number.ilike.%${safe}%,title.ilike.%${safe}%`);
   }
+  return q;
+}
+
+/** Applies hub list filters (category/status/search/assignee/archived) on top of core filters. */
+function applyHubFilters(q, params = {}) {
+  q = applyCoreListFilters(q, params);
+  const { category, status, assignedUserId, includeArchived } = params;
+  if (category && category !== "all") q = q.eq("category_key", category);
+  if (status === "archived") {
+    q = q.not("archived_at", "is", null);
+  } else if (!includeArchived) {
+    q = q.is("archived_at", null);
+  }
+  q = applyAssigneeFilter(q, assignedUserId);
   return q;
 }
 
@@ -455,35 +471,26 @@ export const DocumentService = {
     const offset = Math.max(Number(params.offset) || 0, 0);
     const hubSelect =
       "id, org_id, type, category_key, status, document_number, title, total_amount, currency, base_currency, exchange_rate, client_id, assigned_user_id, archived_at, created_at, updated_at, client:clients ( id, name )";
+    const assigneeSelect =
+      "id, org_id, type, status, document_number, title, total_amount, currency, base_currency, exchange_rate, client_id, assigned_user_id, created_at, updated_at, client:clients ( id, name )";
     const coreSelect =
       "id, org_id, type, status, document_number, title, total_amount, currency, base_currency, exchange_rate, client_id, created_at, updated_at, client:clients ( id, name )";
 
-    const runQuery = (selectFields, useHubFilters) => {
+    const runQuery = (selectFields, filterTier) => {
       let q = supabase.from("documents").select(selectFields, { count: "exact" }).eq("org_id", orgId);
-      if (useHubFilters) {
-        q = applyHubFilters(q, params);
-      } else {
-        if (params.type && params.type !== "all") q = q.eq("type", params.type);
-        if (params.status && params.status !== "all" && params.status !== "archived") {
-          q = q.eq("status", params.status);
-        }
-        if (params.assignedUserId === "none") q = q.is("assigned_user_id", null);
-        else if (params.assignedUserId && params.assignedUserId !== "all") {
-          q = q.eq("assigned_user_id", params.assignedUserId);
-        }
-        const term = String(params.search || "").trim();
-        if (term) {
-          const safe = term.replace(/[%,()]/g, " ");
-          q = q.or(`document_number.ilike.%${safe}%,title.ilike.%${safe}%`);
-        }
-      }
+      if (filterTier === "hub") q = applyHubFilters(q, params);
+      else if (filterTier === "assignee") q = applyCoreListFilters(q, { ...params, includeAssignee: true });
+      else q = applyCoreListFilters(q, params);
       q = applyHubSort(q, params.sort);
       return q.range(offset, offset + limit - 1);
     };
 
-    let result = await runQuery(hubSelect, true);
+    let result = await runQuery(hubSelect, "hub");
     if (result.error && isSupabaseMissingColumnError(result.error)) {
-      result = await runQuery(coreSelect, false);
+      result = await runQuery(assigneeSelect, "assignee");
+    }
+    if (result.error && isSupabaseMissingColumnError(result.error)) {
+      result = await runQuery(coreSelect, "core");
     }
     const { data, error, count } = result;
     if (error) {
