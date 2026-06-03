@@ -348,15 +348,6 @@ export default function DocumentsPage() {
       </PageTemplate.Header>
 
       <PageTemplate.Body>
-        {hubIncomplete ? (
-          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
-            <strong className="font-medium">Documents hub migration pending.</strong> Templates, new document types, assignees,
-            and archive need the hub schema. Run{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">supabase db push</code> or apply{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">scripts/apply-documents-hub.sql</code> in the Supabase SQL
-            editor, then reload the API schema cache.
-          </div>
-        ) : null}
 
         {/* KPI cards */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
