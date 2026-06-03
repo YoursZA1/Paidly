@@ -12,6 +12,62 @@ import { ArrowDown, ArrowUp, ArrowUpDown, MoreHorizontal, Pencil, Trash2 } from 
 import { formatCurrency } from "@/components/CurrencySelector";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
 
+function MobileProductCard({ product, currencyCode, quantityLabel, onOpenProduct, onEdit, onDelete }) {
+  const stock = Number(product.stock_on_hand ?? 0);
+  const isService = product.item_type === "service";
+  const statusText = product.is_active === false ? "Inactive" : isService ? "Active" : stock <= 0 ? "Out of stock" : "Active";
+  const typeText = isService ? "Service" : "Product";
+
+  return (
+    <div
+      className="flex items-start gap-3 px-4 py-3.5 cursor-pointer active:bg-muted/30 touch-manipulation"
+      onClick={() => onOpenProduct?.(product)}
+    >
+      <div className="shrink-0 mt-0.5">
+        <ProductThumbnail imageUrl={product.image_url} name={product.name} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium text-sm text-foreground leading-snug truncate">{product.name}</p>
+          <div className="shrink-0 flex items-center -mr-2 -mt-1" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(product)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onOpenProduct?.(product)}>Open product</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEdit(product)}>Edit</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete(product)} className="text-destructive focus:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+          {typeText}
+          {product.category ? ` · ${product.category}` : ""}
+          {" · "}{statusText}
+        </p>
+        <div className="flex items-baseline gap-4 mt-1.5">
+          <span className="text-sm font-semibold tabular-nums">
+            {product.price ? formatCurrency(product.price, currencyCode) : "—"}
+          </span>
+          {!isService && (
+            <span className="text-xs text-muted-foreground tabular-nums">Qty: {quantityLabel(product)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SortableHead({ label, sortKey, activeKey, direction, onSort, className }) {
   const active = activeKey === sortKey;
   const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
@@ -95,7 +151,24 @@ export default function ProductTable({
   const allSelected = products.length > 0 && selected.size === products.length;
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Mobile cards — shown below md */}
+      <div className="md:hidden divide-y divide-border/40">
+        {products.map((product) => (
+          <MobileProductCard
+            key={product.id}
+            product={product}
+            currencyCode={currencyCode}
+            quantityLabel={quantityLabel}
+            onOpenProduct={onOpenProduct}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+
+      {/* Desktop table — shown from md up */}
+      <div className="hidden md:block overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/20 hover:bg-muted/20 border-b border-border/60">
@@ -237,6 +310,7 @@ export default function ProductTable({
           ))}
         </TableBody>
       </Table>
-    </div>
+      </div>
+    </>
   );
 }

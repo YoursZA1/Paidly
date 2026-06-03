@@ -26,7 +26,8 @@ export default function InventoryFilterBar({
   const showActiveChip = statusFilter === "active";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-0.5">
+    <div className="flex flex-nowrap items-center gap-2 sm:flex-wrap sm:gap-3">
       <Button
         type="button"
         variant="ghost"
@@ -105,6 +106,7 @@ export default function InventoryFilterBar({
           <SelectItem value="over_200">Over 200</SelectItem>
         </SelectContent>
       </Select>
+    </div>
     </div>
   );
 }

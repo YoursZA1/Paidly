@@ -104,6 +104,48 @@ const adminNavigationItems = ADMIN_NAV_ITEMS.map((item) => ({
   id: `nav-admin-${item.label.toLowerCase().replace(/\s+/g, '-')}`,
 }));
 
+const PAGE_DISPLAY_NAMES = {
+  Dashboard: "Dashboard",
+  Invoices: "Invoices",
+  CreateInvoice: "New Invoice",
+  EditInvoice: "Edit Invoice",
+  ViewInvoice: "Invoice",
+  CreateDocument: "New Document",
+  Quotes: "Quotes",
+  CreateQuote: "New Quote",
+  EditQuote: "Edit Quote",
+  ViewQuote: "Quote",
+  Clients: "Clients",
+  EditClient: "Client",
+  ClientDetail: "Client",
+  Payslips: "Payslips",
+  CreatePayslip: "New Payslip",
+  EditPayslip: "Edit Payslip",
+  ViewPayslip: "Payslip",
+  Documents: "Documents",
+  DocumentDetail: "Document",
+  ViewDocument: "Document",
+  Reports: "Reports",
+  CashFlow: "Cash Flow",
+  Settings: "Settings",
+  Calendar: "Calendar",
+  Messages: "Messages",
+  Notes: "Notes",
+  Budgets: "Budgets",
+  Inventory: "Inventory",
+  Vendors: "Vendors",
+  Services: "Services",
+  RecurringInvoices: "Recurring",
+  CreateRecurringInvoice: "New Recurring",
+  EditRecurringInvoice: "Edit Recurring",
+  BillingAndInvoices: "Billing",
+  AffiliateDashboard: "Affiliate",
+  AffiliatesPage: "Affiliates",
+  UsersPage: "Users",
+  SubscriptionsPage: "Subscriptions",
+  AuditLogPage: "Audit Log",
+};
+
 const allNavigationItems = [
   {
     title: "Dashboard",
@@ -431,8 +473,8 @@ const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme,
   /* Panel only — used inside Sheet drawer on mobile */
   return (
     <div className="w-full flex flex-col h-full max-h-[100dvh] bg-white dark:bg-card text-foreground p-4 sm:p-6 mobile-nav-panel">
-      {/* 1. BRANDING — extra bottom padding for premium spacing */}
-      <div className="mb-10 sm:mb-12 shrink-0">
+      {/* 1. BRANDING */}
+      <div className="mb-5 sm:mb-8 shrink-0">
         <div className="flex min-h-[52px] items-center justify-between gap-2">
           <Link to={createPageUrl("Dashboard")} onClick={onClose} className="flex items-center gap-3 min-w-0 flex-1 touch-manipulation" aria-label="Paidly home">
             <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
@@ -1012,8 +1054,8 @@ export default function Layout({ children, currentPageName }) {
           className="relative z-20 safe-top bg-card/95 backdrop-blur-sm border-b border-border shadow-sm min-h-[56px]
             fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-element sm:gap-3 app-gutter-x"
         >
-          {/* Mobile (< lg): Hamburger | Paidly | Avatar */}
-          <div className="flex items-center gap-2 w-full lg:hidden">
+          {/* Mobile (< lg): Hamburger | Page title | Search + Bell + Status + Avatar */}
+          <div className="flex items-center gap-1.5 w-full lg:hidden">
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
@@ -1022,8 +1064,8 @@ export default function Layout({ children, currentPageName }) {
             >
               <Menu className="size-6 pointer-events-none" aria-hidden />
             </button>
-            <span className="flex-1 text-center font-black text-foreground tracking-tight text-lg truncate">
-              Paidly
+            <span className="flex-1 font-semibold text-foreground tracking-tight text-base truncate leading-none">
+              {PAGE_DISPLAY_NAMES[currentPageName] ?? "Paidly"}
             </span>
             {user && (
               <Button
@@ -1037,7 +1079,8 @@ export default function Layout({ children, currentPageName }) {
                 <Search className="size-5" aria-hidden />
               </Button>
             )}
-            <div className="shrink-0 flex items-center gap-1">
+            {user && <NotificationBell />}
+            <div className="shrink-0 flex items-center gap-0.5">
               <ConnectionStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
               <SessionIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
               <SyncStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />

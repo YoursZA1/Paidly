@@ -9,6 +9,7 @@ import {
   UserGroupIcon,
   PlusIcon,
   Bars3Icon,
+  BanknotesIcon,
 } from "@heroicons/react/24/outline";
 import { createPageUrl, triggerHaptic } from "@/utils";
 
@@ -19,7 +20,14 @@ import { createPageUrl, triggerHaptic } from "@/utils";
 const speedDialActions = [
   { name: "Invoice", url: createPageUrl("CreateInvoice"), icon: DocumentTextIcon },
   { name: "Quote", url: createPageUrl("CreateQuote"), icon: DocumentDuplicateIcon },
+  { name: "Payslip", url: createPageUrl("CreatePayslip"), icon: BanknotesIcon },
 ];
+
+const PINNED_NAV_PATHS = new Set([
+  createPageUrl("Dashboard").split("?")[0].toLowerCase(),
+  createPageUrl("Invoices").split("?")[0].toLowerCase(),
+  createPageUrl("Clients").split("?")[0].toLowerCase(),
+]);
 
 function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
@@ -30,6 +38,7 @@ function MobileBottomNav({ onOpenMenu }) {
   }, [location.pathname, location.search]);
 
   const isActive = (url) => location.pathname === url.split("?")[0];
+  const isMenuActive = !PINNED_NAV_PATHS.has(location.pathname.toLowerCase());
 
   const handlePress = (callback) => {
     triggerHaptic(12);
@@ -132,11 +141,13 @@ function MobileBottomNav({ onOpenMenu }) {
             <UserGroupIcon className="w-6 h-6 shrink-0" />
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Clients</span>
           </Link>
-          {/* Menu — opens sidebar drawer */}
+          {/* Menu — opens sidebar drawer; active when on a route not pinned in the bar */}
           <button
             type="button"
             onClick={() => handlePress(() => onOpenMenu?.())}
-            className="flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.97]"
+            className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
+              isMenuActive ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
             aria-label="Menu"
           >
             <Bars3Icon className="w-6 h-6 shrink-0" />

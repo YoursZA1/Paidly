@@ -2,7 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Search } from "lucide-react";
 import ProductTable from "@/components/inventory/ProductTable";
 import InventoryFilterBar from "@/components/inventory/InventoryFilterBar";
 import InventoryTableFooter from "@/components/inventory/InventoryTableFooter";
@@ -57,28 +63,69 @@ export default function ManageProductsView({
   return (
     <div className="min-h-screen bg-[#f6f4f2] dark:bg-background">
       <header className="border-b border-border/40 bg-[#f6f4f2]/95 dark:bg-background/95 backdrop-blur-sm sticky top-0 z-30">
-        <div className="responsive-page-shell pt-6 pb-4 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <h1 className="text-2xl sm:text-[1.65rem] font-semibold tracking-tight text-foreground">
+        <div className="responsive-page-shell pt-4 sm:pt-6 pb-3 sm:pb-4 space-y-3 sm:space-y-4">
+          {/* Title row */}
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-xl sm:text-[1.65rem] font-semibold tracking-tight text-foreground">
               Manage Products
             </h1>
-            <Avatar className="h-10 w-10 border border-border/60 shrink-0">
+            {/* Avatar hidden on mobile — accessible via top nav */}
+            <Avatar className="hidden sm:flex h-10 w-10 border border-border/60 shrink-0">
               {profileAvatarUrl ? <AvatarImage src={profileAvatarUrl} alt="" /> : null}
               <AvatarFallback className="text-xs font-medium">{profileInitials}</AvatarFallback>
             </Avatar>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          {/* Search + actions */}
+          <div className="flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search products and services"
                 value={searchInput}
                 onChange={(e) => onSearchInputChange(e.target.value)}
-                className="h-11 sm:h-12 pl-11 rounded-full bg-card border-border/50 shadow-sm"
+                className="h-11 pl-11 rounded-full bg-card border-border/50 shadow-sm"
               />
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+
+            {/* Mobile action row: primary CTA + secondary dropdown + data actions */}
+            <div className="flex items-center gap-2 lg:hidden">
+              <Button
+                type="button"
+                className="flex-1 h-11 rounded-xl uppercase text-xs tracking-wide font-semibold bg-foreground text-background hover:bg-foreground/90 touch-manipulation"
+                onClick={onAddProduct}
+              >
+                Add product
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 rounded-xl"
+                    aria-label="More actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={onCreateCategory}>Create category</DropdownMenuItem>
+                  {onAddService ? <DropdownMenuItem onClick={onAddService}>Add service</DropdownMenuItem> : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <CatalogDataActions
+                isImporting={isImporting}
+                isExporting={isExporting}
+                exportDisabled={exportDisabled}
+                onImportFile={onImportFile}
+                onExport={onExportCsv}
+                onOpenIndustryTemplates={onOpenIndustryTemplates}
+              />
+            </div>
+
+            {/* Desktop action row: all buttons visible */}
+            <div className="hidden lg:flex items-center gap-2 shrink-0">
               <CatalogDataActions
                 isImporting={isImporting}
                 isExporting={isExporting}
@@ -115,6 +162,7 @@ export default function ManageProductsView({
             </div>
           </div>
 
+          {/* Filter bar */}
           <InventoryFilterBar
             statusFilter={statusFilter}
             onStatusFilterChange={onStatusFilterChange}
