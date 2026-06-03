@@ -73,6 +73,7 @@ const INITIAL_FILTERS = {
   category: "all",
   type: "all",
   status: "all",
+  assignedUserId: "all",
   sort: "newest",
 };
 
@@ -89,6 +90,17 @@ export default function DocumentsPage() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [hubCaps, setHubCaps] = useState(null);
+
+  useEffect(() => {
+    DocumentService.listOrgMembers()
+      .then((rows) => setMembers(Array.isArray(rows) ? rows : []))
+      .catch(() => setMembers([]));
+    DocumentService.getHubCapabilities()
+      .then(setHubCaps)
+      .catch(() => setHubCaps({ templates: false, archive: false, assignees: false, newTypes: false }));
+  }, []);
 
   // Debounce the search box into the active filter set.
   useEffect(() => {
@@ -130,7 +142,10 @@ export default function DocumentsPage() {
     filters.category !== "all" ||
     filters.type !== "all" ||
     filters.status !== "all" ||
+    filters.assignedUserId !== "all" ||
     filters.sort !== "newest";
+
+  const hubIncomplete = hubCaps && (!hubCaps.templates || !hubCaps.archive || !hubCaps.newTypes);
 
   const refreshAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["documents"] });
@@ -333,6 +348,16 @@ export default function DocumentsPage() {
       </PageTemplate.Header>
 
       <PageTemplate.Body>
+        {hubIncomplete ? (
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+            <strong className="font-medium">Documents hub migration pending.</strong> Templates, new document types, assignees,
+            and archive need the hub schema. Run{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">supabase db push</code> or apply{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">scripts/apply-documents-hub.sql</code> in the Supabase SQL
+            editor, then reload the API schema cache.
+          </div>
+        ) : null}
+
         {/* KPI cards */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {KPI_DEFS.map((kpi) => {
@@ -403,6 +428,22 @@ export default function DocumentsPage() {
                 ))}
               </SelectContent>
             </Select>
+            {hubCaps?.assignees && members.length ? (
+              <Select value={filters.assignedUserId} onValueChange={(v) => setFilter("assignedUserId", v)}>
+                <SelectTrigger className="w-[160px]" aria-label="Filter by assignee">
+                  <SelectValue placeholder="Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All assignees</SelectItem>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {members.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <Select value={filters.sort} onValueChange={(v) => setFilter("sort", v)}>
               <SelectTrigger className="w-[170px]" aria-label="Sort documents">
                 <SelectValue placeholder="Sort" />

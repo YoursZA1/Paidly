@@ -15,8 +15,6 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "isolatedModules": true,
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"]
@@ -29,6 +27,9 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "build",
+    ".vercel",
+    "coverage"
   ]
 }

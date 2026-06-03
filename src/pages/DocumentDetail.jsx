@@ -34,7 +34,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { COMMON_CURRENCIES } from "@/data/currencies";
-import { ArrowLeft, FileText, Loader2, LayoutTemplate } from "lucide-react";
+import { ArrowLeft, FileText, Loader2, LayoutTemplate, Archive, ArchiveRestore } from "lucide-react";
 
 function lineFromRow(row) {
   return {
@@ -78,6 +78,8 @@ export default function DocumentDetailPage() {
   const { toast } = useToast();
   const [doc, setDoc] = useState(null);
   const [clients, setClients] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [hubCaps, setHubCaps] = useState({ templates: true, archive: true, assignees: true, newTypes: true });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState(null);
@@ -129,6 +131,12 @@ export default function DocumentDetailPage() {
     Client.list("-created_date", { limit: 200 })
       .then((rows) => setClients(Array.isArray(rows) ? rows : []))
       .catch(() => setClients([]));
+    DocumentService.listOrgMembers()
+      .then((rows) => setMembers(Array.isArray(rows) ? rows : []))
+      .catch(() => setMembers([]));
+    DocumentService.getHubCapabilities()
+      .then(setHubCaps)
+      .catch(() => setHubCaps({ templates: false, archive: false, assignees: false, newTypes: false }));
   }, []);
 
   useEffect(() => {
@@ -181,6 +189,39 @@ export default function DocumentDetailPage() {
       await load();
     } catch (e) {
       toast({ variant: "destructive", title: "Could not update client", description: e?.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssigneeChange = async (assignedUserId) => {
+    if (!documentId) return;
+    setSaving(true);
+    try {
+      await DocumentService.update(documentId, { assigned_user_id: assignedUserId });
+      await load();
+      toast({ title: "Assignee updated" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Could not assign", description: e?.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!documentId || !doc) return;
+    setSaving(true);
+    try {
+      if (doc.archived_at) {
+        await DocumentService.unarchive(documentId);
+        toast({ title: "Document restored" });
+      } else {
+        await DocumentService.archive(documentId);
+        toast({ title: "Document archived" });
+      }
+      await load();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Action failed", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -343,9 +384,20 @@ export default function DocumentDetailPage() {
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save
             </Button>
-            <Button type="button" variant="outline" className="gap-2" onClick={() => setTemplateOpen(true)}>
+            <Button type="button" variant="outline" className="gap-2" onClick={() => setTemplateOpen(true)} disabled={!hubCaps.templates}>
               <LayoutTemplate className="h-4 w-4" /> Save as template
             </Button>
+            {hubCaps.archive ? (
+              doc.archived_at ? (
+                <Button type="button" variant="outline" className="gap-2" onClick={handleArchiveToggle} disabled={saving}>
+                  <ArchiveRestore className="h-4 w-4" /> Restore
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" className="gap-2" onClick={handleArchiveToggle} disabled={saving}>
+                  <Archive className="h-4 w-4" /> Archive
+                </Button>
+              )
+            ) : null}
             {canSend ? (
               <Button type="button" variant="secondary" onClick={handleSend} disabled={saving}>
                 Mark sent
@@ -610,7 +662,15 @@ export default function DocumentDetailPage() {
           </TabsContent>
         </Tabs>
 
-        <DocumentDetailSidebar doc={doc} clients={clients} onClientChange={handleClientChange} saving={saving} />
+        <DocumentDetailSidebar
+          doc={doc}
+          clients={clients}
+          members={members}
+          assigneesEnabled={hubCaps.assignees}
+          onClientChange={handleClientChange}
+          onAssigneeChange={handleAssigneeChange}
+          saving={saving}
+        />
       </div>
 
       <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>

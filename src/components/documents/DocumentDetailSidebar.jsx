@@ -15,13 +15,22 @@ function fmtDateTime(value) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+function memberLabel(members, userId) {
+  if (!userId) return "Unassigned";
+  const m = members.find((x) => x.user_id === userId);
+  return m?.label || "Team member";
+}
+
 /**
  * Right sidebar for document detail: status, assignee, client, linked docs, dates.
  */
 export default function DocumentDetailSidebar({
   doc,
   clients = [],
+  members = [],
+  assigneesEnabled = true,
   onClientChange,
+  onAssigneeChange,
   saving = false,
 }) {
   if (!doc) return null;
@@ -66,11 +75,32 @@ export default function DocumentDetailSidebar({
         </Select>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="sidebar-assignee">Assigned to</Label>
+        {assigneesEnabled ? (
+          <Select
+            value={doc.assigned_user_id || "none"}
+            onValueChange={(v) => onAssigneeChange?.(v === "none" ? null : v)}
+            disabled={saving}
+          >
+            <SelectTrigger id="sidebar-assignee">
+              <SelectValue placeholder="Unassigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Unassigned</SelectItem>
+              {members.map((m) => (
+                <SelectItem key={m.user_id} value={m.user_id}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <p className="text-sm text-muted-foreground">{memberLabel(members, doc.assigned_user_id)}</p>
+        )}
+      </div>
+
       <dl className="space-y-3 text-sm">
-        <div>
-          <dt className="text-muted-foreground">Assigned</dt>
-          <dd className="mt-0.5 font-medium">{doc.assigned_user_id ? "Team member" : "Unassigned"}</dd>
-        </div>
         <div>
           <dt className="text-muted-foreground">Created</dt>
           <dd className="mt-0.5">{fmtDateTime(doc.created_at)}</dd>
@@ -79,6 +109,12 @@ export default function DocumentDetailSidebar({
           <dt className="text-muted-foreground">Last updated</dt>
           <dd className="mt-0.5">{fmtDateTime(doc.updated_at)}</dd>
         </div>
+        {doc.archived_at ? (
+          <div>
+            <dt className="text-muted-foreground">Archived</dt>
+            <dd className="mt-0.5">{fmtDateTime(doc.archived_at)}</dd>
+          </div>
+        ) : null}
       </dl>
 
       {doc.linked_documents?.length ? (

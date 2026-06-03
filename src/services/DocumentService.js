@@ -81,6 +81,15 @@ async function updateDocumentRow(documentId, orgId, updateRow) {
   if (error) throw error;
 }
 
+function isDocumentTypeConstraintError(error) {
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  return code === "23514" || code === "23503" || /documents_type_check|document_types|foreign key.*type/i.test(msg);
+}
+
+const HUB_MIGRATION_HINT =
+  "Apply the documents hub migration (supabase db push), then reload the API schema cache in Supabase Dashboard → Settings → API.";
+
 function throwWithCause(message, cause) {
   const err = new Error(message);
   if (cause != null) err.cause = cause;
@@ -293,7 +302,8 @@ function applyHubFilters(q, { type, category, status, search, assignedUserId, in
     if (status && status !== "all") q = q.eq("status", status);
     if (!includeArchived) q = q.is("archived_at", null);
   }
-  if (assignedUserId && assignedUserId !== "all") q = q.eq("assigned_user_id", assignedUserId);
+  if (assignedUserId === "none") q = q.is("assigned_user_id", null);
+  else if (assignedUserId && assignedUserId !== "all") q = q.eq("assigned_user_id", assignedUserId);
   const term = String(search || "").trim();
   if (term) {
     const safe = term.replace(/[%,()]/g, " ");
@@ -457,6 +467,10 @@ export const DocumentService = {
         if (params.status && params.status !== "all" && params.status !== "archived") {
           q = q.eq("status", params.status);
         }
+        if (params.assignedUserId === "none") q = q.is("assigned_user_id", null);
+        else if (params.assignedUserId && params.assignedUserId !== "all") {
+          q = q.eq("assigned_user_id", params.assignedUserId);
+        }
         const term = String(params.search || "").trim();
         if (term) {
           const safe = term.replace(/[%,()]/g, " ");
@@ -484,6 +498,22 @@ export const DocumentService = {
         total_base_amount: Math.round(Number(row?.total_amount || 0) * exchangeRate * 100) / 100,
       };
     });
+
+    const assigneeIds = [...new Set(rows.map((r) => r.assigned_user_id).filter(Boolean))];
+    if (assigneeIds.length) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", assigneeIds);
+      const byId = new Map((profiles || []).map((p) => [p.id, p]));
+      for (const row of rows) {
+        if (row.assigned_user_id) {
+          const p = byId.get(row.assigned_user_id);
+          row.assignee_name = p?.full_name || p?.email || null;
+        }
+      }
+    }
+
     return { rows, total: Number(count || 0), limit, offset };
   },
 
@@ -695,6 +725,11 @@ export const DocumentService = {
       }
     })();
     if (error) {
+      if (isDocumentTypeConstraintError(error)) {
+        throw new Error(
+          `Cannot create "${type}" yet. ${HUB_MIGRATION_HINT} Until then, use invoice, quote, or payslip.`
+        );
+      }
       throw throwWithCause(getSupabaseErrorMessage(error, "Failed to create document"), error);
     }
     await replaceDocumentItems(doc.id, rows);
@@ -983,35 +1018,31 @@ export const DocumentService = {
   /** Soft-archive a document (sets archived_at; keeps the row and its history). */
   async archive(documentId) {
     const { userId, orgId } = await getActorContext();
-    const { data, error } = await supabase
-      .from("documents")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("id", documentId)
-      .eq("org_id", orgId)
-      .select("id")
-      .maybeSingle();
-    if (error) {
-      throw throwWithCause(getSupabaseErrorMessage(error, "Failed to archive document"), error);
+    try {
+      await updateDocumentRow(documentId, orgId, { archived_at: new Date().toISOString() });
+    } catch (e) {
+      if (isSupabaseMissingColumnError(e)) {
+        throw new Error(`Archive is not available yet. ${HUB_MIGRATION_HINT}`);
+      }
+      throw throwWithCause(getSupabaseErrorMessage(e, "Failed to archive document"), e);
     }
     await insertDocumentEventBestEffort({ orgId, documentId, userId, eventType: "archived", payload: {} });
-    return data;
+    return { id: documentId };
   },
 
   /** Restore an archived document. */
   async unarchive(documentId) {
     const { userId, orgId } = await getActorContext();
-    const { data, error } = await supabase
-      .from("documents")
-      .update({ archived_at: null })
-      .eq("id", documentId)
-      .eq("org_id", orgId)
-      .select("id")
-      .maybeSingle();
-    if (error) {
-      throw throwWithCause(getSupabaseErrorMessage(error, "Failed to restore document"), error);
+    try {
+      await updateDocumentRow(documentId, orgId, { archived_at: null });
+    } catch (e) {
+      if (isSupabaseMissingColumnError(e)) {
+        throw new Error(`Restore is not available yet. ${HUB_MIGRATION_HINT}`);
+      }
+      throw throwWithCause(getSupabaseErrorMessage(e, "Failed to restore document"), e);
     }
     await insertDocumentEventBestEffort({ orgId, documentId, userId, eventType: "unarchived", payload: {} });
-    return data;
+    return { id: documentId };
   },
 
   /** Permanently delete a document (cascades to items, events, attachments, comments, links). */
@@ -1307,6 +1338,61 @@ export const DocumentService = {
     });
 
     return { source, target };
+  },
+
+  /** Org members for assignee pickers (current organization). */
+  async listOrgMembers() {
+    const { orgId } = await getActorContext();
+    const { data: memberships, error } = await supabase
+      .from("memberships")
+      .select("user_id, role")
+      .eq("org_id", orgId);
+    if (error) {
+      throw throwWithCause(getSupabaseErrorMessage(error, "Failed to load team members"), error);
+    }
+    const rows = Array.isArray(memberships) ? memberships : [];
+    if (!rows.length) return [];
+    const userIds = rows.map((m) => m.user_id).filter(Boolean);
+    const { data: profiles, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", userIds);
+    if (profileErr) {
+      throw throwWithCause(getSupabaseErrorMessage(profileErr, "Failed to load team profiles"), profileErr);
+    }
+    const byId = new Map((profiles || []).map((p) => [p.id, p]));
+    return rows.map((m) => {
+      const p = byId.get(m.user_id);
+      const label = p?.full_name?.trim() || p?.email?.trim() || "Team member";
+      return {
+        user_id: m.user_id,
+        role: m.role,
+        full_name: p?.full_name || null,
+        email: p?.email || null,
+        label,
+      };
+    });
+  },
+
+  /**
+   * Probe whether full hub schema is available (templates table + archive column).
+   * Cached for the browser session after first successful check.
+   */
+  async getHubCapabilities() {
+    if (getHubCapabilities._cache) return getHubCapabilities._cache;
+    const { orgId } = await getActorContext();
+    const [templatesProbe, archiveProbe] = await Promise.all([
+      supabase.from("document_templates").select("id", { count: "exact", head: true }).eq("org_id", orgId).limit(1),
+      supabase.from("documents").select("archived_at").limit(1),
+    ]);
+    const caps = {
+      templates: !templatesProbe.error || !isSupabaseMissingRelationError(templatesProbe.error),
+      archive: !archiveProbe.error || !isSupabaseMissingColumnError(archiveProbe.error),
+      assignees: !archiveProbe.error || !isSupabaseMissingColumnError(archiveProbe.error),
+      newTypes: !archiveProbe.error || !isSupabaseMissingColumnError(archiveProbe.error),
+    };
+    getHubCapabilities._cache = caps;
+    return caps;
   },
 
   async listTemplates({ type } = {}) {

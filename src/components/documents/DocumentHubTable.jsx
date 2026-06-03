@@ -47,7 +47,7 @@ import { QUOTE_STATUSES } from "@/document-engine/documentStateMachine";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { DocumentTypeIcon } from "./documentIcon";
 
-const COLUMN_COUNT = 9;
+const COLUMN_COUNT = 10;
 
 function fmtDate(value) {
   if (!value) return "—";
@@ -135,6 +135,7 @@ export default function DocumentHubTable({
             <TableHead className="hidden md:table-cell">Client</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="hidden lg:table-cell">Created</TableHead>
+            <TableHead className="hidden xl:table-cell">Owner</TableHead>
             <TableHead className="hidden lg:table-cell">Updated</TableHead>
             <TableHead className="text-right">Value</TableHead>
             <TableHead className="w-12 text-right">Actions</TableHead>
@@ -190,6 +191,9 @@ export default function DocumentHubTable({
                 </TableCell>
                 <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                   {fmtDate(row.created_at)}
+                </TableCell>
+                <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
+                  {row.assignee_name || "—"}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                   {fmtDate(row.updated_at)}
