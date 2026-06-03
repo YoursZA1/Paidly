@@ -10,8 +10,13 @@ const EVENT_TYPE_LABELS = Object.freeze({
   viewed: "Viewed",
   accepted: "Quote accepted",
   paid: "Marked paid",
-  converted: "Converted to invoice",
+  converted: "Converted",
   created_from_quote: "Created from quote",
+  created_from_conversion: "Created from conversion",
+  attachment_added: "Attachment added",
+  comment_added: "Comment added",
+  archived: "Archived",
+  unarchived: "Restored from archive",
 });
 
 /**
@@ -45,6 +50,12 @@ export function summarizeDocumentEventPayload(payload) {
   }
   if (p.new_invoice_document_id) {
     rows.push({ label: "New invoice", value: String(p.new_invoice_document_id) });
+  }
+  if (p.target_document_id) {
+    rows.push({ label: "Target document", value: String(p.target_document_id) });
+  }
+  if (p.source_document_id) {
+    rows.push({ label: "Source document", value: String(p.source_document_id) });
   }
   if (p.source_quote_id) {
     rows.push({ label: "Source quote", value: String(p.source_quote_id) });

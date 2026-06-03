@@ -23,3 +23,28 @@ export { aggregateFromItems, normalizeLineTotals } from "./documentTotals";
 export { formatDocumentEventType, summarizeDocumentEventPayload } from "./documentEventLabels";
 export { documentStatusBadgeVariant, documentTypeBadgeVariant } from "./documentUi";
 export { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "./documentEventTypes";
+export {
+    DOCUMENT_CATEGORIES,
+    DOCUMENT_TYPE_DEFS,
+    DOCUMENT_TYPE_KEYS,
+    STATUS_FLOWS,
+    isCatalogType,
+    getTypeDef,
+    getCategoryDef,
+    typeLabel,
+    categoryForType,
+    isFinancialType,
+    typesByCategory,
+    defaultStatusForCatalogType,
+    allowedStatusesForType,
+} from "./documentCatalog";
+export {
+    DOCUMENT_CONVERSIONS,
+    getConversionOptions,
+    usesLegacyQuoteToInvoice,
+} from "./documentConversions";
+export {
+    DOCUMENT_TEMPLATE_PRESETS,
+    getTemplatePreset,
+    presetsByCategory,
+} from "./documentTemplatePresets";

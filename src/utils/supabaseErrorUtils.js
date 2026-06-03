@@ -60,6 +60,20 @@ export function isSupabaseMissingRelationError(error) {
 }
 
 /**
+ * PostgREST: column not in schema cache (hub migration columns not applied yet).
+ * @param {unknown} error
+ */
+export function isSupabaseMissingColumnError(error) {
+  if (error == null || typeof error !== "object") return false;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "PGRST204") return true;
+  const msg = String(error.message ?? "").toLowerCase();
+  if (/could not find the .* column .* in the schema cache/i.test(msg)) return true;
+  if (/column .+ of relation .+ does not exist/i.test(msg)) return true;
+  return false;
+}
+
+/**
  * Get a safe, user-friendly message from a Supabase or generic error.
  * Handles PostgrestError, AuthError, StorageError, and plain Error.
  * @param {unknown} error - Error from Supabase or thrown in catch
