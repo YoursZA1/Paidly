@@ -128,7 +128,7 @@ Examples:
 
 - **TanStack Query** already merges concurrent `queryFn` runs for the **same `queryKey`**.
 - **Imperative / shared services:** `runDedupedAsync(key, fn)` in `src/lib/inflightRequestDedupe.js` — if `inflight.has(key)`, return the existing promise so three simultaneous `fetchInvoiceListPage(0, …)` calls share one `Invoice.list` round-trip.
-- **Wired today:** `fetchInvoiceListPage`, `fetchInvoiceSideData` (`InvoiceListService.js`), combined `Invoice.list` + `Client.list` in `useInvoicesQuery.js`, and raw `fetchInvoices` in `useInvoicesSupabaseQuery.js`.
+- **Wired today:** `fetchInvoiceListPage`, `fetchInvoiceSideData` (`InvoiceListService.js`), consumed by `useInvoices` — the single source of truth for the invoice list.
 
 ---
 
@@ -253,7 +253,7 @@ Avoid: parallel **recovery**, **retry**, and **reconnect** systems that do not s
 | Slice | `staleTime` / skip window | Source |
 |-------|---------------------------|--------|
 | Dashboard document previews | 60s | `PAIDLY_STALE_MS.dashboard` — `useDashboardDocumentsQuery`, nav prefetch |
-| Invoices (lists) | 5 minutes | `PAIDLY_STALE_MS.invoices` — `useInvoices`, `useInvoicesQuery`, default `useSupabaseQuery`, `query-client` default |
+| Invoices (lists) | 5 minutes | `PAIDLY_STALE_MS.invoices` — `useInvoices`, default `useSupabaseQuery`, `query-client` default |
 | Clients (lists) | 10 minutes | `PAIDLY_STALE_MS.clients` — `useClientsList`, nav prefetch |
 | Currency rates | 12 hours | `EXCHANGE_RATES_CACHE_TTL_MS` in `exchangeRatesClientPolicy.js` |
 | User profile (`auth.me` fallback) | 24 hours | `PAIDLY_STALE_MS.userProfile` — `useCurrentUser`; primary profile remains AuthContext |

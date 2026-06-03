@@ -63,7 +63,7 @@ flowchart TB
   end
 
   subgraph logic["Application logic"]
-    H[Hooks e.g. useInvoicesQuery]
+    H[Hooks e.g. useInvoices]
     Svc["Services e.g. DocumentService"]
     Ent["Entity facades e.g. Invoice in api/entities"]
   end

@@ -59,6 +59,10 @@ export const useSyncQueueStore = create((set, get) => ({
       doneAt: null,
       result: null,
     };
+    // Tracks the job actually present in the queue after this call. On a conflict-merge the new
+    // `job` is discarded in favor of the existing (merged) job, so callers that wait on the returned
+    // id (e.g. waitForSyncJobResult) must receive the merged job's real queue id — not the dropped one.
+    let resultJob = job;
     set((state) => {
       const conflictKey = String(meta?.conflictKey || "").trim();
       if (conflictKey) {
@@ -86,6 +90,7 @@ export const useSyncQueueStore = create((set, get) => ({
           };
           const queue = state.queue.map((entry, idx) => (idx === existingIndex ? merged : entry));
           persistQueue(queue);
+          resultJob = merged;
           return { queue };
         }
       }
@@ -93,7 +98,7 @@ export const useSyncQueueStore = create((set, get) => ({
       persistQueue(queue);
       return { queue };
     });
-    return job;
+    return resultJob;
   },
 
   markProcessing: (id) =>

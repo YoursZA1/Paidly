@@ -204,7 +204,7 @@ while (getRuntimeCoordinatorSnapshot().pauseNonCriticalRequests) {
 This polls the runtime coordinator every 100ms, keeping at least one microtask chain alive per waiting request. Under concurrent requests during auth recovery, this creates N×10 setTimeout firings per second. The fix: replace with a Zustand subscription that resolves on the next state change.
 
 **LOW — `inflightRequestDedupe.js` and `RequestCoordinator.dedupe` are parallel dedup systems:**  
-`inflightRequestDedupe.js` provides global request dedup by string key. `RequestCoordinator.dedupe` provides the same per-coordinator. They're used in different places (the former in `useInvoicesQuery.js`, the latter available for direct use). No conflicts, but consolidating would simplify the mental model.
+`inflightRequestDedupe.js` provides global request dedup by string key. `RequestCoordinator.dedupe` provides the same per-coordinator. They're used in different places (the former in services such as `InvoiceListService.js`, the latter available for direct use). No conflicts, but consolidating would simplify the mental model.
 
 **INFORMATIONAL — Silent refreshes don't trigger `pauseNonCriticalRequests`:**  
 Only non-silent refresh calls (direct user-triggered recovery, not heartbeat/visibility/bfcache) emit `report_refresh_starting`. This is correct by design — background token renewal should not stall UI data fetches. Documented here for clarity.

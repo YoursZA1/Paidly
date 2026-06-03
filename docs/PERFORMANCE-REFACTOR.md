@@ -1,5 +1,10 @@
 # Performance & Data Loading Refactor
 
+> **⚠️ Historical (point-in-time).** The proposed `useInvoicesQuery` / `useInvoicesSupabaseQuery` hooks
+> referenced below were **removed**. The live invoice list is served solely by `useInvoices` (TanStack
+> infinite query → `InvoiceListService`), and clients by `useClientsList`. Treat hook names here as
+> historical; the caching principles still apply.
+
 This document summarizes the performance, stability, and data-loading improvements applied across the app.
 
 ## 1. Data Fetching

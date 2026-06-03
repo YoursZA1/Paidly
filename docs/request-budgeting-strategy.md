@@ -66,7 +66,7 @@ Two systems exist; use consistently:
 | `RequestCoordinator.dedupe(key, fn)` | `src/core/network/RequestCoordinator.ts` | Per-coordinator, uses concurrency slot |
 | `runDedupedAsync(key, fn)` | `src/lib/inflightRequestDedupe.js` | Global module-level dedup, no concurrency limit |
 
-**Use `RequestCoordinator.dedupe`** for new code. `runDedupedAsync` is used in `useInvoicesQuery` for legacy compatibility.
+**Use `RequestCoordinator.dedupe`** for new code. `runDedupedAsync` is used in services such as `InvoiceListService.js`.
 
 ---
 

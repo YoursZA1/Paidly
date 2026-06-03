@@ -1,5 +1,11 @@
 # Save as Draft / Send Immediately Feature
 
+> **⚠️ Superseded / historical (Jun 2026).** The `InvoiceSaveActions` component documented below has
+> been **removed** (it was never imported by the live pages). Draft/send is now handled directly in
+> `src/pages/CreateDocument.jsx` and `src/pages/EditInvoice.jsx` via the optimistic **sync queue**
+> (`queueCreateInvoice` / `queueUpdateInvoice` / `queueSendInvoice`). "Send now" routes into the real
+> interactive send flow in `ViewInvoice` (`?autosend=1`). Kept for historical context only.
+
 ## Overview
 Comprehensive draft and send functionality for invoices, allowing users to either save invoices as drafts for later review or send them immediately to clients.
 

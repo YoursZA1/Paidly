@@ -1,5 +1,11 @@
 # Invoice Editing Implementation Summary
 
+> **⚠️ Superseded / historical (Jun 2026).** This document describes an earlier design that used the
+> `InvoiceSaveActions` component, which has since been **removed**. The live save/send flow lives in
+> `src/pages/EditInvoice.jsx` and `src/pages/CreateDocument.jsx`, persists through the optimistic
+> **sync queue** (`queueCreateInvoice` / `queueUpdateInvoice` → `SyncEngine` → `Invoice.create`/`update`),
+> and uses plain draft/send buttons (no `InvoiceSaveActions`). Kept for historical context only.
+
 ## Overview
 Complete implementation of invoice editing functionality with draft workflow support. This feature allows users to edit draft invoices and either save them as drafts or send them to clients.
 
