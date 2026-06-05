@@ -16,6 +16,14 @@ export const DOCUMENT_EVENT_TYPES = Object.freeze({
   status_changed: "status_changed",
   converted: "converted",
   created_from_quote: "created_from_quote",
+  // PDF workflow
+  pdf_generated: "pdf_generated",
+  pdf_downloaded: "pdf_downloaded",
+  sent_to_client: "sent_to_client",
+  signature_requested: "signature_requested",
+  signature_viewed: "signature_viewed",
+  signature_completed: "signature_completed",
+  signature_declined: "signature_declined",
 });
 
 function sentTargetForType(docType) {

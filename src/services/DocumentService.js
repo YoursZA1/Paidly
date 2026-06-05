@@ -1600,6 +1600,233 @@ export const DocumentService = {
     return data;
   },
 
+  /**
+   * Records that a PDF was generated/downloaded (best-effort, won't throw).
+   * @param {string} documentId
+   * @param {"generated"|"downloaded"} action
+   */
+  async logPdfAction(documentId, action = "generated") {
+    try {
+      const { userId, orgId } = await getActorContext();
+      const eventType =
+        action === "downloaded"
+          ? DOCUMENT_EVENT_TYPES.pdf_downloaded
+          : DOCUMENT_EVENT_TYPES.pdf_generated;
+      await insertDocumentEventBestEffort({
+        orgId,
+        documentId,
+        userId,
+        eventType,
+        payload: {},
+      });
+    } catch {
+      // intentionally best-effort
+    }
+  },
+
+  /**
+   * Send document to a client: records the send, advances status to "sent" if draft,
+   * and logs the event.
+   */
+  async sendToClient(
+    documentId,
+    {
+      recipient_name,
+      recipient_email,
+      subject,
+      message,
+      include_pdf,
+      include_branding,
+      scheduled_at,
+    } = {}
+  ) {
+    const { userId, orgId } = await getActorContext();
+    const existing = await this.get(documentId);
+    if (!existing) throw new Error("Document not found");
+
+    const email = String(recipient_email || "").trim();
+    if (!email) throw new Error("Recipient email is required.");
+
+    const isScheduled = Boolean(scheduled_at);
+    const sendStatus = isScheduled ? "scheduled" : "sent";
+
+    // Insert send record (graceful if table not yet migrated)
+    const { error: sendErr } = await supabase
+      .from("document_sends")
+      .insert({
+        org_id: orgId,
+        document_id: documentId,
+        recipient_name: recipient_name || null,
+        recipient_email: email,
+        subject: subject || null,
+        message: message || null,
+        include_pdf: Boolean(include_pdf !== false),
+        include_branding: Boolean(include_branding !== false),
+        scheduled_at: scheduled_at || null,
+        status: sendStatus,
+        channel: "email",
+        created_by: userId,
+      });
+
+    if (sendErr && !isSupabaseMissingRelationError(sendErr)) {
+      throw throwWithCause(
+        getSupabaseErrorMessage(sendErr, "Failed to record send"),
+        sendErr
+      );
+    }
+
+    // Only advance document status immediately for non-scheduled sends
+    if (!isScheduled && existing.status === "draft") {
+      const nextStatus = sentStatusForType(existing.type);
+      try {
+        await updateDocumentRow(documentId, orgId, {
+          status: nextStatus,
+          last_sent_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        if (isSupabaseMissingColumnError(e)) {
+          await supabase
+            .from("documents")
+            .update({ status: nextStatus })
+            .eq("id", documentId)
+            .eq("org_id", orgId);
+        } else {
+          throw throwWithCause(
+            getSupabaseErrorMessage(e, "Failed to update status"),
+            e
+          );
+        }
+      }
+    }
+
+    await insertDocumentEventBestEffort({
+      orgId,
+      documentId,
+      userId,
+      eventType: DOCUMENT_EVENT_TYPES.sent_to_client,
+      payload: {
+        recipient_email: email,
+        recipient_name: recipient_name || null,
+        include_pdf: Boolean(include_pdf !== false),
+        ...(isScheduled ? { scheduled_at } : {}),
+      },
+    });
+
+    return this.get(documentId);
+  },
+
+  /**
+   * Request e-signatures from one or more signers (ordered).
+   * Creates signature rows, sets document status to "pending" + signature_status to
+   * "awaiting_signature", and logs the event.
+   */
+  async requestSignature(documentId, { signers } = {}) {
+    const { userId, orgId } = await getActorContext();
+    if (!Array.isArray(signers) || !signers.length) {
+      throw new Error("At least one signer is required.");
+    }
+    const existing = await this.get(documentId);
+    if (!existing) throw new Error("Document not found");
+
+    const insertRows = signers.map((s) => ({
+      org_id: orgId,
+      document_id: documentId,
+      signer_name: s.signer_name || null,
+      signer_email: String(s.signer_email || "").trim(),
+      signing_order: Number(s.signing_order) || 1,
+      status: "pending",
+      created_by: userId,
+    }));
+
+    const { error: sigErr } = await supabase
+      .from("document_signatures")
+      .insert(insertRows);
+
+    if (sigErr && !isSupabaseMissingRelationError(sigErr)) {
+      throw throwWithCause(
+        getSupabaseErrorMessage(sigErr, "Failed to create signature request"),
+        sigErr
+      );
+    }
+
+    try {
+      await updateDocumentRow(documentId, orgId, {
+        status: "pending",
+        signature_status: "awaiting_signature",
+      });
+    } catch (e) {
+      if (isSupabaseMissingColumnError(e)) {
+        await supabase
+          .from("documents")
+          .update({ status: "pending" })
+          .eq("id", documentId)
+          .eq("org_id", orgId);
+      } else {
+        throw throwWithCause(
+          getSupabaseErrorMessage(e, "Failed to update signature status"),
+          e
+        );
+      }
+    }
+
+    await insertDocumentEventBestEffort({
+      orgId,
+      documentId,
+      userId,
+      eventType: DOCUMENT_EVENT_TYPES.signature_requested,
+      payload: {
+        signers: signers.map((s) => ({
+          name: s.signer_name || null,
+          email: s.signer_email,
+        })),
+      },
+    });
+
+    return this.get(documentId);
+  },
+
+  /** List send records for a document (newest first). Returns [] if table not yet available. */
+  async listSends(documentId) {
+    const { orgId } = await getActorContext();
+    const { data, error } = await supabase
+      .from("document_sends")
+      .select(
+        "id, recipient_name, recipient_email, subject, sent_at, opened_at, downloaded_at, scheduled_at, status, channel"
+      )
+      .eq("document_id", documentId)
+      .eq("org_id", orgId)
+      .order("sent_at", { ascending: false });
+    if (error) {
+      if (isSupabaseMissingRelationError(error)) return [];
+      throw throwWithCause(
+        getSupabaseErrorMessage(error, "Failed to load send history"),
+        error
+      );
+    }
+    return Array.isArray(data) ? data : [];
+  },
+
+  /** List signature requests for a document (ordered by signing_order). Returns [] if table not yet available. */
+  async listSignatures(documentId) {
+    const { orgId } = await getActorContext();
+    const { data, error } = await supabase
+      .from("document_signatures")
+      .select(
+        "id, signer_name, signer_email, signing_order, status, signed_at, viewed_at, created_at"
+      )
+      .eq("document_id", documentId)
+      .eq("org_id", orgId)
+      .order("signing_order", { ascending: true });
+    if (error) {
+      if (isSupabaseMissingRelationError(error)) return [];
+      throw throwWithCause(
+        getSupabaseErrorMessage(error, "Failed to load signatures"),
+        error
+      );
+    }
+    return Array.isArray(data) ? data : [];
+  },
+
   async createFromTemplate(templateId) {
     const { orgId } = await getActorContext();
     const { data: tpl, error: getErr } = await supabase

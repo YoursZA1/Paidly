@@ -17,6 +17,14 @@ const EVENT_TYPE_LABELS = Object.freeze({
   comment_added: "Comment added",
   archived: "Archived",
   unarchived: "Restored from archive",
+  // PDF workflow
+  pdf_generated: "PDF generated",
+  pdf_downloaded: "PDF downloaded",
+  sent_to_client: "Sent to client",
+  signature_requested: "Signature requested",
+  signature_viewed: "Signature viewed",
+  signature_completed: "Signature completed",
+  signature_declined: "Signature declined",
 });
 
 /**
@@ -84,6 +92,24 @@ export function summarizeDocumentEventPayload(payload) {
   }
   if (p.surface) {
     rows.push({ label: "Where", value: String(p.surface) });
+  }
+  if (p.recipient_email) {
+    const label = p.recipient_name
+      ? `${p.recipient_name} <${p.recipient_email}>`
+      : String(p.recipient_email);
+    rows.push({ label: "Recipient", value: label });
+  }
+  if (p.scheduled_at) {
+    rows.push({
+      label: "Scheduled",
+      value: new Date(String(p.scheduled_at)).toLocaleString(),
+    });
+  }
+  if (Array.isArray(p.signers) && p.signers.length) {
+    const names = p.signers
+      .map((s) => s?.name || s?.email || "Signer")
+      .join(", ");
+    rows.push({ label: "Signers", value: names });
   }
 
   return rows;

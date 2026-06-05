@@ -19,6 +19,14 @@ const HISTORY_EVENT_TYPES = new Set([
   "unarchived",
   "attachment_added",
   "comment_added",
+  // PDF workflow
+  "pdf_generated",
+  "pdf_downloaded",
+  "sent_to_client",
+  "signature_requested",
+  "signature_viewed",
+  "signature_completed",
+  "signature_declined",
 ]);
 
 /**
