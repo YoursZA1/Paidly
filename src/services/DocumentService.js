@@ -6,6 +6,7 @@ import {
   categoryForType,
   isFinancialType,
   defaultStatusForCatalogType,
+  getTypeDef,
   typeLabel,
 } from "@/document-engine/documentCatalog";
 import { getConversionOptions, usesLegacyQuoteToInvoice } from "@/document-engine/documentConversions";
@@ -20,6 +21,10 @@ import { aggregateFromItems } from "@/document-engine/documentTotals";
 import { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "@/document-engine/documentEventTypes";
 import { getSupabaseErrorMessage, isSupabaseMissingRelationError, isSupabaseMissingColumnError } from "@/utils/supabaseErrorUtils";
 import { getExchangeRateForDocument } from "@/lib/exchangeRatesClientPolicy";
+import {
+  resolveApproverRecipient,
+  sendDocumentApprovalRequestEmail,
+} from "@/services/DocumentApprovalEmailService";
 
 const DEFAULT_BASE_CURRENCY = "ZAR";
 
@@ -773,6 +778,27 @@ export const DocumentService = {
       assertTransition(existing.type, existing.status, nextStatus);
     }
 
+    const approvalPendingTransition =
+      nextStatus === "pending" &&
+      existing.status !== "pending" &&
+      getTypeDef(existing.type)?.flow === "approval";
+    const effectiveAssignee =
+      patch.assigned_user_id !== undefined ? patch.assigned_user_id : existing.assigned_user_id;
+
+    if (approvalPendingTransition) {
+      const members = await this.listOrgMembers();
+      const approver = resolveApproverRecipient(
+        { ...existing, assigned_user_id: effectiveAssignee },
+        members,
+        { excludeUserId: userId }
+      );
+      if (!approver) {
+        throw new Error(
+          "No approver email found. Choose an approver before submitting, or ensure your organization owner has an email address."
+        );
+      }
+    }
+
     if (existing.type === DOCUMENT_TYPES.invoice && existing.source_quote_id != null) {
       if (patch.source_quote_id !== undefined && patch.source_quote_id !== existing.source_quote_id) {
         throw new Error("source_quote_id cannot be changed: it records which quote this invoice was converted from.");
@@ -867,12 +893,52 @@ export const DocumentService = {
     let eventPayload = /** @type {Record<string, unknown>} */ ({ keys: patchKeys });
 
     if (statusChanged) {
-      eventType = resolveLifecycleEventType(existing.type, existing.status, nextStatus);
+      eventType =
+        nextStatus === "pending" && getTypeDef(existing.type)?.flow === "approval"
+          ? DOCUMENT_EVENT_TYPES.approval_requested
+          : resolveLifecycleEventType(existing.type, existing.status, nextStatus);
       eventPayload = {
         action: eventType,
         from_status: existing.status,
         to_status: nextStatus,
         ...(nonStatusKeys.length ? { changed_fields: nonStatusKeys } : {}),
+      };
+    }
+
+    if (approvalPendingTransition) {
+      const members = await this.listOrgMembers();
+      const approver = resolveApproverRecipient(
+        { ...existing, assigned_user_id: effectiveAssignee },
+        members,
+        { excludeUserId: userId }
+      );
+      const submitter = members.find((m) => m.user_id === userId);
+      const { data: submitterProfile } = await supabase
+        .from("profiles")
+        .select("full_name, email, company_name")
+        .eq("id", userId)
+        .maybeSingle();
+      const submitterName =
+        submitterProfile?.full_name?.trim() ||
+        submitter?.label ||
+        submitterProfile?.email?.trim() ||
+        "A team member";
+      const companyName =
+        submitterProfile?.company_name?.trim() || submitterName || "Your team";
+
+      const updatedDoc = await this.get(documentId);
+      const emailResult = await sendDocumentApprovalRequestEmail({
+        doc: updatedDoc,
+        approverEmail: approver.email,
+        approverName: approver.name,
+        submitterName,
+        companyName,
+      });
+
+      eventPayload = {
+        ...eventPayload,
+        approver_email: emailResult.recipientEmail,
+        approver_name: approver.name,
       };
     }
 

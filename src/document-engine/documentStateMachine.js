@@ -1,6 +1,7 @@
 import { DOCUMENT_TYPES } from "./documentTypes";
+import { getTypeDef } from "./documentCatalog";
 
-/** @typedef {'invoice' | 'quote' | 'payslip'} DocumentType */
+/** @typedef {'invoice' | 'quote' | 'payslip'} LegacyDocumentType */
 
 export const INVOICE_STATUSES = Object.freeze({
   draft: "draft",
@@ -25,8 +26,10 @@ export const PAYSLIP_STATUSES = Object.freeze({
   paid: "paid",
 });
 
-/** @type {Record<DocumentType, Record<string, string[]>>} */
-const ALLOWED_EDGES = Object.freeze({
+const LEGACY_TYPES = new Set(Object.values(DOCUMENT_TYPES));
+
+/** @type {Record<LegacyDocumentType, Record<string, string[]>>} */
+const LEGACY_ALLOWED_EDGES = Object.freeze({
   [DOCUMENT_TYPES.invoice]: {
     [INVOICE_STATUSES.draft]: [INVOICE_STATUSES.sent, INVOICE_STATUSES.cancelled],
     [INVOICE_STATUSES.sent]: [INVOICE_STATUSES.paid, INVOICE_STATUSES.overdue, INVOICE_STATUSES.cancelled],
@@ -44,22 +47,78 @@ const ALLOWED_EDGES = Object.freeze({
 });
 
 /**
- * @param {DocumentType} type
+ * Status transitions for catalog hub types (all non-legacy types use their flow group).
+ * Vocabulary aligns with `STATUS_FLOWS` in documentCatalog.js.
+ */
+const FLOW_ALLOWED_EDGES = Object.freeze({
+  financial: {
+    draft: ["sent", "cancelled", "archived"],
+    sent: ["viewed", "paid", "overdue", "cancelled", "archived"],
+    viewed: ["paid", "overdue", "cancelled", "archived"],
+    paid: ["archived"],
+    overdue: ["paid", "cancelled", "archived"],
+    cancelled: ["archived"],
+    archived: [],
+  },
+  signature: {
+    draft: ["pending", "sent", "cancelled", "archived"],
+    pending: ["sent", "signed", "cancelled", "archived"],
+    sent: ["viewed", "signed", "cancelled", "archived"],
+    viewed: ["signed", "cancelled", "archived"],
+    signed: ["completed", "cancelled", "archived"],
+    completed: ["archived"],
+    cancelled: ["archived"],
+    archived: [],
+  },
+  approval: {
+    draft: ["pending", "cancelled", "archived"],
+    pending: ["approved", "cancelled", "archived"],
+    approved: ["sent", "completed", "cancelled", "archived"],
+    sent: ["completed", "cancelled", "archived"],
+    completed: ["archived"],
+    cancelled: ["archived"],
+    archived: [],
+  },
+  report: {
+    draft: ["pending", "completed", "archived"],
+    pending: ["approved", "completed", "archived"],
+    approved: ["completed", "archived"],
+    completed: ["archived"],
+    archived: [],
+  },
+  simple: {
+    draft: ["completed", "archived"],
+    completed: ["archived"],
+    archived: [],
+  },
+});
+
+function edgesForType(type) {
+  if (LEGACY_TYPES.has(type)) {
+    return LEGACY_ALLOWED_EDGES[type] || null;
+  }
+  const def = getTypeDef(type);
+  if (!def) return null;
+  const flow = def.flow || "financial";
+  return FLOW_ALLOWED_EDGES[flow] || FLOW_ALLOWED_EDGES.financial;
+}
+
+/**
+ * @param {string} type
  * @param {string} from
  * @param {string} to
  * @returns {boolean}
  */
 export function canTransitionStatus(type, from, to) {
-  const t = type === DOCUMENT_TYPES.quote ? DOCUMENT_TYPES.quote : type === DOCUMENT_TYPES.payslip ? DOCUMENT_TYPES.payslip : DOCUMENT_TYPES.invoice;
-  const edges = ALLOWED_EDGES[t];
+  if (from === to) return true;
+  const edges = edgesForType(type);
   if (!edges) return false;
   const next = edges[from];
-  if (!next || !Array.isArray(next)) return false;
-  return next.includes(to);
+  return Array.isArray(next) && next.includes(to);
 }
 
 /**
- * @param {DocumentType} type
+ * @param {string} type
  * @param {string} from
  * @param {string} to
  */
@@ -71,14 +130,12 @@ export function assertTransition(type, from, to) {
 }
 
 /**
- * @param {DocumentType} type
+ * @param {string} type
  * @param {string} current
  * @returns {string[]}
  */
 export function allowedNextStatuses(type, current) {
-  const t =
-    type === DOCUMENT_TYPES.quote ? DOCUMENT_TYPES.quote : type === DOCUMENT_TYPES.payslip ? DOCUMENT_TYPES.payslip : DOCUMENT_TYPES.invoice;
-  const edges = ALLOWED_EDGES[t];
+  const edges = edgesForType(type);
   if (!edges) return [];
   return edges[current] ? [...edges[current]] : [];
 }

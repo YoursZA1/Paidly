@@ -35,6 +35,7 @@ import {
   DOCUMENT_TYPE_DEFS,
   typeLabel,
   isFinancialType,
+  getDedicatedCreatePath,
 } from "@/document-engine";
 import {
   Files,
@@ -174,6 +175,12 @@ export default function DocumentsPage() {
 
   const handleCreate = useCallback(
     async (type) => {
+      const dedicatedPath = getDedicatedCreatePath(type);
+      if (dedicatedPath) {
+        navigate(dedicatedPath, { state: { returnTo: createPageUrl("Documents") } });
+        return;
+      }
+
       setCreating(true);
       try {
         const defaultTpl = await DocumentService.getDefaultTemplateForType(type);

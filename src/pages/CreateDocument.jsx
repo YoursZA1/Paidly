@@ -20,6 +20,7 @@ import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
+import { documentsReturnPath } from "@/document-engine/documentCreateNavigation";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
@@ -1029,6 +1030,12 @@ function CreateDocumentCore({ docType }) {
 
   const currencyCode = form.currency || "ZAR";
   const listHref = docType === "quote" ? createPageUrl("Quotes") : createPageUrl("Invoices");
+  const returnTo = documentsReturnPath(location, listHref);
+  const backLabel = location?.state?.returnTo
+    ? "Back to Documents"
+    : docType === "quote"
+      ? "Back to Quotes"
+      : "Back to Invoices";
   const draftSavedAtLabel = draftLastSavedAt
     ? `Last saved at ${new Date(draftLastSavedAt).toLocaleTimeString([], { hour12: false })}`
     : "";
@@ -1125,8 +1132,11 @@ function CreateDocumentCore({ docType }) {
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(listHref)} aria-label="Back to list">
-            <ArrowLeft className="w-5 h-5" />
+          <Button variant="outline" asChild className="gap-2 shrink-0">
+            <Link to={returnTo}>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">{backLabel}</span>
+            </Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">

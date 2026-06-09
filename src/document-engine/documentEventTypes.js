@@ -24,6 +24,8 @@ export const DOCUMENT_EVENT_TYPES = Object.freeze({
   signature_viewed: "signature_viewed",
   signature_completed: "signature_completed",
   signature_declined: "signature_declined",
+  /** Approval-flow document submitted for review (draft → pending). */
+  approval_requested: "approval_requested",
 });
 
 function sentTargetForType(docType) {

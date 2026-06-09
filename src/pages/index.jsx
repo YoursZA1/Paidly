@@ -45,6 +45,9 @@ const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
 const Reports = lazy(() => import("./Reports"));
 const Payslips = lazy(() => import("./Payslips"));
 const CreatePayslip = lazy(() => import("./CreatePayslip"));
+const CreateLeaveRequest = lazy(() => import("./CreateLeaveRequest"));
+const CreateExpenseClaim = lazy(() => import("./CreateExpenseClaim"));
+const CreateTypedDocument = lazy(() => import("./CreateTypedDocument"));
 const EditPayslip = lazy(() => import("./EditPayslip"));
 const PayslipPDF = lazy(() => import("./PayslipPDF"));
 const ViewPayslip = lazy(() => import("./ViewPayslip"));
@@ -193,6 +196,12 @@ const INVOICE_ROUTES = [
     { path: "/documents/:documentId", element: <RequireAuth><DocumentDetail /></RequireAuth> },
     { path: "/Documents", element: <RequireAuth><Documents /></RequireAuth> },
     { path: "/documents", element: <RequireAuth><Documents /></RequireAuth> },
+    { path: "/CreateLeaveRequest", element: <RequireAuth><CreateLeaveRequest /></RequireAuth> },
+    { path: "/createleaverequest", element: <RequireAuth><CreateLeaveRequest /></RequireAuth> },
+    { path: "/CreateExpenseClaim", element: <RequireAuth><CreateExpenseClaim /></RequireAuth> },
+    { path: "/createexpenseclaim", element: <RequireAuth><CreateExpenseClaim /></RequireAuth> },
+    { path: "/CreateTypedDocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
+    { path: "/createtypeddocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
     { path: "/ViewInvoice", element: <RequireAuth><ViewInvoice /></RequireAuth> },
     { path: "/EditInvoice", element: <RequireAuth><EditInvoice /></RequireAuth> },
     { path: "/RecurringInvoices", element: <RequireAuth><RecurringInvoices /></RequireAuth> },

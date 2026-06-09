@@ -25,6 +25,7 @@ const EVENT_TYPE_LABELS = Object.freeze({
   signature_viewed: "Signature viewed",
   signature_completed: "Signature completed",
   signature_declined: "Signature declined",
+  approval_requested: "Submitted for approval",
 });
 
 /**
@@ -98,6 +99,12 @@ export function summarizeDocumentEventPayload(payload) {
       ? `${p.recipient_name} <${p.recipient_email}>`
       : String(p.recipient_email);
     rows.push({ label: "Recipient", value: label });
+  }
+  if (p.approver_email) {
+    const label = p.approver_name
+      ? `${p.approver_name} <${p.approver_email}>`
+      : String(p.approver_email);
+    rows.push({ label: "Approver notified", value: label });
   }
   if (p.scheduled_at) {
     rows.push({

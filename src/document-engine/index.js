@@ -44,7 +44,59 @@ export {
     usesLegacyQuoteToInvoice,
 } from "./documentConversions";
 export {
+    DOCUMENT_CREATE_FLOW,
+    DEDICATED_CREATE_PAGES,
+    resolveDocumentCreateFlow,
+    getDedicatedCreatePath,
+    usesDedicatedCreatePage,
+    dedicatedCreateTitle,
+} from "./documentCreateFlow";
+export {
+    documentsReturnPath,
+    isApprovalFlowType,
+    persistNewHubDocument,
+    afterCreateNavigateTarget,
+} from "./documentCreateNavigation";
+export {
+    LEAVE_TYPES,
+    DEFAULT_LEAVE_BALANCES,
+    leaveTypeLabel,
+    leaveBalanceForType,
+    countBusinessLeaveDays,
+} from "./leaveRequest";
+export {
+    EXPENSE_CATEGORIES,
+    REIMBURSEMENT_METHODS,
+    emptyExpenseLine,
+    expenseCategoryLabel,
+    reimbursementMethodLabel,
+    sumExpenseLineAmounts,
+    expenseLinesToDocumentItems,
+} from "./expenseClaim";
+export {
     DOCUMENT_TEMPLATE_PRESETS,
     getTemplatePreset,
     presetsByCategory,
 } from "./documentTemplatePresets";
+export {
+    getDocumentFormProfile,
+    hasDocumentFormProfile,
+    typedDocumentTitle,
+    emptyFormValues,
+    formValuesFromMetadata,
+    buildDocumentTitleFromForm,
+    formMetadataFromValues,
+    resolveFormState,
+    validateFormValues,
+    TYPED_DOCUMENT_EXCLUDED,
+} from "./documentFormProfiles";
+export {
+    RATING_SCALE,
+    PERFORMANCE_COMPETENCIES,
+    DEFAULT_CHECKLIST_STARTER_LABELS,
+    parseChecklistField,
+    serializeChecklistField,
+    parseRatingMatrixField,
+    ratingLabel,
+    checklistProgress,
+} from "./documentFormRichFields";
