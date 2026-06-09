@@ -10,6 +10,26 @@ import DocumentPdfPreviewModal from "@/components/documents/DocumentPdfPreviewMo
 import DocumentSendModal from "@/components/documents/DocumentSendModal";
 import DocumentSignatureModal from "@/components/documents/DocumentSignatureModal";
 import DocumentPdfTemplate from "@/components/documents/DocumentPdfTemplate";
+import LeaveRequestFields, {
+  leaveFormStateFromMetadata,
+  leaveMetadataFromForm,
+} from "@/components/documents/LeaveRequestFields";
+import ExpenseClaimFields, {
+  expenseClaimFormStateFromMetadata,
+  expenseClaimMetadataFromForm,
+} from "@/components/documents/ExpenseClaimFields";
+import { expenseLinesToDocumentItems, emptyExpenseLine } from "@/document-engine/expenseClaim";
+import TypedDocumentFields, {
+  documentItemsToTypedLines,
+  typedLinesToDocumentItems,
+} from "@/components/documents/TypedDocumentFields";
+import {
+  getDocumentFormProfile,
+  hasDocumentFormProfile,
+  formMetadataFromValues,
+  resolveFormState,
+} from "@/document-engine/documentFormProfiles";
+import { getTypeDef } from "@/document-engine/documentCatalog";
 import { DocumentService } from "@/services/DocumentService";
 import { sendDocumentEmail } from "@/services/DocumentEmailService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +39,7 @@ import {
   QUOTE_STATUSES,
   INVOICE_STATUSES,
   PAYSLIP_STATUSES,
+  allowedNextStatuses,
 } from "@/document-engine/documentStateMachine";
 import { aggregateFromItems } from "@/document-engine/documentTotals";
 import { isFinancialType, getConversionOptions, typeLabel } from "@/document-engine";
@@ -78,8 +99,62 @@ import {
   PenLine,
   Copy,
   MoreHorizontal,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  ArrowRightLeft,
 } from "lucide-react";
 
+// ── Status action vocabulary (flow-aware) ──────────────────────────────────────
+const STATUS_LABELS = Object.freeze({
+  sent: "Mark as Sent",
+  paid: "Mark as Paid",
+  overdue: "Mark as Overdue",
+  accepted: "Accept",
+  declined: "Decline",
+  expired: "Mark as Expired",
+  converted: "Convert to Invoice",
+  pending: "Submit for Approval",
+  approved: "Approve",
+  completed: "Mark as Complete",
+  signed: "Mark as Signed",
+  cancelled: "Cancel",
+  viewed: "Mark as Viewed",
+  archived: "Archive",
+});
+
+/** Status-to-label adjusted for each lifecycle flow. */
+function getStatusActionLabel(toStatus, docFlow) {
+  if (docFlow === "signature") {
+    if (toStatus === "pending") return "Submit for Signing";
+    if (toStatus === "sent") return "Send for Review";
+    if (toStatus === "signed") return "Mark as Signed";
+    if (toStatus === "completed") return "Complete";
+    if (toStatus === "cancelled") return "Cancel";
+  }
+  if (docFlow === "approval") {
+    if (toStatus === "pending") return "Submit for Approval";
+    if (toStatus === "approved") return "Approve";
+    if (toStatus === "completed") return "Mark as Complete";
+    if (toStatus === "sent") return "Send";
+    if (toStatus === "cancelled") return "Cancel / Reject";
+  }
+  if (docFlow === "report") {
+    if (toStatus === "pending") return "Submit for Review";
+    if (toStatus === "approved") return "Approve";
+    if (toStatus === "completed") return "Publish";
+  }
+  if (docFlow === "simple") {
+    if (toStatus === "completed") return "Mark as Complete";
+  }
+  return STATUS_LABELS[toStatus] ?? String(toStatus).replace(/_/g, " ");
+}
+
+/** Statuses treated as destructive / negative workflow actions. */
+const DESTRUCTIVE_STATUSES = new Set(["cancelled", "declined", "expired"]);
+
+// ── Helper components ─────────────────────────────────────────────────────────
 function lineFromRow(row) {
   return {
     _key: row.id || crypto.randomUUID(),
@@ -119,6 +194,14 @@ function DocumentDetailSkeleton() {
   );
 }
 
+// ── Context hint level → Tailwind classes ─────────────────────────────────────
+const HINT_CLASSES = {
+  info: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400",
+  warning: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400",
+  muted: "border-border bg-muted/50 text-muted-foreground",
+};
+
 export default function DocumentDetailPage() {
   const { documentId } = useParams();
   const navigate = useNavigate();
@@ -146,6 +229,15 @@ export default function DocumentDetailPage() {
   const [discount, setDiscount] = useState("0");
   const [documentCurrency, setDocumentCurrency] = useState("ZAR");
   const [lines, setLines] = useState([]);
+  const [leaveType, setLeaveType] = useState("annual");
+  const [leaveDateRange, setLeaveDateRange] = useState({ from: undefined, to: undefined });
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveBalances, setLeaveBalances] = useState({});
+  const [expenseLines, setExpenseLines] = useState(() => [emptyExpenseLine()]);
+  const [expenseReimbursement, setExpenseReimbursement] = useState("bank_transfer");
+  const [expenseNotes, setExpenseNotes] = useState("");
+  const [typedFormValues, setTypedFormValues] = useState({});
+  const [typedFormLines, setTypedFormLines] = useState([]);
 
   // ── Template modal ──
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -164,8 +256,21 @@ export default function DocumentDetailPage() {
 
   // Hidden PDF capture element (for direct download without opening modal)
   const hiddenPdfRef = useRef(null);
-
   const viewLoggedForId = useRef(null);
+
+  // ── Derived type flags (non-hook, used in hooks below) ──
+  const isLeaveRequest = doc?.type === "leave_request";
+  const isExpenseClaim = doc?.type === "expense_claim";
+  const typedProfile = doc ? getDocumentFormProfile(doc.type) : null;
+  const isTypedDocument = Boolean(typedProfile);
+
+  // ── Derived flow type (always safe to read even when doc is null) ──
+  const typeDef = doc ? getTypeDef(doc.type) : null;
+  const docFlow = typeDef?.flow ?? "financial";
+  const isSignatureFlow = docFlow === "signature";
+  const isApprovalFlow = docFlow === "approval";
+  const isReportFlow = docFlow === "report";
+  const isSimpleFlow = docFlow === "simple";
 
   // ── Derived client record (for PDF rendering) ──
   const activeClient = useMemo(
@@ -191,6 +296,26 @@ export default function DocumentDetailPage() {
         setDocumentCurrency(row.currency || "ZAR");
         setLines((row.document_items || []).map(lineFromRow));
         setPaymentSummary(row.payment_summary || null);
+        if (row.type === "leave_request") {
+          const leaveForm = leaveFormStateFromMetadata(row.metadata);
+          setLeaveType(leaveForm.leaveType);
+          setLeaveDateRange(leaveForm.dateRange);
+          setLeaveReason(leaveForm.reason || row.body || "");
+          setLeaveBalances(leaveForm.balances);
+        }
+        if (row.type === "expense_claim") {
+          const claimForm = expenseClaimFormStateFromMetadata(row.metadata);
+          setExpenseLines(claimForm.lines);
+          setExpenseReimbursement(claimForm.reimbursementMethod);
+          setExpenseNotes(claimForm.notes || row.body || "");
+        }
+        if (hasDocumentFormProfile(row.type)) {
+          const { profile, values } = resolveFormState(row.type, row.metadata);
+          setTypedFormValues(values);
+          if (profile?.includeLineItems) {
+            setTypedFormLines(documentItemsToTypedLines(row.document_items));
+          }
+        }
         setTemplateName(
           row.title
             ? `${row.title} template`
@@ -216,19 +341,12 @@ export default function DocumentDetailPage() {
       DocumentService.listSends(documentId),
       DocumentService.listSignatures(documentId),
     ]);
-    if (sendsResult.status === "fulfilled")
-      setSends(sendsResult.value);
-    if (sigsResult.status === "fulfilled")
-      setSignatures(sigsResult.value);
+    if (sendsResult.status === "fulfilled") setSends(sendsResult.value);
+    if (sigsResult.status === "fulfilled") setSignatures(sigsResult.value);
   }, [documentId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    loadDelivery();
-  }, [loadDelivery]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadDelivery(); }, [loadDelivery]);
 
   useEffect(() => {
     Client.list("-created_date", { limit: 200 })
@@ -240,12 +358,7 @@ export default function DocumentDetailPage() {
     DocumentService.getHubCapabilities()
       .then(setHubCaps)
       .catch(() =>
-        setHubCaps({
-          templates: false,
-          archive: false,
-          assignees: false,
-          newTypes: false,
-        })
+        setHubCaps({ templates: false, archive: false, assignees: false, newTypes: false })
       );
   }, []);
 
@@ -253,12 +366,10 @@ export default function DocumentDetailPage() {
     if (!documentId || loading || !doc?.id || doc.id !== documentId) return;
     if (viewLoggedForId.current === documentId) return;
     viewLoggedForId.current = documentId;
-    DocumentService.recordView(documentId, {
-      surface: "app_document_detail",
-    }).catch(() => {});
+    DocumentService.recordView(documentId, { surface: "app_document_detail" }).catch(() => {});
   }, [documentId, loading, doc?.id]);
 
-  // ── Computed ──
+  // ── Computed totals (financial docs only) ──
   const previewTotals = useMemo(() => {
     if (!doc || !isFinancialType(doc.type)) return null;
     return aggregateFromItems(
@@ -273,7 +384,139 @@ export default function DocumentDetailPage() {
     [doc?.type]
   );
 
-  // ── Handlers ──
+  // ── Allowed next statuses (data-driven from state machine) ──
+  const nextStatuses = useMemo(
+    () => (doc ? allowedNextStatuses(doc.type, doc.status ?? "draft") : []),
+    [doc?.type, doc?.status]
+  );
+
+  // Positive forward-progress statuses (exclude archive + destructive)
+  const workflowStatuses = useMemo(
+    () => nextStatuses.filter((s) => !DESTRUCTIVE_STATUSES.has(s) && s !== "archived"),
+    [nextStatuses]
+  );
+
+  // Negative statuses (cancel, decline, expire — not archive which has its own button)
+  const negativeStatuses = useMemo(
+    () => nextStatuses.filter((s) => DESTRUCTIVE_STATUSES.has(s)),
+    [nextStatuses]
+  );
+
+  // ── Primary flow CTA (the one extra button shown alongside Save) ──
+  // Returns a plain data object, not a function ref, to avoid stale-closure issues.
+  const primaryFlowCTA = useMemo(() => {
+    if (!doc) return null;
+
+    // Signature flow → "Send for Signature"
+    if (isSignatureFlow && (nextStatuses.includes("pending") || nextStatuses.includes("sent"))) {
+      return { label: "Send for Signature", icon: PenLine, type: "signature_modal" };
+    }
+
+    // Approval flow (including special leave_request & expense_claim)
+    if (isApprovalFlow || isLeaveRequest || isExpenseClaim) {
+      if (nextStatuses.includes("pending")) {
+        return { label: "Submit for Approval", icon: Clock, type: "status", toStatus: "pending" };
+      }
+      if (nextStatuses.includes("approved")) {
+        return { label: "Approve", icon: CheckCircle2, type: "status", toStatus: "approved" };
+      }
+      if (nextStatuses.includes("completed")) {
+        return { label: "Mark as Complete", icon: CheckCircle2, type: "status", toStatus: "completed" };
+      }
+    }
+
+    // Simple flow → "Mark as Complete"
+    if (isSimpleFlow && nextStatuses.includes("completed")) {
+      return { label: "Mark as Complete", icon: CheckCircle2, type: "status", toStatus: "completed" };
+    }
+
+    return null;
+  }, [doc, isSignatureFlow, isApprovalFlow, isSimpleFlow, isLeaveRequest, isExpenseClaim, nextStatuses]);
+
+  // ── Context hint banner (appears below the document title) ──
+  const contextHint = useMemo(() => {
+    if (!doc || doc.archived_at) return null;
+    const s = doc.status;
+
+    if (isSignatureFlow) {
+      if (s === "draft")
+        return { level: "info", text: typedProfile?.summaryHint || "Complete the document then send it for signature." };
+      if (s === "pending" || s === "sent") {
+        const awaitingCount = signatures.filter(
+          (x) => x.status !== "signed" && x.status !== "completed"
+        ).length;
+        if (awaitingCount > 0)
+          return { level: "info", text: `Awaiting ${awaitingCount} signature${awaitingCount !== 1 ? "s" : ""}.` };
+        return { level: "info", text: "Sent for signature — awaiting response." };
+      }
+      if (s === "signed" || s === "completed")
+        return { level: "success", text: "All signatures collected." };
+      if (s === "cancelled")
+        return { level: "muted", text: "This document has been cancelled." };
+    }
+
+    if (isApprovalFlow || isLeaveRequest || isExpenseClaim) {
+      if (s === "draft")
+        return { level: "info", text: typedProfile?.summaryHint || "Fill in the required fields and submit for approval." };
+      if (s === "pending")
+        return { level: "warning", text: "Submitted — awaiting review and approval." };
+      if (s === "approved")
+        return { level: "success", text: "Approved. Mark as complete when the work is done." };
+      if (s === "completed")
+        return { level: "success", text: "Completed." };
+      if (s === "cancelled")
+        return { level: "muted", text: "This request has been cancelled." };
+    }
+
+    if (isReportFlow) {
+      if (s === "draft")
+        return { level: "info", text: typedProfile?.summaryHint || "Complete the report and submit it for review." };
+      if (s === "pending")
+        return { level: "warning", text: "Submitted — awaiting approval." };
+      if (s === "approved")
+        return { level: "success", text: "Approved — publish when ready." };
+      if (s === "completed")
+        return { level: "success", text: "Published." };
+    }
+
+    if (isSimpleFlow) {
+      if (s === "draft")
+        return { level: "info", text: typedProfile?.summaryHint || "Work in progress — mark as complete when done." };
+      if (s === "completed")
+        return { level: "success", text: "Complete." };
+    }
+
+    return null;
+  }, [
+    doc,
+    isSignatureFlow, isApprovalFlow, isReportFlow, isSimpleFlow,
+    isLeaveRequest, isExpenseClaim,
+    typedProfile, signatures,
+  ]);
+
+  // ── Flow-aware details card copy ──
+  const detailsCardDescription = useMemo(() => {
+    if (typedProfile?.description) return typedProfile.description;
+    if (isSignatureFlow) return "Add the full document content before sending for signature.";
+    if (isApprovalFlow || isLeaveRequest || isExpenseClaim) return "Fill in the required fields and submit for review.";
+    if (isReportFlow) return "Record findings, data, and recommendations.";
+    if (isSimpleFlow) return "Capture the essentials for this document.";
+    return "Title and core content for this document.";
+  }, [typedProfile, isSignatureFlow, isApprovalFlow, isReportFlow, isSimpleFlow, isLeaveRequest, isExpenseClaim]);
+
+  const bodyFieldPlaceholder = isSignatureFlow
+    ? "Add terms, clauses, conditions, and obligations…"
+    : isApprovalFlow || isLeaveRequest || isExpenseClaim
+    ? "Add context, justification, or notes for the reviewer…"
+    : isReportFlow
+    ? "Write the report body — findings, analysis, and recommendations…"
+    : isSimpleFlow
+    ? "Write the document content…"
+    : "Write the document body…";
+
+  const bodyFieldMinHeight = isSignatureFlow ? "min-h-[320px]" : isReportFlow ? "min-h-[240px]" : "min-h-[200px]";
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!documentId || !doc) return;
     setSaving(true);
@@ -283,7 +526,43 @@ export default function DocumentDetailPage() {
         body: body.trim() || null,
         client_id: doc.client_id,
       };
-      if (isFinancialType(doc.type)) {
+      if (isLeaveRequest) {
+        patch.body = leaveReason.trim() || null;
+        patch.metadata = {
+          ...(typeof doc.metadata === "object" && doc.metadata ? doc.metadata : {}),
+          ...leaveMetadataFromForm({ leaveType, dateRange: leaveDateRange, reason: leaveReason, balances: leaveBalances }),
+        };
+      }
+      if (isExpenseClaim) {
+        patch.body = expenseNotes.trim() || null;
+        patch.currency = documentCurrency;
+        patch.tax_rate = 0;
+        patch.discount_amount = 0;
+        patch.metadata = {
+          ...(typeof doc.metadata === "object" && doc.metadata ? doc.metadata : {}),
+          ...expenseClaimMetadataFromForm({ lines: expenseLines, reimbursementMethod: expenseReimbursement, notes: expenseNotes, currency: documentCurrency }),
+        };
+        patch.items = expenseLinesToDocumentItems(expenseLines);
+      }
+      if (isTypedDocument && typedProfile) {
+        patch.metadata = {
+          ...(typeof doc.metadata === "object" && doc.metadata ? doc.metadata : {}),
+          ...formMetadataFromValues({ values: typedFormValues, profile: typedProfile }),
+        };
+        patch.body =
+          typedFormValues.notes?.trim() ||
+          typedFormValues.summary?.trim() ||
+          body.trim() ||
+          null;
+        if (typedProfile.includeLineItems) {
+          patch.currency = documentCurrency;
+          patch.tax_rate = 0;
+          patch.discount_amount = 0;
+          patch.items = typedLinesToDocumentItems(typedFormLines);
+        }
+      }
+      const isStandardFinancial = isFinancialType(doc.type) && !isExpenseClaim && !isTypedDocument;
+      if (isStandardFinancial) {
         patch.currency = documentCurrency;
         patch.tax_rate = Number(taxRate) || 0;
         patch.discount_amount = Number(discount) || 0;
@@ -293,11 +572,7 @@ export default function DocumentDetailPage() {
       await load();
       toast({ title: "Saved", description: "Document was updated." });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Save failed",
-        description: e?.message || String(e),
-      });
+      toast({ variant: "destructive", title: "Save failed", description: e?.message || String(e) });
     } finally {
       setSaving(false);
     }
@@ -307,19 +582,14 @@ export default function DocumentDetailPage() {
     if (!hiddenPdfRef.current) return;
     setPdfDownloading(true);
     try {
-      const filename =
-        [doc?.document_number || typeLabel(doc?.type) || "document", ".pdf"]
-          .join("")
-          .replace(/\s+/g, "-");
+      const filename = [doc?.document_number || typeLabel(doc?.type) || "document", ".pdf"]
+        .join("")
+        .replace(/\s+/g, "-");
       await generatePdfFromElement(hiddenPdfRef.current, filename);
       toast({ title: "PDF downloaded" });
       DocumentService.logPdfAction(documentId, "downloaded").catch(() => {});
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Download failed",
-        description: e?.message || String(e),
-      });
+      toast({ variant: "destructive", title: "Download failed", description: e?.message || String(e) });
     } finally {
       setPdfDownloading(false);
     }
@@ -331,7 +601,6 @@ export default function DocumentDetailPage() {
       const isScheduled = Boolean(payload.scheduled_at);
 
       if (!isScheduled && payload.include_pdf !== false) {
-        // Fire-and-forget email; errors are caught so DB record still lands.
         try {
           await sendDocumentEmail({
             pdfElement: hiddenPdfRef.current,
@@ -341,10 +610,7 @@ export default function DocumentDetailPage() {
               body,
               tax_rate: Number(taxRate) || 0,
               discount_amount: Number(discount) || 0,
-              document_items: toPersistItems(lines).map((it, i) => ({
-                ...it,
-                id: `line-${i}`,
-              })),
+              document_items: toPersistItems(lines).map((it, i) => ({ ...it, id: `line-${i}` })),
             },
             recipientEmail: payload.recipient_email,
             recipientName: payload.recipient_name,
@@ -354,7 +620,6 @@ export default function DocumentDetailPage() {
             workspace: authUser,
           });
         } catch (emailErr) {
-          // Email sending can fail if edge function is unavailable; still record the send.
           console.warn("[DocumentDetail] email send failed:", emailErr?.message);
         }
       }
@@ -370,11 +635,7 @@ export default function DocumentDetailPage() {
           : `Document sent to ${payload.recipient_email}.`,
       });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Send failed",
-        description: e?.message || String(e),
-      });
+      toast({ variant: "destructive", title: "Send failed", description: e?.message || String(e) });
       throw e;
     } finally {
       setSaving(false);
@@ -392,11 +653,7 @@ export default function DocumentDetailPage() {
         description: `Sent to ${payload.signers.length} signer${payload.signers.length !== 1 ? "s" : ""}.`,
       });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Request failed",
-        description: e?.message || String(e),
-      });
+      toast({ variant: "destructive", title: "Request failed", description: e?.message || String(e) });
       throw e;
     } finally {
       setSaving(false);
@@ -410,11 +667,7 @@ export default function DocumentDetailPage() {
       await DocumentService.update(documentId, { client_id: clientId });
       await load();
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Could not update client",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Could not update client", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -424,17 +677,11 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setSaving(true);
     try {
-      await DocumentService.update(documentId, {
-        assigned_user_id: assignedUserId,
-      });
+      await DocumentService.update(documentId, { assigned_user_id: assignedUserId });
       await load();
       toast({ title: "Assignee updated" });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Could not assign",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Could not assign", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -453,16 +700,13 @@ export default function DocumentDetailPage() {
       }
       await load();
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Action failed",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Action failed", description: e?.message });
     } finally {
       setSaving(false);
     }
   };
 
+  /** Legacy "Mark as Sent" used by invoice/quote/payslip flows. */
   const handleSend = async () => {
     if (!documentId) return;
     setSaving(true);
@@ -471,11 +715,7 @@ export default function DocumentDetailPage() {
       await load();
       toast({ title: "Sent", description: "Status is now Sent." });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Could not mark as sent",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Could not mark as sent", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -485,17 +725,11 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setSaving(true);
     try {
-      await DocumentService.update(documentId, {
-        status: QUOTE_STATUSES.accepted,
-      });
+      await DocumentService.update(documentId, { status: QUOTE_STATUSES.accepted });
       await load();
       toast({ title: "Quote accepted" });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Update failed",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Update failed", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -505,19 +739,12 @@ export default function DocumentDetailPage() {
     if (!documentId || !doc) return;
     setSaving(true);
     try {
-      const paidStatus =
-        doc.type === DOCUMENT_TYPES.payslip
-          ? PAYSLIP_STATUSES.paid
-          : INVOICE_STATUSES.paid;
+      const paidStatus = doc.type === DOCUMENT_TYPES.payslip ? PAYSLIP_STATUSES.paid : INVOICE_STATUSES.paid;
       await DocumentService.update(documentId, { status: paidStatus });
       await load();
       toast({ title: "Marked as paid" });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Update failed",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Update failed", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -527,26 +754,14 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setSaving(true);
     try {
-      const result = await DocumentService.convertDocument(
-        documentId,
-        targetType
-      );
+      const result = await DocumentService.convertDocument(documentId, targetType);
       const target = result?.target || result?.invoice;
-      toast({
-        title: "Conversion complete",
-        description: `Opening ${typeLabel(target?.type || targetType)}.`,
-      });
+      toast({ title: "Conversion complete", description: `Opening ${typeLabel(target?.type || targetType)}.` });
       if (target?.id)
-        navigate(
-          `${createPageUrl("Documents")}/${encodeURIComponent(target.id)}`
-        );
+        navigate(`${createPageUrl("Documents")}/${encodeURIComponent(target.id)}`);
       else await load();
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Conversion failed",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Conversion failed", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -559,15 +774,9 @@ export default function DocumentDetailPage() {
       const copy = await DocumentService.duplicate(documentId);
       toast({ title: "Duplicated", description: "A draft copy was created." });
       if (copy?.id)
-        navigate(
-          `${createPageUrl("Documents")}/${encodeURIComponent(copy.id)}`
-        );
+        navigate(`${createPageUrl("Documents")}/${encodeURIComponent(copy.id)}`);
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Duplicate failed",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Duplicate failed", description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -584,39 +793,61 @@ export default function DocumentDetailPage() {
       setTemplateOpen(false);
       toast({ title: "Template saved" });
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Could not save template",
-        description: e?.message,
-      });
+      toast({ variant: "destructive", title: "Could not save template", description: e?.message });
     } finally {
       setSaving(false);
     }
   };
 
-  // ── Line item helpers ──
-  const updateLine = (key, patch) => {
-    setLines((prev) =>
-      prev.map((row) => (row._key === key ? { ...row, ...patch } : row))
-    );
-  };
-  const addLine = () => {
-    setLines((prev) => [
-      ...prev,
-      {
-        _key: crypto.randomUUID(),
-        description: "",
-        quantity: 1,
-        unit_price: 0,
-        total_price: null,
-        line_order: prev.length,
-      },
-    ]);
-  };
-  const removeLine = (key) => {
-    setLines((prev) => prev.filter((row) => row._key !== key));
+  /**
+   * Generic data-driven status transition.
+   * Routes to legacy-specific handlers where needed, generic update otherwise.
+   */
+  const handleStatusTransition = async (toStatus) => {
+    if (!documentId || !doc) return;
+
+    // Conversion requires a full document-creation flow
+    if (toStatus === "converted") return handleConvert("invoice");
+
+    // Legacy types have specialised handlers
+    const isLegacy = [DOCUMENT_TYPES.invoice, DOCUMENT_TYPES.quote, DOCUMENT_TYPES.payslip].includes(doc.type);
+    if (isLegacy) {
+      if (toStatus === "sent") return handleSend();
+      if (toStatus === "paid") return handleMarkPaid();
+      if (toStatus === "accepted") return handleAcceptQuote();
+    }
+
+    // Generic update for all other types / statuses
+    setSaving(true);
+    try {
+      await DocumentService.update(documentId, { status: toStatus });
+      await load();
+      toast({ title: getStatusActionLabel(toStatus, docFlow) });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Update failed", description: e?.message });
+    } finally {
+      setSaving(false);
+    }
   };
 
+  /** Dispatches the inline primary flow CTA button action. */
+  const handlePrimaryFlowCTA = () => {
+    if (!primaryFlowCTA) return;
+    if (primaryFlowCTA.type === "signature_modal") return setSignatureOpen(true);
+    if (primaryFlowCTA.type === "status") return handleStatusTransition(primaryFlowCTA.toStatus);
+  };
+
+  // ── Line item helpers ──
+  const updateLine = (key, patch) =>
+    setLines((prev) => prev.map((row) => (row._key === key ? { ...row, ...patch } : row)));
+  const addLine = () =>
+    setLines((prev) => [
+      ...prev,
+      { _key: crypto.randomUUID(), description: "", quantity: 1, unit_price: 0, total_price: null, line_order: prev.length },
+    ]);
+  const removeLine = (key) => setLines((prev) => prev.filter((row) => row._key !== key));
+
+  // ── Guards ────────────────────────────────────────────────────────────────
   if (loading) return <DocumentDetailSkeleton />;
 
   if (!doc) {
@@ -625,10 +856,7 @@ export default function DocumentDetailPage() {
         <Card className="mx-auto max-w-lg border-dashed">
           <CardHeader>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-              <FileText
-                className="h-5 w-5 text-muted-foreground"
-                aria-hidden
-              />
+              <FileText className="h-5 w-5 text-muted-foreground" aria-hidden />
             </div>
             <CardTitle>Document not found</CardTitle>
             <CardDescription>
@@ -648,38 +876,39 @@ export default function DocumentDetailPage() {
     );
   }
 
-  const financial = isFinancialType(doc.type);
+  // ── Render-time derived values (after null guard) ──────────────────────────
+  const financial = isFinancialType(doc.type) && !isExpenseClaim && !isTypedDocument;
   const currency = doc.currency || "ZAR";
   const baseCurrency = doc.base_currency || "ZAR";
   const exchangeRate = Number(doc.exchange_rate || 1);
-  const isDraft = doc.status === "draft";
   const isQuote = doc.type === DOCUMENT_TYPES.quote;
   const isInvoice = doc.type === DOCUMENT_TYPES.invoice;
-  const isPayslip = doc.type === DOCUMENT_TYPES.payslip;
-  const canSend = isDraft;
-  const canAcceptQuote = isQuote && doc.status === QUOTE_STATUSES.sent;
-  const canMarkPaid =
-    (isInvoice &&
-      (doc.status === INVOICE_STATUSES.sent ||
-        doc.status === INVOICE_STATUSES.overdue)) ||
-    (isPayslip && doc.status === PAYSLIP_STATUSES.sent);
+
+  // Show PDF buttons: financial docs, signature docs, reports, typed docs
+  const showPdfButtons = financial || isSignatureFlow || isReportFlow || isTypedDocument;
+  // Download PDF inline (not dropdown) only for financial + report flows
+  const showDownloadInline = financial || isReportFlow;
 
   const headerTitle = doc.document_number?.trim()
     ? `${doc.title?.trim() || "Untitled"} · ${doc.document_number}`
     : doc.title?.trim() || "Untitled document";
 
-  const pdfFilename = [
-    doc.document_number || typeLabel(doc.type) || "document",
-    ".pdf",
-  ]
+  const pdfFilename = [doc.document_number || typeLabel(doc.type) || "document", ".pdf"]
     .join("")
     .replace(/\s+/g, "-");
 
-  // Default recipient pre-fill from client
-  const defaultRecipientEmail =
-    doc?.client?.email || activeClient?.email || "";
-  const defaultRecipientName =
-    doc?.client?.name || activeClient?.name || "";
+  const defaultRecipientEmail = doc?.client?.email || activeClient?.email || "";
+  const defaultRecipientName = doc?.client?.name || activeClient?.name || "";
+
+  // Current doc snapshot for PDF rendering (reflects unsaved edits)
+  const liveDocForPdf = {
+    ...doc,
+    title,
+    body,
+    tax_rate: Number(taxRate) || 0,
+    discount_amount: Number(discount) || 0,
+    document_items: toPersistItems(lines).map((it, i) => ({ ...it, id: `line-${i}` })),
+  };
 
   return (
     <PageTemplate>
@@ -709,69 +938,92 @@ export default function DocumentDetailPage() {
 
           {/* ── Action bar ── */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Primary: Save */}
+            {/* Always: Save */}
             <Button type="button" onClick={handleSave} disabled={saving}>
-              {saving && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save
             </Button>
 
-            {/* Primary: Preview PDF */}
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => setPreviewOpen(true)}
-            >
-              <Eye className="h-4 w-4" />
-              Preview PDF
-            </Button>
+            {/* Flow-specific primary CTA (e.g., Send for Signature, Submit for Approval) */}
+            {primaryFlowCTA && (
+              <Button
+                type="button"
+                variant={isSignatureFlow ? "default" : "outline"}
+                className="gap-2"
+                onClick={handlePrimaryFlowCTA}
+                disabled={saving}
+              >
+                <primaryFlowCTA.icon className="h-4 w-4" />
+                {primaryFlowCTA.label}
+              </Button>
+            )}
 
-            {/* Primary: Download PDF */}
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={handleDownloadPdf}
-              disabled={pdfDownloading}
-            >
-              {pdfDownloading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              Download PDF
-            </Button>
+            {/* Preview PDF — shown for financial, signature, report, typed docs */}
+            {showPdfButtons && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setPreviewOpen(true)}
+              >
+                <Eye className="h-4 w-4" />
+                Preview PDF
+              </Button>
+            )}
 
-            {/* Secondary actions dropdown */}
+            {/* Download PDF inline — only for financial + report (others get it in dropdown) */}
+            {showDownloadInline && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={handleDownloadPdf}
+                disabled={pdfDownloading}
+              >
+                {pdfDownloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download PDF
+              </Button>
+            )}
+
+            {/* ── More actions ── */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={saving}
-                >
+                <Button type="button" variant="outline" size="icon" disabled={saving}>
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Document Actions</DropdownMenuLabel>
                 <DropdownMenuSeparator />
 
+                {/* Delivery actions */}
                 <DropdownMenuItem onClick={() => setSendOpen(true)}>
                   <Send className="mr-2 h-4 w-4" />
                   Send to Client
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSignatureOpen(true)}>
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Send for Signature
-                </DropdownMenuItem>
+                {/* Signature modal — in dropdown for non-signature-flow docs */}
+                {!isSignatureFlow && (
+                  <DropdownMenuItem onClick={() => setSignatureOpen(true)}>
+                    <PenLine className="mr-2 h-4 w-4" />
+                    Send for Signature
+                  </DropdownMenuItem>
+                )}
+                {/* Download PDF — in dropdown for signature / approval / simple flows */}
+                {!showDownloadInline && (
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={pdfDownloading}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download PDF
+                  </DropdownMenuItem>
+                )}
 
                 <DropdownMenuSeparator />
 
+                {/* Document management */}
                 <DropdownMenuItem onClick={handleDuplicate}>
                   <Copy className="mr-2 h-4 w-4" />
                   Duplicate
@@ -785,6 +1037,7 @@ export default function DocumentDetailPage() {
 
                 <DropdownMenuSeparator />
 
+                {/* Archive / Restore */}
                 {hubCaps.archive && (
                   <DropdownMenuItem onClick={handleArchiveToggle}>
                     {doc.archived_at ? (
@@ -796,50 +1049,72 @@ export default function DocumentDetailPage() {
                   </DropdownMenuItem>
                 )}
 
-                {/* Status workflow */}
-                {(canSend ||
-                  canAcceptQuote ||
-                  canMarkPaid ||
-                  conversionOptions.length > 0) && (
+                {/* ── Data-driven status transitions ── */}
+                {(workflowStatuses.length > 0 || negativeStatuses.length > 0) && (
                   <DropdownMenuSeparator />
                 )}
-                {canSend && (
-                  <DropdownMenuItem onClick={handleSend}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Mark as Sent
-                  </DropdownMenuItem>
-                )}
-                {canAcceptQuote && (
-                  <DropdownMenuItem onClick={handleAcceptQuote}>
-                    Accept Quote
-                  </DropdownMenuItem>
-                )}
-                {canMarkPaid && (
-                  <DropdownMenuItem onClick={handleMarkPaid}>
-                    Mark as Paid
-                  </DropdownMenuItem>
-                )}
-                {conversionOptions.map((opt) => {
-                  const disabled =
-                    isQuote &&
-                    opt.targetType === "invoice" &&
-                    doc.status !== QUOTE_STATUSES.accepted;
+                {workflowStatuses.map((toStatus) => {
+                  // Quote conversion has its own dedicated handler
+                  if (toStatus === "converted") return null;
                   return (
                     <DropdownMenuItem
-                      key={opt.targetType}
-                      onClick={() =>
-                        !disabled && handleConvert(opt.targetType)
-                      }
-                      className={disabled ? "pointer-events-none opacity-50" : ""}
+                      key={toStatus}
+                      onClick={() => handleStatusTransition(toStatus)}
                     >
-                      {opt.label}
+                      <ArrowRightLeft className="mr-2 h-4 w-4" />
+                      {getStatusActionLabel(toStatus, docFlow)}
                     </DropdownMenuItem>
                   );
                 })}
+                {negativeStatuses.map((toStatus) => (
+                  <DropdownMenuItem
+                    key={toStatus}
+                    onClick={() => handleStatusTransition(toStatus)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    {getStatusActionLabel(toStatus, docFlow)}
+                  </DropdownMenuItem>
+                ))}
+
+                {/* ── Conversion options (quote → invoice, etc.) ── */}
+                {conversionOptions.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {conversionOptions.map((opt) => {
+                      const disabled = isQuote && opt.targetType === "invoice" && doc.status !== QUOTE_STATUSES.accepted;
+                      return (
+                        <DropdownMenuItem
+                          key={opt.targetType}
+                          onClick={() => !disabled && handleConvert(opt.targetType)}
+                          className={disabled ? "pointer-events-none opacity-50" : ""}
+                        >
+                          <ArrowRightLeft className="mr-2 h-4 w-4" />
+                          {opt.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
+
+        {/* ── Context hint banner ── */}
+        {contextHint && (
+          <div
+            className={[
+              "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+              HINT_CLASSES[contextHint.level] ?? HINT_CLASSES.muted,
+            ].join(" ")}
+          >
+            {contextHint.level === "info" && <Clock className="h-3.5 w-3.5 shrink-0" />}
+            {contextHint.level === "warning" && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+            {contextHint.level === "success" && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+            <span>{contextHint.text}</span>
+          </div>
+        )}
       </div>
 
       {/* ── Main content grid ── */}
@@ -858,9 +1133,7 @@ export default function DocumentDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Details</CardTitle>
-                <CardDescription>
-                  Title and core content for this document.
-                </CardDescription>
+                <CardDescription>{detailsCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -871,18 +1144,53 @@ export default function DocumentDetailPage() {
                     onChange={(e) => setTitle(e.target.value)}
                   />
                 </div>
-                {!financial ? (
+
+                {/* ── Specialised field editors ── */}
+                {isLeaveRequest ? (
+                  <LeaveRequestFields
+                    leaveType={leaveType}
+                    onLeaveTypeChange={setLeaveType}
+                    dateRange={leaveDateRange}
+                    onDateRangeChange={setLeaveDateRange}
+                    reason={leaveReason}
+                    onReasonChange={setLeaveReason}
+                    balances={leaveBalances}
+                  />
+                ) : isExpenseClaim ? (
+                  <ExpenseClaimFields
+                    lines={expenseLines}
+                    onLinesChange={setExpenseLines}
+                    reimbursementMethod={expenseReimbursement}
+                    onReimbursementMethodChange={setExpenseReimbursement}
+                    notes={expenseNotes}
+                    onNotesChange={setExpenseNotes}
+                    currency={documentCurrency}
+                  />
+                ) : isTypedDocument && typedProfile ? (
+                  <TypedDocumentFields
+                    profile={typedProfile}
+                    values={typedFormValues}
+                    onChange={(key, value) =>
+                      setTypedFormValues((prev) => ({ ...prev, [key]: value }))
+                    }
+                    lines={typedFormLines}
+                    onLinesChange={setTypedFormLines}
+                    currency={documentCurrency}
+                  />
+                ) : !financial ? (
+                  /* Prose body (signature, simple, report, bare approval types) */
                   <div className="space-y-2">
                     <Label htmlFor="doc-body">Content</Label>
                     <Textarea
                       id="doc-body"
                       value={body}
                       onChange={(e) => setBody(e.target.value)}
-                      className="min-h-[200px]"
-                      placeholder="Write the document body…"
+                      className={bodyFieldMinHeight}
+                      placeholder={bodyFieldPlaceholder}
                     />
                   </div>
                 ) : (
+                  /* Financial line-item config (currency, tax, discount) */
                   <>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
@@ -893,10 +1201,7 @@ export default function DocumentDetailPage() {
                           </SelectTrigger>
                           <SelectContent>
                             {COMMON_CURRENCIES.map((item) => (
-                              <SelectItem
-                                key={item.code}
-                                value={item.code}
-                              >
+                              <SelectItem key={item.code} value={item.code}>
                                 {item.code}
                               </SelectItem>
                             ))}
@@ -933,19 +1238,15 @@ export default function DocumentDetailPage() {
               </CardContent>
             </Card>
 
-            {financial ? (
+            {/* ── Line items card (financial only) ── */}
+            {financial && (
               <Card>
                 <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
                   <div>
                     <CardTitle className="text-base">Line items</CardTitle>
                     <CardDescription>Quantity × unit price.</CardDescription>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={addLine}
-                  >
+                  <Button type="button" size="sm" variant="outline" onClick={addLine}>
                     Add line
                   </Button>
                 </CardHeader>
@@ -963,29 +1264,19 @@ export default function DocumentDetailPage() {
                         <Input
                           placeholder="Description"
                           value={line.description}
-                          onChange={(e) =>
-                            updateLine(line._key, {
-                              description: e.target.value,
-                            })
-                          }
+                          onChange={(e) => updateLine(line._key, { description: e.target.value })}
                         />
                         <Input
                           inputMode="decimal"
                           placeholder="Qty"
                           value={line.quantity}
-                          onChange={(e) =>
-                            updateLine(line._key, { quantity: e.target.value })
-                          }
+                          onChange={(e) => updateLine(line._key, { quantity: e.target.value })}
                         />
                         <Input
                           inputMode="decimal"
                           placeholder="Unit price"
                           value={line.unit_price}
-                          onChange={(e) =>
-                            updateLine(line._key, {
-                              unit_price: e.target.value,
-                            })
-                          }
+                          onChange={(e) => updateLine(line._key, { unit_price: e.target.value })}
                         />
                         <Button
                           type="button"
@@ -1001,9 +1292,10 @@ export default function DocumentDetailPage() {
                   )}
                 </CardContent>
               </Card>
-            ) : null}
+            )}
 
-            {financial && previewTotals ? (
+            {/* ── Totals preview card (financial only) ── */}
+            {financial && previewTotals && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Totals preview</CardTitle>
@@ -1026,44 +1318,33 @@ export default function DocumentDetailPage() {
                     <div className="flex justify-between font-semibold">
                       <dt>Total</dt>
                       <dd className="tabular-nums">
-                        {formatCurrency(
-                          previewTotals.total_amount,
-                          currency
-                        )}
+                        {formatCurrency(previewTotals.total_amount, currency)}
                       </dd>
                     </div>
                   </dl>
-                  {isInvoice && paymentSummary ? (
+                  {isInvoice && paymentSummary && (
                     <>
                       <Separator className="my-3" />
                       <dl className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <dt className="text-muted-foreground">Paid</dt>
-                          <dd>
-                            {formatCurrency(paymentSummary.paid, currency)}
-                          </dd>
+                          <dd>{formatCurrency(paymentSummary.paid, currency)}</dd>
                         </div>
                         <div className="flex justify-between">
                           <dt className="text-muted-foreground">Balance</dt>
-                          <dd>
-                            {formatCurrency(
-                              paymentSummary.balance,
-                              currency
-                            )}
-                          </dd>
+                          <dd>{formatCurrency(paymentSummary.balance, currency)}</dd>
                         </div>
                       </dl>
                     </>
-                  ) : null}
-                  {currency !== baseCurrency ? (
+                  )}
+                  {currency !== baseCurrency && (
                     <p className="mt-3 text-xs text-muted-foreground">
-                      Rate: 1 {currency} = {exchangeRate.toFixed(6)}{" "}
-                      {baseCurrency}
+                      Rate: 1 {currency} = {exchangeRate.toFixed(6)} {baseCurrency}
                     </p>
-                  ) : null}
+                  )}
                 </CardContent>
               </Card>
-            ) : null}
+            )}
           </TabsContent>
 
           {/* Activity */}
@@ -1088,11 +1369,7 @@ export default function DocumentDetailPage() {
                   await load();
                   toast({ title: "Attachment added" });
                 } catch (e) {
-                  toast({
-                    variant: "destructive",
-                    title: "Failed",
-                    description: e?.message,
-                  });
+                  toast({ variant: "destructive", title: "Failed", description: e?.message });
                 } finally {
                   setSaving(false);
                 }
@@ -1103,11 +1380,7 @@ export default function DocumentDetailPage() {
                   await DocumentService.removeAttachment(id);
                   await load();
                 } catch (e) {
-                  toast({
-                    variant: "destructive",
-                    title: "Failed",
-                    description: e?.message,
-                  });
+                  toast({ variant: "destructive", title: "Failed", description: e?.message });
                 } finally {
                   setSaving(false);
                 }
@@ -1126,11 +1399,7 @@ export default function DocumentDetailPage() {
                   await DocumentService.addComment(documentId, text);
                   await load();
                 } catch (e) {
-                  toast({
-                    variant: "destructive",
-                    title: "Failed",
-                    description: e?.message,
-                  });
+                  toast({ variant: "destructive", title: "Failed", description: e?.message });
                 } finally {
                   setSaving(false);
                 }
@@ -1169,7 +1438,7 @@ export default function DocumentDetailPage() {
         />
       </div>
 
-      {/* ── Hidden PDF capture element (for direct download) ── */}
+      {/* ── Hidden PDF capture element (for direct download / email) ── */}
       <div
         aria-hidden="true"
         style={{
@@ -1183,17 +1452,7 @@ export default function DocumentDetailPage() {
       >
         <DocumentPdfTemplate
           ref={hiddenPdfRef}
-          doc={{
-            ...doc,
-            title,
-            body,
-            tax_rate: Number(taxRate) || 0,
-            discount_amount: Number(discount) || 0,
-            document_items: toPersistItems(lines).map((it, i) => ({
-              ...it,
-              id: `line-${i}`,
-            })),
-          }}
+          doc={liveDocForPdf}
           workspace={authUser}
           client={activeClient}
         />
@@ -1203,17 +1462,7 @@ export default function DocumentDetailPage() {
       <DocumentPdfPreviewModal
         open={previewOpen}
         onOpenChange={setPreviewOpen}
-        doc={{
-          ...doc,
-          title,
-          body,
-          tax_rate: Number(taxRate) || 0,
-          discount_amount: Number(discount) || 0,
-          document_items: toPersistItems(lines).map((it, i) => ({
-            ...it,
-            id: `line-${i}`,
-          })),
-        }}
+        doc={liveDocForPdf}
         workspace={authUser}
         client={activeClient}
         onSendToClient={() => setSendOpen(true)}
@@ -1244,9 +1493,8 @@ export default function DocumentDetailPage() {
           <DialogHeader>
             <DialogTitle>Save as template</DialogTitle>
             <DialogDescription>
-              Save this document&apos;s structure and content as a reusable
-              template. Set it as the default for {typeLabel(doc.type)} to
-              pre-fill new documents from the New Document menu.
+              Save this document&apos;s structure and content as a reusable template.
+              Set it as the default for {typeLabel(doc.type)} to pre-fill new documents.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1267,10 +1515,7 @@ export default function DocumentDetailPage() {
             </label>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setTemplateOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setTemplateOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSaveTemplate} disabled={saving}>
