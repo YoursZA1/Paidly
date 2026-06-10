@@ -118,11 +118,11 @@
     },
     {
       "source": "/api/company/team/invite",
-      "destination": "/api/company?__companyOp=team-invite"
+      "destination": "/api/company/invite"
     },
     {
       "source": "/api/company/team/role",
-      "destination": "/api/company?__companyOp=team-role"
+      "destination": "/api/company/role"
     },
     {
       "source": "/api/track-open",

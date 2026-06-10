@@ -7,26 +7,25 @@ import { applyApiCors } from "../../server/src/auth/applyApiCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
 
 /**
- * Vercel: /api/company/team/invite | /api/company/team/role | /api/company/context
- * Deep paths are rewritten in vercel.json (?__companyOp=…) because nested segments
- * may not reach this catch-all on all Vercel routing configurations.
+ * Vercel: /api/company/invite | /api/company/role | /api/company/context
+ * (Legacy /api/company/team/* rewritten in vercel.json — nested paths do not reach this handler.)
  */
 function resolveCompanyRoute(req) {
-  const op = String(req.query?.__companyOp || "").trim();
-  if (op === "team-invite" || op === "invite") return "team-invite";
-  if (op === "team-role" || op === "role") return "team-role";
-  if (op === "context") return "context";
-
   const raw = req.query?.path;
   const parts = Array.isArray(raw) ? raw.map(String) : raw != null && raw !== "" ? [String(raw)] : [];
+  const head = parts[0] || "";
+  if (head === "invite") return "team-invite";
+  if (head === "role") return "team-role";
+  if (head === "context") return "context";
+
   const joined = parts.join("/").replace(/^\/+|\/+$/g, "");
-  if (joined === "team/invite") return "team-invite";
-  if (joined === "team/role") return "team-role";
+  if (joined === "team/invite" || joined === "invite") return "team-invite";
+  if (joined === "team/role" || joined === "role") return "team-role";
   if (joined === "context") return "context";
 
   const urlPath = String(req.url || "").split("?")[0] || "";
-  if (urlPath.endsWith("/team/invite")) return "team-invite";
-  if (urlPath.endsWith("/team/role")) return "team-role";
+  if (urlPath.endsWith("/invite")) return "team-invite";
+  if (urlPath.endsWith("/role")) return "team-role";
   if (urlPath.endsWith("/context")) return "context";
 
   return null;

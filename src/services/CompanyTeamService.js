@@ -72,7 +72,7 @@ export async function inviteCompanyMember({
 
   const headers = await authHeaders();
   const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
-  const res = await apiRequest(`${apiBase}/api/company/team/invite`, {
+  const res = await apiRequest(`${apiBase}/api/company/invite`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -98,7 +98,7 @@ export async function updateCompanyMember(userId, { role, jobFunction } = {}) {
   if (role != null) body.role = normalizeCompanyRole(role);
   if (jobFunction != null) body.job_function = normalizeJobFunction(jobFunction);
 
-  const res = await apiRequest(`${apiBase}/api/company/team/role`, {
+  const res = await apiRequest(`${apiBase}/api/company/role`, {
     method: "PATCH",
     headers,
     body: JSON.stringify(body),

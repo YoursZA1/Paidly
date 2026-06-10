@@ -243,7 +243,10 @@ export async function handleCompanyContextGet(req, res) {
 }
 
 export function registerCompanyTeamRoutes(app) {
+  app.post("/api/company/invite", handleCompanyTeamInvite);
+  app.patch("/api/company/role", handleCompanyTeamRolePatch);
+  app.get("/api/company/context", handleCompanyContextGet);
+  // Legacy paths (bookmarks / older clients)
   app.post("/api/company/team/invite", handleCompanyTeamInvite);
   app.patch("/api/company/team/role", handleCompanyTeamRolePatch);
-  app.get("/api/company/context", handleCompanyContextGet);
 }
