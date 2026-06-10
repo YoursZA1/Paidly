@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Users, UserPlus } from "lucide-react";
+import CompanyTeamInviteResultDialog from "@/components/company/CompanyTeamInviteResultDialog";
 
 /**
  * Company org team management — invite employees/managers with job function (Sales, HR, …).
@@ -43,6 +44,7 @@ export default function CompanyTeamManagePanel() {
   const [inviteJobFunction, setInviteJobFunction] = useState("sales");
   const [inviting, setInviting] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [inviteNotice, setInviteNotice] = useState(null);
 
   const canManage = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const showJobFunctionOnInvite = jobFunctionRequiredForRole(inviteRole);
@@ -81,13 +83,19 @@ export default function CompanyTeamManagePanel() {
         role: inviteRole,
         jobFunction: showJobFunctionOnInvite ? inviteJobFunction : "general",
       });
-      toast({
-        title: result.mode === "email_invite" ? "Invitation sent" : "Member added",
-        description:
-          result.mode === "email_invite"
-            ? `${email} will join your company when they accept the invite.`
-            : `${email} was added to your company.`,
-      });
+      if (result.mode === "email_invite") {
+        setInviteNotice({
+          email: String(result.email || email).trim(),
+          inviteLink: result.invite_link || "",
+          emailSent: result.email_sent === true,
+          emailError: result.email_error || null,
+        });
+      } else {
+        toast({
+          title: "Member added",
+          description: `${email} was added to your company.`,
+        });
+      }
       setEmail("");
       setFullName("");
       await reload();
@@ -125,6 +133,13 @@ export default function CompanyTeamManagePanel() {
   };
 
   return (
+    <>
+    <CompanyTeamInviteResultDialog
+      notice={inviteNotice}
+      onOpenChange={(open) => {
+        if (!open) setInviteNotice(null);
+      }}
+    />
     <Card className="mb-6">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
@@ -277,5 +292,6 @@ export default function CompanyTeamManagePanel() {
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }

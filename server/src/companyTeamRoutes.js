@@ -9,19 +9,20 @@ import {
   PERMISSIONS,
   COMPANY_ROLES,
 } from "./companyRouteAccess.js";
+import {
+  companyInviteRedirectUrl,
+  sendCompanyTeamInviteEmail,
+} from "./companyTeamInviteDelivery.js";
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
-function inviteRedirectUrl() {
-  const origin =
-    (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
-    process.env.VITE_APP_URL ||
-    process.env.APP_URL ||
-    "https://www.paidly.co.za";
-  return `${String(origin).replace(/\/$/, "")}/AcceptInvite`;
-}
+const COMPANY_ROLE_LABELS = {
+  employee: "Employee",
+  manager: "Manager",
+  admin: "Admin",
+};
 
 async function requireCompanyAdmin(req, res) {
   try {
@@ -117,25 +118,60 @@ export async function handleCompanyTeamInvite(req, res) {
       });
     }
 
-    const { data: inviteData, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: {
-          full_name: fullName || email.split("@")[0],
-          company_org_id: gate.membership.companyId,
-          company_role: role,
-          company_job_function: jobFunction,
-          plan: "none",
-        },
-        redirectTo: inviteRedirectUrl(),
-      }
-    );
+    const inviteMetadata = {
+      full_name: fullName || email.split("@")[0],
+      company_org_id: gate.membership.companyId,
+      company_role: role,
+      company_job_function: jobFunction,
+      plan: "none",
+    };
 
-    if (inviteErr) {
-      const msg = inviteErr.message || "Invite failed";
+    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        data: inviteMetadata,
+        redirectTo: companyInviteRedirectUrl(),
+      },
+    });
+
+    if (linkErr) {
+      const msg = linkErr.message || "Invite failed";
       const status = /already|registered|exists|invalid/i.test(msg) ? 400 : 500;
       return jsonError(res, status, msg);
     }
+
+    const inviteLink = String(linkData?.properties?.action_link || "").trim();
+    if (!inviteLink) {
+      return jsonError(res, 500, "Could not create invite link");
+    }
+
+    const [{ data: inviterProfile }, { data: orgRow }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("full_name, company_name")
+        .eq("id", gate.user.id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("organizations")
+        .select("name")
+        .eq("id", gate.membership.companyId)
+        .maybeSingle(),
+    ]);
+
+    const companyName =
+      String(orgRow?.name || inviterProfile?.company_name || "").trim() || "your company";
+    const inviterName =
+      String(inviterProfile?.full_name || gate.user.user_metadata?.full_name || gate.user.email || "")
+        .trim() || "Your team admin";
+
+    const emailResult = await sendCompanyTeamInviteEmail({
+      to: email,
+      inviteLink,
+      companyName,
+      inviterName,
+      roleLabel: COMPANY_ROLE_LABELS[role] || "team member",
+    });
 
     return res.status(200).json({
       ok: true,
@@ -143,7 +179,10 @@ export async function handleCompanyTeamInvite(req, res) {
       email,
       role,
       job_function: jobFunction,
-      user_id: inviteData?.user?.id || null,
+      user_id: linkData?.user?.id || null,
+      invite_link: inviteLink,
+      email_sent: emailResult.success === true,
+      email_error: emailResult.success ? null : emailResult.error || "Email delivery failed",
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Invite failed");
