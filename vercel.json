@@ -117,6 +117,14 @@
       "destination": "/api/admin/security-events"
     },
     {
+      "source": "/api/company/team/invite",
+      "destination": "/api/company?__companyOp=team-invite"
+    },
+    {
+      "source": "/api/company/team/role",
+      "destination": "/api/company?__companyOp=team-role"
+    },
+    {
       "source": "/api/track-open",
       "destination": "/api/public-share?doc=email-track&mode=open"
     },
