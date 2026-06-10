@@ -52,6 +52,7 @@ import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
+import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import PlanBadge from "@/components/dashboard/PlanBadge";
@@ -256,6 +257,8 @@ export default function Dashboard() {
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
+  const { companyId, companyRole, loading: companyCtxLoading } = useCompanyContext();
+  const isCompanyEmployee = !companyCtxLoading && Boolean(companyId) && companyRole === 'employee';
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
 
   // Admin Roles Management State
@@ -1524,6 +1527,45 @@ export default function Dashboard() {
               </Card>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // EMPLOYEE WORKSPACE VIEW — minimal dashboard for company employees
+  if (!isAdmin && isCompanyEmployee) {
+    const empH = new Date().getHours();
+    const empGreeting = empH < 12 ? 'Good morning' : empH < 17 ? 'Good afternoon' : 'Good evening';
+    const empUser = profileFromQuery ?? authUser;
+    const empName = empUser?.full_name || empUser?.company_name || 'there';
+    return (
+      <div className="min-h-full w-full min-w-0 mobile-page">
+        <div className="responsive-page-shell w-full min-w-0 py-2 sm:py-6 md:py-8">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+            className="mb-2 sm:mb-6"
+          >
+            <p className="text-xs sm:text-[11px] font-semibold tracking-[0.1em] text-muted-foreground/70 uppercase mb-0.5 sm:mb-1 hidden sm:block">{empGreeting}</p>
+            <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-1 font-display leading-tight">
+              {empName}
+            </h1>
+            <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your workspace for today.</p>
+          </motion.div>
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Company workspace</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Payslips, leave, documents, and team tools for your role.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link to={createPageUrl("CompanyWorkspace")}>Open company workspace</Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );

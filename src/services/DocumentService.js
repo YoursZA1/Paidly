@@ -25,6 +25,8 @@ import {
   resolveApproverRecipient,
   sendDocumentApprovalRequestEmail,
 } from "@/services/DocumentApprovalEmailService";
+import { dataScopeForContext } from "@/lib/companyPermissions";
+import { loadCompanyAccessContext } from "@/services/CompanyContextService";
 
 const DEFAULT_BASE_CURRENCY = "ZAR";
 
@@ -333,7 +335,17 @@ function applyHubFilters(q, params = {}) {
   return q;
 }
 
-/** Applies the hub sort option to a documents query. */
+/** Restrict document lists to self-owned rows for employee company role (RLS also enforces). */
+function applyCompanyRoleDocumentScope(q, userId, ctx) {
+  const scope = dataScopeForContext(ctx);
+  if (scope.scope !== "self" || !userId || !scope.companyId) return q;
+  const org = scope.companyId;
+  return q.or(
+    `and(org_id.eq.${org},created_by.eq.${userId}),and(org_id.eq.${org},user_id.eq.${userId}),and(org_id.eq.${org},assigned_user_id.eq.${userId})`
+  );
+}
+
+/** Applies hub sort option to a documents query. */
 function applyHubSort(q, sort) {
   switch (sort) {
     case "oldest":
@@ -471,7 +483,13 @@ export const DocumentService = {
    *   includeArchived?: boolean }} [params]
    */
   async listPage(params = {}) {
-    const { orgId } = await getActorContext();
+    const { orgId, userId } = await getActorContext();
+    let companyCtx = null;
+    try {
+      companyCtx = await loadCompanyAccessContext(userId);
+    } catch {
+      companyCtx = null;
+    }
     const limit = Math.min(Math.max(Number(params.limit) || 25, 1), 100);
     const offset = Math.max(Number(params.offset) || 0, 0);
     const hubSelect =
@@ -483,6 +501,7 @@ export const DocumentService = {
 
     const runQuery = (selectFields, filterTier) => {
       let q = supabase.from("documents").select(selectFields, { count: "exact" }).eq("org_id", orgId);
+      q = applyCompanyRoleDocumentScope(q, userId, companyCtx);
       if (filterTier === "hub") q = applyHubFilters(q, params);
       else if (filterTier === "assignee") q = applyCoreListFilters(q, { ...params, includeAssignee: true });
       else q = applyCoreListFilters(q, params);
@@ -534,9 +553,17 @@ export const DocumentService = {
    * "pending" = pending approval, "signed" = e-signed, "archived" = archived_at set.
    */
   async getKpis() {
-    const { orgId } = await getActorContext();
-    const base = () =>
-      supabase.from("documents").select("id", { count: "exact", head: true }).eq("org_id", orgId);
+    const { orgId, userId } = await getActorContext();
+    let companyCtx = null;
+    try {
+      companyCtx = await loadCompanyAccessContext(userId);
+    } catch {
+      companyCtx = null;
+    }
+    const base = () => {
+      let q = supabase.from("documents").select("id", { count: "exact", head: true }).eq("org_id", orgId);
+      return applyCompanyRoleDocumentScope(q, userId, companyCtx);
+    };
 
     const runHubKpis = async () => {
       const [total, drafts, pending, sent, signed, archived] = await Promise.all([

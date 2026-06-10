@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -78,12 +78,28 @@ const INITIAL_FILTERS = {
   sort: "newest",
 };
 
+function filtersFromSearchParams(searchParams) {
+  const status = searchParams.get("status");
+  const type = searchParams.get("type");
+  const search = searchParams.get("search");
+  const category = searchParams.get("category");
+  if (!status && !type && !search && !category) return INITIAL_FILTERS;
+  return {
+    ...INITIAL_FILTERS,
+    ...(status ? { status } : {}),
+    ...(type ? { type } : {}),
+    ...(search ? { search } : {}),
+    ...(category ? { category } : {}),
+  };
+}
+
 export default function DocumentsPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
-  const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [filters, setFilters] = useState(() => filtersFromSearchParams(searchParams));
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -93,6 +109,32 @@ export default function DocumentsPage() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [members, setMembers] = useState([]);
   const [hubCaps, setHubCaps] = useState(null);
+
+  useEffect(() => {
+    setFilters((current) => {
+      const next = filtersFromSearchParams(searchParams);
+      if (
+        current.status === next.status &&
+        current.type === next.type &&
+        current.search === next.search &&
+        current.category === next.category
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        status: next.status,
+        type: next.type,
+        search: next.search,
+        category: next.category,
+      };
+    });
+    setSearchInput((prev) => {
+      const nextSearch = searchParams.get("search") || "";
+      return prev === nextSearch ? prev : nextSearch;
+    });
+    setPage(0);
+  }, [searchParams]);
 
   useEffect(() => {
     DocumentService.listOrgMembers()

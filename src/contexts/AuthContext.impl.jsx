@@ -1112,7 +1112,8 @@ export function AuthProvider({ children }) {
         connectionLifecycle.markConnected("signed_in");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
-        await refreshUserRef.current();
+        // Do not await — refreshUser calls getSession and can deadlock with setSession.
+        void refreshUserRef.current();
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });
       } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
@@ -1137,7 +1138,7 @@ export function AuthProvider({ children }) {
         connectionLifecycle.markConnected("initial_session");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
-        await refreshUserRef.current();
+        void refreshUserRef.current();
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "INITIAL_SESSION" });
       }

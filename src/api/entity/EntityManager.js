@@ -19,6 +19,8 @@ import {
   getAuthUserIdForWrites,
   isSupabaseAuthUuid,
 } from "@/api/auth/authSessionHelpers.js";
+import { loadCompanyAccessContext } from "@/services/CompanyContextService";
+import { applyCompanyDataScope } from "@/lib/companyDataScope";
 import {
   isBrowserOnline,
   assertSessionAuthorityAllowsMutations,
@@ -190,6 +192,13 @@ export class EntityManager {
         return;
       }
 
+      let companyCtx = null;
+      try {
+        companyCtx = await loadCompanyAccessContext(userId);
+      } catch {
+        companyCtx = null;
+      }
+
       // Supabase CRUD: only these entities map to Supabase tables (see docs/SUPABASE_DATA_MODEL.md)
       const supabaseTable =
         table === "services"
@@ -249,6 +258,9 @@ export class EntityManager {
             ].includes(supabaseTable)
           ) {
             query = query.eq("org_id", orgId);
+          }
+          if (supabaseTable === "payslips") {
+            query = applyCompanyDataScope(query, companyCtx);
           }
           if (supabaseTable === "packages") {
             if (orgId) {
@@ -1019,7 +1031,7 @@ export class EntityManager {
       }
 
       const PAYSLIP_INSERT_COLUMNS = [
-        'org_id', 'user_id', 'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
+        'org_id', 'user_id', 'employee_user_id', 'payslip_number', 'employee_name', 'employee_id', 'employee_email', 'employee_phone',
         'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',

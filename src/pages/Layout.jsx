@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
@@ -48,6 +48,11 @@ import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickSetupEligible } from "@/utils";
 import { ADMIN_NAV_ITEMS } from "@/lib/adminNavConfig";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import {
+  filterNavigationForCompanyRole,
+  injectCompanyDashboardNavItems,
+} from "@/lib/companyNavFilter";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
@@ -123,6 +128,8 @@ const PAGE_DISPLAY_NAMES = {
   EditPayslip: "Edit Payslip",
   ViewPayslip: "Payslip",
   Documents: "Documents",
+  TeamMembers: "Team Members",
+  CompanyWorkspace: "Company Workspace",
   DocumentDetail: "Document",
   CreateLeaveRequest: "Leave Request",
   CreateExpenseClaim: "Expense Claim",
@@ -644,6 +651,20 @@ export default function Layout({ children, currentPageName }) {
     user?.plan ||
     "none";
 
+  const { ctx: companyCtx, hasPermission: hasCompanyPermission } = useCompanyContext();
+  const navigationItems = useMemo(() => {
+    let items = getNavigationItems(planForNavFeatures, user?.role);
+    if (companyCtx) {
+      items = filterNavigationForCompanyRole(items, {
+        companyRole: companyCtx.companyRole,
+        userId: companyCtx.userId,
+        companyId: companyCtx.companyId,
+      });
+      items = injectCompanyDashboardNavItems(items, hasCompanyPermission);
+    }
+    return items;
+  }, [planForNavFeatures, user?.role, companyCtx, hasCompanyPermission]);
+
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
     if (currentPageName !== "Dashboard") return;
@@ -930,7 +951,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
             <div className="mt-3" data-tour="dashboard-summary">
               <NavLink
-                item={getNavigationItems(planForNavFeatures, user?.role).find(item => item.title === "Dashboard")}
+                item={navigationItems.find(item => item.title === "Dashboard")}
                 collapsed={isSidebarCollapsed}
               />
             </div>
@@ -939,7 +960,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Navigation */}
           <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "pl-4 pr-12"}`}>
             <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-1"}>
-              {getNavigationItems(planForNavFeatures, user?.role)
+              {navigationItems
                 .filter(item => item.title && item.id && item.title !== "Dashboard")
                 .map(item => {
                   // Add data-tour for Accounts/Clients and Reports
@@ -959,7 +980,8 @@ export default function Layout({ children, currentPageName }) {
             </nav>
           </div>
 
-          {/* Create Invoice CTA */}
+          {/* Create Invoice CTA — hidden for company employees */}
+          {companyCtx?.companyRole !== 'employee' && (
           <div className={`mt-auto ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
             <Link
               to={createPageUrl("CreateInvoice")}
@@ -981,6 +1003,7 @@ export default function Layout({ children, currentPageName }) {
               )}
             </Link>
           </div>
+          )}
 
           {/* User identity + logout */}
           <div className={`mt-4 pt-4 border-t border-sidebar-border/40 ${isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-4"}`}>
@@ -1033,7 +1056,7 @@ export default function Layout({ children, currentPageName }) {
           aria-describedby={undefined}
         >
           <MobileNav
-            items={getNavigationItems(planForNavFeatures, user?.role)}
+            items={navigationItems}
             onClose={() => setIsMobileMenuOpen(false)}
             user={user}
             brand={brand}

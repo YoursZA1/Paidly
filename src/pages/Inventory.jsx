@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient";
+import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
 import { useAuth } from "@/contexts/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
@@ -292,18 +293,12 @@ export default function Inventory() {
     const { data: sessionData } = await supabase.auth.getSession();
     const authUid = sessionData?.session?.user?.id;
     if (!authUid) return null;
-    const { data, error } = await supabase
-      .from("memberships")
-      .select("org_id")
-      .eq("user_id", authUid)
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
+    try {
+      return await resolveActiveOrgIdForUser(authUid);
+    } catch (error) {
       console.warn("Inventory: failed to resolve org_id", error);
       return null;
     }
-    return data?.org_id ?? null;
   }, []);
 
   const loadProducts = useCallback(async () => {

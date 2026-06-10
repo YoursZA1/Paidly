@@ -93,6 +93,7 @@ import { registerAffiliateUserRoutes } from "./affiliateUserRoutes.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
+import { registerCompanyTeamRoutes } from "./companyTeamRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
 import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
@@ -702,6 +703,7 @@ app.get("/api/exchange-rates/:slug", (req, res) => {
 app.get("/api/exchange-rates", (req, res) => handleLatestExchangeRates(req, res));
 
 app.get("/api/dashboard/bootstrap", dashboardBootstrapHandler);
+registerCompanyTeamRoutes(app);
 
 app.get("/api/security/events", async (req, res) => {
   try {

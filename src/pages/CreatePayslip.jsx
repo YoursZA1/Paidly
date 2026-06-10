@@ -13,6 +13,8 @@ import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
 import { useToast } from "@/components/ui/use-toast";
+import { resolveOrgMemberUserIdByEmail } from "@/services/CompanyContextService";
+import { Invoice } from "@/api/entities";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
@@ -187,9 +189,20 @@ export default function CreatePayslip() {
             const timestamp = now.getTime().toString().slice(-6);
             const payslipNumber = `PAY-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${employeeInitials}${timestamp}`;
 
+            let employee_user_id = null;
+            if (authUserId && payslipData.employee_email?.trim()) {
+                try {
+                    const orgId = await Invoice.ensureUserHasOrganization(authUserId);
+                    employee_user_id = await resolveOrgMemberUserIdByEmail(orgId, payslipData.employee_email);
+                } catch {
+                    employee_user_id = null;
+                }
+            }
+
             await Payroll.create({
                 ...payslipData,
                 payslip_number: payslipNumber,
+                employee_user_id: employee_user_id || undefined,
                 gross_pay: grossPay,
                 total_deductions: totalDeductions,
                 net_pay: netPay,

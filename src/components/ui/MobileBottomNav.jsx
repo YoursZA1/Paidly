@@ -12,6 +12,7 @@ import {
   BanknotesIcon,
 } from "@heroicons/react/24/outline";
 import { createPageUrl, triggerHaptic } from "@/utils";
+import useCompanyContext from "@/hooks/useCompanyContext";
 
 /**
  * Rule 7 — Simple navigation: one primary row only (max ~5 targets).
@@ -23,15 +24,25 @@ const speedDialActions = [
   { name: "Payslip", url: createPageUrl("CreatePayslip"), icon: BanknotesIcon },
 ];
 
+const employeeSpeedDialActions = [
+  { name: "Leave", url: createPageUrl("CreateLeaveRequest"), icon: DocumentTextIcon },
+  { name: "Expense", url: createPageUrl("CreateExpenseClaim"), icon: DocumentDuplicateIcon },
+];
+
 const PINNED_NAV_PATHS = new Set([
   createPageUrl("Dashboard").split("?")[0].toLowerCase(),
   createPageUrl("Invoices").split("?")[0].toLowerCase(),
   createPageUrl("Clients").split("?")[0].toLowerCase(),
+  createPageUrl("Payslips").split("?")[0].toLowerCase(),
+  createPageUrl("Documents").split("?")[0].toLowerCase(),
 ]);
 
 function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
+  const { companyId, companyRole } = useCompanyContext();
+  const isCompanyEmployee = Boolean(companyId) && companyRole === 'employee';
+  const activeSpeedDial = isCompanyEmployee ? employeeSpeedDialActions : speedDialActions;
 
   useEffect(() => {
     setSpeedDialOpen(false);
@@ -65,18 +76,24 @@ function MobileBottomNav({ onOpenMenu }) {
             <HomeIcon className="w-6 h-6 shrink-0" />
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Home</span>
           </Link>
-          {/* Invoices */}
+          {/* Invoices (owners) / My Payslips (employees) */}
           <Link
-            to={createPageUrl("Invoices")}
+            to={isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label="Invoices"
-            aria-current={isActive(createPageUrl("Invoices")) ? "page" : undefined}
+            aria-label={isCompanyEmployee ? "My Payslips" : "Invoices"}
+            aria-current={isActive(isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "page" : undefined}
           >
-            <DocumentTextIcon className="w-6 h-6 shrink-0" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Invoices</span>
+            {isCompanyEmployee ? (
+              <BanknotesIcon className="w-6 h-6 shrink-0" />
+            ) : (
+              <DocumentTextIcon className="w-6 h-6 shrink-0" />
+            )}
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">
+              {isCompanyEmployee ? "Payslips" : "Invoices"}
+            </span>
           </Link>
 
           {/* Center FAB */}
@@ -89,7 +106,7 @@ function MobileBottomNav({ onOpenMenu }) {
                   exit={{ opacity: 0 }}
                   className="absolute bottom-full mb-2 flex flex-col gap-2"
                 >
-                  {speedDialActions.map((action, i) => (
+                  {activeSpeedDial.map((action, i) => (
                     <motion.div
                       key={action.name}
                       initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -128,18 +145,24 @@ function MobileBottomNav({ onOpenMenu }) {
             </motion.button>
           </div>
 
-          {/* Clients */}
+          {/* Clients (owners) / Documents (employees) */}
           <Link
-            to={createPageUrl("Clients")}
+            to={isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(createPageUrl("Clients")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label="Clients"
-            aria-current={isActive(createPageUrl("Clients")) ? "page" : undefined}
+            aria-label={isCompanyEmployee ? "Documents" : "Clients"}
+            aria-current={isActive(isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")) ? "page" : undefined}
           >
-            <UserGroupIcon className="w-6 h-6 shrink-0" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Clients</span>
+            {isCompanyEmployee ? (
+              <DocumentDuplicateIcon className="w-6 h-6 shrink-0" />
+            ) : (
+              <UserGroupIcon className="w-6 h-6 shrink-0" />
+            )}
+            <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">
+              {isCompanyEmployee ? "Documents" : "Clients"}
+            </span>
           </Link>
           {/* Menu — opens sidebar drawer; active when on a route not pinned in the bar */}
           <button

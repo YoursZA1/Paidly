@@ -125,6 +125,18 @@ const normalizeSession = (session) => {
   };
 };
 
+/** Apply API-issued tokens without getSession — concurrent reads deadlock with setSession. */
+async function activateSessionFromApiTokens({ access_token, refresh_token }, abortMessage) {
+  const { data, error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token,
+  });
+  if (error) {
+    throwIfSupabaseAuthError(error, { abortMessage });
+  }
+  return normalizeSession(data.session);
+}
+
 const SupabaseAuthService = {
   /**
    * Sign-up: POST /api/auth/sign-up when shouldUseNodeAuthApi() is true; otherwise direct Supabase (default in Vite dev).
@@ -167,21 +179,12 @@ const SupabaseAuthService = {
 
       if (status === 200 && data) {
         const sess = data.session;
+        let session = null;
         if (sess?.access_token && sess?.refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: sess.access_token,
-            refresh_token: sess.refresh_token,
-          });
-          if (sessionError) {
-            throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-up was interrupted. Please try again." });
-          }
-        }
-        const { data: sessionData, error: getErr } = await supabase.auth.getSession();
-        if (getErr) {
-          throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-up was interrupted. Please try again." });
+          session = await activateSessionFromApiTokens(sess, "Sign-up was interrupted. Please try again.");
         }
         return {
-          session: normalizeSession(sessionData?.session ?? null),
+          session,
           user: data.user ?? null,
         };
       }
@@ -310,20 +313,10 @@ const SupabaseAuthService = {
         });
         try {
           const session = await Promise.race([
-            (async () => {
-              const { error: sessionError } = await supabase.auth.setSession({
-                access_token: data.access_token,
-                refresh_token: data.refresh_token,
-              });
-              if (sessionError) {
-                throwIfSupabaseAuthError(sessionError, { abortMessage: "Sign-in was interrupted. Please try again." });
-              }
-              const { data: sessionData, error: getErr } = await supabase.auth.getSession();
-              if (getErr) {
-                throwIfSupabaseAuthError(getErr, { abortMessage: "Sign-in was interrupted. Please try again." });
-              }
-              return normalizeSession(sessionData.session);
-            })(),
+            activateSessionFromApiTokens(
+              { access_token: data.access_token, refresh_token: data.refresh_token },
+              "Sign-in was interrupted. Please try again."
+            ),
             sessionOpsTimeout,
           ]);
           return session;

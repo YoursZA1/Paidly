@@ -15,6 +15,8 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useDocumentListController } from "@/hooks/useDocumentListController";
 import { payslipListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import { PERMISSIONS } from "@/lib/companyPermissions";
 
 export default function PayslipsPage() {
     const payslipsFromStore = useAppStore((s) => s.payslips);
@@ -28,6 +30,8 @@ export default function PayslipsPage() {
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const { hasPermission } = useCompanyContext();
+    const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
     const payslipFileInputRef = useRef(null);
     const { toast } = useToast();
 
@@ -145,10 +149,10 @@ export default function PayslipsPage() {
                 >
                     <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
                         <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">
-                            Payslips
+                            {canManagePayroll ? "Payroll" : "My Payslips"}
                         </h1>
                         <p className="text-xs sm:text-sm text-muted-foreground">
-                            Manage and distribute employee payslips.
+                            {canManagePayroll ? "Manage and distribute employee payslips." : "Payslips issued to you by your employer."}
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
@@ -160,16 +164,20 @@ export default function PayslipsPage() {
                             className="hidden"
                             onChange={handleImportCsv}
                         />
+                        {canManagePayroll ? (
                         <Link to={createPageUrl("CreatePayslip")} className="order-first sm:order-none w-full sm:w-auto">
                             <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">
                                 <Plus className="w-4 h-4 shrink-0" />
                                 Create payslip
                             </Button>
                         </Link>
+                        ) : null}
+                        {canManagePayroll ? (
                         <Button variant="outline" size="sm" disabled={isImporting} onClick={() => payslipFileInputRef.current?.click()} className="rounded-xl h-10 sm:h-9">
                             <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
                             {isImporting ? "Importing…" : "Import CSV"}
                         </Button>
+                        ) : null}
                         <Button
                             variant="outline"
                             size="sm"
@@ -217,7 +225,7 @@ export default function PayslipsPage() {
                                 icon={<Receipt className="h-7 w-7 text-muted-foreground" />}
                                 title="No payslips yet"
                                 description={searchTerm ? "Try a different search." : "Create your first payslip to see it here."}
-                                action={!searchTerm && (
+                                action={!searchTerm && canManagePayroll && (
                                     <Link to={createPageUrl("CreatePayslip")}>
                                         <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />

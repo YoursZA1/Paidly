@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -48,6 +49,8 @@ import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings"
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import { PERMISSIONS } from "@/lib/companyPermissions";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 import { createPageUrl } from "@/utils";
@@ -366,7 +369,6 @@ function CompanyProfileSettings() {
             
             // Map display_name to full_name for Supabase profile (saved per user, restored on login)
             const payload = {
-                full_name: updatedData.display_name ?? updatedData.full_name,
                 company_name: updatedData.company_name,
                 company_address: updatedData.company_address,
                 phone: (updatedData.phone || "").trim(),
@@ -405,7 +407,6 @@ function CompanyProfileSettings() {
             setFormData((prev) => ({
                 ...prev,
                 ...payload,
-                display_name: payload.full_name,
                 document_brand_primary: payload.document_brand_primary || "",
                 document_brand_secondary: payload.document_brand_secondary || "",
                 business_bank_name: updatedData.business_bank_name,
@@ -601,17 +602,6 @@ function CompanyProfileSettings() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="display_name" className="text-sm font-medium text-foreground">Dashboard Display Name</Label>
-                        <Input
-                            id="display_name"
-                            value={formData.display_name}
-                            onChange={(e) => handleInputChange("display_name", e.target.value)}
-                            placeholder="e.g., Mando Mavelele"
-                            className="h-11 rounded-lg"
-                        />
-                        <p className="text-xs text-muted-foreground">Shown on your dashboard greeting.</p>
-                    </div>
                     <div className="space-y-1.5">
                         <Label htmlFor="company_name" className="text-sm font-medium text-foreground flex items-center gap-2">
                             Company Name
@@ -985,8 +975,6 @@ function CompanyProfileSettings() {
                 </Button>
             </div>
         </form>
-            <ResetAppSection />
-            <DeleteAccountSection />
         </>
     );
 }
@@ -1563,37 +1551,174 @@ function PaymentMethodsSettings() {
     );
 }
 
+function PersonalAccountSettings() {
+    const { user: authUser, refreshUser } = useAuth();
+    const { toast } = useToast();
+    const [displayName, setDisplayName] = useState("");
+    const [email, setEmail] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (!authUser?.id) {
+            setIsLoading(false);
+            return;
+        }
+        setDisplayName(authUser.full_name || authUser.display_name || "");
+        setEmail(authUser.email || "");
+    }, [authUser?.id, authUser?.full_name, authUser?.display_name, authUser?.email]);
+
+    useEffect(() => {
+        if (!authUser?.id) {
+            setIsLoading(false);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            setIsLoading(true);
+            try {
+                const { data } = await selectProfileByUserId(supabase, authUser.id);
+                if (cancelled || !data) return;
+                setDisplayName(data.full_name || authUser.full_name || authUser.display_name || "");
+                setEmail(data.email || authUser.email || "");
+            } catch {
+                /* profile load optional */
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authUser?.id]);
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setIsSaving(true);
+        try {
+            const full_name = displayName.trim();
+            await User.updateMyUserData({ full_name });
+            if (authUser?.id) {
+                const { error } = await supabase
+                    .from("profiles")
+                    .upsert(
+                        { id: authUser.id, full_name, updated_at: new Date().toISOString() },
+                        { onConflict: "id" }
+                    );
+                if (error) throw error;
+            }
+            await refreshUser();
+            toast({
+                title: "Account updated",
+                description: "Your personal details were saved.",
+                variant: "success",
+            });
+        } catch (error) {
+            toast({
+                title: "Could not save",
+                description: error?.message || "Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="animate-pulse space-y-6">
+                <div className="h-12 bg-muted rounded-xl w-full" />
+                <div className="h-12 bg-muted rounded-xl w-full" />
+                <div className="h-28 bg-muted rounded-xl w-full" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <form onSubmit={handleSave}>
+                <SettingsCard
+                    title="My account"
+                    description="Personal details used for your dashboard greeting and account identity."
+                >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="account_display_name" className="text-sm font-medium text-foreground">
+                                Display name
+                            </Label>
+                            <Input
+                                id="account_display_name"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                placeholder="e.g., Mando Mavelele"
+                                className="h-11 rounded-lg"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="account_email" className="text-sm font-medium text-foreground">
+                                Email
+                            </Label>
+                            <Input
+                                id="account_email"
+                                value={email}
+                                readOnly
+                                disabled
+                                className="h-11 rounded-lg bg-muted/50"
+                            />
+                            <p className="text-xs text-muted-foreground">Contact support to change your sign-in email.</p>
+                        </div>
+                    </div>
+                    <div className="mt-6 flex justify-end">
+                        <Button
+                            type="submit"
+                            disabled={isSaving}
+                            className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white px-8 py-3 rounded-xl shadow-lg"
+                        >
+                            <Save className="w-4 h-4 mr-2" />
+                            {isSaving ? "Saving…" : "Save changes"}
+                        </Button>
+                    </div>
+                </SettingsCard>
+            </form>
+            <SettingsCard title="Security" description="Protect your account with two-factor authentication.">
+                <TwoFactorSettings />
+            </SettingsCard>
+            <ResetAppSection />
+            <DeleteAccountSection />
+        </div>
+    );
+}
+
 const SETTINGS_TABS = [
-    { value: "profile", label: "Company Profile", icon: SettingsIcon },
-    { value: "currency", label: "Currency", icon: DollarSign },
-    { value: "payments", label: "Payment Methods", icon: CreditCard },
-    { value: "reminders", label: "Reminders", icon: Bell },
-    { value: "subscription", label: "Subscription", icon: Award },
-    { value: "security", label: "Security", icon: ShieldCheck },
+    { value: "account", label: "My Account", icon: UserIcon, permission: PERMISSIONS.VIEW_OWN_PROFILE },
+    { value: "profile", label: "Company Profile", icon: SettingsIcon, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "payments", label: "Payment Methods", icon: CreditCard, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "reminders", label: "Reminders", icon: Bell, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "subscription", label: "Subscription", icon: Award, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
 ];
 
-const SETTINGS_TAB_IDS = new Set(SETTINGS_TABS.map((t) => t.value));
-
-const SETTINGS_TAB_PANEL_CLASS =
-    "mt-0 focus-visible:outline-none data-[state=inactive]:hidden";
-
-function SettingsTabPanels() {
-    return (
-        <>
-            <TabsContent value="profile" className={SETTINGS_TAB_PANEL_CLASS}>
-                <CompanyProfileSettings />
-            </TabsContent>
-            <TabsContent value="currency" className={SETTINGS_TAB_PANEL_CLASS}>
+function SettingsTabPanels({ activeTab }) {
+    switch (activeTab) {
+        case "account":
+            return <PersonalAccountSettings />;
+        case "profile":
+            return <CompanyProfileSettings />;
+        case "currency":
+            return (
                 <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">
                     <CurrencyConfiguration />
                 </SettingsCard>
-            </TabsContent>
-            <TabsContent value="payments" className={SETTINGS_TAB_PANEL_CLASS}>
+            );
+        case "payments":
+            return (
                 <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
                     <PaymentMethodsSettings />
                 </SettingsCard>
-            </TabsContent>
-            <TabsContent value="reminders" className={`${SETTINGS_TAB_PANEL_CLASS} space-y-8`}>
+            );
+        case "reminders":
+            return (
                 <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">
                     <div className="space-y-8">
                         <PaymentReminderSettings />
@@ -1601,42 +1726,60 @@ function SettingsTabPanels() {
                         <ReminderDashboard />
                     </div>
                 </SettingsCard>
-            </TabsContent>
-            <TabsContent value="subscription" className={SETTINGS_TAB_PANEL_CLASS}>
+            );
+        case "subscription":
+            return (
                 <SettingsCard title="Subscription" description="Manage your plan and billing.">
                     <SubscriptionSettings />
                 </SettingsCard>
-            </TabsContent>
-            <TabsContent value="security" className={SETTINGS_TAB_PANEL_CLASS}>
-                <SettingsCard title="Security" description="Manage authentication options and account security.">
-                    <TwoFactorSettings />
-                </SettingsCard>
-            </TabsContent>
-        </>
-    );
+            );
+        default:
+            return null;
+    }
 }
 
-function resolveSettingsTab(tabParam) {
-    if (!tabParam || !SETTINGS_TAB_IDS.has(tabParam)) return "profile";
-    return tabParam;
+function resolveSettingsTab(tabParam, allowedTabIds, fallbackTab) {
+    if (tabParam && allowedTabIds.has(tabParam)) return tabParam;
+    return fallbackTab;
 }
 
 export default function Settings() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const activeTab = resolveSettingsTab(searchParams.get("tab"));
+    const { hasPermission, loading: companyLoading, companyRole, companyRoleLabel } = useCompanyContext();
+    const visibleTabs = useMemo(() => {
+        if (companyLoading) return [];
+        // Solo business owners without company RBAC context see full settings.
+        if (!companyRole) return SETTINGS_TABS;
+        return SETTINGS_TABS.filter((tab) => hasPermission(tab.permission));
+    }, [companyLoading, hasPermission, companyRole]);
+    const defaultTab =
+        visibleTabs.find((t) => t.value === "profile")?.value ||
+        visibleTabs.find((t) => t.value === "account")?.value ||
+        visibleTabs[0]?.value ||
+        "profile";
+    const visibleTabIds = useMemo(() => new Set(visibleTabs.map((t) => t.value)), [visibleTabs]);
+    const activeTab = resolveSettingsTab(searchParams.get("tab"), visibleTabIds, defaultTab);
+    const isEmployeeSettings = companyRole === "employee";
 
     useEffect(() => {
         const raw = searchParams.get("tab");
-        if (raw && !SETTINGS_TAB_IDS.has(raw)) {
+        if (companyLoading) return;
+        if (raw === "security") {
+            const next = new URLSearchParams(searchParams);
+            next.set("tab", "account");
+            setSearchParams(next, { replace: true });
+            return;
+        }
+        if (raw && !visibleTabIds.has(raw)) {
             const next = new URLSearchParams(searchParams);
             next.delete("tab");
             setSearchParams(next, { replace: true });
         }
-    }, [searchParams, setSearchParams]);
+    }, [searchParams, setSearchParams, visibleTabIds, companyLoading]);
 
     const setActiveTab = (value) => {
         const next = new URLSearchParams(searchParams);
-        if (value === "profile") {
+        if (value === defaultTab) {
             next.delete("tab");
         } else {
             next.set("tab", value);
@@ -1644,15 +1787,39 @@ export default function Settings() {
         setSearchParams(next, { replace: true });
     };
 
+    if (companyLoading) {
+        return (
+            <div className="w-full min-w-0 mobile-page overflow-x-hidden">
+                <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-16">
+                    <div className="flex min-h-[40vh] items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading settings" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="w-full min-w-0 mobile-page overflow-x-hidden">
             <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-16">
                 <header className="mb-6 sm:mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Manage your account and business preferences.</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
+                        {companyRole ? (
+                            <Badge variant="outline" className="capitalize font-normal">
+                                Company {companyRoleLabel}
+                            </Badge>
+                        ) : null}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        {isEmployeeSettings
+                            ? "Manage your personal account and security."
+                            : "Manage your account and business preferences."}
+                    </p>
                 </header>
 
                 {/* Mobile: compact dropdown selector */}
+                {visibleTabs.length > 1 ? (
                 <div className="md:hidden mb-4">
                     <div className="relative">
                         <select
@@ -1661,21 +1828,23 @@ export default function Settings() {
                             className="w-full h-11 appearance-none rounded-xl border border-border bg-background pl-4 pr-10 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                             aria-label="Select settings section"
                         >
-                            {SETTINGS_TABS.map((tab) => (
+                            {visibleTabs.map((tab) => (
                                 <option key={tab.value} value={tab.value}>{tab.label}</option>
                             ))}
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     </div>
                 </div>
+                ) : null}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <div className="flex flex-col md:flex-row md:gap-8 md:items-start">
+                        {visibleTabs.length > 1 ? (
                         <TabsList
                             className="hidden md:flex w-44 shrink-0 flex-col h-auto gap-0.5 bg-transparent p-0 items-stretch justify-start"
                             aria-label="Settings sections"
                         >
-                            {SETTINGS_TABS.map((tab) => {
+                            {visibleTabs.map((tab) => {
                                 const Icon = tab.icon;
                                 return (
                                     <TabsTrigger
@@ -1691,9 +1860,10 @@ export default function Settings() {
                                 );
                             })}
                         </TabsList>
+                        ) : null}
 
                         <div className="min-w-0 flex-1 w-full">
-                            <SettingsTabPanels />
+                            <SettingsTabPanels activeTab={activeTab} />
                         </div>
                     </div>
                 </Tabs>

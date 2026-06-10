@@ -1,6 +1,10 @@
 /**
  * Validate SUPABASE_SERVICE_ROLE_KEY shape/claims to avoid silently using anon keys.
+ * Accepts legacy service_role JWTs (eyJ…) and new Supabase secret keys (sb_secret_…).
  */
+const SECRET_KEY_PREFIX = "sb_secret_";
+const PUBLISHABLE_KEY_PREFIX = "sb_publishable_";
+
 function decodeJwtPayload(token) {
   try {
     const parts = String(token || "").split(".");
@@ -23,9 +27,23 @@ export function validateServiceRoleKey(key) {
   if (!raw) {
     return { ok: false, message: "SUPABASE_SERVICE_ROLE_KEY is missing." };
   }
+  if (raw.startsWith(PUBLISHABLE_KEY_PREFIX)) {
+    return {
+      ok: false,
+      message:
+        "SUPABASE_SERVICE_ROLE_KEY must be a secret/service_role key, not a publishable (anon) key.",
+    };
+  }
+  if (raw.startsWith(SECRET_KEY_PREFIX)) {
+    return { ok: true };
+  }
   const payload = decodeJwtPayload(raw);
   if (!payload || typeof payload !== "object") {
-    return { ok: false, message: "SUPABASE_SERVICE_ROLE_KEY is invalid JWT format." };
+    return {
+      ok: false,
+      message:
+        "SUPABASE_SERVICE_ROLE_KEY must be a service_role JWT (eyJ…) or secret key (sb_secret_…).",
+    };
   }
   const role = String(payload.role || "").toLowerCase();
   if (role !== "service_role") {

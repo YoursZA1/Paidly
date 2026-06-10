@@ -42,6 +42,8 @@ const PublicQuote = lazy(() => import("./PublicQuote"));
 const ClientPortal = lazy(() => import("./ClientPortal"));
 const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
 const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
+const TeamMembers = lazy(() => import("./TeamMembers"));
+const CompanyWorkspace = lazy(() => import("./CompanyWorkspace"));
 const Reports = lazy(() => import("./Reports"));
 const Payslips = lazy(() => import("./Payslips"));
 const CreatePayslip = lazy(() => import("./CreatePayslip"));
@@ -93,6 +95,8 @@ const NotFoundPage = lazy(() =>
 
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
+import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
+import { PERMISSIONS } from "@/lib/companyPermissions";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -222,18 +226,22 @@ const QUOTE_ROUTES = [
 // --- Payslip & Report Pages ---
 const PAYSLIP_REPORT_ROUTES = [
     { path: "/Payslips", element: <RequireAuth><Payslips /></RequireAuth> },
-    { path: "/CreatePayslip", element: <RequireAuth><CreatePayslip /></RequireAuth> },
-    { path: "/EditPayslip", element: <RequireAuth><EditPayslip /></RequireAuth> },
+    { path: "/CreatePayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><CreatePayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/EditPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><EditPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/PayslipPDF", element: <RequireAuth><PayslipPDF /></RequireAuth> },
     { path: "/ViewPayslip", element: <RequireAuth><ViewPayslip /></RequireAuth> },
-    { path: "/ReportPDF", element: <RequireAuth><ReportPDF /></RequireAuth> },
-    { path: "/reportpdf", element: <RequireAuth><ReportPDF /></RequireAuth> },
-    { path: "/Reports", element: <RequireAuth><Reports /></RequireAuth> },
-    { path: "/CashFlow", element: <RequireAuth><CashFlow /></RequireAuth> },
-    { path: "/CashFlowPDF", element: <RequireAuth><CashFlowPDF /></RequireAuth> },
+    { path: "/ReportPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/reportpdf", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><Reports /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/TeamMembers", element: <RequireAuth><TeamMembers /></RequireAuth> },
+    { path: "/teammembers", element: <RequireAuth><TeamMembers /></RequireAuth> },
+    { path: "/CompanyWorkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
+    { path: "/companyworkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
+    { path: "/CashFlow", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><CashFlow /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/CashFlowPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><CashFlowPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     // Lowercase aliases for nav/bookmarks
-    { path: "/reports", element: <RequireAuth><Reports /></RequireAuth> },
-    { path: "/cashflow", element: <RequireAuth><CashFlow /></RequireAuth> },
+    { path: "/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><Reports /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/cashflow", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><CashFlow /></RequireCompanyPermissionRedirect></RequireAuth> },
 ];
 
 // --- Admin & Support Pages ---

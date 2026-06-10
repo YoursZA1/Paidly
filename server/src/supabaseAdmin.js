@@ -6,8 +6,9 @@ import { validateServiceRoleKey } from "./supabaseServiceRoleGuard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
+dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
-const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
@@ -18,7 +19,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const roleCheck = validateServiceRoleKey(supabaseServiceKey);
 if (!roleCheck.ok) {
-  throw new Error(roleCheck.message);
+  throw new Error(
+    `${roleCheck.message} Update server/.env with the secret key from Supabase → Settings → API (sb_secret_… or legacy service_role JWT eyJ…).`
+  );
 }
 
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
