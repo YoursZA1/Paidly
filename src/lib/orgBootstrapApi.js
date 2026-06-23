@@ -1,6 +1,7 @@
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequestJson } from "@/utils/apiRequest";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 
 const TAB_ID =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -140,10 +141,23 @@ export async function runOrgBootstrapWithLock(effectiveUserId, options = {}) {
       const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
       const url = `${apiBase}/api/auth/bootstrap-user`;
       const body = { user_id: uid, org_name: options.orgName ? String(options.orgName) : "" };
+
+      // bootstrap-user authenticates the caller server-side via admin.auth.getUser(token),
+      // so it requires `Authorization: Bearer <jwt>`. Without it the server returns
+      // 401 "Missing bearer token" (the failure seen in production). Acquire the session
+      // token (with the shared refresh/unauthorized policy) and attach it.
+      const accessToken = await getSessionAccessTokenOrHandleUnauthorized("org_bootstrap");
+      if (!accessToken) {
+        return { ok: false, skipped: true, reason: "missing_access_token" };
+      }
+
       try {
         const data = await apiRequestJson(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify(body),
           signal: options.signal,
         });
