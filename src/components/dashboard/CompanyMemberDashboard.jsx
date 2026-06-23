@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function CompanyMemberDashboard() {
   const { companyRoleLabel } = useCompanyContext();
   const { profile } = useUserProfileQuery();
-  const { authUser } = useAuth();
+  const { user: authUser } = useAuth();
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";

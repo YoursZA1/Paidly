@@ -249,6 +249,18 @@ StatCard.propTypes = {
 };
 
 export default function Dashboard() {
+  const { user: authUser } = useAuth();
+  const isAdmin = (authUser?.role || "user") === "admin";
+  const { companyId, loading: companyCtxLoading, showBusinessDashboard } = useCompanyContext();
+
+  if (!isAdmin && !companyCtxLoading && companyId && !showBusinessDashboard) {
+    return <CompanyMemberDashboard />;
+  }
+
+  return <DashboardMain />;
+}
+
+function DashboardMain() {
   const { user: authUser, session } = useAuth();
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
   const {
@@ -260,10 +272,7 @@ export default function Dashboard() {
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
-  const { companyId, loading: companyCtxLoading, isOrgOwner, showBusinessDashboard } =
-    useCompanyContext();
-  const isCompanyMemberDashboard =
-    !companyCtxLoading && Boolean(companyId) && !showBusinessDashboard;
+  const { companyId, isOrgOwner } = useCompanyContext();
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
 
   // Admin Roles Management State
@@ -362,6 +371,7 @@ export default function Dashboard() {
   });
   const navigate = useNavigate();
   const mountedRef = useRef(true);
+  const checklistPersistKeyRef = useRef("");
 
   // Non-admin: read from global store (filled by Layout fetchAll). Admin: use local state from loadAdminData.
   const {
@@ -447,6 +457,9 @@ export default function Dashboard() {
       currentChecklist.create_first_invoice !== onboardingChecklist.create_first_invoice ||
       currentChecklist.add_first_client !== onboardingChecklist.add_first_client;
     if (!changed) return;
+    const persistKey = JSON.stringify(onboardingChecklist);
+    if (checklistPersistKeyRef.current === persistKey) return;
+    checklistPersistKeyRef.current = persistKey;
     User.updateMyUserData({
       business: {
         onboarding_v2: {
@@ -1537,10 +1550,7 @@ export default function Dashboard() {
     );
   }
 
-  // COMPANY MEMBER DASHBOARD — employees, managers, and invited admins (not org owners)
-  if (!isAdmin && isCompanyMemberDashboard) {
-    return <CompanyMemberDashboard />;
-  }
+  // COMPANY MEMBER DASHBOARD — rendered by Dashboard() wrapper before DashboardMain mounts.
 
   // USER DASHBOARD
   // Unified revenue: from paid/partial invoices (or from payments for collected amount)

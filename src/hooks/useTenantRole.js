@@ -10,16 +10,17 @@ export default function useTenantRole() {
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ invalidateCache = false } = {}) => {
     if (!userId) {
       setCtx(null);
       setLoading(false);
+      setError(null);
       return;
     }
+    if (invalidateCache) clearTenantContextCache();
     setLoading(true);
     setError(null);
     try {
-      clearTenantContextCache();
       const next = await loadTenantContext(userId);
       setCtx(next);
     } catch (e) {
@@ -33,6 +34,15 @@ export default function useTenantRole() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!userId) {
+      clearTenantContextCache();
+      setCtx(null);
+      setLoading(false);
+      setError(null);
+    }
+  }, [userId]);
 
   return useMemo(
     () => ({

@@ -659,6 +659,7 @@ export default function Layout({ children, currentPageName }) {
     hasPermission: hasCompanyPermission,
     loading: companyContextLoading,
     isOrgOwner,
+    showBusinessDashboard,
   } = useCompanyContext();
   const { loading: onboardingRoleLoading, isAdminOnboarding } = useOnboardingRole();
   const inviteAcceptRef = useRef(false);
@@ -739,11 +740,9 @@ export default function Layout({ children, currentPageName }) {
   // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
   useEffect(() => {
     if (!user?.id) return;
-    // Do not gate on authSession: after password login, session and user update in the same tick, but a
-    // stuck profile write must not block store hydration. fetchAll resolves the user from the client layer.
-    // Admin V2 pages fetch their own datasets with React Query.
-    // Skipping legacy store bootstrap here avoids blocking admin loads on auth.me timeouts.
     if (isAdminV2Route) return;
+    // Company members use MemberDashboardService — skip heavy invoice/client bootstrap.
+    if (companyCtx?.companyId && !showBusinessDashboard) return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < SHARED_STORE_STALE_MS;
     // Always refetch if profile never hydrated (e.g. interrupted load, stale cache edge case).
     if (hasFreshData && userProfile != null) return;
@@ -752,11 +751,12 @@ export default function Layout({ children, currentPageName }) {
     lastFetchAllRequestAtRef.current = now;
     // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
     fetchAll(user, { accessToken: session?.accessToken ?? null });
-  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile, session?.accessToken]);
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
   useEffect(() => {
     if (!user?.id || isAdminV2Route) return undefined;
+    if (companyCtx?.companyId && !showBusinessDashboard) return undefined;
     let debounceId = null;
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
@@ -777,7 +777,7 @@ export default function Layout({ children, currentPageName }) {
       if (debounceId) clearTimeout(debounceId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt, session?.accessToken]);
+  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo

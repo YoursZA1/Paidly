@@ -17,6 +17,8 @@ export const INVITE_TOKEN_KEY = "paidly_company_invite_token";
 
 let cached = null;
 let cachedUserId = null;
+let inflightLoad = null;
+let inflightUserId = null;
 
 function normalizeTenantContext(raw) {
   if (!raw || raw.ok === false) {
@@ -48,7 +50,19 @@ function normalizeTenantContext(raw) {
 export async function loadTenantContext(userId) {
   if (!userId) return normalizeTenantContext({ ok: false, error: "missing_user" });
   if (cached && cachedUserId === userId) return cached;
+  if (inflightLoad && inflightUserId === userId) return inflightLoad;
 
+  inflightUserId = userId;
+  inflightLoad = loadTenantContextInner(userId).finally(() => {
+    if (inflightUserId === userId) {
+      inflightLoad = null;
+      inflightUserId = null;
+    }
+  });
+  return inflightLoad;
+}
+
+async function loadTenantContextInner(userId) {
   const { data, error } = await supabase.rpc("get_my_tenant_context");
   if (error) throw new Error(getSupabaseErrorMessage(error, "Failed to load tenant context"));
 
@@ -60,6 +74,8 @@ export async function loadTenantContext(userId) {
 export function clearTenantContextCache() {
   cached = null;
   cachedUserId = null;
+  inflightLoad = null;
+  inflightUserId = null;
 }
 
 export function storePendingInviteToken(token) {

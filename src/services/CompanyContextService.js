@@ -7,6 +7,8 @@ import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 
 let cachedContext = null;
 let cachedUserId = null;
+let inflightLoad = null;
+let inflightUserId = null;
 
 /**
  * Load the active company (org) membership for the signed-in user.
@@ -15,7 +17,19 @@ let cachedUserId = null;
 export async function loadCompanyAccessContext(userId) {
   if (!userId) return null;
   if (cachedContext && cachedUserId === userId) return cachedContext;
+  if (inflightLoad && inflightUserId === userId) return inflightLoad;
 
+  inflightUserId = userId;
+  inflightLoad = loadCompanyAccessContextInner(userId).finally(() => {
+    if (inflightUserId === userId) {
+      inflightLoad = null;
+      inflightUserId = null;
+    }
+  });
+  return inflightLoad;
+}
+
+async function loadCompanyAccessContextInner(userId) {
   // Owners sign in to their company; invite-only members use the org they joined.
   let orgId = await resolveActiveOrgIdForUser(userId);
   if (!orgId) {
@@ -61,6 +75,8 @@ export async function loadCompanyAccessContext(userId) {
 export function clearCompanyAccessContextCache() {
   cachedContext = null;
   cachedUserId = null;
+  inflightLoad = null;
+  inflightUserId = null;
 }
 
 /**

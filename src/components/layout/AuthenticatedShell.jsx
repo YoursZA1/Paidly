@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AppProvider } from "@/contexts/AppContext";
+import { CompanyContextProvider } from "@/contexts/CompanyContext";
 import ConnectionMonitor from "@/components/connection/ConnectionMonitor";
 import SyncEngine from "@/components/sync/SyncEngine";
 import SessionActivityBeacon from "@/components/activity/SessionActivityBeacon";
@@ -42,6 +43,7 @@ export default function AuthenticatedShell({ children }) {
 
   return (
     <AppProvider>
+      <CompanyContextProvider>
       <ConnectionMonitor />
       <SyncEngine />
       <ProfileRealtimeBridge />
@@ -50,6 +52,7 @@ export default function AuthenticatedShell({ children }) {
       <InactivitySessionGuard />
       <SessionExpiredModal />
       {children}
+      </CompanyContextProvider>
     </AppProvider>
   );
 }
