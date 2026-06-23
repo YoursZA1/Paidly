@@ -19,10 +19,19 @@ import { typesByCategory } from "@/document-engine";
 import { DocumentTypeIcon, CategoryIcon } from "./documentIcon";
 
 /**
- * @param {{ onSelect: (typeKey: string) => void, creating?: boolean, disabled?: boolean }} props
+ * @param {{ onSelect: (typeKey: string) => void, creating?: boolean, disabled?: boolean, canCreateType?: (typeKey: string) => boolean }} props
  */
-export default function NewDocumentMenu({ onSelect, creating = false, disabled = false }) {
+export default function NewDocumentMenu({ onSelect, creating = false, disabled = false, canCreateType }) {
   const groups = typesByCategory();
+  const filteredGroups = groups
+    .map((group) => ({
+      ...group,
+      types: group.types.filter((t) => (canCreateType ? canCreateType(t.key) : true)),
+    }))
+    .filter((group) => group.types.length > 0);
+
+  if (!filteredGroups.length) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -39,7 +48,7 @@ export default function NewDocumentMenu({ onSelect, creating = false, disabled =
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>Create a document</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {groups.map((group) => (
+        {filteredGroups.map((group) => (
           <DropdownMenuSub key={group.key}>
             <DropdownMenuSubTrigger className="gap-2">
               <CategoryIcon category={group.key} className="h-4 w-4 text-muted-foreground" />

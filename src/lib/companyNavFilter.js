@@ -1,15 +1,13 @@
-import { Building2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
 
 /** Nav item ids visible to each company role (admin sees full app nav). */
 const EMPLOYEE_NAV_IDS = new Set([
   "nav-dashboard",
-  "nav-company-workspace",
   "nav-payslips",
   "nav-documents",
   "nav-settings",
-  "nav-team-members",
 ]);
 
 const MANAGER_EXTRA_NAV_IDS = new Set([
@@ -25,7 +23,11 @@ const MANAGER_EXTRA_NAV_IDS = new Set([
  * @param {{ companyRole?: string, userId?: string, companyId?: string } | null} membership
  */
 export function filterNavigationForCompanyRole(items, membership) {
-  if (!membership?.companyRole || membership.companyRole === "admin") {
+  if (!membership?.companyRole) {
+    return items;
+  }
+  // Org owners keep full solo-business navigation (invoices, clients, cash flow, etc.).
+  if (membership.isOrgOwner) {
     return items;
   }
 
@@ -37,10 +39,19 @@ export function filterNavigationForCompanyRole(items, membership) {
 
   const allowed = new Set(EMPLOYEE_NAV_IDS);
 
-  if (membership.companyRole === "manager") {
+  if (membership.companyRole === "manager" || membership.companyRole === "admin") {
     for (const id of MANAGER_EXTRA_NAV_IDS) allowed.add(id);
     if (hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_LEAVE)) {
       allowed.add("nav-documents");
+    }
+  }
+
+  if (membership.companyRole === "admin") {
+    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL)) {
+      allowed.add("nav-payslips");
+    }
+    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
+      allowed.add("nav-settings");
     }
   }
 
@@ -58,15 +69,7 @@ export function filterNavigationForCompanyRole(items, membership) {
  * @param {(permission: string) => boolean} hasPermission
  */
 export function injectCompanyDashboardNavItems(items, hasPermission) {
-  const extra = [
-    {
-      id: "nav-company-workspace",
-      title: "Company Workspace",
-      url: createPageUrl("CompanyWorkspace"),
-      icon: Building2,
-      roles: ["user"],
-    },
-  ];
+  const extra = [];
   if (hasPermission(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     extra.push({
       id: "nav-team-members",

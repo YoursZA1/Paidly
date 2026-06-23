@@ -43,6 +43,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboard";
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
+import { tryAcceptStoredInviteToken, peekPendingInviteToken } from "@/services/TenantRoleService";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const SIGNUP_ONBOARDING_DRAFT_KEY = "paidly_signup_onboarding_draft";
@@ -173,8 +174,13 @@ export default function Signup() {
     }
   }, [searchParams, location.hash]);
 
+  // Company invite link: pre-fill email from /invite → /Signup?invite=1&email=...
   useEffect(() => {
-    if (location.hash !== "#sign-up") return;
+    const inviteEmail = String(searchParams.get("email") || "").trim().toLowerCase();
+    if (inviteEmail) setEmail(inviteEmail);
+  }, [searchParams]);
+
+  useEffect(() => {
     const scrollToForm = () =>
       document.getElementById("sign-up")?.scrollIntoView({ behavior: "smooth", block: "start" });
     scrollToForm();
@@ -307,6 +313,9 @@ export default function Signup() {
             role: "user",
             plan: selectedPlan,
             subscription_plan: selectedPlan,
+            // Shareable company-invite signup: suppress personal-org creation in
+            // handle_new_user; the validated invite is bound post-auth. Grants no role/org.
+            ...(peekPendingInviteToken() ? { pending_company_invite: "true" } : {}),
           }
         );
         authUserId = createdAuthUser?.id || null;
@@ -373,6 +382,7 @@ export default function Signup() {
       try {
         const sessionWrap = await SupabaseAuthService.getSession();
         if (sessionWrap?.session?.user?.id) {
+          await tryAcceptStoredInviteToken();
           await processPendingAffiliateReferral();
         }
       } catch {
@@ -471,6 +481,7 @@ export default function Signup() {
       }
 
       try {
+        await tryAcceptStoredInviteToken();
         await processPendingAffiliateReferral();
       } catch {
         /* non-fatal */

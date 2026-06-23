@@ -18,6 +18,7 @@ let fetchSyncUsersForAdmin;
 let getSecurityEventsSnapshot;
 let handleVercelAffiliateDeclinePost;
 let handleVercelAdminInviteUserPost;
+let handleAdminCompanyInvitePost;
 let applyPaidlyServerlessCors;
 let validateServiceRoleKey;
 let runAdminDeleteOrphanProfiles;
@@ -129,6 +130,17 @@ async function ensureInviteUserDeps() {
     handleVercelAdminInviteUserPost = m.handleVercelAdminInviteUserPost;
   });
   return inviteUserDepsPromise;
+}
+
+let inviteCompanyDepsPromise = null;
+async function ensureInviteCompanyDeps() {
+  await ensureCorsDeps();
+  if (handleAdminCompanyInvitePost) return;
+  if (inviteCompanyDepsPromise) return inviteCompanyDepsPromise;
+  inviteCompanyDepsPromise = import("../../server/src/adminCompanyInviteRoutes.js").then((m) => {
+    handleAdminCompanyInvitePost = m.handleAdminCompanyInvitePost;
+  });
+  return inviteCompanyDepsPromise;
 }
 
 let handleVercelSendPlatformMessagePost;
@@ -884,6 +896,7 @@ export default async function handler(req, res) {
       "affiliate-commission",
       "decline",
       "invite-user",
+      "invite-company",
       "clean-orphaned-users",
       "send-platform-message",
       "send-message",
@@ -945,6 +958,10 @@ export default async function handler(req, res) {
         if (resource === "invite-user") {
           await ensureInviteUserDeps();
           return handleVercelAdminInviteUserPost(req, res);
+        }
+        if (resource === "invite-company") {
+          await ensureInviteCompanyDeps();
+          return handleAdminCompanyInvitePost(req, res);
         }
         if (resource === "send-platform-message") {
           await ensureSendPlatformMessageDeps();

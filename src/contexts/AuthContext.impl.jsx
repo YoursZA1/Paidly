@@ -9,6 +9,7 @@ import { clearSessionOrgIdCache } from "@/api/customClient";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";
+import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
@@ -1112,6 +1113,9 @@ export function AuthProvider({ children }) {
         connectionLifecycle.markConnected("signed_in");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
+        void tryAcceptStoredInviteToken().then(() => {
+          void processPendingAffiliateReferral();
+        });
         // Do not await — refreshUser calls getSession and can deadlock with setSession.
         void refreshUserRef.current();
         touchAuthHeartbeatIfValid(norm);

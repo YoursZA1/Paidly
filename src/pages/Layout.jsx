@@ -49,6 +49,9 @@ import { createPageUrl, isWelcomeTourEligible, isQuickSetupEligible, clearQuickS
 import { ADMIN_NAV_ITEMS } from "@/lib/adminNavConfig";
 import { DASHBOARD_STAFF_ROLES, isStaffDashboardRole } from "@/lib/staffDashboard";
 import useCompanyContext from "@/hooks/useCompanyContext";
+import useOnboardingRole from "@/hooks/useOnboardingRole";
+import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
+import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import {
   filterNavigationForCompanyRole,
   injectCompanyDashboardNavItems,
@@ -651,7 +654,23 @@ export default function Layout({ children, currentPageName }) {
     user?.plan ||
     "none";
 
-  const { ctx: companyCtx, hasPermission: hasCompanyPermission } = useCompanyContext();
+  const {
+    ctx: companyCtx,
+    hasPermission: hasCompanyPermission,
+    loading: companyContextLoading,
+    isOrgOwner,
+  } = useCompanyContext();
+  const { loading: onboardingRoleLoading, isAdminOnboarding } = useOnboardingRole();
+  const inviteAcceptRef = useRef(false);
+
+  usePostAuthHomeRedirect({ enabled: !isAdminV2Route });
+
+  useEffect(() => {
+    if (!user?.id || inviteAcceptRef.current) return;
+    inviteAcceptRef.current = true;
+    void tryAcceptStoredInviteToken();
+  }, [user?.id]);
+
   const navigationItems = useMemo(() => {
     let items = getNavigationItems(planForNavFeatures, user?.role);
     if (companyCtx) {
@@ -659,6 +678,7 @@ export default function Layout({ children, currentPageName }) {
         companyRole: companyCtx.companyRole,
         userId: companyCtx.userId,
         companyId: companyCtx.companyId,
+        isOrgOwner: companyCtx.isOrgOwner,
       });
       items = injectCompanyDashboardNavItems(items, hasCompanyPermission);
     }
@@ -668,10 +688,17 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
     if (currentPageName !== "Dashboard") return;
+    // Platform staff (admin/management/sales/support) use the /admin-v2 shell, not company onboarding.
+    if (isStaffDashboardRole(user?.role)) {
+      setShowActivationOnboarding(false);
+      return;
+    }
     if (!isQuickSetupEligible(user.id)) {
       setShowActivationOnboarding(false);
       return;
     }
+    // Role check before form display: wait until Supabase user_company_roles resolves.
+    if (companyContextLoading || onboardingRoleLoading) return;
     const business =
       layoutProfile?.business && typeof layoutProfile.business === "object" ? layoutProfile.business : {};
     const onboarding =
@@ -684,7 +711,7 @@ export default function Layout({ children, currentPageName }) {
     const dismissedKey = `paidly_onboarding_v2_dismissed_${user.id}`;
     const dismissed = typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "1";
     if (!dismissed) setShowActivationOnboarding(true);
-  }, [user?.id, layoutProfile?.id, layoutProfile?.business, currentPageName]);
+  }, [user?.id, user?.role, layoutProfile?.id, layoutProfile?.business, currentPageName, companyContextLoading, onboardingRoleLoading]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -980,8 +1007,8 @@ export default function Layout({ children, currentPageName }) {
             </nav>
           </div>
 
-          {/* Create Invoice CTA — hidden for company employees */}
-          {companyCtx?.companyRole !== 'employee' && (
+          {/* Create Invoice CTA — solo org owners only */}
+          {(!companyCtx?.companyId || isOrgOwner) && (
           <div className={`mt-auto ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
             <Link
               to={createPageUrl("CreateInvoice")}
@@ -1288,6 +1315,7 @@ export default function Layout({ children, currentPageName }) {
         <OnboardingTour isOpen={showTour} onClose={() => setShowTour(false)} />
         <FastActivationOnboarding
           isOpen={showActivationOnboarding}
+          isCompanyAdmin={isAdminOnboarding}
           profile={layoutProfile || user}
           onClose={() => {
             if (user?.id) {

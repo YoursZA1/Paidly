@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { Brain, ExternalLink, TrendingUp, Users, Wrench } from 'lucide-react';
 import TeamMembers from '@/components/settings/TeamMembers';
+import PlatformCompanyInvitePanel from '@/components/admin/PlatformCompanyInvitePanel';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { getPermissions } from '@/lib/permissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -525,6 +526,20 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <TeamMembers />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {String(currentUser?.role || '').toLowerCase() === 'admin' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl">Company onboarding</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Invite company administrators to new or existing tenant organizations.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <PlatformCompanyInvitePanel />
               </CardContent>
             </Card>
           ) : null}

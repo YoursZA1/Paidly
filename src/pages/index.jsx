@@ -77,6 +77,7 @@ const AuditLogPage = lazy(() => import("./AuditLogPage"));
 const ForgotPassword = lazy(() => import("./ForgotPassword"));
 const ResetPassword = lazy(() => import("./ResetPassword"));
 const AcceptInvite = lazy(() => import("./AcceptInvite"));
+const InvitePage = lazy(() => import("./Invite"));
 const About = lazy(() => import("./About"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
@@ -96,6 +97,7 @@ const NotFoundPage = lazy(() =>
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
+import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
@@ -118,6 +120,8 @@ const AUTH_ROUTES = [
     { path: "/ForgotPassword", element: <AuthLayout><ForgotPassword /></AuthLayout> },
     { path: "/ResetPassword", element: <ResetPassword /> },
     { path: "/AcceptInvite", element: <AcceptInvite /> },
+    { path: "/invite", element: <InvitePage /> },
+    { path: "/Invite", element: <InvitePage /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },
     { path: "/view/:token", element: <InvoiceView /> },
     /** Guest-safe PDF + download; uses ?token= (public API) or ?id= when logged in */
@@ -142,34 +146,44 @@ const AUTH_ROUTES = [
     { path: "/cancel", element: <PayfastCancel /> },
 ];
 
+function ownerRoute(element) {
+    return (
+        <RequireAuth>
+            <RequireBusinessOwner>{element}</RequireBusinessOwner>
+        </RequireAuth>
+    );
+}
+
 // --- Main App Pages ---
 const MAIN_ROUTES = [
     { path: "/", element: <Home /> },
     { path: "/Dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
-    { path: "/Clients", element: <RequireAuth><Clients /></RequireAuth> },
-    { path: "/clients", element: <RequireAuth><Clients /></RequireAuth> },
+    { path: "/employee-dashboard", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
+    { path: "/EmployeeDashboard", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
+    { path: "/Clients", element: ownerRoute(<Clients />) },
+    { path: "/clients", element: ownerRoute(<Clients />) },
     { path: "/Settings", element: <RequireAuth><Settings /></RequireAuth> },
     { path: "/settings", element: <RequireAuth><Settings /></RequireAuth> },
     { path: "/Reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
     { path: "/reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
-    { path: "/BillingAndInvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
-    { path: "/billingandinvoices", element: <RequireAuth><BillingAndInvoices /></RequireAuth> },
+    { path: "/BillingAndInvoices", element: ownerRoute(<BillingAndInvoices />) },
+    { path: "/billingandinvoices", element: ownerRoute(<BillingAndInvoices />) },
     { path: "/Notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/notes", element: <RequireAuth><Notes /></RequireAuth> },
-    { path: "/Services", element: <RequireAuth><Services /></RequireAuth> },
-    { path: "/services", element: <RequireAuth><Services /></RequireAuth> },
+    { path: "/Services", element: ownerRoute(<Services />) },
+    { path: "/services", element: ownerRoute(<Services />) },
     { path: "/Inventory", element: <RequireAuth><Navigate to="/Services" replace /></RequireAuth> },
     { path: "/inventory", element: <RequireAuth><Navigate to="/Services" replace /></RequireAuth> },
     { path: "/Calendar", element: <RequireAuth><Calendar /></RequireAuth> },
     { path: "/Messages", element: <RequireAuth><Messages /></RequireAuth> },
-    { path: "/Budgets", element: <RequireAuth><Budgets /></RequireAuth> },
-    { path: "/Accounting", element: <RequireAuth><Accounting /></RequireAuth> },
-    { path: "/ClientDetail", element: <RequireAuth><ClientDetail /></RequireAuth> },
-    { path: "/EditClient", element: <RequireAuth><EditClient /></RequireAuth> },
-    { path: "/editclient", element: <RequireAuth><EditClient /></RequireAuth> },
-    { path: "/EditCatalogItem", element: <RequireAuth><EditCatalogItem /></RequireAuth> },
-    { path: "/editcatalogitem", element: <RequireAuth><EditCatalogItem /></RequireAuth> },
+    { path: "/Budgets", element: ownerRoute(<Budgets />) },
+    { path: "/Accounting", element: ownerRoute(<Accounting />) },
+    { path: "/ClientDetail", element: ownerRoute(<ClientDetail />) },
+    { path: "/EditClient", element: ownerRoute(<EditClient />) },
+    { path: "/editclient", element: ownerRoute(<EditClient />) },
+    { path: "/EditCatalogItem", element: ownerRoute(<EditCatalogItem />) },
+    { path: "/editcatalogitem", element: ownerRoute(<EditCatalogItem />) },
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
@@ -186,46 +200,46 @@ const MAIN_ROUTES = [
 
 // --- Invoice Pages ---
 const INVOICE_ROUTES = [
-    { path: "/Invoices", element: <RequireAuth><Invoices /></RequireAuth> },
-    { path: "/invoices", element: <RequireAuth><Invoices /></RequireAuth> },
-    { path: "/CreateInvoice", element: <RequireAuth><CreateInvoice /></RequireAuth> },
-    { path: "/createinvoice", element: <RequireAuth><CreateInvoice /></RequireAuth> },
-    { path: "/CreateDocument", element: <RequireAuth><Navigate to="/CreateDocument/invoice" replace /></RequireAuth> },
-    { path: "/CreateDocument/:type", element: <RequireAuth><CreateDocument /></RequireAuth> },
-    { path: "/createdocument", element: <RequireAuth><Navigate to="/CreateDocument/invoice" replace /></RequireAuth> },
-    { path: "/createdocument/:type", element: <RequireAuth><CreateDocument /></RequireAuth> },
+    { path: "/Invoices", element: ownerRoute(<Invoices />) },
+    { path: "/invoices", element: ownerRoute(<Invoices />) },
+    { path: "/CreateInvoice", element: ownerRoute(<CreateInvoice />) },
+    { path: "/createinvoice", element: ownerRoute(<CreateInvoice />) },
+    { path: "/CreateDocument", element: ownerRoute(<Navigate to="/CreateDocument/invoice" replace />) },
+    { path: "/CreateDocument/:type", element: ownerRoute(<CreateDocument />) },
+    { path: "/createdocument", element: ownerRoute(<Navigate to="/CreateDocument/invoice" replace />) },
+    { path: "/createdocument/:type", element: ownerRoute(<CreateDocument />) },
     { path: "/ViewDocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
     { path: "/viewdocument/:docType/:id", element: <RequireAuth><ViewDocument /></RequireAuth> },
-    { path: "/Documents/:documentId", element: <RequireAuth><DocumentDetail /></RequireAuth> },
-    { path: "/documents/:documentId", element: <RequireAuth><DocumentDetail /></RequireAuth> },
-    { path: "/Documents", element: <RequireAuth><Documents /></RequireAuth> },
-    { path: "/documents", element: <RequireAuth><Documents /></RequireAuth> },
-    { path: "/CreateLeaveRequest", element: <RequireAuth><CreateLeaveRequest /></RequireAuth> },
-    { path: "/createleaverequest", element: <RequireAuth><CreateLeaveRequest /></RequireAuth> },
-    { path: "/CreateExpenseClaim", element: <RequireAuth><CreateExpenseClaim /></RequireAuth> },
-    { path: "/createexpenseclaim", element: <RequireAuth><CreateExpenseClaim /></RequireAuth> },
+    { path: "/Documents/:documentId", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><DocumentDetail /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/documents/:documentId", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><DocumentDetail /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Documents", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><Documents /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/documents", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><Documents /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/CreateLeaveRequest", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_LEAVE}><CreateLeaveRequest /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/createleaverequest", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_LEAVE}><CreateLeaveRequest /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/CreateExpenseClaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><CreateExpenseClaim /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/createexpenseclaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><CreateExpenseClaim /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreateTypedDocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
     { path: "/createtypeddocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
-    { path: "/ViewInvoice", element: <RequireAuth><ViewInvoice /></RequireAuth> },
-    { path: "/EditInvoice", element: <RequireAuth><EditInvoice /></RequireAuth> },
-    { path: "/RecurringInvoices", element: <RequireAuth><RecurringInvoices /></RequireAuth> },
-    { path: "/CreateRecurringInvoice", element: <RequireAuth><CreateRecurringInvoice /></RequireAuth> },
+    { path: "/ViewInvoice", element: ownerRoute(<ViewInvoice />) },
+    { path: "/EditInvoice", element: ownerRoute(<EditInvoice />) },
+    { path: "/RecurringInvoices", element: ownerRoute(<RecurringInvoices />) },
+    { path: "/CreateRecurringInvoice", element: ownerRoute(<CreateRecurringInvoice />) },
 ];
 
 // --- Quote Pages ---
 const QUOTE_ROUTES = [
-    { path: "/Quotes", element: <RequireAuth><Quotes /></RequireAuth> },
-    { path: "/quotes", element: <RequireAuth><Quotes /></RequireAuth> },
-    { path: "/CreateQuote", element: <RequireAuth><CreateQuote /></RequireAuth> },
-    { path: "/ViewQuote", element: <RequireAuth><ViewQuote /></RequireAuth> },
-    { path: "/EditQuote", element: <RequireAuth><EditQuote /></RequireAuth> },
-    { path: "/QuotePDF", element: <RequireAuth><QuotePDF /></RequireAuth> },
-    { path: "/QuoteTemplates", element: <RequireAuth><QuoteTemplates /></RequireAuth> },
+    { path: "/Quotes", element: ownerRoute(<Quotes />) },
+    { path: "/quotes", element: ownerRoute(<Quotes />) },
+    { path: "/CreateQuote", element: ownerRoute(<CreateQuote />) },
+    { path: "/ViewQuote", element: ownerRoute(<ViewQuote />) },
+    { path: "/EditQuote", element: ownerRoute(<EditQuote />) },
+    { path: "/QuotePDF", element: ownerRoute(<QuotePDF />) },
+    { path: "/QuoteTemplates", element: ownerRoute(<QuoteTemplates />) },
 ];
 
 // --- Payslip & Report Pages ---
 const PAYSLIP_REPORT_ROUTES = [
-    { path: "/Payslips", element: <RequireAuth><Payslips /></RequireAuth> },
+    { path: "/Payslips", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><Payslips /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreatePayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><CreatePayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/EditPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><EditPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/PayslipPDF", element: <RequireAuth><PayslipPDF /></RequireAuth> },
@@ -233,8 +247,8 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/ReportPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/reportpdf", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><Reports /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/TeamMembers", element: <RequireAuth><TeamMembers /></RequireAuth> },
-    { path: "/teammembers", element: <RequireAuth><TeamMembers /></RequireAuth> },
+    { path: "/TeamMembers", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><TeamMembers /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/teammembers", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><TeamMembers /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CompanyWorkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
     { path: "/companyworkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
     { path: "/CashFlow", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><CashFlow /></RequireCompanyPermissionRedirect></RequireAuth> },
@@ -352,6 +366,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/forgotpassword$/i,
     /^\/resetpassword$/i,
     /^\/acceptinvite$/i,
+    /^\/invite$/i,
     /^\/publicinvoice$/i,
     /^\/publicquote$/i,
     /^\/publicpayslip$/i,

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { getUserFromRequest } from "./supabaseAuth.js";
 import { normalizeRequestBody } from "./validateBody.js";
@@ -16,6 +17,38 @@ import {
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
+}
+
+const INVITE_TTL_DAYS = 14;
+
+function companyInviteAppUrl(token) {
+  const origin =
+    (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
+    process.env.VITE_APP_URL ||
+    process.env.APP_URL ||
+    "https://www.paidly.co.za";
+  return `${String(origin).replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+}
+
+function generateInviteToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+async function persistCompanyInvite({ orgId, email, role, createdBy, source = "company_admin" }) {
+  const token = generateInviteToken();
+  const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await supabaseAdmin.from("company_invites").insert({
+    email,
+    role: role === COMPANY_ROLES.ADMIN ? "admin" : role,
+    org_id: orgId,
+    token,
+    status: "pending",
+    expires_at: expiresAt,
+    created_by: createdBy,
+    source,
+  });
+  if (error) throw new Error(error.message || "Could not store invite");
+  return { token, expiresAt, inviteLink: companyInviteAppUrl(token) };
 }
 
 const COMPANY_ROLE_LABELS = {
@@ -108,6 +141,16 @@ export async function handleCompanyTeamInvite(req, res) {
         jobFunction
       );
       if (memErr) return jsonError(res, 500, memErr.message || "Could not add member");
+      const { error: roleErr } = await supabaseAdmin.rpc("upsert_user_company_role", {
+        p_user_id: existingProfile.id,
+        p_org_id: gate.membership.companyId,
+        p_company_role: role,
+        p_onboarding_form: role === COMPANY_ROLES.ADMIN ? "admin" : "member",
+        p_assigned_by: gate.user.id,
+      });
+      if (roleErr) {
+        return jsonError(res, 500, roleErr.message || "Could not assign company role");
+      }
       return res.status(200).json({
         ok: true,
         mode: "existing_user",
@@ -118,12 +161,15 @@ export async function handleCompanyTeamInvite(req, res) {
       });
     }
 
+    const onboardingForm = role === COMPANY_ROLES.ADMIN ? "admin" : "member";
     const inviteMetadata = {
       full_name: fullName || email.split("@")[0],
       company_org_id: gate.membership.companyId,
       company_role: role,
       company_job_function: jobFunction,
+      company_onboarding_form: onboardingForm,
       plan: "none",
+      invited_by: gate.user.id,
     };
 
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -141,10 +187,24 @@ export async function handleCompanyTeamInvite(req, res) {
       return jsonError(res, status, msg);
     }
 
-    const inviteLink = String(linkData?.properties?.action_link || "").trim();
-    if (!inviteLink) {
+    const authInviteLink = String(linkData?.properties?.action_link || "").trim();
+    if (!authInviteLink) {
       return jsonError(res, 500, "Could not create invite link");
     }
+
+    let persistedInvite = null;
+    try {
+      persistedInvite = await persistCompanyInvite({
+        orgId: gate.membership.companyId,
+        email,
+        role,
+        createdBy: gate.user.id,
+      });
+    } catch (persistErr) {
+      console.warn("[company/invite] persist company_invites failed:", persistErr?.message);
+    }
+
+    const inviteLink = persistedInvite?.inviteLink || authInviteLink;
 
     const [{ data: inviterProfile }, { data: orgRow }] = await Promise.all([
       supabaseAdmin
@@ -167,7 +227,7 @@ export async function handleCompanyTeamInvite(req, res) {
 
     const emailResult = await sendCompanyTeamInviteEmail({
       to: email,
-      inviteLink,
+      inviteLink: authInviteLink,
       companyName,
       inviterName,
       roleLabel: COMPANY_ROLE_LABELS[role] || "team member",
@@ -180,7 +240,10 @@ export async function handleCompanyTeamInvite(req, res) {
       role,
       job_function: jobFunction,
       user_id: linkData?.user?.id || null,
-      invite_link: inviteLink,
+      invite_link: persistedInvite?.inviteLink || authInviteLink,
+      auth_invite_link: authInviteLink,
+      invite_token: persistedInvite?.token || null,
+      expires_at: persistedInvite?.expiresAt || null,
       email_sent: emailResult.success === true,
       email_error: emailResult.success ? null : emailResult.error || "Email delivery failed",
     });
@@ -281,8 +344,173 @@ export async function handleCompanyContextGet(req, res) {
   }
 }
 
+export async function handleCompanyInviteValidate(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return jsonError(res, 405, "Method not allowed");
+  }
+
+  try {
+    const token = String(req.query?.token || "").trim();
+    if (!token) return jsonError(res, 400, "token is required");
+
+    const { data, error } = await supabaseAdmin.rpc("validate_company_invite_token", {
+      p_token: token,
+    });
+    if (error) return jsonError(res, 500, error.message || "Validation failed");
+    if (!data?.ok) {
+      const status = data?.error === "not_found" ? 404 : 400;
+      return res.status(status).json({ ok: false, error: data?.error || "invalid" });
+    }
+    return res.status(200).json(data);
+  } catch (err) {
+    return jsonError(res, 500, err?.message || "Validation failed");
+  }
+}
+
+/**
+ * GET /api/company/invites — list invites for the caller's company (admin only).
+ */
+export async function handleCompanyInvitesList(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return jsonError(res, 405, "Method not allowed");
+  }
+
+  try {
+    const gate = await requireCompanyAdmin(req, res);
+    if (!gate.ok) return gate.response;
+
+    const status = String(req.query?.status || "").trim().toLowerCase();
+    let query = supabaseAdmin
+      .from("company_invites")
+      .select("id, email, role, status, expires_at, created_at, accepted_at, source")
+      .eq("org_id", gate.membership.companyId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (status && status !== "all") {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+    if (error) return jsonError(res, 500, error.message || "Could not load invites");
+
+    return res.status(200).json({ ok: true, invites: data || [] });
+  } catch (err) {
+    return jsonError(res, 500, err?.message || "Could not load invites");
+  }
+}
+
+/**
+ * DELETE /api/company/invites/:id — revoke a pending invite.
+ */
+export async function handleCompanyInviteRevoke(req, res) {
+  if (req.method !== "DELETE") {
+    res.setHeader("Allow", "DELETE");
+    return jsonError(res, 405, "Method not allowed");
+  }
+
+  try {
+    const gate = await requireCompanyAdmin(req, res);
+    if (!gate.ok) return gate.response;
+
+    const inviteId = String(req.params?.id || req.query?.id || "").trim();
+    if (!inviteId) return jsonError(res, 400, "invite id is required");
+
+    const { data: row, error: fetchErr } = await supabaseAdmin
+      .from("company_invites")
+      .select("id, status")
+      .eq("id", inviteId)
+      .eq("org_id", gate.membership.companyId)
+      .maybeSingle();
+
+    if (fetchErr) return jsonError(res, 500, fetchErr.message);
+    if (!row) return jsonError(res, 404, "Invite not found");
+    if (row.status !== "pending") return jsonError(res, 400, "Only pending invites can be revoked");
+
+    const { error } = await supabaseAdmin
+      .from("company_invites")
+      .update({ status: "revoked" })
+      .eq("id", inviteId);
+
+    if (error) return jsonError(res, 500, error.message || "Could not revoke invite");
+    return res.status(200).json({ ok: true, id: inviteId, status: "revoked" });
+  } catch (err) {
+    return jsonError(res, 500, err?.message || "Could not revoke invite");
+  }
+}
+
+/**
+ * POST /api/company/invites/:id/resend — extend expiry and return fresh share link.
+ */
+export async function handleCompanyInviteResend(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return jsonError(res, 405, "Method not allowed");
+  }
+
+  try {
+    const gate = await requireCompanyAdmin(req, res);
+    if (!gate.ok) return gate.response;
+
+    const inviteId = String(req.params?.id || req.body?.id || "").trim();
+    if (!inviteId) return jsonError(res, 400, "invite id is required");
+
+    const { data: row, error: fetchErr } = await supabaseAdmin
+      .from("company_invites")
+      .select("id, email, role, status, token, org_id")
+      .eq("id", inviteId)
+      .eq("org_id", gate.membership.companyId)
+      .maybeSingle();
+
+    if (fetchErr) return jsonError(res, 500, fetchErr.message);
+    if (!row) return jsonError(res, 404, "Invite not found");
+    if (row.status === "accepted") return jsonError(res, 400, "Invite already accepted");
+
+    const newToken = generateInviteToken();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const { error: updateErr } = await supabaseAdmin
+      .from("company_invites")
+      .update({ token: newToken, status: "pending", expires_at: expiresAt })
+      .eq("id", inviteId);
+
+    if (updateErr) return jsonError(res, 500, updateErr.message || "Could not refresh invite");
+
+    const inviteLink = companyInviteAppUrl(newToken);
+    const { data: orgRow } = await supabaseAdmin
+      .from("organizations")
+      .select("name")
+      .eq("id", row.org_id)
+      .maybeSingle();
+
+    const emailResult = await sendCompanyTeamInviteEmail({
+      to: row.email,
+      inviteLink,
+      companyName: orgRow?.name || "your company",
+      inviterName: "Your team admin",
+      roleLabel: COMPANY_ROLE_LABELS[row.role] || "team member",
+    });
+
+    return res.status(200).json({
+      ok: true,
+      id: inviteId,
+      invite_link: inviteLink,
+      expires_at: expiresAt,
+      email_sent: emailResult.success === true,
+      email_error: emailResult.success ? null : emailResult.error || "Email delivery failed",
+    });
+  } catch (err) {
+    return jsonError(res, 500, err?.message || "Could not resend invite");
+  }
+}
+
 export function registerCompanyTeamRoutes(app) {
   app.post("/api/company/invite", handleCompanyTeamInvite);
+  app.get("/api/company/invite/validate", handleCompanyInviteValidate);
+  app.get("/api/company/invites", handleCompanyInvitesList);
+  app.delete("/api/company/invites/:id", handleCompanyInviteRevoke);
+  app.post("/api/company/invites/:id/resend", handleCompanyInviteResend);
   app.patch("/api/company/role", handleCompanyTeamRolePatch);
   app.get("/api/company/context", handleCompanyContextGet);
   // Legacy paths (bookmarks / older clients)

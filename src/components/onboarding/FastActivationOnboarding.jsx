@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,33 @@ import CurrencySelector from "@/components/CurrencySelector";
 import { User } from "@/api/entities";
 import { createPageUrl, clearQuickSetupEligible } from "@/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import { updateOrganizationProfile } from "@/services/OrganizationProfileService";
+
+function splitName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first_name: "", last_name: "" };
+  if (parts.length === 1) return { first_name: parts[0], last_name: "" };
+  return { first_name: parts[0], last_name: parts.slice(1).join(" ") };
+}
 
 function normalizeOnboardingBusiness(profile = {}) {
   const business = profile?.business && typeof profile.business === "object" ? profile.business : {};
   const onboarding = business?.onboarding_v2 && typeof business.onboarding_v2 === "object" ? business.onboarding_v2 : {};
+  const nameParts = splitName(profile?.full_name || profile?.display_name || "");
   return {
     business_name: profile?.company_name || "",
+    registration_number: onboarding?.registration_number || "",
     industry: onboarding?.industry || business?.industry || "",
+    address: profile?.company_address || onboarding?.address || "",
     currency: profile?.currency || "ZAR",
+    full_name: profile?.full_name || profile?.display_name || "",
+    first_name: profile?.first_name || nameParts.first_name,
+    last_name: profile?.last_name || nameParts.last_name,
+    phone: profile?.phone || "",
+    department: profile?.department || onboarding?.department || "",
+    job_title: profile?.job_title || onboarding?.job_title || "",
+    tax_info: onboarding?.tax_info || "",
     goal: onboarding?.goal || "",
     status: onboarding?.status || "welcome",
   };
@@ -27,9 +46,17 @@ const GOAL_OPTIONS = [
   { id: "setup_business", label: "Set up business", route: createPageUrl("Settings") + "?tab=profile&onboarding=1" },
 ];
 
-export default function FastActivationOnboarding({ isOpen, profile, onClose, onProfileRefresh }) {
+/**
+ * Post-signup activation onboarding.
+ * @param {{ isOpen: boolean, isCompanyAdmin?: boolean, profile?: object, onClose?: () => void, onProfileRefresh?: () => void }} props
+ *   isCompanyAdmin distinguishes org-owner signup (extended company-details form) from
+ *   invited employees/managers (standard personal-profile form). Resolved from Supabase
+ *   user_company_roles via useOnboardingRole / get_my_onboarding_context RPC.
+ */
+export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true, profile, onClose, onProfileRefresh }) {
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
+  const { companyId } = useCompanyContext();
   const [step, setStep] = useState("welcome");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => normalizeOnboardingBusiness(profile));
@@ -52,30 +79,67 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
     return ob;
   };
 
-  const persistDraft = async (patch = {}) => {
-    const next = { ...form, ...patch };
-    setSaving(true);
-    try {
-      const baseOnboarding = getBaseOnboarding();
-      await User.updateMyUserData({
-        company_name: next.business_name?.trim(),
-        currency: next.currency || "ZAR",
-        business: {
-          industry: next.industry || "",
-          onboarding_v2: {
-            ...baseOnboarding,
-            status: next.status || step,
-            goal: next.goal || "",
-            industry: next.industry || "",
-            updated_at: new Date().toISOString(),
-          },
-        },
-      });
-      onProfileRefresh?.();
-    } finally {
-      setSaving(false);
-    }
-  };
+  const persistDraft = useCallback(
+    async (patch = {}) => {
+      const next = { ...form, ...patch };
+      setSaving(true);
+      try {
+        const baseOnboarding = getBaseOnboarding();
+        const onboardingPayload = {
+          ...baseOnboarding,
+          status: next.status || step,
+          goal: next.goal || "",
+          industry: isCompanyAdmin ? next.industry || "" : baseOnboarding?.industry || "",
+          updated_at: new Date().toISOString(),
+        };
+
+        if (isCompanyAdmin) {
+          await User.updateMyUserData({
+            company_name: next.business_name?.trim(),
+            company_address: next.address?.trim() || undefined,
+            phone: next.phone?.trim() || undefined,
+            currency: next.currency || "ZAR",
+            business: {
+              industry: next.industry || "",
+              onboarding_v2: {
+                ...onboardingPayload,
+                registration_number: next.registration_number || "",
+                address: next.address || "",
+                tax_info: next.tax_info || "",
+              },
+            },
+          });
+          if (companyId) {
+            await updateOrganizationProfile(companyId, {
+              name: next.business_name?.trim(),
+              registration_number: next.registration_number?.trim() || null,
+              industry: next.industry?.trim() || null,
+              address: next.address?.trim() || null,
+              phone: next.phone?.trim() || null,
+              company_email: authUser?.email || null,
+              tax_info: next.tax_info?.trim() ? { notes: next.tax_info.trim() } : {},
+            }).catch(() => {});
+          }
+        } else {
+          const userPayload = { business: { onboarding_v2: onboardingPayload } };
+          const first = (next.first_name || "").trim();
+          const last = (next.last_name || "").trim();
+          const display = [first, last].filter(Boolean).join(" ");
+          if (display) userPayload.full_name = display;
+          if (first) userPayload.first_name = first;
+          if (last) userPayload.last_name = last;
+          if (next.phone?.trim()) userPayload.phone = next.phone.trim();
+          if (next.department?.trim()) userPayload.department = next.department.trim();
+          if (next.job_title?.trim()) userPayload.job_title = next.job_title.trim();
+          await User.updateMyUserData(userPayload);
+        }
+        onProfileRefresh?.();
+      } finally {
+        setSaving(false);
+      }
+    },
+    [form, step, isCompanyAdmin, companyId, authUser?.email, profile, onProfileRefresh]
+  );
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -87,7 +151,7 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [isOpen, step, form.business_name, form.industry, form.currency, form.goal]);
+  }, [isOpen, step, persistDraft]);
 
   const selectedGoal = useMemo(() => GOAL_OPTIONS.find((o) => o.id === form.goal) || null, [form.goal]);
 
@@ -97,9 +161,16 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
       return;
     }
     if (step === "business") {
-      if (!form.business_name.trim()) return;
-      await persistDraft({ status: "goal" });
-      setStep("goal");
+      if (isCompanyAdmin) {
+        if (!form.business_name.trim()) return;
+        await persistDraft({ status: "goal" });
+        setStep("goal");
+        return;
+      }
+      // Invited employee: profile-only setup, then straight to the dashboard.
+      if (!form.first_name.trim()) return;
+      await persistDraft({ status: "success" });
+      setStep("success");
       return;
     }
     if (step === "goal") {
@@ -139,10 +210,15 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
         },
       },
     });
+    if (isCompanyAdmin && companyId) {
+      await updateOrganizationProfile(companyId, {
+        onboarding_completed_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
     clearQuickSetupEligible(authUser?.id);
     onProfileRefresh?.();
     onClose?.();
-    navigate(createPageUrl("Dashboard"));
+    navigate(isCompanyAdmin ? createPageUrl("Dashboard") : createPageUrl("EmployeeDashboard"));
   };
 
   return (
@@ -151,9 +227,11 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
         {step === "welcome" && (
           <>
             <DialogHeader>
-              <DialogTitle>Get Paid Faster. Stay in Control.</DialogTitle>
+              <DialogTitle>{isCompanyAdmin ? "Get Paid Faster. Stay in Control." : "Welcome to the team."}</DialogTitle>
               <DialogDescription>
-                Complete a quick setup and get to your first meaningful action in under 2 minutes.
+                {isCompanyAdmin
+                  ? "Complete a quick setup and get to your first meaningful action in under 2 minutes."
+                  : "Let's confirm your profile so your team workspace is ready. Takes under a minute."}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -162,20 +240,29 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
           </>
         )}
 
-        {step === "business" && (
+        {step === "business" && isCompanyAdmin && (
           <>
             <DialogHeader>
               <DialogTitle>Business setup</DialogTitle>
               <DialogDescription>Tell us a bit about your business so we can prefill your workflow.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
               <div className="space-y-2">
-                <Label htmlFor="onboarding-business-name">Business name</Label>
+                <Label htmlFor="onboarding-business-name">Company name</Label>
                 <Input
                   id="onboarding-business-name"
                   value={form.business_name}
                   onChange={(e) => setForm((prev) => ({ ...prev, business_name: e.target.value }))}
-                  placeholder="Your business name"
+                  placeholder="Your company name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-reg">Registration number</Label>
+                <Input
+                  id="onboarding-reg"
+                  value={form.registration_number}
+                  onChange={(e) => setForm((prev) => ({ ...prev, registration_number: e.target.value }))}
+                  placeholder="Company / tax registration"
                 />
               </div>
               <div className="space-y-2">
@@ -185,6 +272,34 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
                   value={form.industry}
                   onChange={(e) => setForm((prev) => ({ ...prev, industry: e.target.value }))}
                   placeholder="e.g. Consulting"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-address">Address</Label>
+                <Input
+                  id="onboarding-address"
+                  value={form.address}
+                  onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                  placeholder="Business address"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-admin-phone">Contact number</Label>
+                <Input
+                  id="onboarding-admin-phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="+27 123 456 7890"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-tax">Tax information (optional)</Label>
+                <Input
+                  id="onboarding-tax"
+                  value={form.tax_info}
+                  onChange={(e) => setForm((prev) => ({ ...prev, tax_info: e.target.value }))}
+                  placeholder="VAT number or tax notes"
                 />
               </div>
               <div className="space-y-2">
@@ -199,6 +314,70 @@ export default function FastActivationOnboarding({ isOpen, profile, onClose, onP
             </div>
             <DialogFooter>
               <Button onClick={goNext} disabled={!form.business_name.trim() || saving}>
+                Continue
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {step === "business" && !isCompanyAdmin && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Your profile</DialogTitle>
+              <DialogDescription>Confirm your details. Your admin manages company-wide settings.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="onboarding-first-name">First name</Label>
+                  <Input
+                    id="onboarding-first-name"
+                    value={form.first_name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, first_name: e.target.value }))}
+                    placeholder="First name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="onboarding-last-name">Last name</Label>
+                  <Input
+                    id="onboarding-last-name"
+                    value={form.last_name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, last_name: e.target.value }))}
+                    placeholder="Last name"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-phone">Phone number</Label>
+                <Input
+                  id="onboarding-phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="+27 123 456 7890"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-department">Department</Label>
+                <Input
+                  id="onboarding-department"
+                  value={form.department}
+                  onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))}
+                  placeholder="e.g. Sales"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="onboarding-job-title">Job title</Label>
+                <Input
+                  id="onboarding-job-title"
+                  value={form.job_title}
+                  onChange={(e) => setForm((prev) => ({ ...prev, job_title: e.target.value }))}
+                  placeholder="e.g. Account Manager"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={goNext} disabled={!form.first_name.trim() || saving}>
                 Continue
               </Button>
             </DialogFooter>

@@ -55,6 +55,9 @@ import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanne
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
+import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
+import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
+import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
@@ -257,8 +260,10 @@ export default function Dashboard() {
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
-  const { companyId, companyRole, loading: companyCtxLoading } = useCompanyContext();
-  const isCompanyEmployee = !companyCtxLoading && Boolean(companyId) && companyRole === 'employee';
+  const { companyId, loading: companyCtxLoading, isOrgOwner, showBusinessDashboard } =
+    useCompanyContext();
+  const isCompanyMemberDashboard =
+    !companyCtxLoading && Boolean(companyId) && !showBusinessDashboard;
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
 
   // Admin Roles Management State
@@ -1532,43 +1537,9 @@ export default function Dashboard() {
     );
   }
 
-  // EMPLOYEE WORKSPACE VIEW — minimal dashboard for company employees
-  if (!isAdmin && isCompanyEmployee) {
-    const empH = new Date().getHours();
-    const empGreeting = empH < 12 ? 'Good morning' : empH < 17 ? 'Good afternoon' : 'Good evening';
-    const empUser = profileFromQuery ?? authUser;
-    const empName = empUser?.full_name || empUser?.company_name || 'there';
-    return (
-      <div className="min-h-full w-full min-w-0 mobile-page">
-        <div className="responsive-page-shell w-full min-w-0 py-2 sm:py-6 md:py-8">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
-            className="mb-2 sm:mb-6"
-          >
-            <p className="text-xs sm:text-[11px] font-semibold tracking-[0.1em] text-muted-foreground/70 uppercase mb-0.5 sm:mb-1 hidden sm:block">{empGreeting}</p>
-            <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-1 font-display leading-tight">
-              {empName}
-            </h1>
-            <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your workspace for today.</p>
-          </motion.div>
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Company workspace</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Payslips, leave, documents, and team tools for your role.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <Button asChild>
-                <Link to={createPageUrl("CompanyWorkspace")}>Open company workspace</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
+  // COMPANY MEMBER DASHBOARD — employees, managers, and invited admins (not org owners)
+  if (!isAdmin && isCompanyMemberDashboard) {
+    return <CompanyMemberDashboard />;
   }
 
   // USER DASHBOARD
@@ -1679,6 +1650,22 @@ export default function Dashboard() {
           </h1>
           <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your business overview for today.</p>
         </motion.div>
+
+        {isOrgOwner && companyId ? (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08, duration: 0.3 }}
+            className="mb-6 sm:mb-8 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-6"
+          >
+            <h2 className="text-sm font-semibold text-foreground mb-1">Company team</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              HR and team tools for your organization — role-based for each member.
+            </p>
+            <CompanyOverviewPanel />
+            <RoleBasedDashboardPanel />
+          </motion.div>
+        ) : null}
 
         {!isAdmin && !profileLoading && profileLoadError && (
             <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

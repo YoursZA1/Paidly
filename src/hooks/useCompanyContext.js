@@ -9,6 +9,9 @@ import {
   canApproveLeave,
   canViewCompanyReports,
   dataScopeForContext,
+  showBusinessOwnerDashboard,
+  canCreateDocumentType,
+  canApproveDocument,
 } from "@/lib/companyPermissions";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import {
@@ -33,6 +36,10 @@ import {
  *   canManageCompany: () => boolean,
  *   canApproveLeave: () => boolean,
  *   canViewCompanyReports: () => boolean,
+ *   isOrgOwner: boolean,
+ *   showBusinessDashboard: boolean,
+ *   canCreateDocumentType: (typeKey: string) => boolean,
+ *   canApproveDocument: (docType: string, docOwnerUserId?: string) => boolean,
  *   dataScope: ReturnType<typeof dataScopeForContext>,
  *   refresh: () => Promise<void>,
  * }}
@@ -89,6 +96,11 @@ export function useCompanyContext() {
       canManageCompany: () => canManageCompany(ctx),
       canApproveLeave: () => canApproveLeave(ctx),
       canViewCompanyReports: () => canViewCompanyReports(ctx),
+      isOrgOwner: Boolean(ctx?.isOrgOwner),
+      showBusinessDashboard: showBusinessOwnerDashboard(ctx),
+      canCreateDocumentType: (typeKey) => canCreateDocumentType(ctx, typeKey),
+      canApproveDocument: (docType, docOwnerUserId) =>
+        canApproveDocument(ctx, docType, docOwnerUserId),
       dataScope: dataScopeForContext(ctx),
       refresh,
     }),

@@ -29,6 +29,8 @@ import NewDocumentMenu from "@/components/documents/NewDocumentMenu";
 import DocumentHubTable from "@/components/documents/DocumentHubTable";
 import DocumentTemplatesDialog from "@/components/documents/DocumentTemplatesDialog";
 import { DocumentService } from "@/services/DocumentService";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import { PERMISSIONS } from "@/lib/companyPermissions";
 import { createPageUrl } from "@/utils";
 import {
   DOCUMENT_CATEGORIES,
@@ -98,6 +100,10 @@ export default function DocumentsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const { dataScope, hasPermission, canCreateDocumentType, loading: companyLoading } =
+    useCompanyContext();
+  const isEmployeeScope = !companyLoading && dataScope.scope === "self";
+  const canManageCompanyDocuments = hasPermission(PERMISSIONS.MANAGE_COMPANY_DOCUMENTS);
 
   const [filters, setFilters] = useState(() => filtersFromSearchParams(searchParams));
   const [searchInput, setSearchInput] = useState("");
@@ -381,17 +387,31 @@ export default function DocumentsPage() {
       <PageTemplate.Header>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <PageHeader
-            title="Documents"
-            description="Create, manage, track and organize every business document from one place."
+            title={isEmployeeScope ? "My Documents" : "Documents"}
+            description={
+              isEmployeeScope
+                ? "Your leave requests, expense claims, and personal company documents."
+                : canManageCompanyDocuments
+                  ? "Create, manage, track and organize every business document from one place."
+                  : "Company documents you can view and act on for your role."
+            }
           />
           <div className="flex flex-wrap items-center gap-2">
-            <NewDocumentMenu onSelect={handleCreate} creating={creating} />
-            <Button variant="outline" className="gap-2" onClick={() => setTemplatesOpen(true)}>
-              <LayoutTemplate className="h-4 w-4" /> Templates
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={() => comingSoon("Import")}>
-              <Upload className="h-4 w-4" /> Import
-            </Button>
+            <NewDocumentMenu
+              onSelect={handleCreate}
+              creating={creating}
+              canCreateType={canCreateDocumentType}
+            />
+            {canManageCompanyDocuments ? (
+              <>
+                <Button variant="outline" className="gap-2" onClick={() => setTemplatesOpen(true)}>
+                  <LayoutTemplate className="h-4 w-4" /> Templates
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={() => comingSoon("Import")}>
+                  <Upload className="h-4 w-4" /> Import
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       </PageTemplate.Header>

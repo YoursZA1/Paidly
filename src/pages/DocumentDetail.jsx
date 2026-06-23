@@ -33,6 +33,7 @@ import { getTypeDef } from "@/document-engine/documentCatalog";
 import { DocumentService } from "@/services/DocumentService";
 import { sendDocumentEmail } from "@/services/DocumentEmailService";
 import { useAuth } from "@/contexts/AuthContext";
+import useCompanyContext from "@/hooks/useCompanyContext";
 import { Client } from "@/api/entities";
 import { DOCUMENT_TYPES } from "@/document-engine/documentTypes";
 import {
@@ -207,6 +208,7 @@ export default function DocumentDetailPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user: authUser } = useAuth();
+  const { canApproveDocument } = useCompanyContext();
 
   // ── Core document state ──
   const [doc, setDoc] = useState(null);
@@ -414,13 +416,15 @@ export default function DocumentDetailPage() {
 
     // Approval flow (including special leave_request & expense_claim)
     if (isApprovalFlow || isLeaveRequest || isExpenseClaim) {
-      if (nextStatuses.includes("pending")) {
+      const docOwnerId = doc.user_id || doc.created_by || null;
+      const isDocOwner = !docOwnerId || docOwnerId === authUser?.id;
+      if (nextStatuses.includes("pending") && isDocOwner) {
         return { label: "Submit for Approval", icon: Clock, type: "status", toStatus: "pending" };
       }
-      if (nextStatuses.includes("approved")) {
+      if (nextStatuses.includes("approved") && canApproveDocument(doc.type, docOwnerId)) {
         return { label: "Approve", icon: CheckCircle2, type: "status", toStatus: "approved" };
       }
-      if (nextStatuses.includes("completed")) {
+      if (nextStatuses.includes("completed") && (isDocOwner || canApproveDocument(doc.type, docOwnerId))) {
         return { label: "Mark as Complete", icon: CheckCircle2, type: "status", toStatus: "completed" };
       }
     }
@@ -431,7 +435,7 @@ export default function DocumentDetailPage() {
     }
 
     return null;
-  }, [doc, isSignatureFlow, isApprovalFlow, isSimpleFlow, isLeaveRequest, isExpenseClaim, nextStatuses]);
+  }, [doc, isSignatureFlow, isApprovalFlow, isSimpleFlow, isLeaveRequest, isExpenseClaim, nextStatuses, authUser?.id, canApproveDocument]);
 
   // ── Context hint banner (appears below the document title) ──
   const contextHint = useMemo(() => {

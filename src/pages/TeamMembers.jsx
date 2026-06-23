@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
 import CompanyTeamManagePanel from "@/components/company/CompanyTeamManagePanel";
+import CompanyInvitesPanel from "@/components/company/CompanyInvitesPanel";
 
 function TeamMembersCore() {
   const { ctx, companyRoleLabel, hasPermission } = useCompanyContext();
@@ -45,7 +46,12 @@ function TeamMembersCore() {
         />
       </PageTemplate.Header>
       <PageTemplate.Body>
-        {hasPermission(PERMISSIONS.MANAGE_EMPLOYEES) ? <CompanyTeamManagePanel /> : null}
+        {hasPermission(PERMISSIONS.MANAGE_EMPLOYEES) ? (
+          <>
+            <CompanyTeamManagePanel />
+            <CompanyInvitesPanel />
+          </>
+        ) : null}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">

@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Mail, AlertCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import { Link } from "react-router-dom";
 
 /**
- * Team invitations are sent by Supabase (`inviteUserByEmail`). The invitee completes signup
- * from the link in their email — not via a browser-stored token. This page explains that flow.
+ * Legacy route — email auth invites and shareable /invite?token= links.
  */
 export default function AcceptInvite() {
   const navigate = useNavigate();
@@ -20,15 +20,15 @@ export default function AcceptInvite() {
           </div>
           <CardTitle className="text-2xl font-bold">Team invitation</CardTitle>
           <p className="text-sm text-slate-500">
-            Invitations are completed using the secure link in your email.
+            Invitations are completed using the secure link from your administrator.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 flex gap-2">
             <AlertCircle className="w-5 h-5 shrink-0 text-amber-700" />
             <span>
-              Open the invitation message from your administrator and follow the link to set your password
-              and activate your account. That link is issued by our auth provider and expires automatically.
+              Open the invitation email and follow the link to set your password. Shareable invite URLs
+              use <Link to="/invite" className="underline font-medium">/invite?token=…</Link>.
             </span>
           </div>
           <Button

@@ -94,6 +94,7 @@ import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js
 import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
 import { registerCompanyTeamRoutes } from "./companyTeamRoutes.js";
+import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
 import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
@@ -704,6 +705,7 @@ app.get("/api/exchange-rates", (req, res) => handleLatestExchangeRates(req, res)
 
 app.get("/api/dashboard/bootstrap", dashboardBootstrapHandler);
 registerCompanyTeamRoutes(app);
+registerAdminCompanyInviteRoutes(app);
 
 app.get("/api/security/events", async (req, res) => {
   try {

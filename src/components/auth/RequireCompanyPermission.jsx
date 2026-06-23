@@ -9,9 +9,23 @@ import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
  * @param {{ permission: string, children: React.ReactNode, redirectTo?: string }} props
  */
 export default function RequireCompanyPermission({ permission, children, redirectTo }) {
-  const { loading, hasPermission } = useCompanyContext();
+  const { loading, hasPermission, ctx } = useCompanyContext();
 
   if (loading) return <AuthBootstrapShell />;
+
+  if (!ctx?.companyId) {
+    if (redirectTo) return <Navigate to={redirectTo} replace />;
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-semibold">Access restricted</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Company membership is required to view this page.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!hasPermission(permission)) {
     if (redirectTo) return <Navigate to={redirectTo} replace />;

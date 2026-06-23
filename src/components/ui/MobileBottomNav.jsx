@@ -40,9 +40,9 @@ const PINNED_NAV_PATHS = new Set([
 function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
-  const { companyId, companyRole } = useCompanyContext();
-  const isCompanyEmployee = Boolean(companyId) && companyRole === 'employee';
-  const activeSpeedDial = isCompanyEmployee ? employeeSpeedDialActions : speedDialActions;
+  const { companyId, showBusinessDashboard } = useCompanyContext();
+  const isCompanyMemberNav = Boolean(companyId) && !showBusinessDashboard;
+  const activeSpeedDial = isCompanyMemberNav ? employeeSpeedDialActions : speedDialActions;
 
   useEffect(() => {
     setSpeedDialOpen(false);
@@ -78,21 +78,21 @@ function MobileBottomNav({ onOpenMenu }) {
           </Link>
           {/* Invoices (owners) / My Payslips (employees) */}
           <Link
-            to={isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")}
+            to={isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label={isCompanyEmployee ? "My Payslips" : "Invoices"}
-            aria-current={isActive(isCompanyEmployee ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "page" : undefined}
+            aria-label={isCompanyMemberNav ? "My Payslips" : "Invoices"}
+            aria-current={isActive(isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "page" : undefined}
           >
-            {isCompanyEmployee ? (
+            {isCompanyMemberNav ? (
               <BanknotesIcon className="w-6 h-6 shrink-0" />
             ) : (
               <DocumentTextIcon className="w-6 h-6 shrink-0" />
             )}
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">
-              {isCompanyEmployee ? "Payslips" : "Invoices"}
+              {isCompanyMemberNav ? "Payslips" : "Invoices"}
             </span>
           </Link>
 
@@ -147,21 +147,21 @@ function MobileBottomNav({ onOpenMenu }) {
 
           {/* Clients (owners) / Documents (employees) */}
           <Link
-            to={isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")}
+            to={isCompanyMemberNav ? createPageUrl("Documents") : createPageUrl("Clients")}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(isCompanyMemberNav ? createPageUrl("Documents") : createPageUrl("Clients")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label={isCompanyEmployee ? "Documents" : "Clients"}
-            aria-current={isActive(isCompanyEmployee ? createPageUrl("Documents") : createPageUrl("Clients")) ? "page" : undefined}
+            aria-label={isCompanyMemberNav ? "Documents" : "Clients"}
+            aria-current={isActive(isCompanyMemberNav ? createPageUrl("Documents") : createPageUrl("Clients")) ? "page" : undefined}
           >
-            {isCompanyEmployee ? (
+            {isCompanyMemberNav ? (
               <DocumentDuplicateIcon className="w-6 h-6 shrink-0" />
             ) : (
               <UserGroupIcon className="w-6 h-6 shrink-0" />
             )}
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">
-              {isCompanyEmployee ? "Documents" : "Clients"}
+              {isCompanyMemberNav ? "Documents" : "Clients"}
             </span>
           </Link>
           {/* Menu — opens sidebar drawer; active when on a route not pinned in the bar */}

@@ -122,8 +122,14 @@ export function companyRoleHasPermission(role, permission) {
  *   companyRole: CompanyRole,
  *   jobFunction: string,
  *   permissions: Set<string>,
+ *   isOrgOwner: boolean,
  * }} CompanyAccessContext
  */
+
+/** Document types employees may create (leave/expense); admins manage the full catalog. */
+export const EMPLOYEE_CREATABLE_DOCUMENT_TYPES = Object.freeze(
+  new Set(["leave_request", "expense_claim"])
+);
 
 /**
  * @param {{ userId: string, companyId: string, companyRole?: string, membershipRole?: string, jobFunction?: string }} input
@@ -151,7 +157,14 @@ export function normalizeJobFunction(raw) {
 }
 
 export function buildCompanyAccessContext({ userId, companyId, companyRole, membershipRole, jobFunction }) {
+  const rawMembership = String(membershipRole || "")
+    .trim()
+    .toLowerCase();
+  const rawCompany = String(companyRole || "")
+    .trim()
+    .toLowerCase();
   const role = normalizeCompanyRole(companyRole ?? membershipRole);
+  const isOrgOwner = rawMembership === "owner" || rawCompany === "owner";
   return {
     userId,
     companyId,
@@ -159,7 +172,50 @@ export function buildCompanyAccessContext({ userId, companyId, companyRole, memb
     companyRole: role,
     jobFunction: normalizeJobFunction(jobFunction),
     permissions: permissionsForCompanyRole(role),
+    isOrgOwner,
   };
+}
+
+/**
+ * Solo business owners and org owners see invoicing/revenue dashboard; invited members see company workspace only.
+ * @param {CompanyAccessContext | null | undefined} ctx
+ */
+export function showBusinessOwnerDashboard(ctx) {
+  if (!ctx?.companyId) return true;
+  return Boolean(ctx.isOrgOwner);
+}
+
+/**
+ * @param {CompanyAccessContext | null | undefined} ctx
+ * @param {string} typeKey
+ */
+export function canCreateDocumentType(ctx, typeKey) {
+  const key = String(typeKey || "").trim().toLowerCase();
+  if (!key) return false;
+  if (!ctx?.companyId || ctx.isOrgOwner) return true;
+  if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_DOCUMENTS)) return true;
+  if (!EMPLOYEE_CREATABLE_DOCUMENT_TYPES.has(key)) return false;
+  if (key === "leave_request") return hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_LEAVE);
+  return hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_DOCUMENTS);
+}
+
+/**
+ * @param {CompanyAccessContext | null | undefined} ctx
+ * @param {string} docType
+ * @param {string} [docOwnerUserId]
+ */
+export function canApproveDocument(ctx, docType, docOwnerUserId) {
+  if (!ctx) return false;
+  const type = String(docType || "").trim().toLowerCase();
+  const isHrApproval = type === "leave_request" || type === "expense_claim";
+  if (!isHrApproval) {
+    return hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_DOCUMENTS);
+  }
+  if (docOwnerUserId && ctx.userId === docOwnerUserId) return false;
+  return (
+    hasCompanyPermission(ctx, PERMISSIONS.APPROVE_LEAVE) ||
+    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_LEAVE)
+  );
 }
 
 /**
