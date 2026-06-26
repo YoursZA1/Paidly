@@ -65,7 +65,7 @@ export default function CompanyOverviewPanel() {
           Company overview
         </h2>
         <Link
-          to={createPageUrl("TeamMembers")}
+          to={`${createPageUrl("Settings")}?tab=team`}
           className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         >
           Manage team <ArrowRight className="h-3 w-3" />
@@ -74,7 +74,7 @@ export default function CompanyOverviewPanel() {
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <CompanyStat
-          to={createPageUrl("TeamMembers")}
+          to={`${createPageUrl("Settings")}?tab=team`}
           title="Team Members"
           value={data.members?.count ?? 0}
           icon={Users}

@@ -52,10 +52,7 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import useOnboardingRole from "@/hooks/useOnboardingRole";
 import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
-import {
-  filterNavigationForCompanyRole,
-  injectCompanyDashboardNavItems,
-} from "@/lib/companyNavFilter";
+import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
@@ -656,7 +653,6 @@ export default function Layout({ children, currentPageName }) {
 
   const {
     ctx: companyCtx,
-    hasPermission: hasCompanyPermission,
     loading: companyContextLoading,
     isOrgOwner,
     showBusinessDashboard,
@@ -681,10 +677,9 @@ export default function Layout({ children, currentPageName }) {
         companyId: companyCtx.companyId,
         isOrgOwner: companyCtx.isOrgOwner,
       });
-      items = injectCompanyDashboardNavItems(items, hasCompanyPermission);
     }
     return items;
-  }, [planForNavFeatures, user?.role, companyCtx, hasCompanyPermission]);
+  }, [planForNavFeatures, user?.role, companyCtx]);
 
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;

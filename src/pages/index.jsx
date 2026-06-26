@@ -42,7 +42,6 @@ const PublicQuote = lazy(() => import("./PublicQuote"));
 const ClientPortal = lazy(() => import("./ClientPortal"));
 const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
 const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
-const TeamMembers = lazy(() => import("./TeamMembers"));
 const CompanyWorkspace = lazy(() => import("./CompanyWorkspace"));
 const Reports = lazy(() => import("./Reports"));
 const Payslips = lazy(() => import("./Payslips"));
@@ -247,8 +246,10 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/ReportPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/reportpdf", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><Reports /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/TeamMembers", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><TeamMembers /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/teammembers", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><TeamMembers /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/TeamMembers", element: <RequireAuth><Navigate to="/Settings?tab=team" replace /></RequireAuth> },
+    { path: "/teammembers", element: <RequireAuth><Navigate to="/Settings?tab=team" replace /></RequireAuth> },
+    { path: "/CompanyTeam", element: <RequireAuth><Navigate to="/Settings?tab=company-team" replace /></RequireAuth> },
+    { path: "/companyteam", element: <RequireAuth><Navigate to="/Settings?tab=company-team" replace /></RequireAuth> },
     { path: "/CompanyWorkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
     { path: "/companyworkspace", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
     { path: "/CashFlow", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><CashFlow /></RequireCompanyPermissionRedirect></RequireAuth> },

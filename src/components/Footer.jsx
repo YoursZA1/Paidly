@@ -17,6 +17,7 @@ export default function Footer({ onLoginClick }) {
       { label: "Log in", action: "login" },
       { label: "Privacy Policy", to: createPageUrl("PrivacyPolicy") },
       { label: "Terms & Conditions", to: createPageUrl("TermsAndConditions") },
+      { label: "Refund & Cancellation", to: `${createPageUrl("TermsAndConditions")}#refund-cancellation` },
     ],
     Contact: [{ label: "support@paidly.co.za", href: "mailto:support@paidly.co.za" }],
   };

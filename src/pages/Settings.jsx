@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
@@ -49,6 +49,9 @@ import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings"
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
+import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
+import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
+import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
@@ -1693,6 +1696,8 @@ function PersonalAccountSettings() {
 const SETTINGS_TABS = [
     { value: "account", label: "My Account", icon: UserIcon, permission: PERMISSIONS.VIEW_OWN_PROFILE },
     { value: "profile", label: "Company Profile", icon: SettingsIcon, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "team", label: "Team Members", icon: Users, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
+    { value: "company-team", label: "Company Team", icon: Building2, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "payments", label: "Payment Methods", icon: CreditCard, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "reminders", label: "Reminders", icon: Bell, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
@@ -1705,6 +1710,19 @@ function SettingsTabPanels({ activeTab }) {
             return <PersonalAccountSettings />;
         case "profile":
             return <CompanyProfileSettings />;
+        case "team":
+            return (
+                <SettingsCard title="Team Members" description="Invite teammates and manage who belongs to your company.">
+                    <CompanyTeamMembersPanel />
+                </SettingsCard>
+            );
+        case "company-team":
+            return (
+                <SettingsCard title="Company Team" description="HR and team tools for your organization — role-based for each member.">
+                    <CompanyOverviewPanel />
+                    <RoleBasedDashboardPanel />
+                </SettingsCard>
+            );
         case "currency":
             return (
                 <SettingsCard title="Currency" description="Configure your default currency and multi-currency preferences.">

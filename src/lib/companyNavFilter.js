@@ -1,5 +1,3 @@
-import { Users } from "lucide-react";
-import { createPageUrl } from "@/utils";
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
 
 /** Nav item ids visible to each company role (admin sees full app nav). */
@@ -61,26 +59,4 @@ export function filterNavigationForCompanyRole(items, membership) {
     if (item.id.startsWith("nav-admin-")) return false;
     return allowed.has(item.id);
   });
-}
-
-/**
- * Inject company HR nav links (Team Members) when permitted.
- * @param {Array<object>} items
- * @param {(permission: string) => boolean} hasPermission
- */
-export function injectCompanyDashboardNavItems(items, hasPermission) {
-  const extra = [];
-  if (hasPermission(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
-    extra.push({
-      id: "nav-team-members",
-      title: "Team Members",
-      url: createPageUrl("TeamMembers"),
-      icon: Users,
-      roles: ["user"],
-    });
-  }
-  if (!extra.length) return items;
-  const dashboardIdx = items.findIndex((i) => i.id === "nav-dashboard");
-  if (dashboardIdx < 0) return [...extra, ...items];
-  return [...items.slice(0, dashboardIdx + 1), ...extra, ...items.slice(dashboardIdx + 1)];
 }

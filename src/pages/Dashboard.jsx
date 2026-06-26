@@ -56,8 +56,6 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
-import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
-import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
@@ -272,7 +270,6 @@ function DashboardMain() {
   const calendarYear = useCalendarYear();
   const userRole = authUser?.role || 'user';
   const isAdmin = userRole === 'admin';
-  const { companyId, isOrgOwner } = useCompanyContext();
   const [createAccountDialogOpen, setCreateAccountDialogOpen] = useState(false);
 
   // Admin Roles Management State
@@ -1660,22 +1657,6 @@ function DashboardMain() {
           </h1>
           <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your business overview for today.</p>
         </motion.div>
-
-        {isOrgOwner && companyId ? (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08, duration: 0.3 }}
-            className="mb-6 sm:mb-8 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-6"
-          >
-            <h2 className="text-sm font-semibold text-foreground mb-1">Company team</h2>
-            <p className="text-xs text-muted-foreground mb-4">
-              HR and team tools for your organization — role-based for each member.
-            </p>
-            <CompanyOverviewPanel />
-            <RoleBasedDashboardPanel />
-          </motion.div>
-        ) : null}
 
         {!isAdmin && !profileLoading && profileLoadError && (
             <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
