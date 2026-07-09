@@ -45,6 +45,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var MARKETING =
+          /^\/($|home$|auth|login$|signup$|forgotpassword$|privacy-policy$|privacypolicy$|terms|how-?to$|affiliate(\/apply)?$)/i;
+        if (!MARKETING.test(location.pathname)) return;
+
+        var script = document.createElement("script");
+        script.src =
+          "https://gentle-site-guide-flow.base44.app/functions/widgetLoader?api_key=sg_a5zy8bm4qmved9dw&mode=popup";
+        script.async = true;
+        document.body.appendChild(script);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
