@@ -52,6 +52,7 @@ import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
+import PosSalesCard from '@/components/dashboard/PosSalesCard';
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
@@ -2135,6 +2136,10 @@ function DashboardMain() {
           >
             {user && !isAdmin && (
               <SetupProgressStepper checklist={onboardingChecklist} />
+            )}
+
+            {user && !isAdmin && (
+              <PosSalesCard currency={userCurrency} />
             )}
 
             {/* Quick Creator — hidden on mobile (shown in mobile block above) */}

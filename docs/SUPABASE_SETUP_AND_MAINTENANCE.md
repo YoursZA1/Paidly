@@ -159,6 +159,7 @@ Used for admin/sync and any server-only Supabase operations. Config lives in **`
 
 - **DEV:** Use a dev/staging Supabase project; `PAYFAST_MODE=sandbox`; `ADMIN_BYPASS_AUTH` only if needed.
 - **PROD:** Use production Supabase; `PAYFAST_MODE=live`; set `ADMIN_BYPASS_AUTH=false` and real URLs.
+- **POS (optional):** Square OAuth and Yoco connect — `SQUARE_*` and `POS_CREDENTIALS_ENCRYPTION_KEY` in server/Vercel env. See **`docs/POS_INTEGRATIONS.md`**.
 
 | Variable | Required | Description |
 |----------|----------|-------------|

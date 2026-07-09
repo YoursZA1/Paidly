@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2 } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2, Plug } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
@@ -48,6 +48,7 @@ import PaymentReminderSettings from "@/components/reminders/PaymentReminderSetti
 import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings";
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
+import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
 import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
@@ -1700,6 +1701,7 @@ const SETTINGS_TABS = [
     { value: "company-team", label: "Company Team", icon: Building2, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "payments", label: "Payment Methods", icon: CreditCard, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "integrations", label: "Integrations", icon: Plug, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "reminders", label: "Reminders", icon: Bell, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "subscription", label: "Subscription", icon: Award, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
 ];
@@ -1733,6 +1735,12 @@ function SettingsTabPanels({ activeTab }) {
             return (
                 <SettingsCard title="Payment Methods" description="Add banking details for clients to pay your invoices.">
                     <PaymentMethodsSettings />
+                </SettingsCard>
+            );
+        case "integrations":
+            return (
+                <SettingsCard title="POS integrations" description="Connect your point of sale to sync sales and update inventory automatically.">
+                    <PosIntegrationSettings />
                 </SettingsCard>
             );
         case "reminders":

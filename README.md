@@ -141,6 +141,7 @@ CRUD for **clients**, **services**, **invoices**, **quotes**, and **payments** i
 - Access restrictions & compliance: **[docs/SECURITY_AND_COMPLIANCE.md](docs/SECURITY_AND_COMPLIANCE.md)**
 - API ↔ UI mapping: **[docs/SUPABASE_UI_REVIEW.md](docs/SUPABASE_UI_REVIEW.md)**
 - Testing and log monitoring: **[docs/TESTING.md](docs/TESTING.md)**
+- POS integrations (Square OAuth, Yoco, webhooks): **[docs/POS_INTEGRATIONS.md](docs/POS_INTEGRATIONS.md)**
 
 ## Import Consistency: Vite @ Alias
 

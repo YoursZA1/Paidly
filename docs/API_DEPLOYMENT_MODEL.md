@@ -42,10 +42,22 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 
 Legacy duplicate handlers in `api/payfast-handler.js` should be treated as deprecated; new work uses the routes above.
 
+## 1d. POS integrations (Square OAuth + Yoco + webhooks)
+
+| Concern | Canonical route | Client entry | Notes |
+|--------|-----------------|--------------|-------|
+| **Square OAuth start** | `POST /api/pos/oauth/square/start` | Settings → Integrations | Returns `authorize_url`; callback at `GET /api/pos/oauth/callback/square`. |
+| **Yoco connect** | `POST /api/pos/oauth/yoco/connect` | Settings → Integrations | Merchant API key; Paidly registers Yoco webhook. |
+| **POS sale webhooks** | `POST /api/pos/webhook/:token`, `POST /api/pos/webhook/provider/square` | N/A (POS provider) | Implementation: `server/src/pos/`, `api/pos/[[...path]].js`. |
+| **Connections / sales** | `GET /api/pos/connections`, `GET /api/pos/sales` | `PosIntegrationService` | Org-scoped; RLS on `pos_*` tables. |
+
+**Env:** `SQUARE_*`, `POS_CREDENTIALS_ENCRYPTION_KEY` — see **`docs/POS_INTEGRATIONS.md`** (includes Square sandbox testing).
+
 ## 2. Related docs
 
 - **`docs/API_RATE_LIMIT_BUDGET.md`** — keep-alive, Axios retries, and Express budget math.
 - **`docs/SESSION_TIMEOUT_INTEGRATION.md`** — inactivity and keep-alive UX.
+- **`docs/POS_INTEGRATIONS.md`** — Square OAuth, Yoco connect, webhook env vars, sandbox testing.
 
 ## 3. Hardening checklist (in priority order)
 

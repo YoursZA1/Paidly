@@ -254,6 +254,7 @@ List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `
 **Job:** Everything that turns **issued documents** (especially invoices) into **cash, visibility, and tenant billing**—without re-implementing document authoring here.
 
 - **Payments:** Payfast, invoice payment state, webhooks (`api/payfast-handler`)
+- **POS integrations:** Generic webhook + Yoco/Square ingress (`api/pos/*`), normalized `pos_sales_events`, optional catalog stock decrement via `adjust_inventory_stock` (source `pos`). **Connect flows:** Square OAuth (`/api/pos/oauth/square/start` → callback); Yoco secure connect (API secret → auto webhook registration). Settings → Integrations; dashboard **POS sales today** card.
 - **Payment intents:** capture/retry/expiry orchestration and provider status normalization
 - **Cash flow:** timelines and balances built from documents + payments
 - **Reports:** read models and exports on top of documents + payments + catalog where relevant
@@ -659,6 +660,12 @@ Ship these in parallel with **High impact next**—they reduce churn and make ev
 - `POST /api/payment-intents` (new): create intent for payable document
 - `GET /api/payment-intents/:id` (new): fetch intent status for sticky panel + public views
 - `POST /api/payments/webhook/:provider` (new canonical route; may proxy existing `payfast-handler`)
+- `POST /api/pos/webhook/:token` (POS sale ingress — generic, Yoco, Square parsers)
+- `POST /api/pos/webhook/provider/square` (Square application webhook — routes by merchant_id)
+- `POST /api/pos/oauth/square/start` · `GET /api/pos/oauth/callback/square` (Square OAuth connect)
+- `POST /api/pos/oauth/yoco/connect` (Yoco API key connect + auto webhook)
+- `GET|POST|PATCH|DELETE /api/pos/connections` (org settings managers)
+- `GET /api/pos/sales` (org members — dashboard read model)
 - `POST /api/documents/:type/:id/events` (new internal endpoint) or service-only ingestion path for `document_events`
 - `POST /api/reminders/dispatch` (new internal endpoint used by cron workers)
 

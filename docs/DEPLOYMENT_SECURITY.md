@@ -82,3 +82,4 @@ Security-related lines are **single-line JSON** (`type: "security"`) for easy in
 - [ ] All secrets in platform env, not git.
 - [ ] Ship logs to a **SIEM** or alert on `level=error` / `suspicious_404_burst` / repeated `auth_sign_in_rate_limited`.
 - [ ] Review Supabase **Auth** rate limits and **MFA** policy for admins.
+- [ ] POS (if enabled): follow **`docs/POS_INTEGRATIONS.md`** — encryption key, Square redirect URL, sandbox vs production credentials.
