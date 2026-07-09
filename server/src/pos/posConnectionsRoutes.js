@@ -6,6 +6,7 @@ import {
   companyRoleHasPermission,
   PERMISSIONS,
 } from "../companyRouteAccess.js";
+import { postgrestErrorToApiBody } from "../postgrestErrorToApiBody.js";
 import { getWebhookPublicUrl } from "./posWebhookAuth.js";
 import { decryptPosSecret } from "./posSecretCrypto.js";
 import { deleteYocoWebhook } from "./yocoConnect.js";
@@ -14,15 +15,27 @@ function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
+function dbErrorResponse(res, status, err, fallback) {
+  const body = postgrestErrorToApiBody(err);
+  const message = body?.error ? mapPosDbError(body.error) : fallback;
+  return res.status(status).json(body ? { ...body, error: message } : { error: message });
+}
+
 function mapPosDbError(message) {
   const msg = String(message || "");
-  if (/pos_connections|pos_sales_events|pos_oauth_states/i.test(msg) && /schema cache|does not exist|could not find the table/i.test(msg)) {
+  if (/pos_connections|pos_sales_events|pos_oauth_states|delete_pos_connection/i.test(msg) && /schema cache|does not exist|could not find the table|could not find the function/i.test(msg)) {
     return "POS database tables are missing. Run scripts/apply-pos-integrations.sql in Supabase SQL Editor (see docs/POS_INTEGRATIONS.md).";
   }
   if (/foreign key|violates foreign key|23503/i.test(msg)) {
     return "Could not delete POS connection because related sales data could not be removed. Run supabase/migrations/20260709190000_pos_sales_events_cascade_delete.sql in Supabase SQL Editor.";
   }
   return msg || "Database error";
+}
+
+function isMissingPosSchemaError(message) {
+  const msg = String(message || "");
+  return /pos_connections|pos_sales_events|delete_pos_connection/i.test(msg)
+    && /schema cache|does not exist|could not find the table|could not find the function/i.test(msg);
 }
 
 const VALID_PROVIDERS = new Set(["generic", "yoco", "square"]);
@@ -56,15 +69,56 @@ async function requireSettingsManager(req, res) {
   const { user, error: authErr } = await getUserFromRequest(req);
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
-  const membership = await loadCompanyMembership(supabaseAdmin, user.id);
-  if (!membership) {
-    return { ok: false, response: jsonError(res, 403, "No company membership") };
+  try {
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    if (!membership) {
+      return { ok: false, response: jsonError(res, 403, "No company membership") };
+    }
+    if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
+      return { ok: false, response: jsonError(res, 403, "Forbidden — company settings permission required") };
+    }
+
+    return { ok: true, user, membership };
+  } catch (err) {
+    return {
+      ok: false,
+      response: jsonError(res, 500, err?.message || "Could not verify company permissions"),
+    };
   }
-  if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
-    return { ok: false, response: jsonError(res, 403, "Forbidden — company settings permission required") };
+}
+
+async function deletePosConnectionRows(orgId, connectionId) {
+  const { data: rpcDeleted, error: rpcError } = await supabaseAdmin.rpc("delete_pos_connection", {
+    p_org_id: orgId,
+    p_connection_id: connectionId,
+  });
+
+  if (!rpcError) {
+    return rpcDeleted ? { ok: true, via: "rpc" } : { ok: false, notFound: true };
   }
 
-  return { ok: true, user, membership };
+  if (!isMissingPosSchemaError(rpcError.message) && !/could not find the function/i.test(String(rpcError.message || ""))) {
+    return { ok: false, error: rpcError };
+  }
+
+  const { error: salesDeleteError } = await supabaseAdmin
+    .from("pos_sales_events")
+    .delete()
+    .eq("connection_id", connectionId);
+
+  if (salesDeleteError && !isMissingPosSchemaError(salesDeleteError.message)) {
+    return { ok: false, error: salesDeleteError };
+  }
+
+  const { data: deletedRows, error: deleteError } = await supabaseAdmin
+    .from("pos_connections")
+    .delete()
+    .eq("id", connectionId)
+    .eq("org_id", orgId)
+    .select("id");
+
+  if (deleteError) return { ok: false, error: deleteError };
+  return deletedRows?.length ? { ok: true, via: "direct" } : { ok: false, notFound: true };
 }
 
 export async function handlePosConnectionsList(req, res) {
@@ -195,38 +249,12 @@ export async function handlePosConnectionDelete(req, res) {
       }
     }
 
-    // Remove dependent sales first (safe even when FK CASCADE is present).
-    const { error: salesDeleteError } = await supabaseAdmin
-      .from("pos_sales_events")
-      .delete()
-      .eq("connection_id", connectionId);
-
-    if (salesDeleteError) {
-      console.error("[pos-delete] sales cleanup failed", salesDeleteError.message);
-      return jsonError(
-        res,
-        500,
-        mapPosDbError(salesDeleteError.message) || "Could not delete POS sales for this connection"
-      );
+    const removed = await deletePosConnectionRows(gate.membership.orgId, connectionId);
+    if (removed.error) {
+      console.error("[pos-delete] db delete failed", removed.error?.message || removed.error);
+      return dbErrorResponse(res, 500, removed.error, "Could not delete POS connection");
     }
-
-    const { data: deletedRows, error: deleteError } = await supabaseAdmin
-      .from("pos_connections")
-      .delete()
-      .eq("id", connectionId)
-      .eq("org_id", gate.membership.orgId)
-      .select("id");
-
-    if (deleteError) {
-      console.error("[pos-delete] connection delete failed", deleteError.message);
-      return jsonError(
-        res,
-        500,
-        mapPosDbError(deleteError.message) || "Could not delete POS connection"
-      );
-    }
-
-    if (!deletedRows?.length) {
+    if (removed.notFound) {
       return jsonError(res, 404, "Connection not found");
     }
 

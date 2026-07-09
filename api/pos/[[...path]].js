@@ -19,9 +19,16 @@ import {
  * Vercel: /api/pos/connections, /api/pos/sales, /api/pos/webhook/:token,
  *         /api/pos/oauth/*
  */
+function normalizePosPathSegments(raw) {
+  if (Array.isArray(raw)) {
+    return raw.flatMap((part) => String(part).split("/")).filter(Boolean);
+  }
+  if (raw == null || raw === "") return [];
+  return String(raw).split("/").filter(Boolean);
+}
+
 function resolvePosRoute(req) {
-  const raw = req.query?.path;
-  const parts = Array.isArray(raw) ? raw.map(String) : raw != null && raw !== "" ? [String(raw)] : [];
+  const parts = normalizePosPathSegments(req.query?.path);
   const head = parts[0] || "";
   const second = parts[1] || "";
   const third = parts[2] || "";
@@ -63,9 +70,11 @@ function resolvePosRoute(req) {
   if (urlPath.includes("/oauth/yoco/connect")) return { route: "oauth-yoco-connect" };
   if (urlPath.includes("/oauth/status")) return { route: "oauth-status" };
 
+  const connectionIdMatch = urlPath.match(/\/connections\/([^/]+)/i);
+  if (connectionIdMatch?.[1]) {
+    return { route: "connection-id", id: connectionIdMatch[1] };
+  }
   if (urlPath.endsWith("/connections") || /\/connections$/i.test(urlPath)) {
-    const idMatch = urlPath.match(/\/connections\/([^/]+)/i);
-    if (idMatch?.[1]) return { route: "connection-id", id: idMatch[1] };
     return { route: "connections" };
   }
   if (urlPath.endsWith("/sales") || /\/sales$/i.test(urlPath)) {

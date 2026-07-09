@@ -5,11 +5,13 @@ import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 
-async function authHeaders() {
+async function authHeaders({ includeJsonContentType = true } = {}) {
   const session = await getStableSession();
   const token = session?.access_token;
   if (!token) throw new Error("Not authenticated");
-  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const headers = { Authorization: `Bearer ${token}` };
+  if (includeJsonContentType) headers["Content-Type"] = "application/json";
+  return headers;
 }
 
 function parseApiJsonError(res, raw, fallbackMessage) {
@@ -25,8 +27,9 @@ function parseApiJsonError(res, raw, fallbackMessage) {
   const detail =
     (typeof json?.error === "string" && json.error) ||
     (typeof json?.message === "string" && json.message) ||
+    (raw && !raw.trim().startsWith("{") ? raw.trim().slice(0, 240) : "") ||
     res.statusText ||
-    fallbackMessage;
+    `${fallbackMessage} (HTTP ${res.status})`;
   throw new Error(detail);
 }
 
@@ -81,7 +84,7 @@ export async function updatePosConnection(connectionId, updates) {
 }
 
 export async function deletePosConnection(connectionId) {
-  const headers = await authHeaders();
+  const headers = await authHeaders({ includeJsonContentType: false });
   const res = await apiRequest(`${apiBase()}/api/pos/connections/${encodeURIComponent(connectionId)}`, {
     method: "DELETE",
     headers,
