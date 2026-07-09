@@ -14,6 +14,17 @@ function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
+function mapPosDbError(message) {
+  const msg = String(message || "");
+  if (/pos_connections|pos_sales_events|pos_oauth_states/i.test(msg) && /schema cache|does not exist|could not find the table/i.test(msg)) {
+    return "POS database tables are missing. Run scripts/apply-pos-integrations.sql in Supabase SQL Editor (see docs/POS_INTEGRATIONS.md).";
+  }
+  if (/foreign key|violates foreign key|23503/i.test(msg)) {
+    return "Could not delete POS connection because related sales data could not be removed. Run supabase/migrations/20260709190000_pos_sales_events_cascade_delete.sql in Supabase SQL Editor.";
+  }
+  return msg || "Database error";
+}
+
 const VALID_PROVIDERS = new Set(["generic", "yoco", "square"]);
 
 function sanitizeConnection(row) {
@@ -66,7 +77,7 @@ export async function handlePosConnectionsList(req, res) {
     .eq("org_id", gate.membership.orgId)
     .order("created_at", { ascending: false });
 
-  if (error) return jsonError(res, 500, error.message || "Could not load POS connections");
+  if (error) return jsonError(res, 500, mapPosDbError(error.message) || "Could not load POS connections");
 
   return res.status(200).json({
     connections: (data || []).map(sanitizeConnection),
@@ -156,38 +167,74 @@ export async function handlePosConnectionPatch(req, res) {
 }
 
 export async function handlePosConnectionDelete(req, res) {
-  const gate = await requireSettingsManager(req, res);
-  if (!gate.ok) return gate.response;
+  try {
+    const gate = await requireSettingsManager(req, res);
+    if (!gate.ok) return gate.response;
 
-  const connectionId = String(req.params?.id || "").trim();
-  if (!connectionId) return jsonError(res, 400, "Missing connection id");
+    const connectionId = String(
+      req.params?.id || req.query?.id || req.body?.id || ""
+    ).trim();
+    if (!connectionId) return jsonError(res, 400, "Missing connection id");
 
-  const { data: existing, error: loadError } = await supabaseAdmin
-    .from("pos_connections")
-    .select("id, provider, config")
-    .eq("id", connectionId)
-    .eq("org_id", gate.membership.orgId)
-    .maybeSingle();
+    const { data: existing, error: loadError } = await supabaseAdmin
+      .from("pos_connections")
+      .select("id, provider, config")
+      .eq("id", connectionId)
+      .eq("org_id", gate.membership.orgId)
+      .maybeSingle();
 
-  if (loadError) return jsonError(res, 500, loadError.message || "Could not load connection");
-  if (!existing) return jsonError(res, 404, "Connection not found");
-
-  if (existing.provider === "yoco" && existing.config?.yoco_webhook_subscription_id) {
-    const apiKey = decryptPosSecret(existing.config?.yoco_api_key_enc);
-    if (apiKey) {
-      await deleteYocoWebhook(apiKey, existing.config.yoco_webhook_subscription_id);
+    if (loadError) {
+      return jsonError(res, 500, mapPosDbError(loadError.message) || "Could not load connection");
     }
+    if (!existing) return jsonError(res, 404, "Connection not found");
+
+    if (existing.provider === "yoco" && existing.config?.yoco_webhook_subscription_id) {
+      const apiKey = decryptPosSecret(existing.config?.yoco_api_key_enc);
+      if (apiKey) {
+        await deleteYocoWebhook(apiKey, existing.config.yoco_webhook_subscription_id);
+      }
+    }
+
+    // Remove dependent sales first (safe even when FK CASCADE is present).
+    const { error: salesDeleteError } = await supabaseAdmin
+      .from("pos_sales_events")
+      .delete()
+      .eq("connection_id", connectionId);
+
+    if (salesDeleteError) {
+      console.error("[pos-delete] sales cleanup failed", salesDeleteError.message);
+      return jsonError(
+        res,
+        500,
+        mapPosDbError(salesDeleteError.message) || "Could not delete POS sales for this connection"
+      );
+    }
+
+    const { data: deletedRows, error: deleteError } = await supabaseAdmin
+      .from("pos_connections")
+      .delete()
+      .eq("id", connectionId)
+      .eq("org_id", gate.membership.orgId)
+      .select("id");
+
+    if (deleteError) {
+      console.error("[pos-delete] connection delete failed", deleteError.message);
+      return jsonError(
+        res,
+        500,
+        mapPosDbError(deleteError.message) || "Could not delete POS connection"
+      );
+    }
+
+    if (!deletedRows?.length) {
+      return jsonError(res, 404, "Connection not found");
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[pos-delete] unexpected failure", err?.message || err);
+    return jsonError(res, 500, err?.message || "Could not delete POS connection");
   }
-
-  const { error } = await supabaseAdmin
-    .from("pos_connections")
-    .delete()
-    .eq("id", connectionId)
-    .eq("org_id", gate.membership.orgId);
-
-  if (error) return jsonError(res, 500, error.message || "Could not delete POS connection");
-
-  return res.status(200).json({ ok: true });
 }
 
 async function requireOrgMember(req, res) {

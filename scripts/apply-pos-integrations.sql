@@ -1,5 +1,12 @@
--- POS integrations: connections + normalized sales events (Revenue System ingress).
--- Providers: generic webhook, Yoco, Square. Inventory sync via adjust_inventory_stock (source = pos).
+-- Apply POS integration tables (run once in Supabase → SQL Editor).
+-- Combines:
+--   supabase/migrations/20260709180000_pos_integrations.sql
+--   supabase/migrations/20260709183000_pos_oauth_states.sql
+-- Safe to re-run (IF NOT EXISTS / DROP POLICY IF EXISTS).
+
+-- Requires public.is_org_member(uuid) from migration 20260624120000_fix_org_membership_rls_recursion.sql
+
+-- ── pos_connections + pos_sales_events ────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.pos_connections (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -46,7 +53,6 @@ CREATE INDEX IF NOT EXISTS idx_pos_sales_events_connection_id
 ALTER TABLE public.pos_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_sales_events ENABLE ROW LEVEL SECURITY;
 
--- Connections: org members read; settings managers write.
 DROP POLICY IF EXISTS "pos_connections_org_select" ON public.pos_connections;
 CREATE POLICY "pos_connections_org_select"
   ON public.pos_connections
@@ -62,7 +68,6 @@ CREATE POLICY "pos_connections_org_manage"
   USING (public.is_org_member(org_id))
   WITH CHECK (public.is_org_member(org_id));
 
--- Sales: org members can read synced events.
 DROP POLICY IF EXISTS "pos_sales_events_org_select" ON public.pos_sales_events;
 CREATE POLICY "pos_sales_events_org_select"
   ON public.pos_sales_events
@@ -70,14 +75,30 @@ CREATE POLICY "pos_sales_events_org_select"
   TO authenticated
   USING (public.is_org_member(org_id));
 
--- Service role ingests webhooks (bypasses RLS). Grant inventory RPC for server-side stock updates.
 GRANT EXECUTE ON FUNCTION public.adjust_inventory_stock(uuid, uuid, integer, text, text, uuid) TO service_role;
 
 GRANT ALL ON TABLE public.pos_connections TO service_role;
 GRANT ALL ON TABLE public.pos_sales_events TO service_role;
 GRANT ALL ON TABLE public.pos_oauth_states TO service_role;
 
-COMMENT ON TABLE public.pos_connections IS
-  'Per-org POS webhook connections (generic, Yoco, Square). Webhook URL uses webhook_token.';
-COMMENT ON TABLE public.pos_sales_events IS
-  'Normalized POS sale events; inventory_applied when stock was decremented via adjust_inventory_stock.';
+-- ── pos_oauth_states (Square OAuth CSRF) ──────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.pos_oauth_states (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  provider text NOT NULL CHECK (provider IN ('square', 'yoco')),
+  state_token text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_oauth_states_expires_at ON public.pos_oauth_states(expires_at);
+
+ALTER TABLE public.pos_oauth_states ENABLE ROW LEVEL SECURITY;
+
+-- Notify PostgREST to reload schema cache (Supabase API)
+NOTIFY pgrst, 'reload schema';
+
+-- If DELETE /api/pos/connections/:id fails with FK errors, also run:
+-- supabase/migrations/20260709190000_pos_sales_events_cascade_delete.sql

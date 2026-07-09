@@ -29,7 +29,7 @@ Templates: `server/.env.example`, `server/.env.development.example`, `server/.en
 
 ## Database migrations
 
-Apply in Supabase SQL Editor (or `supabase db push`):
+Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integrations.sql`**), or use CLI: `supabase link` then `supabase db push`.
 
 1. `supabase/migrations/20260709180000_pos_integrations.sql` — `pos_connections`, `pos_sales_events`
 2. `supabase/migrations/20260709183000_pos_oauth_states.sql` — OAuth CSRF state

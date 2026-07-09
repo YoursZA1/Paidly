@@ -92,9 +92,13 @@ export default function PosIntegrationSettings() {
       setConnections(rows);
       setOauthStatus(status);
     } catch (err) {
+      const msg = err?.message || "Please try again.";
+      const isMissingTable = /pos_connections|schema cache|could not find the table/i.test(msg);
       toast({
         title: "Could not load POS connections",
-        description: err?.message || "Please try again.",
+        description: isMissingTable
+          ? "POS tables are not in your database yet. Run scripts/apply-pos-integrations.sql in Supabase → SQL Editor, then refresh this page."
+          : msg,
         variant: "destructive",
       });
     } finally {

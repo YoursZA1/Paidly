@@ -64,7 +64,7 @@ export async function handlePosWebhook(req, res) {
   if (connection.provider === "yoco" && (headers["webhook-signature"] || headers["webhook_signature"])) {
     verified = verifyYocoStandardWebhook(rawBody, headers, connection.webhook_secret);
   } else {
-    verified = verifyPosHmacSignature(req, body, connection.webhook_secret);
+    verified = verifyPosHmacSignature(req, rawBody, connection.webhook_secret);
   }
 
   if (!verified) {

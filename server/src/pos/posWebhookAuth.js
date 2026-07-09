@@ -26,6 +26,9 @@ export function verifyPosWebhookSecret(req, webhookSecret) {
 
 /**
  * Optional HMAC-SHA256 body signature (hex or sha256= prefix).
+ * @param {import("express").Request | Record<string, unknown>} req
+ * @param {string} rawBody Original request body bytes as a string (not re-serialized JSON).
+ * @param {string} webhookSecret
  */
 export function verifyPosHmacSignature(req, rawBody, webhookSecret) {
   const secret = String(webhookSecret || "").trim();
@@ -38,8 +41,11 @@ export function verifyPosHmacSignature(req, rawBody, webhookSecret) {
 
   if (!signature) return verifyPosWebhookSecret(req, webhookSecret);
 
-  const body = typeof rawBody === "string" ? rawBody : JSON.stringify(rawBody ?? {});
-  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
+  if (typeof rawBody !== "string") {
+    return false;
+  }
+
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   const provided = String(signature).replace(/^sha256=/i, "").trim();
 
   try {

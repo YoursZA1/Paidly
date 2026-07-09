@@ -77,19 +77,39 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
     inventoryApplied = inventory.applied;
     inventoryResult = inventory.results;
 
-    await supabase
+    const { error: inventoryUpdateError } = await supabase
       .from("pos_sales_events")
       .update({
         inventory_applied: inventoryApplied,
         inventory_result: inventoryResult,
       })
       .eq("id", saleEventId);
+
+    if (inventoryUpdateError) {
+      console.error("[pos-sale] inventory metadata update failed", inventoryUpdateError.message);
+      return {
+        ok: false,
+        status: 500,
+        error: inventoryUpdateError.message || "Could not save inventory result",
+        saleEventId,
+      };
+    }
   }
 
-  await supabase
+  const { error: connectionUpdateError } = await supabase
     .from("pos_connections")
     .update({ last_event_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", connection.id);
+
+  if (connectionUpdateError) {
+    console.error("[pos-sale] connection last_event_at update failed", connectionUpdateError.message);
+    return {
+      ok: false,
+      status: 500,
+      error: connectionUpdateError.message || "Could not update connection",
+      saleEventId,
+    };
+  }
 
   return {
     ok: true,

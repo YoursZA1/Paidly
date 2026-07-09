@@ -63,12 +63,19 @@ export async function registerYocoWebhook(apiKey, webhookUrl, name) {
  * @param {string} subscriptionId
  */
 export async function deleteYocoWebhook(apiKey, subscriptionId) {
-  const secret = normalizeYocoSecretKey(apiKey);
-  if (!subscriptionId) return;
-  await fetch(`${YOCO_API_BASE}/webhooks/${encodeURIComponent(subscriptionId)}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${secret}` },
-  }).catch(() => {});
+  if (!apiKey || !subscriptionId) return;
+  try {
+    const secret = normalizeYocoSecretKey(apiKey);
+    const res = await fetch(`${YOCO_API_BASE}/webhooks/${encodeURIComponent(subscriptionId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    if (!res.ok && res.status !== 404) {
+      console.warn("[yoco] webhook delete failed", res.status, subscriptionId);
+    }
+  } catch (err) {
+    console.warn("[yoco] webhook delete skipped", err?.message || err);
+  }
 }
 
 /**
