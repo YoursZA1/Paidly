@@ -15,6 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_pos_oauth_states_expires_at ON public.pos_oauth_s
 ALTER TABLE public.pos_oauth_states ENABLE ROW LEVEL SECURITY;
 
 -- No client policies — service role only.
+GRANT ALL ON TABLE public.pos_oauth_states TO service_role;
 
 COMMENT ON TABLE public.pos_oauth_states IS
   'One-time OAuth CSRF state for POS provider connect flows. Consumed on callback.';

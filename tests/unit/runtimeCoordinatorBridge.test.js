@@ -32,4 +32,24 @@ describe("runtimeCoordinatorBridge", () => {
     notifyRuntimeFromLifecycle({ type: "mark_reconnecting", reason: "test" });
     expect(useRuntimeCoordinator.getState().reconnectTimerId).not.toBeNull();
   });
+
+  it("maps REALTIME_DISCONNECTED to DEGRADED from SESSION_READY", () => {
+    notifyAuthBootstrapComplete();
+    notifyRuntimeFromLifecycle({ type: "REALTIME_DISCONNECTED", reason: "channel_closed" });
+    expect(useRuntimeCoordinator.getState().phase).toBe("DEGRADED");
+  });
+
+  it("clears DEGRADED on REALTIME_SUBSCRIBED", () => {
+    notifyAuthBootstrapComplete();
+    notifyRuntimeFromLifecycle({ type: "REALTIME_DISCONNECTED" });
+    notifyRuntimeFromLifecycle({ type: "REALTIME_SUBSCRIBED" });
+    expect(useRuntimeCoordinator.getState().phase).toBe("SESSION_READY");
+  });
+
+  it("starts AUTH_RECOVERING on VISIBILITY_RESTORE_FAILED", () => {
+    notifyAuthBootstrapComplete();
+    notifyRuntimeFromLifecycle({ type: "VISIBILITY_RESTORE_FAILED" });
+    expect(useRuntimeCoordinator.getState().phase).toBe("AUTH_RECOVERING");
+    expect(useRuntimeCoordinator.getState().pauseNonCriticalRequests).toBe(true);
+  });
 });

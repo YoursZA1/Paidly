@@ -332,7 +332,8 @@ export default async function handler(req, res) {
   if (route === "once") {
     return payfastOnceHandler(req, res);
   }
-  if (route === "webhook" || route === "subscription/itn") {
+  // Canonical: POST /api/payfast/itn (also legacy webhook + subscription/itn)
+  if (route === "itn" || route === "webhook" || route === "subscription/itn") {
     return payfastSubscriptionItnApi(req, res);
   }
 

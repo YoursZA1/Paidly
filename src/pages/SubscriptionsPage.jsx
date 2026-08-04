@@ -18,6 +18,9 @@ import PageHeader from '@/components/dashboard/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
+import SubscriptionOverview from '@/components/dashboard/SubscriptionOverview';
+import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDetailsSheet';
+import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
@@ -91,6 +94,7 @@ export default function SubscriptionsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
+  const [detailSubId, setDetailSubId] = useState(null);
   const [subsPage, setSubsPage] = useState(0);
   const queryClient = useQueryClient();
 
@@ -99,6 +103,19 @@ export default function SubscriptionsPage() {
     queryFn: () => paidly.entities.Subscription.list('-created_date', LIST_LIMIT),
     refetchInterval: 30000,
   });
+
+  const {
+    data: subscriptionOverviewPayload,
+    isLoading: overviewLoading,
+    isError: overviewError,
+    error: overviewErr,
+    refetch: refetchOverview,
+  } = useQuery({
+    queryKey: ['subscription-overview'],
+    queryFn: () => fetchAdminSubscriptionOverview(),
+    refetchInterval: 30000,
+  });
+  const subscriptionOverview = subscriptionOverviewPayload?.overview;
 
   const {
     data: platformUsers = [],
@@ -173,7 +190,10 @@ export default function SubscriptionsPage() {
       <PageHeader
         title="Subscriptions"
         description="All platform users and their subscription records (profile plan shown when no subscription row exists)"
-        onRefresh={() => refetch()}
+        onRefresh={() => {
+          void refetch();
+          void refetchOverview();
+        }}
         isRefreshing={subsFetching}
       >
         <Button onClick={() => setShowAdd(true)} className="bg-primary hover:bg-primary/90">
@@ -189,6 +209,16 @@ export default function SubscriptionsPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <SubscriptionOverview
+        className="mb-6"
+        overview={subscriptionOverview}
+        isLoading={overviewLoading}
+        showManageLink={false}
+        errorMessage={
+          overviewError ? overviewErr?.message || 'Could not load subscription overview' : null
+        }
+      />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
@@ -248,9 +278,12 @@ export default function SubscriptionsPage() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="paused">Paused</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="trialing">Trial</SelectItem>
+            <SelectItem value="past_due">Past Due</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
             <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="suspended">Suspended</SelectItem>
             <SelectItem value="none">No subscription row</SelectItem>
           </SelectContent>
         </Select>
@@ -329,6 +362,9 @@ export default function SubscriptionsPage() {
                           </DropdownMenuItem>
                         ) : (
                           <>
+                            <DropdownMenuItem onClick={() => setDetailSubId(sub.id)}>
+                              View details
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
                                 setShowAdd(false);
@@ -386,6 +422,14 @@ export default function SubscriptionsPage() {
           setEditingSub(null);
         }}
         subscription={editingSub}
+      />
+
+      <SubscriptionDetailsSheet
+        subscriptionId={detailSubId}
+        open={Boolean(detailSubId)}
+        onOpenChange={(next) => {
+          if (!next) setDetailSubId(null);
+        }}
       />
     </div>
   );

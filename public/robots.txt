@@ -1,0 +1,18 @@
+# https://www.paidly.co.za/robots.txt
+# Allow crawling of marketing pages for Search (structured data / indexing).
+# Authenticated app routes are not useful for organic results; Disallow reduces crawl waste.
+
+User-agent: *
+Allow: /
+Allow: /Home
+Allow: /home
+Allow: /HowTo
+Allow: /how-to
+Allow: /Affiliate
+Disallow: /Dashboard
+Disallow: /Settings
+Disallow: /admin
+Disallow: /admin-v2
+Disallow: /api/
+
+Sitemap: https://www.paidly.co.za/sitemap.xml

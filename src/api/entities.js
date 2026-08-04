@@ -49,6 +49,12 @@ export const Budget = breakApi.entities.Budget;
 
 export const Payment = breakApi.entities.Payment;
 
+export const Supplier = breakApi.entities.Supplier;
+
+export const PurchaseOrder = breakApi.entities.PurchaseOrder;
+
+export const PurchaseOrderItem = breakApi.entities.PurchaseOrderItem;
+
 
 
 // auth sdk:

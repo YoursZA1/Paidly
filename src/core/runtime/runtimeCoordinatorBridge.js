@@ -1,12 +1,20 @@
 /**
  * Feeds ConnectionLifecycleManager + auth pipeline signals into RuntimeCoordinator.
- * Feed-only in Wave 2 — SessionOrchestrator remains authority for logout/reauth decisions.
+ * Feed-only — SessionOrchestrator remains authority for logout/reauth decisions.
+ *
+ * Ownership (session/runtime):
+ * - ConnectionLifecycleManager: ingress + read model
+ * - SessionOrchestrator: terminal expire / reconnect surfaces
+ * - RuntimeCoordinator: phase + pauseNonCriticalRequests (HTTP stampede guard)
+ * - sessionRefreshScheduler.requestSessionRefresh: sole coalesced refresh initiator for
+ *   visibility / wake / heartbeat (AuthContext registers the executor)
  */
 import {
   getRuntimeCoordinatorSnapshot,
   subscribeRuntimeCoordinator,
   useRuntimeCoordinator,
 } from "@/core/runtime/RuntimeCoordinator";
+import { LifecycleSignalType } from "@/lib/connection/lifecycleSignalTypes";
 import { trackSessionTelemetry } from "@/lib/sessionTelemetry";
 
 let telemetryUnsub = null;
@@ -34,6 +42,8 @@ export function notifyRuntimeFromLifecycle(signal) {
         rc.endAuthRecoverySuccess();
       } else if (rc.phase === "BOOTING" || rc.phase === "OFFLINE") {
         rc.setPhase("SESSION_READY");
+      } else if (rc.phase === "DEGRADED") {
+        rc.setDegraded(false);
       }
       break;
     case "mark_reconnecting":
@@ -58,6 +68,28 @@ export function notifyRuntimeFromLifecycle(signal) {
     case "mark_manual_logout_reset":
       rc.resetForColdStart();
       break;
+
+    case LifecycleSignalType.REALTIME_SUBSCRIBED:
+      if (rc.phase === "RECONNECTING") {
+        rc.completeReconnecting(true);
+      } else if (rc.phase === "DEGRADED") {
+        rc.setDegraded(false);
+      }
+      break;
+    case LifecycleSignalType.REALTIME_DISCONNECTED:
+    case LifecycleSignalType.TRANSPORT_REALTIME_UNSTABLE:
+      if (rc.phase === "SESSION_READY" || rc.phase === "SYNCING") {
+        rc.setDegraded(true, signal.reason || signal.type);
+      }
+      break;
+    case LifecycleSignalType.VISIBILITY_RESTORE_FAILED:
+      rc.beginAuthRecovery();
+      break;
+    case LifecycleSignalType.REFRESH_SKIPPED:
+    case LifecycleSignalType.REFRESH_RETRYING:
+      // Coalesce / throttle only — never escalate RuntimeCoordinator.
+      break;
+
     default:
       break;
   }

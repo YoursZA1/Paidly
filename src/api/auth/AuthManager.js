@@ -12,6 +12,7 @@ import {
   getSessionDataForProfileWrite,
   isSupabaseAuthUuid,
 } from "@/api/auth/authSessionHelpers.js";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { normalizePaidlyPlan } from "@/api/auth/planNormalize.js";
 import { clearOrgIdCache } from "@/api/auth/orgCache.js";
 import { selectProfileByUserId } from "@/api/auth/profileSelect.js";
@@ -221,17 +222,13 @@ export class AuthManager {
     let authUserId = null;
     for (let attempt = 0; attempt <= GET_SESSION_RETRIES; attempt++) {
       try {
-        const { data: sessionData, error: sessionError } = await withLocalTimeout(
-          supabase.auth.getSession(),
+        const session = await withLocalTimeout(
+          getStableSession(),
           GET_SESSION_MS,
           "auth.getSession"
         );
-        if (sessionError) {
-          warnSessionSlowOnce(getSupabaseErrorMessage(sessionError, "Session failed"));
-          break;
-        }
-        if (sessionData?.session?.user?.id) {
-          authUserId = sessionData.session.user.id;
+        if (session?.user?.id) {
+          authUserId = session.user.id;
         }
         break;
       } catch (e) {

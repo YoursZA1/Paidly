@@ -11,6 +11,8 @@ import { BankingDetail } from "@/api/entities";
 import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
 import { User } from "@/api/entities";
+import { Service } from "@/api/entities";
+import { PurchaseOrder } from "@/api/entities";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
@@ -35,6 +37,10 @@ import {
   Landmark,
   Clock,
   ArrowRightLeft,
+  PackageX,
+  PackageSearch,
+  Warehouse,
+  ClipboardList,
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
@@ -315,6 +321,8 @@ function DashboardMain() {
   const [invoicesState, setInvoicesState] = useState([]);
   const [clientsState, setClientsState] = useState([]);
   const [expensesState, setExpensesState] = useState([]);
+  const [inventoryProductsState, setInventoryProductsState] = useState([]);
+  const [outstandingPurchaseOrdersState, setOutstandingPurchaseOrdersState] = useState([]);
   const [paymentsState, setPaymentsState] = useState([]);
   const [userState, setUserState] = useState(null);
   const [userCurrencyPreference, setUserCurrencyPreference] = useState('ZAR');
@@ -533,6 +541,35 @@ function DashboardMain() {
     })();
     return () => { cancelled = true; mountedRef.current = false; };
   }, [isAdmin, authUser?.id, calendarYear, profileFromQuery]);
+
+  // Inventory KPI cards (Low Stock, Out of Stock, Inventory Value, Outstanding POs):
+  // self-contained fetch, independent of the invoice/expense loading pipeline above.
+  useEffect(() => {
+    if (isAdmin || !authUser?.id) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [servicesSettled, posSettled] = await Promise.allSettled([
+          withTimeoutRetry(() => Service.list(), 15000, 1),
+          withTimeoutRetry(() => PurchaseOrder.list(), 15000, 1),
+        ]);
+        if (cancelled || !mountedRef.current) return;
+        const services = servicesSettled.status === 'fulfilled' && Array.isArray(servicesSettled.value)
+          ? servicesSettled.value
+          : [];
+        setInventoryProductsState(services.filter((s) => s.item_type === 'product'));
+        const purchaseOrders = posSettled.status === 'fulfilled' && Array.isArray(posSettled.value)
+          ? posSettled.value
+          : [];
+        setOutstandingPurchaseOrdersState(
+          purchaseOrders.filter((po) => po.status === 'draft' || po.status === 'approved')
+        );
+      } catch (err) {
+        if (!cancelled) console.warn('Dashboard: inventory KPI fetch failed', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin, authUser?.id]);
 
   // Removed calculateFinancialMetrics (no longer used)
 
@@ -1070,6 +1107,25 @@ function DashboardMain() {
       cashFlowGrowth
     };
   }, [resolvedInvoices, expenses, resolvedPayslips]);
+
+  const inventoryKpis = useMemo(() => {
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+    let inventoryValue = 0;
+    for (const product of inventoryProductsState) {
+      const stock = Number(product.stock_quantity ?? 0);
+      const threshold = Number(product.low_stock_threshold ?? 10);
+      if (stock <= 0) outOfStockCount += 1;
+      else if (stock <= threshold) lowStockCount += 1;
+      inventoryValue += stock * Number(product.cost_price ?? 0);
+    }
+    return {
+      lowStockCount,
+      outOfStockCount,
+      inventoryValue,
+      outstandingPOs: outstandingPurchaseOrdersState.length,
+    };
+  }, [inventoryProductsState, outstandingPurchaseOrdersState]);
 
   const recentTransactions = useMemo(
     () =>
@@ -1710,6 +1766,28 @@ function DashboardMain() {
             </motion.div>
           </div>
         </div>
+
+        {/* Inventory KPI row — only shown once there are product-type catalog items */}
+        {inventoryProductsState.length > 0 && (
+          <div className="mb-4 sm:mb-6">
+            <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
+              <div className="md:hidden">
+                <KPICarousel>
+                  <StatCard title="Low Stock" value={String(inventoryKpis.lowStockCount)} icon={PackageSearch} isLoading={isLoading} fintech accent="amber" />
+                  <StatCard title="Out of Stock" value={String(inventoryKpis.outOfStockCount)} icon={PackageX} isLoading={isLoading} fintech accent="purple" />
+                  <StatCard title="Inventory Value" value={formatCurrency(inventoryKpis.inventoryValue, userCurrency)} icon={Warehouse} isLoading={isLoading} fintech accent="blue" />
+                  <StatCard title="Outstanding POs" value={String(inventoryKpis.outstandingPOs)} icon={ClipboardList} isLoading={isLoading} fintech accent="blue" />
+                </KPICarousel>
+              </div>
+              <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <motion.div variants={itemVariants}><StatCard title="Low Stock" value={String(inventoryKpis.lowStockCount)} icon={PackageSearch} isLoading={isLoading} fintech accent="amber" /></motion.div>
+                <motion.div variants={itemVariants}><StatCard title="Out of Stock" value={String(inventoryKpis.outOfStockCount)} icon={PackageX} isLoading={isLoading} fintech accent="purple" /></motion.div>
+                <motion.div variants={itemVariants}><StatCard title="Inventory Value" value={formatCurrency(inventoryKpis.inventoryValue, userCurrency)} icon={Warehouse} isLoading={isLoading} fintech accent="blue" /></motion.div>
+                <motion.div variants={itemVariants}><StatCard title="Outstanding POs" value={String(inventoryKpis.outstandingPOs)} icon={ClipboardList} isLoading={isLoading} fintech accent="blue" /></motion.div>
+              </motion.div>
+            </div>
+          </div>
+        )}
 
         {/* Total Income — full width, glassmorphism, below KPI carousel on mobile */}
         <div className="mb-4 sm:mb-6 md:hidden w-full max-w-full">

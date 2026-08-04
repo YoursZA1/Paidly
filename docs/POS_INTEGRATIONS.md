@@ -31,8 +31,9 @@ Templates: `server/.env.example`, `server/.env.development.example`, `server/.en
 
 Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integrations.sql`**), or use CLI: `supabase link` then `supabase db push`.
 
-1. `supabase/migrations/20260709180000_pos_integrations.sql` — `pos_connections`, `pos_sales_events`
-2. `supabase/migrations/20260709183000_pos_oauth_states.sql` — OAuth CSRF state
+1. `supabase/migrations/20260709180000_pos_integrations.sql` — `pos_connections`, `pos_sales_events` (members SELECT; company admins/owners write via `is_company_admin_for_org`)
+2. `supabase/migrations/20260709183000_pos_oauth_states.sql` — OAuth CSRF state (service_role only)
+3. `supabase/migrations/20260714150000_pos_connections_admin_write_rls.sql` — tighten write RLS on already-deployed DBs
 
 ---
 
@@ -44,7 +45,7 @@ Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integration
 | `GET /api/pos/oauth/callback/square` | Public (OAuth redirect) | Exchanges code, stores connection, redirects to Settings |
 | `POST /api/pos/oauth/yoco/connect` | Bearer session | Validates API key, registers Yoco webhook |
 | `GET /api/pos/oauth/status` | Bearer session | Whether Square OAuth is configured |
-| `GET/POST/PATCH/DELETE /api/pos/connections` | Bearer session | Manage connections |
+| `GET/POST/PATCH/DELETE /api/pos/connections` | Bearer + company admin (`MANAGE_COMPANY_SETTINGS`) | Manage connections; RLS matches admin write |
 | `GET /api/pos/sales` | Bearer session | Dashboard read model |
 | `POST /api/pos/webhook/:token` | Webhook secret / provider signature | Per-connection ingress (generic, Yoco) |
 | `POST /api/pos/webhook/provider/square` | Square HMAC | App-level Square events (routed by `merchant_id`) |

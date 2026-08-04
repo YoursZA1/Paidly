@@ -5,7 +5,7 @@ import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
-import { clearSessionOrgIdCache } from "@/api/customClient";
+import { clearSessionOrgIdCache } from "@/api/auth/orgCache.js";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
 import { processPendingAffiliateReferral } from "@/api/affiliateClient";

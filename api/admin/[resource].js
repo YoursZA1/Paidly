@@ -1163,6 +1163,20 @@ export default async function handler(req, res) {
       return handleAffiliates(req, res, supabase, limit);
     }
 
+    // Billing v2 admin (also mirrored via admin-billing-handler + vercel rewrites)
+    if (resource === "subscriptions") {
+      const { handleAdminSubscriptionsList } = await import("../../server/src/billing/adminBillingApi.js");
+      return handleAdminSubscriptionsList(req, res);
+    }
+    if (resource === "revenue") {
+      const { handleAdminRevenue } = await import("../../server/src/billing/adminBillingApi.js");
+      return handleAdminRevenue(req, res);
+    }
+    if (resource === "failed-payments") {
+      const { handleAdminFailedPayments } = await import("../../server/src/billing/adminBillingApi.js");
+      return handleAdminFailedPayments(req, res);
+    }
+
     let limit = 500;
     if (req.query?.limit != null && String(req.query.limit).trim() !== "") {
       const n = Number(String(req.query.limit).trim());

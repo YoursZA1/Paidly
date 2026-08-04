@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, FileText, Download, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { createPageUrl } from "@/utils";
 import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
@@ -121,8 +121,8 @@ function InvoicePreview({
       });
       const base64PDF = await blobToDataURI(blob);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const session = await getStableSession();
+      const token = session?.access_token;
       if (!token) {
         toast({ title: "Not signed in", description: "Please sign in to send the invoice.", variant: "destructive" });
         return;

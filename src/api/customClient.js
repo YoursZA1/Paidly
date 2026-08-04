@@ -1,6 +1,10 @@
 /**
  * Custom API Client — data access layer for all Paidly entities.
  *
+ * Prefer importing the singleton from `@/api/apiClient` (`breakApi` / `customClient`).
+ * This module exports the factory only — constructing a second client splits AuthManager
+ * / EntityManager state.
+ *
  * SPLIT PLAN (tracked): AuthManager → src/api/auth/; IntegrationManager → src/api/integration/.
  * Thin orchestrator: AuthManager, IntegrationManager, EntityManager in src/api/*.
  */
@@ -90,7 +94,10 @@ class CustomAPIClient {
       'QuoteReminder',
       'Vendor',
       'Budget',
-      'Payment'
+      'Payment',
+      'Supplier',
+      'PurchaseOrder',
+      'PurchaseOrderItem'
     ];
 
     const userId = this.auth.user ? this.auth.user.id : null;
@@ -114,8 +121,3 @@ class CustomAPIClient {
 export const createClient = (config) => {
   return new CustomAPIClient(config);
 };
-
-export const customClient = createClient({
-  appId: "6887a9d49af4acc63ae9062f",
-  requiresAuth: true
-});

@@ -1,9 +1,17 @@
 import { supabase } from "@/lib/supabaseClient";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
-import { readStoredAuthUser } from "@/utils/authStorage";
+import {
+  getStableSession,
+  getStableSessionResult,
+  invalidateSessionSnapshot,
+} from "@/core/auth/SessionCoordinator";
 
+/**
+ * Prefer SessionCoordinator; fall back to getUser + a fresh getSession when the
+ * snapshot/store has no user (common right after sign-in races).
+ */
 export async function getSessionWithRetry() {
-  const first = await retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+  const first = await getStableSessionResult();
   if (first?.data?.session?.user) {
     return first;
   }
@@ -12,7 +20,8 @@ export async function getSessionWithRetry() {
     if (userErr || !userData?.user) {
       return first;
     }
-    const second = await retryOnAbort(() => supabase.auth.getSession(), 2, 300);
+    invalidateSessionSnapshot();
+    const second = await getStableSessionResult();
     if (second?.data?.session?.user) {
       return second;
     }
@@ -45,8 +54,8 @@ export async function getAuthUserIdForWrites() {
   } catch {
     /* fall through */
   }
-  const { data: sessionData } = await getSessionWithRetry();
-  return sessionData?.session?.user?.id ?? null;
+  const session = await getStableSession();
+  return session?.user?.id ?? null;
 }
 
 export function isSupabaseAuthUuid(id) {

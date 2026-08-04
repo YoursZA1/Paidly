@@ -1,8 +1,16 @@
 import { createClient } from './customClient';
-// Custom API client - BreakInvoice Backend
 
-// Create a client with authentication required
+/**
+ * Single authenticated API client for the app.
+ * `customClient` is an alias — do not construct a second client via createClient in app code.
+ */
 export const breakApi = createClient({
-  appId: "6887a9d49af4acc63ae9062f", 
-  requiresAuth: true // Ensure authentication is required for all operations
+  appId: "6887a9d49af4acc63ae9062f",
+  requiresAuth: true,
 });
+
+export const customClient = breakApi;
+
+export { createClient } from './customClient';
+export { selectProfileByUserId } from "@/api/auth/profileSelect.js";
+export { clearSessionOrgIdCache } from "@/api/auth/orgCache.js";

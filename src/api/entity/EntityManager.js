@@ -7,17 +7,11 @@ import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
 import { hasFeature } from "@/lib/plans.js";
-import {
-  runOrgBootstrapWithLock,
-  getOrgBootstrapCircuitOpenUntil,
-  recordOrgBootstrapFailure,
-} from "@/lib/orgBootstrapApi";
 import { assertRuntimeAllowsMutations } from "@/lib/runtimeMutationGuard";
-import { orgIdCache, fetchPrimaryMembershipOrgId } from "@/api/auth/orgCache.js";
+import { ensureUserHasOrganization as ensureUserHasOrganizationShared } from "@/api/auth/ensureUserOrganization.js";
 import {
   getSessionWithRetry,
   getAuthUserIdForWrites,
-  isSupabaseAuthUuid,
 } from "@/api/auth/authSessionHelpers.js";
 import { loadCompanyAccessContext } from "@/services/CompanyContextService";
 import { applyCompanyDataScope } from "@/lib/companyDataScope";
@@ -50,6 +44,20 @@ function buildChildItemRows(parentIdField, parentId, items) {
     unit_price: Number(item.unit_price || item.rate || item.price || 0),
     total_price: Number(item.total_price || item.total || 0),
   }));
+}
+
+/** Maps app-shape line items to `purchase_order_items` rows for a given PO. */
+function buildPurchaseOrderItemRows(purchaseOrderId, orgId, items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item?.product_id)
+    .map((item) => ({
+      purchase_order_id: purchaseOrderId,
+      org_id: orgId,
+      product_id: item.product_id,
+      quantity_ordered: Number(item.quantity_ordered || item.quantity || 1),
+      unit_cost: Number(item.unit_cost || item.cost || 0),
+    }));
 }
 
 export class EntityManager {
@@ -231,7 +239,13 @@ export class EntityManager {
                                     ? "document_sends"
                                     : table === "messagelogs"
                                       ? "message_logs"
-                                      : null;
+                                      : table === "suppliers"
+                                        ? "suppliers"
+                                        : table === "purchaseorders"
+                                          ? "purchase_orders"
+                                          : table === "purchaseorderitems"
+                                            ? "purchase_order_items"
+                                            : null;
 
       if (supabaseTable) {
         const columns = getSelectColumns(supabaseTable);
@@ -255,6 +269,9 @@ export class EntityManager {
               "payslips",
               "expenses",
               "tasks",
+              "suppliers",
+              "purchase_orders",
+              "purchase_order_items",
             ].includes(supabaseTable)
           ) {
             query = query.eq("org_id", orgId);
@@ -392,7 +409,10 @@ export class EntityManager {
                                  table === 'tasks' ? 'tasks' :
                                  table === 'notes' ? 'notes' :
                                  table === 'documentsends' ? 'document_sends' :
-                                 table === 'messagelogs' ? 'message_logs' : null;
+                                 table === 'messagelogs' ? 'message_logs' :
+                                 table === 'suppliers' ? 'suppliers' :
+                                 table === 'purchaseorders' ? 'purchase_orders' :
+                                 table === 'purchaseorderitems' ? 'purchase_order_items' : null;
 
             if (supabaseTable) {
               const columns = getSelectColumns(supabaseTable);
@@ -415,6 +435,9 @@ export class EntityManager {
                     "payslips",
                     "expenses",
                     "tasks",
+                    "suppliers",
+                    "purchase_orders",
+                    "purchase_order_items",
                   ].includes(supabaseTable)
                 ) {
                   if (!orgId) {
@@ -565,7 +588,12 @@ export class EntityManager {
     const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
     const offset = opts.offset ?? 0;
     const maxWaitMs = typeof opts.maxWaitMs === 'number' ? opts.maxWaitMs : null;
-    const errorOnEmptyTimeout = opts.errorOnEmptyTimeout === true;
+    // Default: do not treat empty timeout as success for non-persisted entity caches
+    // (callers with maxWaitMs + retries need a real signal). Opt out with errorOnEmptyTimeout: false.
+    const errorOnEmptyTimeout =
+      opts.errorOnEmptyTimeout !== undefined
+        ? opts.errorOnEmptyTimeout === true
+        : Boolean(this.skipLocalPersistence);
     const orderColumn = getOrderColumn(sortBy);
     const orderAsc = getOrderAscending(sortBy);
 
@@ -591,13 +619,12 @@ export class EntityManager {
             );
           }
         });
-        const timedOutWithEmptyCache =
+        const emptyAfterTimeout =
           this.skipLocalPersistence &&
           useSessionHealthStore.getState().status !== SESSION_STATUS.EXPIRED &&
-          Object.keys(this.data).length === 0 &&
-          shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs);
-        if (timedOutWithEmptyCache) {
-          if (import.meta.env?.DEV) {
+          Object.keys(this.data).length === 0;
+        if (emptyAfterTimeout) {
+          if (shouldLogEntityTimeoutWarning(this.entityName, maxWaitMs) && import.meta.env?.DEV) {
             console.warn(
               `[Paidly][EntityManager] list(${this.entityName}): empty cache after ${maxWaitMs}ms — network slow, failed, or still loading.`
             );
@@ -637,81 +664,7 @@ export class EntityManager {
   }
 
   async ensureUserHasOrganization(userId) {
-    assertSessionAuthorityAllowsMutations();
-    const requestedUserId = String(userId || "");
-    if (!requestedUserId || !isSupabaseAuthUuid(requestedUserId)) {
-      throw new Error("Organization setup requires a valid signed-in user (Supabase auth id).");
-    }
-    if (orgIdCache[requestedUserId]) return orgIdCache[requestedUserId];
-
-    let sessionUid = null;
-    try {
-      const { data: gu } = await supabase.auth.getUser();
-      sessionUid = gu?.user?.id ?? null;
-    } catch {
-      /* fall through */
-    }
-    if (!sessionUid) {
-      const { data: sd } = await getSessionWithRetry();
-      sessionUid = sd?.session?.user?.id ?? null;
-    }
-
-    if (!sessionUid || !isSupabaseAuthUuid(String(sessionUid))) {
-      throw new Error("Organization setup requires the active session user. Sign in again and retry.");
-    }
-
-    const effectiveUserId = String(sessionUid);
-    if (sessionUid && sessionUid !== requestedUserId) {
-      console.warn(
-        `[Paidly][EntityManager] ensureUserHasOrganization: session/request user mismatch; using active session user ${sessionUid}.`
-      );
-      // Never keep cross-user cache aliases when identities differ.
-      delete orgIdCache[requestedUserId];
-    }
-
-    try {
-      let orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
-      if (orgId) {
-        orgIdCache[effectiveUserId] = orgId;
-        return orgId;
-      }
-
-      if (getOrgBootstrapCircuitOpenUntil(effectiveUserId) > Date.now()) {
-        throw new Error(
-          "Organization bootstrap is cooling down after repeated errors. Please retry in a moment or contact support."
-        );
-      }
-
-      const { data: sessionForToken } = await getSessionWithRetry();
-      if (!sessionForToken?.session?.access_token) {
-        throw new Error("Organization setup requires an authenticated session.");
-      }
-
-      try {
-        await runOrgBootstrapWithLock(effectiveUserId, {
-          getExistingOrgId: () => fetchPrimaryMembershipOrgId(effectiveUserId),
-        });
-      } catch (err) {
-        console.warn("[Paidly] Organization bootstrap request failed:", err);
-        throw new Error(
-          `Failed to set up organization: ${err?.message || err}. Please try again or contact support.`
-        );
-      }
-
-      orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
-      if (orgId) {
-        orgIdCache[effectiveUserId] = orgId;
-        return orgId;
-      }
-
-      recordOrgBootstrapFailure(effectiveUserId);
-      throw new Error(
-        "Organization membership missing after server bootstrap. Please refresh the page or contact support."
-      );
-    } catch (error) {
-      console.error('Error in ensureUserHasOrganization:', error);
-      throw error;
-    }
+    return ensureUserHasOrganizationShared(userId);
   }
 
   async create(data) {
@@ -769,7 +722,13 @@ export class EntityManager {
                                     ? "document_sends"
                                     : table === "messagelogs"
                                       ? "message_logs"
-                                      : null;
+                                      : table === "suppliers"
+                                        ? "suppliers"
+                                        : table === "purchaseorders"
+                                          ? "purchase_orders"
+                                          : table === "purchaseorderitems"
+                                            ? "purchase_order_items"
+                                            : null;
 
       // Prepare data for Supabase (field names match schema: created_at, updated_at, org_id, etc.)
       const supabaseData = {
@@ -828,6 +787,9 @@ export class EntityManager {
       if (supabaseTable === 'tasks') {
         if (!supabaseData.created_by_id) supabaseData.created_by_id = userId;
       }
+      if (supabaseTable === 'suppliers' || supabaseTable === 'purchase_orders') {
+        if (!supabaseData.created_by) supabaseData.created_by = userId;
+      }
       const DOCUMENT_SEND_INSERT_COLUMNS = ['org_id', 'document_type', 'document_id', 'client_id', 'channel', 'sent_at', 'created_at'];
       if (supabaseTable === 'document_sends') {
         if (supabaseData.sent_at === undefined) supabaseData.sent_at = new Date().toISOString();
@@ -879,7 +841,10 @@ export class EntityManager {
         'invoice_views': ['org_id', 'invoice_id'],
         'payslips': ['org_id', 'employee_name'],
         'expenses': ['org_id', 'amount', 'date'],
-        'tasks': ['org_id', 'title']
+        'tasks': ['org_id', 'title'],
+        'suppliers': ['org_id', 'name'],
+        'purchase_orders': ['org_id', 'po_number', 'status'],
+        'purchase_order_items': ['org_id', 'purchase_order_id', 'product_id', 'quantity_ordered']
       };
 
       // Ensure required fields for services
@@ -1123,6 +1088,38 @@ export class EntityManager {
         });
       }
 
+      const SUPPLIER_INSERT_COLUMNS = [
+        'org_id', 'name', 'email', 'phone', 'address', 'tax_number',
+        'payment_terms', 'lead_time_days', 'notes', 'created_by', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'suppliers') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!SUPPLIER_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
+      const PURCHASE_ORDER_INSERT_COLUMNS = [
+        'org_id', 'supplier_id', 'po_number', 'status', 'expected_date', 'notes',
+        'created_by', 'created_at', 'updated_at', 'received_at'
+      ];
+      if (supabaseTable === 'purchase_orders') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!PURCHASE_ORDER_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+        // These live in purchase_order_items, inserted separately below.
+        delete supabaseData.items;
+      }
+
+      const PURCHASE_ORDER_ITEM_INSERT_COLUMNS = [
+        'org_id', 'purchase_order_id', 'product_id', 'quantity_ordered', 'quantity_received',
+        'unit_cost', 'created_at', 'updated_at'
+      ];
+      if (supabaseTable === 'purchase_order_items') {
+        Object.keys(supabaseData).forEach(key => {
+          if (!PURCHASE_ORDER_ITEM_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
+        });
+      }
+
       EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
 
       // Log for debugging (dev only — payload contains client PII, amounts, and addresses).
@@ -1205,6 +1202,21 @@ export class EntityManager {
         }
       }
 
+      if (supabaseTable === 'purchase_orders' && data.items && Array.isArray(data.items)) {
+        const itemsToInsert = buildPurchaseOrderItemRows(record.id, record.org_id, data.items);
+        if (itemsToInsert.length > 0) {
+          const { error: itemsError } = await supabase
+            .from('purchase_order_items')
+            .insert(itemsToInsert);
+          if (itemsError) {
+            const msg = getSupabaseErrorMessage(itemsError, "Create items failed");
+            console.error('Failed to create purchase_order_items:', msg);
+            alertSupabaseWriteFailure(itemsError, 'Create purchase_order_items failed');
+            throw new Error(`Failed to save purchase order line items: ${msg}`);
+          }
+        }
+      }
+
       return record;
     } catch (e) {
       const isAuthError = e?.message === 'Not authenticated';
@@ -1271,7 +1283,10 @@ export class EntityManager {
                            table === 'tasks' ? 'tasks' :
                            table === 'notes' ? 'notes' :
                            table === 'documentsends' ? 'document_sends' :
-                           table === 'messagelogs' ? 'message_logs' : null;
+                           table === 'messagelogs' ? 'message_logs' :
+                           table === 'suppliers' ? 'suppliers' :
+                           table === 'purchaseorders' ? 'purchase_orders' :
+                           table === 'purchaseorderitems' ? 'purchase_order_items' : null;
 
       EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
 
@@ -1452,6 +1467,35 @@ export class EntityManager {
         });
       }
 
+      const SUPPLIER_UPDATE_COLUMNS = [
+        'name', 'email', 'phone', 'address', 'tax_number', 'payment_terms',
+        'lead_time_days', 'notes', 'updated_at'
+      ];
+      if (supabaseTable === 'suppliers') {
+        Object.keys(updateData).forEach(key => {
+          if (!SUPPLIER_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+
+      const PURCHASE_ORDER_UPDATE_COLUMNS = [
+        'supplier_id', 'po_number', 'status', 'expected_date', 'notes', 'received_at', 'updated_at'
+      ];
+      if (supabaseTable === 'purchase_orders') {
+        Object.keys(updateData).forEach(key => {
+          if (!PURCHASE_ORDER_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+        delete updateData.items;
+      }
+
+      const PURCHASE_ORDER_ITEM_UPDATE_COLUMNS = [
+        'quantity_ordered', 'quantity_received', 'unit_cost', 'updated_at'
+      ];
+      if (supabaseTable === 'purchase_order_items') {
+        Object.keys(updateData).forEach(key => {
+          if (!PURCHASE_ORDER_ITEM_UPDATE_COLUMNS.includes(key)) delete updateData[key];
+        });
+      }
+
       // Remove items from update data (handled separately)
       let itemsToUpdate = null;
       if ((supabaseTable === 'invoices' || supabaseTable === 'quotes') && data.items && Array.isArray(data.items)) {
@@ -1466,7 +1510,7 @@ export class EntityManager {
         // Ensure we only update records belonging to user (notes: user_id; others: org_id)
         if (supabaseTable === 'notes') {
           query = query.eq('user_id', sessionData.session.user.id);
-        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+        } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks', 'suppliers', 'purchase_orders', 'purchase_order_items'].includes(supabaseTable)) {
           query = query.eq('org_id', orgId);
         }
 
@@ -1588,13 +1632,16 @@ export class EntityManager {
                                table === 'tasks' ? 'tasks' :
                                table === 'notes' ? 'notes' :
                                table === 'documentsends' ? 'document_sends' :
-                               table === 'messagelogs' ? 'message_logs' : null;
+                               table === 'messagelogs' ? 'message_logs' :
+                               table === 'suppliers' ? 'suppliers' :
+                               table === 'purchaseorders' ? 'purchase_orders' :
+                               table === 'purchaseorderitems' ? 'purchase_order_items' : null;
 
           if (supabaseTable) {
             let deleteQuery = supabase.from(supabaseTable).delete().eq("id", id);
             if (supabaseTable === 'notes') {
               deleteQuery = deleteQuery.eq('user_id', sessionData.session.user.id);
-            } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks'].includes(supabaseTable)) {
+            } else if (['clients', 'services', 'invoices', 'quotes', 'payments', 'banking_details', 'recurring_invoices', 'invoice_views', 'document_sends', 'message_logs', 'payslips', 'expenses', 'tasks', 'suppliers', 'purchase_orders', 'purchase_order_items'].includes(supabaseTable)) {
               const orgId = await this.ensureUserHasOrganization(sessionData.session.user.id);
               if (orgId) deleteQuery = deleteQuery.eq('org_id', orgId);
             }

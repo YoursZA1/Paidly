@@ -31,6 +31,95 @@
     <link rel="icon" type="image/svg+xml" href="/logo_icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place." />
+    <link rel="canonical" href="https://www.paidly.co.za/" />
+    <!-- JSON-LD: follows Google structured data policies (visible content only; no fake reviews). -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.paidly.co.za/#organization",
+          "name": "Paidly",
+          "url": "https://www.paidly.co.za/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://www.paidly.co.za/logo_icon.svg"
+          },
+          "description": "Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://www.paidly.co.za/#website",
+          "name": "Paidly",
+          "alternateName": ["Paidly Invoice", "Paidly Invoicing"],
+          "url": "https://www.paidly.co.za/",
+          "description": "Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place.",
+          "publisher": { "@id": "https://www.paidly.co.za/#organization" },
+          "inLanguage": "en-ZA"
+        },
+        {
+          "@type": ["SoftwareApplication", "WebApplication"],
+          "@id": "https://www.paidly.co.za/#webapp",
+          "name": "Paidly",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web browser",
+          "browserRequirements": "Requires JavaScript. Requires HTML5.",
+          "description": "Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place.",
+          "url": "https://www.paidly.co.za/",
+          "image": "https://www.paidly.co.za/logo_icon.svg",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Individual",
+              "price": "25",
+              "priceCurrency": "ZAR",
+              "availability": "https://schema.org/InStock",
+              "url": "https://www.paidly.co.za/#pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "SME",
+              "price": "50",
+              "priceCurrency": "ZAR",
+              "availability": "https://schema.org/InStock",
+              "url": "https://www.paidly.co.za/#pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Corporate",
+              "price": "110",
+              "priceCurrency": "ZAR",
+              "availability": "https://schema.org/InStock",
+              "url": "https://www.paidly.co.za/#pricing"
+            }
+          ],
+          "publisher": { "@id": "https://www.paidly.co.za/#organization" },
+          "featureList": [
+            "Invoices",
+            "Quotes",
+            "Client management",
+            "Payment tracking",
+            "Email delivery",
+            "Reports"
+          ]
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://www.paidly.co.za/#webpage",
+          "url": "https://www.paidly.co.za/",
+          "name": "Paidly — Invoicing for small business",
+          "description": "Paidly — Invoicing and cash flow for small businesses. Create invoices, track payments, and manage your business in one place.",
+          "isPartOf": { "@id": "https://www.paidly.co.za/#website" },
+          "about": { "@id": "https://www.paidly.co.za/#webapp" },
+          "primaryImageOfPage": {
+            "@type": "ImageObject",
+            "url": "https://www.paidly.co.za/logo_icon.svg"
+          }
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -45,19 +134,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      (function () {
-        var MARKETING =
-          /^\/($|home$|auth|login$|signup$|forgotpassword$|privacy-policy$|privacypolicy$|terms|how-?to$|affiliate(\/apply)?$)/i;
-        if (!MARKETING.test(location.pathname)) return;
-
-        var script = document.createElement("script");
-        script.src =
-          "https://gentle-site-guide-flow.base44.app/functions/widgetLoader?api_key=sg_a5zy8bm4qmved9dw&mode=popup";
-        script.async = true;
-        document.body.appendChild(script);
-      })();
-    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

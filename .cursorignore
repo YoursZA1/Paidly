@@ -17,3 +17,7 @@ playwright/.auth/
 **/secrets/
 **/*secret*
 **/service_role*
+
+# macOS AppleDouble sidecars (noise for scans/status)
+._*
+__MACOSX/

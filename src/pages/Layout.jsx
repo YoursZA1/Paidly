@@ -79,7 +79,8 @@ import {
   Briefcase,
   Receipt,
   Handshake,
-  Layers
+  Layers,
+  ShoppingCart
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -145,6 +146,7 @@ const PAGE_DISPLAY_NAMES = {
   Inventory: "Inventory",
   Vendors: "Vendors",
   Services: "Services",
+  PurchaseOrders: "Purchase Orders",
   RecurringInvoices: "Recurring",
   CreateRecurringInvoice: "New Recurring",
   EditRecurringInvoice: "Edit Recurring",
@@ -205,6 +207,14 @@ const allNavigationItems = [
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-services",
+  },
+  {
+    title: "Purchase Orders",
+    url: createPageUrl("PurchaseOrders"),
+    icon: ShoppingCart,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-purchase-orders",
   },
   { type: "section", title: "Finance", id: "nav-section-finance" },
   {

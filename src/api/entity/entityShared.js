@@ -66,6 +66,9 @@ export const SUPABASE_SELECT_COLUMNS = {
   expenses: "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, created_at, updated_at",
   tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
   notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
+  suppliers: "id, org_id, name, email, phone, address, tax_number, payment_terms, lead_time_days, notes, created_by, created_at, updated_at",
+  purchase_orders: "id, org_id, supplier_id, po_number, status, expected_date, notes, created_by, created_at, updated_at, received_at",
+  purchase_order_items: "id, purchase_order_id, org_id, product_id, quantity_ordered, quantity_received, unit_cost, created_at, updated_at",
 };
 export function getSelectColumns(table) {
   return SUPABASE_SELECT_COLUMNS[table] || "id, created_at, updated_at";
@@ -142,5 +145,8 @@ export function getSupabaseTableForEntityName(entityName) {
   if (table === "notes") return "notes";
   if (table === "documentsends") return "document_sends";
   if (table === "messagelogs") return "message_logs";
+  if (table === "suppliers") return "suppliers";
+  if (table === "purchaseorders") return "purchase_orders";
+  if (table === "purchaseorderitems") return "purchase_order_items";
   return null;
 }

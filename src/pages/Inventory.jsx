@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
 import { useAuth } from "@/contexts/AuthContext";
 import { Service } from "@/api/entities";
@@ -13,9 +14,14 @@ import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/sup
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
 import { catalogRowsToCsvSource } from "@/utils/catalogCsvUtils";
+import { formatCurrency } from "@/utils/currencyCalculations";
 
 import ManageProductsView from "../components/inventory/ManageProductsView";
 import ProductFormDialog from "../components/inventory/ProductFormDialog";
+import ProductDetailSheet from "../components/inventory/ProductDetailSheet";
+import LowStockAlert from "../components/inventory/LowStockAlert";
+import StatsCard from "../components/inventory/StatsCard";
+import { Package, PackageX, PackageSearch, Wallet } from "lucide-react";
 import CatalogItemDialog from "../components/inventory/CatalogItemDialog";
 import SellStockDialog from "../components/inventory/SellStockDialog";
 import DeliveryFormDialog from "../components/inventory/DeliveryFormDialog";
@@ -212,6 +218,8 @@ export default function Inventory() {
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
   const [catalogDialogItem, setCatalogDialogItem] = useState(null);
   const [catalogDialogType, setCatalogDialogType] = useState("service");
+  const [productDetailOpen, setProductDetailOpen] = useState(false);
+  const [detailProduct, setDetailProduct] = useState(null);
 
   const [sellDialogOpen, setSellDialogOpen] = useState(false);
 
@@ -290,8 +298,8 @@ export default function Inventory() {
   );
 
   const getOrgIdForCurrentUser = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const authUid = sessionData?.session?.user?.id;
+    const session = await getStableSession();
+    const authUid = session?.user?.id;
     if (!authUid) return null;
     try {
       return await resolveActiveOrgIdForUser(authUid);
@@ -582,6 +590,19 @@ export default function Inventory() {
     [products]
   );
 
+  const inventoryStatsSummary = useMemo(() => {
+    let outOfStock = 0;
+    let lowStock = 0;
+    let inventoryValue = 0;
+    for (const p of inventoryProducts) {
+      const stock = Number(p.stock_on_hand || 0);
+      if (stock <= 0) outOfStock += 1;
+      else if (stock <= (p.reorder_level || 10)) lowStock += 1;
+      inventoryValue += stock * Number(p.cost || 0);
+    }
+    return { totalProducts: inventoryProducts.length, outOfStock, lowStock, inventoryValue };
+  }, [inventoryProducts]);
+
   const categories = useMemo(() => {
     const set = new Set();
     for (const p of products) {
@@ -697,6 +718,21 @@ export default function Inventory() {
     [openCatalogDialog]
   );
 
+  // Products get a read-only stock breakdown on open; services keep the
+  // existing catalog editor (previously both went straight into ServiceForm,
+  // which exposes a raw stock_quantity input that bypassed the inventory ledger).
+  const handleOpenProduct = useCallback(
+    (row) => {
+      if (row?.item_type !== "product") {
+        openCatalogDialog(row);
+        return;
+      }
+      setDetailProduct(row);
+      setProductDetailOpen(true);
+    },
+    [openCatalogDialog]
+  );
+
   // Product handlers
   const handleSaveProduct = useCallback(
     async (productData) => {
@@ -725,6 +761,11 @@ export default function Inventory() {
           return;
         }
 
+        const requestedStockQuantity = toInt(productData?.stock_on_hand);
+
+        // stock_quantity is intentionally excluded here: every stock change must
+        // flow through adjust_inventory_stock (or the initial_stock movement
+        // below on create) so inventory_movements always reflects reality.
         const payload = {
           org_id: resolvedOrgId,
           item_type: "product",
@@ -735,7 +776,6 @@ export default function Inventory() {
           category: (productData?.category || "").trim() || null,
           image_url: productData?.image_url || null,
           default_unit: toDbDefaultUnit(productData?.count_style, editingProduct?._raw?.default_unit),
-          stock_quantity: toInt(productData?.stock_on_hand),
           stock_capacity: Number(productData?.stock_capacity) > 0 ? Number(productData.stock_capacity) : null,
           low_stock_threshold: toInt(productData?.reorder_level || 10),
           cost_price: Number(productData?.cost ?? 0) || 0,
@@ -764,14 +804,52 @@ export default function Inventory() {
               throw new Error("No matching product row was updated.");
             }
           }
+
+          const currentStock = toInt(editingProduct.stock_on_hand);
+          const stockDelta = requestedStockQuantity - currentStock;
+          if (stockDelta !== 0) {
+            const { error: rpcErr } = await supabase.rpc("adjust_inventory_stock", {
+              p_product_id: editingProduct.id,
+              p_org_id: resolvedOrgId,
+              p_delta: stockDelta,
+              p_type: stockDelta > 0 ? "in" : "out",
+              p_source: "manual_adjustment",
+              p_reference_id: null,
+            });
+            if (rpcErr) throw rpcErr;
+          }
+
           toast({
             title: "✓ Product Updated",
             description: `${payload.name} was updated successfully.`,
             variant: "success",
           });
         } else {
-          const { error } = await supabase.from("services").insert(payload);
+          const { data: insertedRow, error } = await supabase
+            .from("services")
+            .insert(payload)
+            .select("id")
+            .maybeSingle();
           if (!checkSupabaseWriteResult({ error }, "Add inventory product")) return;
+
+          if (insertedRow?.id && requestedStockQuantity !== 0) {
+            const { error: openingBalanceErr } = await supabase.from("inventory_movements").insert({
+              product_id: insertedRow.id,
+              quantity: Math.abs(requestedStockQuantity),
+              type: requestedStockQuantity > 0 ? "in" : "out",
+              source: "initial_stock",
+              reference_id: null,
+            });
+            if (openingBalanceErr) throw openingBalanceErr;
+
+            const { error: setStockErr } = await supabase
+              .from("services")
+              .update({ stock_quantity: requestedStockQuantity })
+              .eq("id", insertedRow.id)
+              .eq("org_id", resolvedOrgId);
+            if (setStockErr) throw setStockErr;
+          }
+
           toast({
             title: "✓ Product Added",
             description: `${payload.name} was added to your inventory.`,
@@ -884,8 +962,8 @@ export default function Inventory() {
     async (deliveryData) => {
       try {
         if (!user?.id) return;
-        const { data: sessionWrap } = await supabase.auth.getSession();
-        const authUid = sessionWrap?.session?.user?.id;
+        const session = await getStableSession();
+        const authUid = session?.user?.id;
         if (!authUid) {
           toast({
             title: "✗ Not signed in",
@@ -1107,6 +1185,21 @@ export default function Inventory() {
 
   return (
     <>
+      {inventoryProducts.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 space-y-3">
+          <LowStockAlert
+            lowStockProducts={lowStockProducts}
+            onReorder={handleReorder}
+            reorderingIds={reorderingIds}
+          />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatsCard title="Total Products" value={inventoryStatsSummary.totalProducts} icon={Package} color="primary" />
+            <StatsCard title="Low Stock" value={inventoryStatsSummary.lowStock} icon={PackageSearch} color="yellow" />
+            <StatsCard title="Out of Stock" value={inventoryStatsSummary.outOfStock} icon={PackageX} color="red" />
+            <StatsCard title="Inventory Value" value={formatCurrency(inventoryStatsSummary.inventoryValue, userCurrency)} icon={Wallet} color="green" />
+          </div>
+        </div>
+      )}
       <ManageProductsView
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -1141,7 +1234,7 @@ export default function Inventory() {
         sortKey={sortKey}
         sortDirection={sortDirection}
         onSort={handleSort}
-        onOpenProduct={openCatalogDialog}
+        onOpenProduct={handleOpenProduct}
         onEditProduct={handleEditRow}
         onDeleteProduct={handleDeleteProduct}
         page={safePage}
@@ -1226,6 +1319,24 @@ export default function Inventory() {
         }}
         product={editingProduct}
         onSave={handleSaveProduct}
+      />
+
+      <ProductDetailSheet
+        open={productDetailOpen}
+        onOpenChange={(open) => {
+          setProductDetailOpen(open);
+          if (!open) setDetailProduct(null);
+        }}
+        product={detailProduct}
+        transactions={transactions}
+        products={products}
+        deliveries={deliveries}
+        onEdit={(product) => {
+          setProductDetailOpen(false);
+          setDetailProduct(null);
+          setEditingProduct(product);
+          setProductDialogOpen(true);
+        }}
       />
 
       <CatalogItemDialog

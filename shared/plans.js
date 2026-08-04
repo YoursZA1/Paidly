@@ -1,8 +1,9 @@
 /**
- * Paidly subscription tiers — single source of truth for backend, Vercel API routes, and Vite app.
- * Slugs align with `profiles.subscription_plan` / PayFast ITN normalization (individual | sme | corporate).
+ * @deprecated Prefer `public.plans` (Supabase) as catalog SoR for amounts/names/features.
+ * Billing v2: React must load active plans from DB/API — do not hardcode prices for checkout.
+ * This module remains as a temporary fallback / feature-gate helper until FE is wired to `plans`.
  *
- * Feature lists: build from a shared base, then each tier extends the previous (no duplicated keys).
+ * Slugs align with `profiles.subscription_plan` / PayFast ITN (individual | sme | corporate).
  */
 
 /** Core capabilities every paid tier includes; higher tiers spread from this + parent tier. */

@@ -5,7 +5,7 @@ import { backendApi } from "./backendClient";
  * Server purges storage, then deletes auth user; DB trigger removes subscriptions / affiliate apps / waitlist PII;
  * owned organizations cascade with invoices, clients, etc.
  *
- * @param {string} accessToken - JWT from supabase.auth.getSession()
+ * @param {string} accessToken - JWT from getStableSession() / session.access_token
  * @returns {Promise<void>}
  */
 export async function deleteMyAccount(accessToken) {

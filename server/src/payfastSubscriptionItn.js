@@ -1,27 +1,18 @@
 /**
- * PayFast ITN (Instant Transaction Notification) — shared by Express and Vercel (`api/payfast-handler.js`).
+ * PayFast ITN — upsert helpers + thin handler that delegates to
+ * `billing/payfastItnPipeline.js` (production verify flow for POST /api/payfast/itn).
  *
- * Avoid common mistakes (keep these true):
- * - Do not trust the browser to set plan/subscription: profiles + subscriptions are updated here (service role), not from the SPA.
- * - Link payment to user: checkout sets `m_payment_id` = `sub_<userId>_<ts>`, `custom_str1` = user id, `custom_str2` = plan; ITN resolves user from those + signature-verified payload.
- * - Verify webhook: `verifyPayfastSignature` before any DB write.
- * - Persist subscription rows: `upsertSubscriptionFromItn` updates/inserts `public.subscriptions` (new-agreement path uses
- *   RPC `payfast_itn_replace_user_subscription` for atomic deactivate+insert) and syncs `profiles` on success.
- *
- * Observability: after a valid signature, logs a compact line in production; full payload when
- *   PAYFAST_ITN_VERBOSE_LOGS=true or NODE_ENV !== 'production'.
- * Invoice path: `custom_str1` = `invoice:…`. Subscription checkout: `custom_str1` = user id, `custom_str2` = plan.
+ * Activation only after verified ITN (never from the SPA).
+ * Checkout correlation: `m_payment_id` = `sub_<userId>_<ts>`, `custom_str1` = user id, `custom_str2` = plan.
  */
 
-import { assertPayfastPassphraseForItn, verifyPayfastSignature } from "./payfast.js";
-import { getPayfastItnPayload } from "./payfastItnBody.js";
 import {
   isValidUuid,
   parseUserIdFromSubscriptionMPaymentId,
   sanitizeOneLine,
 } from "./inputValidation.js";
-import { recordSubscriptionPaymentCommission } from "./affiliateSubscriptionCommission.js";
-import { processPayfastInvoiceItn } from "./payfastInvoiceItn.js";
+import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
+import { normalizePlanSlug } from "./subscriptionPlans.js";
 
 function parsePayfastWhitelist(raw) {
   return String(raw || "")
@@ -99,7 +90,20 @@ function resolvePayfastSubscriptionUserId(payload) {
   return fromPaymentId && isValidUuid(fromPaymentId) ? fromPaymentId : "";
 }
 
-export async function upsertSubscriptionFromItn(supabase, payload) {
+/** Exported for ITN pipeline (subscription lookup). */
+export const resolvePayfastSubscriptionUserIdForExport = resolvePayfastSubscriptionUserId;
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {Record<string, unknown>} payload
+ * @param {{
+ *   subscriptionIdHint?: string,
+ *   companyIdHint?: string|null,
+ *   planIdHint?: string|null,
+ *   planSlugHint?: string|null,
+ * }} [hints]
+ */
+export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   const userId = resolvePayfastSubscriptionUserId(payload);
   if (!isValidUuid(userId)) return;
 
@@ -121,10 +125,16 @@ export async function upsertSubscriptionFromItn(supabase, payload) {
     parsePayfastYyyyMmDdToIso(payload.billing_date) ||
     addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
 
+  const mPaymentId = String(payload.m_payment_id || "").trim();
+  const pfPaymentId = sanitizeOneLine(String(payload.pf_payment_id || ""), 128);
+  const planSlug =
+    normalizePlanSlug(hints.planSlugHint || payload.custom_str2 || plan) ||
+    mapPayfastPlanToProfilePlan(planRaw);
+
   const { data: userSubsRaw } = await supabase
     .from("subscriptions")
     .select(
-      "id, failure_count, payfast_token, payfast_subscription_id, retry_interval_hours, max_retry_attempts, last_payment_at, plan, updated_at"
+      "id, failure_count, payfast_token, payfast_subscription_id, retry_interval_hours, max_retry_attempts, last_payment_at, plan, m_payment_id, status, updated_at"
     )
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
@@ -133,6 +143,13 @@ export async function upsertSubscriptionFromItn(supabase, payload) {
   const latest = userSubs[0] ?? null;
   const tokenNorm = String(token || "").trim();
   const isSuccess = paymentStatus === "COMPLETE" || isFreeTrialEvent;
+
+  const matchedByPaymentId = mPaymentId
+    ? userSubs.find((r) => String(r.m_payment_id || "").trim() === mPaymentId) || null
+    : null;
+  const matchedByHint = hints.subscriptionIdHint
+    ? userSubs.find((r) => r.id === hints.subscriptionIdHint) || null
+    : null;
 
   let matchedByToken = null;
   if (tokenNorm) {
@@ -149,16 +166,15 @@ export async function upsertSubscriptionFromItn(supabase, payload) {
     !String(latest.payfast_token || "").trim() &&
     !String(latest.payfast_subscription_id || "").trim();
 
-  /** Row representing the same PayFast agreement (recurring / token backfill). */
+  /** Prefer pending checkout row (m_payment_id / create hint), then token agreement. */
   const sameAgreementRow =
+    matchedByHint ||
+    matchedByPaymentId ||
     matchedByToken ||
     (!tokenNorm && latest ? latest : null) ||
     (Boolean(tokenNorm) && latestHasNoToken && latest ? latest : null);
 
-  /** Success ITN for a new checkout (upgrade/downgrade or first sub) → deactivate others, insert. */
   const isSamePayfastAgreement = Boolean(sameAgreementRow);
-
-  /** Row to UPDATE: same agreement, or (failures only) latest row for dunning when token does not match. */
   const rowTargetForMutation = sameAgreementRow || (!isSuccess && latest ? latest : null);
 
   const refRow = sameAgreementRow || latest;
@@ -173,29 +189,45 @@ export async function upsertSubscriptionFromItn(supabase, payload) {
 
   const prevFailures = Number((!isSuccess ? rowTargetForMutation : sameAgreementRow)?.failure_count || 0);
   const nextFailures = isSuccess ? 0 : prevFailures + 1;
-  const status = isSuccess ? "active" : nextFailures >= suspendAfter ? "canceled" : "past_due";
+  // Allowed status vocabulary only (cancelled spelling)
+  const status = isSuccess
+    ? SUBSCRIPTION_STATUS.ACTIVE
+    : nextFailures >= suspendAfter
+      ? SUBSCRIPTION_STATUS.CANCELLED
+      : SUBSCRIPTION_STATUS.PAST_DUE;
 
-  const shouldStartNewSubscriptionRow = isSuccess && !isSamePayfastAgreement;
+  const shouldStartNewSubscriptionRow =
+    isSuccess && !isSamePayfastAgreement && !matchedByPaymentId && !matchedByHint;
 
   const row = {
     user_id: userId,
     status,
-    plan,
-    current_plan: plan,
+    plan: planSlug,
+    current_plan: planSlug,
+    plan_slug: planSlug,
     billing_cycle: cycle,
     provider: "payfast",
     updated_at: nowIso,
+    ...(hints.companyIdHint ? { company_id: hints.companyIdHint } : {}),
+    ...(hints.planIdHint ? { plan_id: hints.planIdHint } : {}),
     ...(amount != null ? { amount, custom_price: amount } : {}),
     ...(token ? { payfast_token: token, payfast_subscription_id: token } : {}),
+    ...(pfPaymentId ? { payfast_payment_id: pfPaymentId, last_pf_payment_id: pfPaymentId } : {}),
+    ...(mPaymentId ? { m_payment_id: mPaymentId } : {}),
     ...(isSuccess
       ? {
           last_payment_at: isFreeTrialEvent ? refRow?.last_payment_at || null : nowIso,
           next_billing_date: nextBilling,
+          started_at: nowIso,
+          activated_at: nowIso,
           start_date: shouldStartNewSubscriptionRow || !sameAgreementRow?.id ? nowIso : undefined,
+          current_period_start: nowIso,
+          current_period_end: nextBilling,
           next_retry_at: null,
           dunning_stage: 0,
           past_due_at: null,
           canceled_at: null,
+          cancelled_at: null,
           last_payment_failure_at: null,
         }
       : {
@@ -248,7 +280,7 @@ export async function upsertSubscriptionFromItn(supabase, payload) {
 
   if (isSuccess) {
     /** Paid / PayFast-success: canonical profile write (service role). Not callable from the SPA. */
-    const profilePlan = mapPayfastPlanToProfilePlan(planRaw);
+    const profilePlan = planSlug;
     const { error: profErr } = await supabase
       .from("profiles")
       .update({
@@ -294,92 +326,19 @@ async function syncAuthUserPlanMetadata(supabase, userId, profilePlan) {
   }
 }
 
+
 /**
+ * Production ITN handler — delegates to billing/payfastItnPipeline.js
+ * (Receive → save raw → signature → IP → validate → merchant → amount →
+ *  subscription → dedupe → update → payment_history → events → 200).
+ *
  * @param {{ supabase: import("@supabase/supabase-js").SupabaseClient, getClientIp: (req: unknown) => string }} deps
  */
 export function createPayfastSubscriptionItnHandler(deps) {
-  const { supabase, getClientIp } = deps;
-
   return async function handlePayfastSubscriptionItn(req, res) {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return res.status(405).send("Method not allowed");
-    }
-
-    if (!payfastSubscriptionItnIpAllowed(req, getClientIp)) {
-      return res.status(403).send("IP not allowed");
-    }
-
-    const passphraseGate = assertPayfastPassphraseForItn();
-    if (!passphraseGate.ok) {
-      console.error("[payfast-itn]", passphraseGate.error);
-      return res.status(503).send("Server misconfigured");
-    }
-
-    const payload = getPayfastItnPayload(req);
-
-    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
-    const signatureValid = verifyPayfastSignature(payload, passphrase);
-    if (!signatureValid) {
-      console.warn("[payfast-itn] Invalid or missing PayFast signature (check PAYFAST_PASSPHRASE matches dashboard)");
-      return res.status(400).send("Invalid signature");
-    }
-
-    // Signature OK — safe to treat fields as from PayFast.
-    const paymentStatusUpper = String(payload.payment_status || "").toUpperCase();
-    if (payfastItnVerboseLogsEnabled()) {
-      console.log("WEBHOOK:", req?.body ?? payload);
-      console.log("[payfast-webhook] normalized payload:", payload);
-      console.log("[payfast-webhook] payload JSON:", JSON.stringify(payload));
-      console.log("[payfast-webhook] payment_status:", paymentStatusUpper || "(empty)");
-      if (paymentStatusUpper === "COMPLETE") {
-        console.log("[payfast-webhook] COMPLETE — accepted for subscription/invoice processing");
-      }
-    } else {
-      console.log("[payfast-webhook]", {
-        payment_status: paymentStatusUpper || null,
-        type: payload.type || null,
-        m_payment_id: payload.m_payment_id || null,
-        pf_payment_id: payload.pf_payment_id || null,
-        item_name: payload.item_name || null,
-      });
-    }
-
-    try {
-      const customStr1 = String(payload.custom_str1 || "");
-      if (customStr1.startsWith("invoice:")) {
-        await processPayfastInvoiceItn(supabase, payload);
-        return res.status(200).send("OK");
-      }
-
-      /**
-       * Subscription notify_url (`/api/payfast/webhook`): mirrors PayFast fields
-       *   userId = custom_str1, plan label = custom_str2 (echoed from checkout).
-       * On success: upsert `subscriptions` (user_id, plan, status, amount, payfast_subscription_id from `token`)
-       * and update `profiles`: plan + subscription_plan slug (individual | sme | corporate), subscription_status active,
-       * trial_ends_at cleared. Signature + passphrase are verified above.
-       * Non-COMPLETE ITNs still update `subscriptions` for dunning / past_due (beyond a minimal tutorial handler).
-       */
-      await upsertSubscriptionFromItn(supabase, payload);
-
-      const userId = resolvePayfastSubscriptionUserId(payload);
-      const paymentAmount = Number(payload.amount_gross ?? payload.amount ?? 0);
-      if (paymentStatusUpper === "COMPLETE" && isValidUuid(userId) && Number.isFinite(paymentAmount) && paymentAmount > 0) {
-        try {
-          await recordSubscriptionPaymentCommission(supabase, {
-            userId,
-            grossAmountZar: paymentAmount,
-            source: `payfast_sub_itn:${String(payload.pf_payment_id || payload.m_payment_id || "")}`,
-          });
-        } catch (e) {
-          console.error("[payfast-subscription-itn] affiliate commission failed", e?.message || e);
-        }
-      }
-      return res.status(200).send("OK");
-    } catch (err) {
-      console.error("[payfast-subscription-itn] processing error", err);
-      return res.status(500).send("Internal error");
-    }
+    const { createPayfastItnProductionHandler } = await import("./billing/payfastItnPipeline.js");
+    const run = createPayfastItnProductionHandler(deps);
+    return run(req, res);
   };
 }
 

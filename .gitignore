@@ -17,6 +17,9 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+# macOS AppleDouble resource-fork sidecars (common on non-APFS volumes)
+._*
+__MACOSX/
 *.suo
 *.ntvs*
 *.njsproj

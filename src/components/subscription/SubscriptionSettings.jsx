@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
-import { payfastAmountZar, priceLabelZar } from "@/data/paidlySubscriptionPlans";
+import { priceLabelZar } from "@/data/paidlySubscriptionPlans";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
 import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 
@@ -246,30 +246,19 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                {tier.id === "individual" && !isCurrent ? (
+                                {!isCurrent &&
+                                (tier.id === "individual" ||
+                                  tier.id === "sme" ||
+                                  tier.id === "corporate") ? (
                                     <PayFastSubscriptionForm
-                                        amountZar={payfastAmountZar(tier.name)}
+                                        planSlug={tier.id}
                                         planName={tier.name}
                                         itemDescription={tier.description}
-                                        ctaLabel="Subscribe — Individual"
-                                        submitVariant="image"
-                                        className="mt-0"
-                                    />
-                                ) : tier.id === "sme" && !isCurrent ? (
-                                    <PayFastSubscriptionForm
-                                        amountZar={payfastAmountZar(tier.name)}
-                                        planName={tier.name}
-                                        itemDescription={tier.description}
-                                        ctaLabel="Subscribe — SME"
-                                        submitVariant="image"
-                                        className="mt-0"
-                                    />
-                                ) : tier.id === "corporate" && !isCurrent ? (
-                                    <PayFastSubscriptionForm
-                                        amountZar={payfastAmountZar(tier.name)}
-                                        planName={tier.name}
-                                        itemDescription={tier.description}
-                                        ctaLabel="Upgrade to Pro +"
+                                        ctaLabel={
+                                          tier.id === "corporate"
+                                            ? "Continue — Pro +"
+                                            : `Continue — ${tier.name}`
+                                        }
                                         submitVariant="image"
                                         className="mt-0"
                                     />

@@ -23,7 +23,7 @@
 | 2 | `RuntimeCoordinator.ts` — 8-state machine, Zustand store | ✅ Complete + wired via bridge |
 | 3 | `queryPolicies.ts` — fine-grained key factories + stale tiers | ✅ Complete; new hooks use it |
 | 4 | `persistedQueryClient.ts` — logout purge + org-bust helpers | ✅ Complete |
-| 5 | `RealtimeManager.ts` — subscription registry + budget | ✅ Defined; ⚠️ **not wired to transport** |
+| 5 | `RealtimeManager.ts` — subscription registry + budget | ✅ Wired — logical families tracked from `paidlyRealtimeManager` (`getSharedRealtimeManager`) |
 | 6 | `MutationCoordinator.ts` — operationId single-flight dedup | ✅ Complete + wired in syncJobProcessor |
 | 7 | `RequestCoordinator.ts` — concurrency + pause gate | ✅ Complete; **polling bug fixed 2026-05-18** |
 | 8 | `errors/classify.ts` + `errors/types.ts` | ✅ Complete |

@@ -19,7 +19,11 @@ Import from `@/utils/apiRequest`.
 
 ## Backend axios
 
-Server API modules should keep using **`backendApi`** from `@/api/backendClient` (401 interceptor already installed).
+Server API modules should keep using **`backendApi`** from `@/api/backendClient` (401 interceptor already installed). Axios and `apiRequest` / `safeFetch` wait on RuntimeCoordinator’s `pauseNonCriticalRequests` (via RequestCoordinator). Pass `__paidlyCritical: true` on the request config/init to bypass the pause (sign-in / bootstrap).
+
+## Session reads
+
+Prefer **`getStableSession()`** / **`getStableSessionResult()`** from `@/core/auth/SessionCoordinator` instead of raw `supabase.auth.getSession()`. Direct getSession is reserved for AuthContext, SupabaseAuthService, supabaseAuthRefresh, and SessionCoordinator itself (`node scripts/check-getSession-bypass.js`).
 
 ## Lint
 

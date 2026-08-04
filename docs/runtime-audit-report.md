@@ -14,7 +14,7 @@ Paidly's runtime is significantly more mature than a typical MVP. The auth lifec
 |------|--------|------|-------------|
 | Auth lifecycle | ✅ Mature | Low | `refreshUser` missing early circuit-breaker guard |
 | Session state machine | ✅ Mature | Low | Terminal `EXPIRED` lock solid |
-| Realtime multiplex channel | ✅ Mature | Low | `RealtimeManager.ts` orphaned (not wired) |
+| Realtime multiplex channel | ✅ Mature | Low | `RealtimeManager` tracks logical families; transport remains `paidlyRealtimeManager` |
 | Session refresh queue | ✅ Mature | Low | Well-guarded with mutex + cross-tab lock |
 | RuntimeCoordinator | ✅ Implemented | Low | Bridge feeds it correctly via lifecycle signals |
 | RequestCoordinator | ⚠️ Partial | Medium | `waitUntilUnpaused` polls every 100ms — should be event-driven |
@@ -109,8 +109,8 @@ The multiplexed channel architecture (`paidly-sync-realtime`) is production-grad
 
 ### Findings
 
-**MEDIUM — `RealtimeManager.ts` is orphaned:**  
-`src/core/realtime/RealtimeManager.ts` defines a subscription registry with budget limits and pause/resume API. It is not wired to `paidlyRealtimeManager.js`. It exists as a useful façade for a future migration but currently provides no runtime value. Either wire it or document it as a future integration point.
+**MEDIUM — `RealtimeManager.ts` logical registry:**  
+`src/core/realtime/RealtimeManager.ts` tracks named logical families (budget + pause) via `getSharedRealtimeManager()`, wired from `paidlyRealtimeManager.js` subscribe/bridge APIs. Channel transport lifecycle remains in `paidlyRealtimeManager`.
 
 **LOW — Notification subscriptions have no org filter:**  
 `subscribePaidlyNotificationsRealtime` adds a `user_id=eq.${notificationUserId}` filter on the `notifications` table. This is correct for user-scoped notifications, but if multi-org support is introduced, org-scoping must be added.

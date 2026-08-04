@@ -13,6 +13,8 @@ import {
   Zap,
 } from "lucide-react";
 import { createPageUrl, createSignupUrl } from "@/utils";
+import JsonLd from "@/components/seo/JsonLd";
+import { buildHowToStructuredData } from "@/lib/seo/structuredData";
 
 const quickStart = [
   {
@@ -127,8 +129,13 @@ const tips = [
 ];
 
 export default function HowTo() {
+  const howToLd = buildHowToStructuredData(
+    quickStart.map((s) => ({ name: s.title, text: s.body }))
+  );
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans text-zinc-100 antialiased selection:bg-[#FF4F00]/30">
+      <JsonLd id="howto" data={howToLd} />
       <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#0a0a0a]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6">
           <Link to={createPageUrl("Home")} className="flex items-center gap-2 text-white" aria-label="Paidly home">

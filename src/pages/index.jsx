@@ -63,6 +63,7 @@ const EditClient = lazy(() => import("./EditClient"));
 const EditCatalogItem = lazy(() => import("./EditCatalogItem"));
 const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
+const PurchaseOrders = lazy(() => import("./PurchaseOrders"));
 const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
 const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
@@ -184,6 +185,8 @@ const MAIN_ROUTES = [
     { path: "/EditCatalogItem", element: ownerRoute(<EditCatalogItem />) },
     { path: "/editcatalogitem", element: ownerRoute(<EditCatalogItem />) },
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
+    { path: "/PurchaseOrders", element: ownerRoute(<PurchaseOrders />) },
+    { path: "/purchaseorders", element: ownerRoute(<PurchaseOrders />) },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },

@@ -1,12 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  parseSignupReferralRef,
+  MAX_SIGNUP_REFERRAL_CODE_LEN,
+} from "@/api/affiliateClient";
 
-const mockSupabase = {
-  auth: {
-    getSession: vi.fn(),
+const { mockSupabase } = vi.hoisted(() => ({
+  mockSupabase: {
+    auth: {
+      getSession: vi.fn(),
+    },
+    from: vi.fn(),
+    rpc: vi.fn(),
   },
-  from: vi.fn(),
-  rpc: vi.fn(),
-};
+}));
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: mockSupabase }));
 
@@ -23,27 +29,23 @@ function createAffiliateRowQueryBuilder(row) {
 }
 
 describe("parseSignupReferralRef", () => {
-  it("prefers ?ref= in search params", async () => {
-    const { parseSignupReferralRef } = await import("@/api/affiliateClient");
+  it("prefers ?ref= in search params", () => {
     const sp = new URLSearchParams("ref=FROMQUERY");
     const params = { get: (k) => sp.get(k) };
     expect(parseSignupReferralRef(params, "#sign-up?ref=IGNORED")).toBe("FROMQUERY");
   });
 
-  it("parses legacy hash sign-up?ref=", async () => {
-    const { parseSignupReferralRef } = await import("@/api/affiliateClient");
+  it("parses legacy hash sign-up?ref=", () => {
     const params = { get: () => null };
     expect(parseSignupReferralRef(params, "#sign-up?ref=LEGACY")).toBe("LEGACY");
   });
 
-  it("returns null when absent", async () => {
-    const { parseSignupReferralRef } = await import("@/api/affiliateClient");
+  it("returns null when absent", () => {
     expect(parseSignupReferralRef({ get: () => null }, "")).toBe(null);
     expect(parseSignupReferralRef({ get: () => null }, "#sign-up")).toBe(null);
   });
 
-  it("truncates overly long ref values", async () => {
-    const { parseSignupReferralRef, MAX_SIGNUP_REFERRAL_CODE_LEN } = await import("@/api/affiliateClient");
+  it("truncates overly long ref values", () => {
     const long = "x".repeat(MAX_SIGNUP_REFERRAL_CODE_LEN + 40);
     const sp = new URLSearchParams(`ref=${encodeURIComponent(long)}`);
     const params = { get: (k) => sp.get(k) };

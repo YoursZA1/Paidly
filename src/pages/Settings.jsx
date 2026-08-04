@@ -17,7 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { selectProfileByUserId } from "@/api/customClient";
+import { selectProfileByUserId } from "@/api/auth/profileSelect";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import SettingsLogoPreviews from "@/components/settings/SettingsLogoPreviews";
 import { mergeProfileLogo, resolveProfileLogoUrl } from "@/lib/profileLogo";
 import AssetService from "@/services/AssetService";
@@ -1042,9 +1043,7 @@ function DeleteAccountSection() {
         if (typed !== "DELETE") return;
         setBusy(true);
         try {
-            const {
-                data: { session },
-            } = await supabase.auth.getSession();
+            const session = await getStableSession();
             const token = session?.access_token;
             if (!token) {
                 throw new Error("Authentication required. Sign in again.");

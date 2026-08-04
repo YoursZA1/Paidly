@@ -6,7 +6,7 @@
 | 2 | `src/core/runtime/RuntimeCoordinator.ts` (states, listeners, single-flight, **exponential reconnect backoff**) | Done — wired via `runtimeCoordinatorBridge` + CLM + auth pipeline |
 | 3 | `src/core/query/queryPolicies.ts` + broad invalidation audit | In progress — `useInvoices` + SyncEngine use scoped invalidation |
 | 4 | `src/core/query/persistedQueryClient.ts` + IDB | Done — `purgeQueryClientAfterLogout` on sign-out / fatal auth |
-| 5 | `src/core/realtime/RealtimeManager.ts` | Registry done — **delegate from `paidlyRealtimeManager`** |
+| 5 | `src/core/realtime/RealtimeManager.ts` | ✅ Wired — logical family registry via `getSharedRealtimeManager()` from `paidlyRealtimeManager` |
 | 6 | `src/core/sync/MutationCoordinator.ts` + **`operationId` on sync queue jobs** | Done — `syncMutationCoordinator` + `client_operation_id` on invoices (Wave 3) |
 | 6b | `customClient.js` modular split | Done — **EntityManager** → `src/api/entity/`; `customClient.js` is thin orchestrator (~120 lines) |
 | 7 | `src/core/network/RequestCoordinator.ts` + **`retryWithBudget`** | Done — Axios pauses on recovery; **EntityManager** uses `runtimeMutationGuard` |

@@ -32,7 +32,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import { supabase } from '@/lib/supabaseClient';
+import { getStableSessionResult } from '@/core/auth/SessionCoordinator';
 import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 import { getPublicApiBase } from '@/api/backendClient';
@@ -255,7 +255,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
             if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
 
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const { data: sessionData, error: sessionError } = await getStableSessionResult();
             if (sessionError) throw sessionError;
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) throw new Error('You must be logged in to send emails.');

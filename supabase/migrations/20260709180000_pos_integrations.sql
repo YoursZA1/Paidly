@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_pos_sales_events_connection_id
 ALTER TABLE public.pos_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_sales_events ENABLE ROW LEVEL SECURITY;
 
--- Connections: org members read; settings managers write.
+-- Connections: org members read; company admins / owners (MANAGE_COMPANY_SETTINGS) write.
 DROP POLICY IF EXISTS "pos_connections_org_select" ON public.pos_connections;
 CREATE POLICY "pos_connections_org_select"
   ON public.pos_connections
@@ -59,8 +59,8 @@ CREATE POLICY "pos_connections_org_manage"
   ON public.pos_connections
   FOR ALL
   TO authenticated
-  USING (public.is_org_member(org_id))
-  WITH CHECK (public.is_org_member(org_id));
+  USING (public.is_company_admin_for_org(org_id))
+  WITH CHECK (public.is_company_admin_for_org(org_id));
 
 -- Sales: org members can read synced events.
 DROP POLICY IF EXISTS "pos_sales_events_org_select" ON public.pos_sales_events;
@@ -75,7 +75,7 @@ GRANT EXECUTE ON FUNCTION public.adjust_inventory_stock(uuid, uuid, integer, tex
 
 GRANT ALL ON TABLE public.pos_connections TO service_role;
 GRANT ALL ON TABLE public.pos_sales_events TO service_role;
-GRANT ALL ON TABLE public.pos_oauth_states TO service_role;
+-- pos_oauth_states is created in 20260709183000_pos_oauth_states.sql (GRANT lives there).
 
 COMMENT ON TABLE public.pos_connections IS
   'Per-org POS webhook connections (generic, Yoco, Square). Webhook URL uses webhook_token.';

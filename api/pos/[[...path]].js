@@ -1,11 +1,11 @@
 import { applyApiCors } from "../../server/src/auth/applyApiCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import {
+  handlePosSalesList,
   handlePosConnectionsList,
   handlePosConnectionCreate,
   handlePosConnectionPatch,
   handlePosConnectionDelete,
-  handlePosSalesList,
 } from "../../server/src/pos/posConnectionsRoutes.js";
 import { handlePosWebhook } from "../../server/src/pos/posWebhookHandler.js";
 import {
@@ -16,8 +16,7 @@ import {
 } from "../../server/src/pos/posOAuthRoutes.js";
 
 /**
- * Vercel: /api/pos/connections, /api/pos/sales, /api/pos/webhook/:token,
- *         /api/pos/oauth/*
+ * Vercel: /api/pos/sales, /api/pos/webhook/:token, /api/pos/oauth/*, /api/pos/connections/*
  */
 function normalizePosPathSegments(raw) {
   if (Array.isArray(raw)) {
@@ -47,11 +46,12 @@ function resolvePosRoute(req) {
     if (second === "status") return { route: "oauth-status" };
   }
 
-  if (head === "connections") {
-    if (second) return { route: "connection-id", id: second };
-    return { route: "connections" };
-  }
   if (head === "sales") return { route: "sales" };
+
+  if (head === "connections") {
+    if (parts.length === 1) return { route: "connections-list", parts };
+    if (parts[1]) return { route: "connection-by-id", parts, id: parts[1] };
+  }
 
   const urlPath = String(req.url || "").split("?")[0] || "";
 
@@ -70,15 +70,14 @@ function resolvePosRoute(req) {
   if (urlPath.includes("/oauth/yoco/connect")) return { route: "oauth-yoco-connect" };
   if (urlPath.includes("/oauth/status")) return { route: "oauth-status" };
 
-  const connectionIdMatch = urlPath.match(/\/connections\/([^/]+)/i);
-  if (connectionIdMatch?.[1]) {
-    return { route: "connection-id", id: connectionIdMatch[1] };
-  }
-  if (urlPath.endsWith("/connections") || /\/connections$/i.test(urlPath)) {
-    return { route: "connections" };
-  }
   if (urlPath.endsWith("/sales") || /\/sales$/i.test(urlPath)) {
     return { route: "sales" };
+  }
+
+  if (/\/connections$/i.test(urlPath)) return { route: "connections-list", parts: [] };
+  const connectionMatch = urlPath.match(/\/connections\/([^/]+)/i);
+  if (connectionMatch?.[1]) {
+    return { route: "connection-by-id", parts: ["connections", connectionMatch[1]], id: connectionMatch[1] };
   }
 
   return null;
@@ -128,24 +127,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (resolved.route === "connections") {
+  if (resolved.route === "sales") {
+    if (req.method === "GET") return handlePosSalesList(req, res);
+    res.setHeader("Allow", "GET, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (resolved.route === "connections-list") {
     if (req.method === "GET") return handlePosConnectionsList(req, res);
     if (req.method === "POST") return handlePosConnectionCreate(req, res);
     res.setHeader("Allow", "GET, POST, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (resolved.route === "connection-id") {
-    req.params = { ...(req.params || {}), id: resolved.id };
+  if (resolved.route === "connection-by-id") {
+    req.params = { ...(req.params || {}), id: String(resolved.id || "").trim() };
     if (req.method === "PATCH") return handlePosConnectionPatch(req, res);
     if (req.method === "DELETE") return handlePosConnectionDelete(req, res);
     res.setHeader("Allow", "PATCH, DELETE, OPTIONS");
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  if (resolved.route === "sales") {
-    if (req.method === "GET") return handlePosSalesList(req, res);
-    res.setHeader("Allow", "GET, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
   }
 

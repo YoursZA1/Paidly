@@ -1,6 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import dotenv from 'dotenv';
+
+/**
+ * Product-style E2E defaults:
+ * - Loads `.env.e2e` when present (same as admin affiliate config); shell exports win
+ * - Strict timeouts, retries in CI, traces on retry
+ * - Optional webServer (Vite) unless PLAYWRIGHT_SKIP_WEBSERVER=1
+ * - Global auth: tests/auth.setup.ts → playwright/.auth/user.json
+ *
+ *   cp playwright/env.e2e.example .env.e2e
+ *   npm run test:e2e
+ */
+const repoRoot = process.cwd();
+const envE2ePath = path.join(repoRoot, '.env.e2e');
+if (fs.existsSync(envE2ePath)) {
+  dotenv.config({ path: envE2ePath });
+}
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 
@@ -26,10 +43,7 @@ const launchOptions = chromiumExecutablePath
   : {};
 
 /**
- * Product-style E2E defaults:
- * - Strict timeouts, retries in CI, traces on retry
- * - Optional webServer (Vite) unless PLAYWRIGHT_SKIP_WEBSERVER=1
- * - Global auth: tests/auth.setup.ts → playwright/.auth/user.json
+ * Product-style E2E defaults. Env loading and chromium helpers are above.
  */
 export default defineConfig({
   testDir: './tests',

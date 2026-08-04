@@ -65,8 +65,8 @@ CREATE POLICY "pos_connections_org_manage"
   ON public.pos_connections
   FOR ALL
   TO authenticated
-  USING (public.is_org_member(org_id))
-  WITH CHECK (public.is_org_member(org_id));
+  USING (public.is_company_admin_for_org(org_id))
+  WITH CHECK (public.is_company_admin_for_org(org_id));
 
 DROP POLICY IF EXISTS "pos_sales_events_org_select" ON public.pos_sales_events;
 CREATE POLICY "pos_sales_events_org_select"
@@ -79,7 +79,6 @@ GRANT EXECUTE ON FUNCTION public.adjust_inventory_stock(uuid, uuid, integer, tex
 
 GRANT ALL ON TABLE public.pos_connections TO service_role;
 GRANT ALL ON TABLE public.pos_sales_events TO service_role;
-GRANT ALL ON TABLE public.pos_oauth_states TO service_role;
 
 -- ── pos_oauth_states (Square OAuth CSRF) ──────────────────────────────────────
 
@@ -96,6 +95,8 @@ CREATE TABLE IF NOT EXISTS public.pos_oauth_states (
 CREATE INDEX IF NOT EXISTS idx_pos_oauth_states_expires_at ON public.pos_oauth_states(expires_at);
 
 ALTER TABLE public.pos_oauth_states ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE public.pos_oauth_states TO service_role;
 
 -- Notify PostgREST to reload schema cache (Supabase API)
 NOTIFY pgrst, 'reload schema';

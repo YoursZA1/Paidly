@@ -1,4 +1,4 @@
-import { clearSessionOrgIdCache } from "@/api/customClient";
+import { clearSessionOrgIdCache } from "@/api/auth/orgCache.js";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
 import { resetPaidlyRealtimeForUserRecovery } from "@/lib/realtime/paidlyRealtimeManager";
 import { useWakeRecoveryStore } from "@/stores/wakeRecoveryStore";

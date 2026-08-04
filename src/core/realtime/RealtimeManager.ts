@@ -1,6 +1,7 @@
 /**
  * Central subscription registry for Supabase Realtime **logical** consumers.
- * Integrate gradually — `paidlyRealtimeManager.js` remains the transport owner until refactored.
+ * Transport/channel lifecycle stays in `paidlyRealtimeManager.js` — this class
+ * tracks named logical families (budget + pause) so cores/docs stay honest.
  */
 
 export type SubscriptionHandle = {
@@ -28,7 +29,7 @@ export class RealtimeManager {
 
   register(name: string, subscribe: () => () => void): SubscriptionHandle | null {
     if (this.paused) return null;
-    if (this.handles.size >= this.budget.maxLogicalSubscriptions) {
+    if (this.handles.size >= this.budget.maxLogicalSubscriptions && !this.handles.has(name)) {
       console.warn(`[RealtimeManager] budget exceeded (${this.budget.maxLogicalSubscriptions}), skipping: ${name}`);
       return null;
     }
@@ -49,9 +50,38 @@ export class RealtimeManager {
     return handle;
   }
 
+  /**
+   * Track a logical family without owning channel lifecycle (used by paidlyRealtimeManager).
+   * @returns false if paused or over budget (name already tracked still returns true)
+   */
+  trackLogical(name: string): boolean {
+    if (this.handles.has(name)) return true;
+    if (this.paused) return false;
+    if (this.handles.size >= this.budget.maxLogicalSubscriptions) {
+      console.warn(`[RealtimeManager] budget exceeded (${this.budget.maxLogicalSubscriptions}), skipping: ${name}`);
+      return false;
+    }
+    this.handles.set(name, {
+      id: name,
+      dispose: () => {
+        this.handles.delete(name);
+      },
+    });
+    return true;
+  }
+
+  untrackLogical(name: string) {
+    this.unregister(name);
+  }
+
   unregister(name: string) {
     const h = this.handles.get(name);
     if (h) h.dispose();
+  }
+
+  /** Soft pause — blocks new trackLogical/register; does not tear down transport. */
+  setPaused(paused: boolean) {
+    this.paused = Boolean(paused);
   }
 
   pauseAll() {
@@ -76,5 +106,10 @@ export class RealtimeManager {
 
   activeCount() {
     return this.handles.size;
+  }
+
+  /** @internal tests */
+  activeNames() {
+    return [...this.handles.keys()];
   }
 }

@@ -1,5 +1,5 @@
 import { formatHttpStatusMessage } from "@/utils/apiErrorText";
-import { supabase } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 /**
  * PayFast subscription / once-off checkout
@@ -10,19 +10,15 @@ import { supabase } from "@/lib/supabaseClient";
  * - Webhook must verify the PayFast signature before trusting `req.body` / payload fields.
  * - Platform state includes `public.subscriptions` plus `profiles` plan fields (ITN upserts both).
  *
- * ## Subscription clean flow (intended behaviour)
- * 1. **Frontend** — `fetch` POST JSON to `/api/payfast/subscription` (this app’s API, not PayFast).
- * 2. **Backend** — validates input, builds PayFast field map, signs with passphrase.
- * 3. **Backend** — responds with JSON `{ payfastUrl, fields }` (`fields.signature` required).
- * 4. **Frontend** — `submitPayfastForm` builds a hidden `<form>` and POSTs `fields` to `payfastUrl` (browser navigates to PayFast).
+ * ## SaaS plan checkout (preferred)
+ * Use `subscriptionCheckoutService.createSubscriptionAndRedirect` →
+ * `POST /api/subscriptions/create` (planSlug only). Return page polls
+ * `GET /api/subscriptions/status`. Never set status active on the client.
+ * ITN: `/api/payfast/itn`.
  *
- * Once-off payments use the same pattern against `/api/payfast/once`.
- *
- * ## After checkout
- * PayFast ITN → `/api/payfast/webhook` → `payfastSubscriptionItn.js` updates `subscriptions` / `profiles.subscription_plan`.
- * Checkout signs `custom_str1` = user id, `custom_str2` = plan (echoed on ITN).
- *
- * **Dev:** `npm run server` (e.g. :5179); Vite can proxy `/api`. **Prod:** same-origin `/api` on Vercel, or `VITE_SERVER_URL` if the API is elsewhere.
+ * ## Legacy `/api/payfast/subscription` (admin / once-off style)
+ * 1. POST JSON (includes amount) → signed `{ payfastUrl, fields }` → form POST to PayFast.
+ * Once-off: `/api/payfast/once`.
  */
 const getPayfastApiBase = () => {
   if (import.meta.env.DEV) return "";
@@ -167,8 +163,8 @@ const PayfastService = {
         : {})
     };
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
+    const session = await getStableSession();
+    const accessToken = session?.access_token;
     if (!accessToken) {
       throw new Error("You must be signed in to start a subscription.");
     }

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paidly — Shareholder Product Overview</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    :root {
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #1d4ed8;
+      --surface: #f8fafc;
+      --ok: #166534;
+      --adv: #92400e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 10pt;
+      line-height: 1.45;
+      color: var(--ink);
+      margin: 0;
+      padding: 12mm 14mm 16mm;
+      max-width: 210mm;
+      margin-inline: auto;
+    }
+    .cover {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .brand {
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 6px;
+    }
+    h1 {
+      font-size: 22pt;
+      line-height: 1.15;
+      margin: 0 0 8px;
+      color: var(--ink);
+    }
+    .subtitle {
+      font-size: 11pt;
+      color: var(--muted);
+      margin: 0 0 10px;
+      max-width: 62ch;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      font-size: 8.5pt;
+      color: var(--muted);
+    }
+    .meta strong { color: var(--ink); font-weight: 600; }
+    h2 {
+      font-size: 11pt;
+      margin: 20px 0 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; }
+    h3 {
+      font-size: 10.5pt;
+      margin: 14px 0 6px;
+      color: #1e293b;
+    }
+    p { margin: 0 0 8px; }
+    ul, ol { margin: 4px 0 10px 18px; padding: 0; }
+    li { margin-bottom: 3px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 12px;
+      font-size: 8.5pt;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 7px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #f1f5f9; font-weight: 600; }
+    .box {
+      background: var(--surface);
+      border-left: 3px solid var(--accent);
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+      font-size: 9.5pt;
+    }
+    .flow {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8pt;
+      background: #f1f5f9;
+      padding: 10px 12px;
+      margin: 8px 0 12px;
+      white-space: pre;
+      overflow-x: auto;
+      line-height: 1.35;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 1px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .badge-shipped { background: #dcfce7; color: var(--ok); }
+    .badge-advanced { background: #ffedd5; color: var(--adv); }
+    .badge-present { background: #e2e8f0; color: #334155; }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+    @media (max-width: 720px) {
+      .two-col { grid-template-columns: 1fr; }
+      body { padding: 16px; }
+    }
+    .footer {
+      margin-top: 22px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 8pt;
+      color: var(--muted);
+    }
+    .print-hint {
+      font-size: 8.5pt;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+    @media print {
+      body { padding: 0; max-width: none; }
+      .print-hint { display: none; }
+      h2 { break-after: avoid; }
+      table, .box, .flow { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <p class="print-hint">Open in a browser → Print → Save as PDF to share with shareholders.</p>
+
+  <header class="cover">
+    <p class="brand">Paidly</p>
+    <h1>Shareholder Product Overview</h1>
+    <p class="subtitle">
+      A business operating system for SMBs: issue documents, manage relationships,
+      collect payment, see cash performance, and grow — in one coherent platform.
+    </p>
+    <div class="meta">
+      <span><strong>Product</strong> paidly.co.za</span>
+      <span><strong>Focus</strong> South Africa–first</span>
+      <span><strong>Status</strong> July 2026</span>
+      <span><strong>Audience</strong> Shareholders &amp; advisors · Confidential</span>
+    </div>
+  </header>
+
+  <h2>1. What Paidly is</h2>
+  <p>
+    Paidly is <strong>not</strong> a narrow invoicing app. It is a
+    <strong>financial workflow platform</strong> for small and medium businesses:
+    one place to issue commercial documents, manage clients and catalog, collect payment,
+    see cash performance, and grow through channels such as affiliates.
+  </p>
+  <div class="box">
+    <strong>Mission:</strong> Help businesses get paid faster by reducing friction between
+    sending a document and receiving money.<br /><br />
+    <strong>Investor framing:</strong> From “another invoice PDF tool” to owning the
+    <strong>money loop</strong> — Document → Payment Intent → Settlement → Intelligence.
+  </div>
+
+  <h2>2. The problem we solve</h2>
+  <table>
+    <thead>
+      <tr><th>Typical tool</th><th>Gap</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Invoicing-only</td><td>Weak relationships, weak cash intelligence, bolted-on payments</td></tr>
+      <tr><td>Accounting-only</td><td>Heavy; slow path from “quote sent” to “money in”</td></tr>
+      <tr><td>Standalone CRM / referral</td><td>Disconnected from documents and payment state</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>Paidly’s edge:</strong> unify issuance, relationships/catalog, revenue/ops,
+    and payment intelligence under one architecture — so the business runs in one system, not five tabs.
+  </p>
+
+  <h2>3. How the product operates</h2>
+  <div class="flow">Create document (invoice / quote / payslip)
+        ↓
+Compose (line items, tax, branding)
+        ↓
+Deliver (email, public link, client portal)
+        ↓
+Observe (opens, clicks, reminders)
+        ↓
+Payment intent → PayFast / rails
+        ↓
+Settle (paid / accepted / archived)
+        ↓
+Intelligence (smart reminders, at-risk follow-ups)</div>
+  <div class="two-col">
+    <div>
+      <h3>Day-to-day for owners</h3>
+      <ol>
+        <li>Add clients and catalog</li>
+        <li>Create branded invoices, quotes, payslips</li>
+        <li>Send via email or shareable link; track views</li>
+        <li>Collect payment (PayFast); record partials</li>
+        <li>Use dashboard, cash flow, and reports</li>
+        <li>Grow via affiliates and team workspaces</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Architecture maturity</h3>
+      <p>
+        Roughly <strong>~70%</strong> of the SaaS operating system is in place.
+        The remaining <strong>~30%</strong> that defines long-term defensibility:
+        payment abstraction at scale, unified document event intelligence,
+        and experience consistency across every money surface.
+      </p>
+    </div>
+  </div>
+
+  <h2>4. Core product systems</h2>
+  <table>
+    <thead>
+      <tr><th>System</th><th>Job</th><th>Shareholder takeaway</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Identity</strong></td><td>Auth, orgs, roles, secure tenancy</td><td>Multi-user, company-ready foundation</td></tr>
+      <tr><td><strong>Document Engine</strong></td><td>Invoices, quotes, payslips</td><td>Shared compose → send → PDF → track</td></tr>
+      <tr><td><strong>Relationship</strong></td><td>Clients + catalog</td><td>CRM + SKU as input to commerce</td></tr>
+      <tr><td><strong>Payment Intent</strong></td><td>Handoff to payment rails</td><td>Multi-provider readiness</td></tr>
+      <tr><td><strong>Revenue &amp; Ops</strong></td><td>Payments, cash, reports, SaaS billing, POS</td><td>Cash visibility + tenant billing</td></tr>
+      <tr><td><strong>Payment Intelligence</strong></td><td>Reminders &amp; Get Paid triggers</td><td>Collection velocity differentiator</td></tr>
+      <tr><td><strong>Experience</strong></td><td>Consistent UI &amp; money CTAs</td><td>One premium product feel</td></tr>
+      <tr><td><strong>Growth</strong></td><td>Affiliates, email, notifications</td><td>Acquisition &amp; retention loops</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. What has been built</h2>
+
+  <h3>Commercial documents</h3>
+  <table>
+    <thead><tr><th>Capability</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Invoices — create, edit, draft/send, view, PDF, branding</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Recurring invoices — pause/resume, cycle tracking</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Quotes — templates, public view, PDF</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Payslips — create, share, PDF</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Unified document patterns (shared list/export)</td><td><span class="badge badge-advanced">Advanced</span></td></tr>
+      <tr><td>Public share links + send/delivery tracking</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Partial payments, tax/VAT, multi-currency</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Relationships, money &amp; growth</h3>
+  <table>
+    <thead><tr><th>Capability</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Clients CRM, search/CSV, client portal, team invites</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Services / catalog &amp; inventory surfaces</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>PayFast payment flows (return, cancel, ITN)</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>SaaS subscription billing v2 (verified ITN, plans, history)</td><td><span class="badge badge-advanced">Advanced</span></td></tr>
+      <tr><td>Cash flow, reports, dashboard KPIs</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>POS integrations (Yoco / Square)</td><td><span class="badge badge-advanced">Advanced</span></td></tr>
+      <tr><td>Affiliate program + platform admin</td><td><span class="badge badge-shipped">Shipped</span></td></tr>
+      <tr><td>Security (RLS), session recovery, rate limits, CI guards</td><td><span class="badge badge-advanced">Advanced</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. How the technology works</h2>
+  <table>
+    <thead><tr><th>Layer</th><th>What it is</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Web app</strong></td><td>React SPA on Vercel</td><td>Fast iteration, modern UX</td></tr>
+      <tr><td><strong>Database &amp; auth</strong></td><td>Supabase (Postgres, Auth, Storage, Realtime)</td><td>Secure multi-tenant data</td></tr>
+      <tr><td><strong>Serverless APIs</strong></td><td>Vercel <code>/api/*</code></td><td>Payments, email, shares, crons — secrets server-side</td></tr>
+      <tr><td><strong>Payments</strong></td><td>PayFast</td><td>SA rail; billing verified server-side (never trust browser)</td></tr>
+      <tr><td><strong>Email</strong></td><td>Resend / SMTP</td><td>Document delivery &amp; transactional mail</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. Competitive narrative</h2>
+  <p>
+    <strong>Old lens:</strong> “We have invoices, quotes, clients…”<br />
+    <strong>New lens:</strong> One Document Engine, one money loop, one Get Paid intelligence layer.
+  </p>
+  <p>
+    Competitors typically win one vertical. Paidly’s thesis is
+    <strong>workflow ownership</strong>: issue → know who bought what → collect safely →
+    remind intelligently → grow via affiliates → operate the company with roles and subscriptions.
+  </p>
+  <div class="box">
+    That stack is the <strong>defensible story</strong> for shareholders: not feature count,
+    but <strong>system coherence</strong>.
+  </div>
+
+  <h2>8. Near-term priorities</h2>
+  <ol>
+    <li><strong>Deepen Document Engine unification</strong> — one compose/send/PDF model across document kinds</li>
+    <li><strong>Client Timeline</strong> — full history per client</li>
+    <li><strong>Quote → accepted → draft invoice</strong> — close the sales-to-AR loop</li>
+    <li><strong>First-class Payment Intent</strong> — multi-provider path + consistent Pay / Retry / Receipt UX</li>
+    <li><strong>Payment Intelligence v1</strong> — e.g. viewed 3× unpaid → reminder + follow-up</li>
+    <li><strong>Foundation (parallel)</strong> — auth/session hardening + UI layout standardization</li>
+  </ol>
+
+  <h2>9. Business model</h2>
+  <ul>
+    <li>SaaS subscription; plans catalog-driven (not hardcoded in UI)</li>
+    <li>Subscriptions activate only after <strong>verified</strong> PayFast ITN — frontend cannot fake “paid”</li>
+    <li>Append-only payment history and event timeline for auditability</li>
+    <li>Affiliate channel for acquisition without a separate growth product</li>
+  </ul>
+
+  <h2>10. One-page board summary</h2>
+  <table>
+    <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td><strong>What is it?</strong></td><td>SMB business OS for documents, relationships, payments, and growth</td></tr>
+      <tr><td><strong>Where?</strong></td><td>South Africa–first; live at paidly.co.za</td></tr>
+      <tr><td><strong>Who uses it?</strong></td><td>SMBs, freelancers, teams with company workspaces</td></tr>
+      <tr><td><strong>What’s shipped?</strong></td><td>Invoices, quotes, payslips, clients, catalog, PayFast, cash/reports, affiliates, admin, portal, billing plumbing</td></tr>
+      <tr><td><strong>What’s left for moat?</strong></td><td>Payment abstraction, document event intelligence, quote→invoice, experience consistency</td></tr>
+      <tr><td><strong>Tech posture?</strong></td><td>Vercel + Supabase + PayFast; security-first billing; multi-tenant RLS</td></tr>
+      <tr><td><strong>Ask of shareholders?</strong></td><td>Align on workflow-platform narrative; complete Get Paid / Payment Intent layer</td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Prepared from the Paidly Application Blueprint and current product surfaces (July 2026).
+    Engineering docs remain source of truth for implementation detail; this overview is the shareable narrative layer.
+    Source: <code>docs/Paidly-Shareholder-Overview.md</code> · Print companion: this HTML.
+  </div>
+</body>
+</html>

@@ -76,6 +76,7 @@ describe("EntityManager org cache behavior", () => {
           error: null,
         });
       }
+      // Owner-first resolveActiveOrgIdForUser hits organizations before memberships.
       if (table === "organizations") {
         return fluentQuery({ data: { id: "org-123" }, error: null });
       }
@@ -91,10 +92,10 @@ describe("EntityManager org cache behavior", () => {
 
     expect(first).toBe("org-123");
     expect(second).toBe("org-123");
-    // Membership present: server bootstrap is not called.
+    // Org present: server bootstrap is not called; second call uses session-user cache.
     expect(globalThis.fetch).toHaveBeenCalledTimes(0);
-    const membershipCalls = mockSupabase.from.mock.calls.filter((c) => c[0] === "memberships");
-    expect(membershipCalls.length).toBeGreaterThanOrEqual(2);
+    const orgCalls = mockSupabase.from.mock.calls.filter((c) => c[0] === "organizations");
+    expect(orgCalls.length).toBeGreaterThanOrEqual(1);
   });
 
   it("calls bootstrap API once when membership is missing, then uses org_id", async () => {
@@ -116,6 +117,10 @@ describe("EntityManager org cache behavior", () => {
 
     let membershipPass = 0;
     mockSupabase.from.mockImplementation((table) => {
+      if (table === "organizations") {
+        // No owned org — fall through to membership / bootstrap.
+        return fluentQuery({ data: null, error: null });
+      }
       if (table === "memberships") {
         membershipPass += 1;
         const orgId = membershipPass >= 3 ? "org-from-boot" : null;

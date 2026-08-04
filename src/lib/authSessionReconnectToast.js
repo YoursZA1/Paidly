@@ -7,7 +7,7 @@ let consecutiveGetSessionErrors = 0;
 const THRESHOLD = 2;
 
 /**
- * Call when `supabase.auth.getSession()` returns `{ error }` (network / flaky edge).
+ * Call when a SessionCoordinator / getSession read returns `{ error }` (network / flaky edge).
  * After several failures in a row, shows a non-destructive Sonner toast (same id = no stack).
  */
 export function reportSupabaseGetSessionFailure() {

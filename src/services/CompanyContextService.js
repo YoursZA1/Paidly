@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
-import { Invoice } from "@/api/entities";
 import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
+import { ensureUserHasOrganization } from "@/api/auth/ensureUserOrganization.js";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { buildCompanyAccessContext, normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
@@ -33,7 +33,7 @@ async function loadCompanyAccessContextInner(userId) {
   // Owners sign in to their company; invite-only members use the org they joined.
   let orgId = await resolveActiveOrgIdForUser(userId);
   if (!orgId) {
-    orgId = await Invoice.ensureUserHasOrganization(userId);
+    orgId = await ensureUserHasOrganization(userId);
   }
 
   const { data: org, error: orgError } = await supabase

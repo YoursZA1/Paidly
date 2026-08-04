@@ -7,7 +7,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PLANS, PLAN_SLUGS } from "@/lib/plans.js";
-import { payfastAmountZar } from "@/data/paidlySubscriptionPlans";
 import PayFastSubscriptionForm from "./PayFastSubscriptionForm";
 
 const FEATURE_LABELS = {
@@ -90,10 +89,10 @@ export default function UpgradeModal({ open, onOpenChange, featureKey, title, de
                 </ul>
                 <div className="mt-4">
                   <PayFastSubscriptionForm
-                    amountZar={payfastAmountZar(plan.name)}
+                    planSlug={slug}
                     planName={plan.name}
-                    itemDescription={`Paidly ${plan.name} — monthly`}
-                    ctaLabel={`Pay — ${plan.name}`}
+                    displayPriceZar={plan.price}
+                    ctaLabel="Continue"
                     submitVariant="button"
                     className="w-full"
                   />

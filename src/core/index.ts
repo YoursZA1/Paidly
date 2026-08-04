@@ -17,6 +17,7 @@ export { getSharedRequestCoordinator } from "./network/sharedRequestCoordinator"
 export * from "./query/queryPolicies";
 export * from "./query/persistedQueryClient";
 export { RealtimeManager } from "./realtime/RealtimeManager";
+export { getSharedRealtimeManager } from "./realtime/sharedRealtimeManager";
 export { MutationCoordinator } from "./sync/MutationCoordinator";
 export { RequestCoordinator, retryWithBudget } from "./network/RequestCoordinator";
 export * from "./errors";

@@ -13,6 +13,8 @@ import Footer from "@/components/Footer";
 import LandingLoginModal from "@/components/auth/LandingLoginModal";
 import WaitlistSection from "@/components/WaitlistSection";
 import AffiliateSection from "@/components/marketing/AffiliateSection";
+import JsonLd from "@/components/seo/JsonLd";
+import { buildHomeStructuredDataGraph } from "@/lib/seo/structuredData";
 
 /**
  * Marketing landing (Supabase-style dark shell). Optional authSlot renders between hero and features
@@ -47,6 +49,7 @@ export default function Home({
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] pb-32 font-sans text-zinc-100 antialiased selection:bg-[#FF4F00]/30 sm:pb-28">
+      <JsonLd id="home" data={buildHomeStructuredDataGraph()} />
       <Navbar active={navActive} onLoginClick={openLogin} />
       <Hero onLoginClick={openLogin} />
       {showWaitlist ? <WaitlistSection /> : null}

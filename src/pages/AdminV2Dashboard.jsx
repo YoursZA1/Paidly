@@ -31,6 +31,13 @@ import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentActivity from '@/components/dashboard/RecentActivity';
+import SubscriptionOverview from '@/components/dashboard/SubscriptionOverview';
+import RevenueOverview from '@/components/dashboard/RevenueOverview';
+import FailedPaymentsTable from '@/components/dashboard/FailedPaymentsTable';
+import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDetailsSheet';
+import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
+import { fetchAdminRevenueMetrics } from '@/api/fetchAdminRevenueMetrics';
+import { fetchAdminFailedPayments } from '@/api/fetchAdminFailedPayments';
 import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
 import {
   approveAffiliateApplication,
@@ -42,7 +49,7 @@ import { createAffiliateSignupShareUrl } from '@/utils';
 import { toast } from 'sonner';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
-import { supabase } from '@/lib/supabaseClient';
+import { getStableSession } from '@/core/auth/SessionCoordinator';
 import { countByUserId, mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import {
   EMPTY_AFFILIATE_ADMIN_BUNDLE,
@@ -65,6 +72,9 @@ import TablePagination from '@/components/ui/TablePagination';
 const DASHBOARD_QUERY_KEYS = [
   'platform-users',
   'subscriptions',
+  'subscription-overview',
+  'revenue-metrics',
+  'failed-payments',
   'affiliates',
   'waitlist',
   'invoices',
@@ -128,6 +138,7 @@ export default function AdminV2Dashboard() {
   const [behaviorSort, setBehaviorSort] = useState({ col: 'activity_score', dir: 'desc' });
   const [behaviorPage, setBehaviorPage] = useState(0);
   const [subsPage, setSubsPage] = useState(0);
+  const [detailSubId, setDetailSubId] = useState(null);
 
   const dashboardRefreshing =
     useIsFetching({
@@ -169,6 +180,54 @@ export default function AdminV2Dashboard() {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
+
+  const {
+    data: subscriptionOverviewPayload,
+    dataUpdatedAt: subscriptionOverviewUpdatedAt,
+    isLoading: subscriptionOverviewLoading,
+    isError: subscriptionOverviewError,
+    error: subscriptionOverviewErr,
+  } = useQuery({
+    queryKey: ['subscription-overview'],
+    queryFn: () => fetchAdminSubscriptionOverview(),
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+  });
+  const subscriptionOverview = subscriptionOverviewPayload?.overview;
+
+  const {
+    data: revenueMetricsPayload,
+    dataUpdatedAt: revenueMetricsUpdatedAt,
+    isLoading: revenueMetricsLoading,
+    isError: revenueMetricsError,
+    error: revenueMetricsErr,
+  } = useQuery({
+    queryKey: ['revenue-metrics'],
+    queryFn: () => fetchAdminRevenueMetrics(),
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+  });
+  const revenueMetrics = revenueMetricsPayload?.metrics;
+
+  const {
+    data: failedPaymentsPayload,
+    dataUpdatedAt: failedPaymentsUpdatedAt,
+    isLoading: failedPaymentsLoading,
+    isError: failedPaymentsError,
+    error: failedPaymentsErr,
+  } = useQuery({
+    queryKey: ['failed-payments'],
+    queryFn: () => fetchAdminFailedPayments(50),
+    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
+    staleTime: ADMIN_DASHBOARD_STALE_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+  });
+  const failedPayments = failedPaymentsPayload?.failedPayments || [];
 
   const {
     data: affiliateAdmin = EMPTY_AFFILIATE_ADMIN_BUNDLE,
@@ -339,8 +398,8 @@ export default function AdminV2Dashboard() {
   const { data: securityEvents, isLoading: securityLoading, error: securityError } = useQuery({
     queryKey: ['security-events'],
     queryFn: async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const session = await getStableSession();
+      const token = session?.access_token;
       if (!token) throw new Error('Not authenticated');
 
       const res = await fetch('/api/security/events', {
@@ -380,6 +439,9 @@ export default function AdminV2Dashboard() {
       Math.max(
         usersUpdatedAt || 0,
         subscriptionsUpdatedAt || 0,
+        subscriptionOverviewUpdatedAt || 0,
+        revenueMetricsUpdatedAt || 0,
+        failedPaymentsUpdatedAt || 0,
         affiliatesUpdatedAt || 0,
         waitlistUpdatedAt || 0,
         invoicesUpdatedAt || 0,
@@ -389,6 +451,9 @@ export default function AdminV2Dashboard() {
     [
       usersUpdatedAt,
       subscriptionsUpdatedAt,
+      subscriptionOverviewUpdatedAt,
+      revenueMetricsUpdatedAt,
+      failedPaymentsUpdatedAt,
       affiliatesUpdatedAt,
       waitlistUpdatedAt,
       invoicesUpdatedAt,
@@ -409,8 +474,16 @@ export default function AdminV2Dashboard() {
   }, [lastUpdatedAt, tick]);
 
   const activeSubscriptions = subscriptions.filter((s) => s.status === 'active');
+  const activeSubscriptionCount =
+    subscriptionOverview?.active != null
+      ? subscriptionOverview.active
+      : activeSubscriptions.length;
   const verifiedUsers = users.filter((u) => u.email_verified === true);
-  const monthlyRevenue = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
+  const monthlyRevenueFallback = activeSubscriptions.reduce((sum, s) => sum + (s.amount || 0), 0);
+  const monthlyRevenue =
+    revenueMetrics?.monthlyRevenue != null
+      ? revenueMetrics.monthlyRevenue
+      : monthlyRevenueFallback;
   const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
@@ -593,8 +666,8 @@ export default function AdminV2Dashboard() {
         />
         <StatCard
           title="Active Subscriptions"
-          value={activeSubscriptions.length}
-          change={`+${Math.min(activeSubscriptions.length, 8)}`}
+          value={activeSubscriptionCount}
+          change={`+${Math.min(activeSubscriptionCount, 8)}`}
           icon={CreditCard}
         />
         <StatCard
@@ -616,6 +689,28 @@ export default function AdminV2Dashboard() {
           icon={FileText}
         />
       </div>
+
+      <SubscriptionOverview
+        className="mb-6"
+        overview={subscriptionOverview}
+        isLoading={subscriptionOverviewLoading}
+        errorMessage={
+          subscriptionOverviewError
+            ? subscriptionOverviewErr?.message || 'Could not load subscription overview'
+            : null
+        }
+      />
+
+      <RevenueOverview
+        className="mb-6"
+        metrics={revenueMetrics}
+        isLoading={revenueMetricsLoading}
+        errorMessage={
+          revenueMetricsError
+            ? revenueMetricsErr?.message || 'Could not load revenue metrics'
+            : null
+        }
+      />
 
       {/* Document stats */}
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -864,6 +959,17 @@ export default function AdminV2Dashboard() {
         </DialogContent>
       </Dialog>
 
+      <FailedPaymentsTable
+        className="mb-8"
+        rows={failedPayments}
+        isLoading={failedPaymentsLoading}
+        errorMessage={
+          failedPaymentsError
+            ? failedPaymentsErr?.message || 'Could not load failed payments'
+            : null
+        }
+      />
+
       {/* Recent Subscriptions — paginated */}
       {(() => {
         const totalSubsPages = Math.max(1, Math.ceil(subscriptions.length / SUBS_PER_PAGE));
@@ -888,7 +994,13 @@ export default function AdminV2Dashboard() {
             {/* Mobile cards */}
             <div className="space-y-3 p-4 sm:hidden">
               {pageSlice.map((sub, idx) => (
-                <article key={stableEntityRowKey(sub, safePage * SUBS_PER_PAGE + idx)} className="rounded-lg border border-border bg-card p-3">
+                <article
+                  key={stableEntityRowKey(sub, safePage * SUBS_PER_PAGE + idx)}
+                  className={`rounded-lg border border-border bg-card p-3 ${sub.id ? 'cursor-pointer hover:bg-muted/40' : ''}`}
+                  onClick={() => {
+                    if (sub.id) setDetailSubId(sub.id);
+                  }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{sub.user_name || 'Unknown'}</p>
@@ -930,13 +1042,20 @@ export default function AdminV2Dashboard() {
                     <th className="px-6 py-3 text-left font-medium">Amount</th>
                     <th className="px-6 py-3 text-left font-medium">Status</th>
                     <th className="px-6 py-3 text-left font-medium">Date</th>
+                    <th className="px-6 py-3 text-right font-medium">Details</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageSlice.map((sub, idx) => {
                     const rowNum = safePage * SUBS_PER_PAGE + idx + 1;
                     return (
-                      <tr key={stableEntityRowKey(sub, rowNum)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
+                      <tr
+                        key={stableEntityRowKey(sub, rowNum)}
+                        className={`border-b border-border/50 transition-colors hover:bg-muted/30 ${sub.id ? 'cursor-pointer' : ''}`}
+                        onClick={() => {
+                          if (sub.id) setDetailSubId(sub.id);
+                        }}
+                      >
                         <td className="px-6 py-4 text-xs tabular-nums text-muted-foreground">{rowNum}</td>
                         <td className="px-6 py-4">
                           <div>
@@ -954,12 +1073,15 @@ export default function AdminV2Dashboard() {
                         <td className="px-6 py-4 text-sm text-muted-foreground">
                           {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
                         </td>
+                        <td className="px-6 py-4 text-right text-xs font-medium text-primary">
+                          {sub.id ? 'View' : '—'}
+                        </td>
                       </tr>
                     );
                   })}
                   {subscriptions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
                         No subscriptions yet
                       </td>
                     </tr>
@@ -1012,6 +1134,14 @@ export default function AdminV2Dashboard() {
           </div>
         );
       })()}
+
+      <SubscriptionDetailsSheet
+        subscriptionId={detailSubId}
+        open={Boolean(detailSubId)}
+        onOpenChange={(next) => {
+          if (!next) setDetailSubId(null);
+        }}
+      />
 
       {/* User Behavior — sortable table with inline actions */}
       <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">

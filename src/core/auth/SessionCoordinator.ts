@@ -13,6 +13,13 @@
  *    concurrent callers within that window.
  * 3. Single-flight: if a getSession() call is already in flight, join it instead
  *    of starting a second one.
+ *
+ * Allowed direct `supabase.auth.getSession()` call sites (populate / refresh authority):
+ * - This module
+ * - AuthContext.impl.jsx (bootstrap / refresh pipeline)
+ * - SupabaseAuthService.js
+ * - supabaseAuthRefresh.js
+ * Prefer {@link getStableSession} / {@link getStableSessionResult} everywhere else.
  */
 
 import { supabase } from "@/lib/supabaseClient";
@@ -31,6 +38,7 @@ type RawSession = {
 
 type Snapshot = {
   session: RawSession;
+  error: Error | null;
   fetchedAt: number;
 };
 
@@ -47,33 +55,52 @@ function _isStoreSessionFresh(s: ReturnType<typeof _storeSession>): boolean {
   return s.expiresAt > nowS + STORE_SESSION_MIN_TTL_S;
 }
 
+function _fromStore(stored: NonNullable<ReturnType<typeof _storeSession>>): RawSession {
+  return {
+    access_token: stored.accessToken,
+    refresh_token: stored.refreshToken,
+    expires_at: stored.expiresAt,
+    user: stored.user,
+  } as RawSession;
+}
+
 /**
- * Returns a stable Supabase session object (or null).
- *
- * Uses the in-memory store when fresh; otherwise falls back to a single-flighted
- * supabase.auth.getSession() call with a 5-second snapshot cache.
+ * Full getSession-shaped result (for call sites that check `error` separately).
  */
-export async function getStableSession(): Promise<RawSession> {
+export async function getStableSessionResult(): Promise<{
+  data: { session: RawSession };
+  error: Error | null;
+}> {
   const stored = _storeSession();
   if (_isStoreSessionFresh(stored)) {
-    return {
-      access_token: stored!.accessToken,
-      refresh_token: stored!.refreshToken,
-      expires_at: stored!.expiresAt,
-      user: stored!.user,
-    } as RawSession;
+    return { data: { session: _fromStore(stored!) }, error: null };
   }
 
   if (_cached && Date.now() - _cached.fetchedAt < SNAPSHOT_TTL_MS) {
-    return _cached.session;
+    return { data: { session: _cached.session }, error: _cached.error };
   }
 
-  if (_inflight) return (await _inflight).session;
+  if (_inflight) {
+    const snap = await _inflight;
+    return { data: { session: snap.session }, error: snap.error };
+  }
 
   _inflight = (async (): Promise<Snapshot> => {
     try {
-      const { data } = await supabase.auth.getSession();
-      const snap: Snapshot = { session: (data?.session as RawSession) ?? null, fetchedAt: Date.now() };
+      const { data, error } = await supabase.auth.getSession();
+      const snap: Snapshot = {
+        session: (data?.session as RawSession) ?? null,
+        error: (error as Error | null) ?? null,
+        fetchedAt: Date.now(),
+      };
+      _cached = snap;
+      return snap;
+    } catch (e) {
+      const snap: Snapshot = {
+        session: null,
+        error: e instanceof Error ? e : new Error(String(e)),
+        fetchedAt: Date.now(),
+      };
       _cached = snap;
       return snap;
     } finally {
@@ -81,7 +108,19 @@ export async function getStableSession(): Promise<RawSession> {
     }
   })();
 
-  return (await _inflight).session;
+  const snap = await _inflight;
+  return { data: { session: snap.session }, error: snap.error };
+}
+
+/**
+ * Returns a stable Supabase session object (or null).
+ *
+ * Uses the in-memory store when fresh; otherwise falls back to a single-flighted
+ * supabase.auth.getSession() call with a 5-second snapshot cache.
+ */
+export async function getStableSession(): Promise<RawSession> {
+  const { data } = await getStableSessionResult();
+  return data.session;
 }
 
 /**

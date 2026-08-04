@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 
 /** Shared Anvil/browser invoice layout (`public/invoice-anvil/invoice.css`). */
@@ -205,8 +205,8 @@ export default async function generatePdfFromAnvil(element, filename = "document
     marginRight: "60px",
   };
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
+  const session = await getStableSession();
+  const token = session?.access_token;
   if (!token) {
     throw new Error("Sign in required to generate PDF");
   }
@@ -263,8 +263,8 @@ export async function generateDocumentPdfFromAnvil(payload, filename = "document
   const title = options.title || (docType === "quote" ? "Quote" : "Invoice");
   const page = options.page || { marginLeft: "60px", marginRight: "60px" };
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
+  const session = await getStableSession();
+  const token = session?.access_token;
   if (!token) throw new Error("Sign in required to generate PDF");
 
   const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
