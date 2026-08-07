@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
  * PayFast signing string must not include undefined/null values (avoids "undefined" in URLs / runtime errors).
@@ -37,8 +37,15 @@ export const verifyPayfastSignature = (payload, passphrase) => {
   if (payload == null || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (!payload.signature) return false;
   const { signature, ...rest } = payload;
+  const incoming = String(signature || "").trim();
+  if (!/^[a-f0-9]{32}$/i.test(incoming)) return false;
   const expected = signPayfastPayload(rest, passphrase);
-  return signature === expected;
+  if (!expected || expected.length !== incoming.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(incoming, "utf8"), Buffer.from(expected, "utf8"));
+  } catch {
+    return false;
+  }
 };
 
 export function isPayfastPassphraseSet() {

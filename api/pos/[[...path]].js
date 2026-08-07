@@ -135,13 +135,23 @@ export default async function handler(req, res) {
 
   if (resolved.route === "connections-list") {
     if (req.method === "GET") return handlePosConnectionsList(req, res);
-    if (req.method === "POST") return handlePosConnectionCreate(req, res);
+    if (req.method === "POST") {
+      const { requireFeature } = await import("../../server/src/billing/entitlements.js");
+      const ok = await requireFeature(req, res, "integrations");
+      if (!ok) return;
+      return handlePosConnectionCreate(req, res);
+    }
     res.setHeader("Allow", "GET, POST, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   if (resolved.route === "connection-by-id") {
     req.params = { ...(req.params || {}), id: String(resolved.id || "").trim() };
+    if (req.method === "PATCH" || req.method === "DELETE") {
+      const { requireFeature } = await import("../../server/src/billing/entitlements.js");
+      const ok = await requireFeature(req, res, "integrations");
+      if (!ok) return;
+    }
     if (req.method === "PATCH") return handlePosConnectionPatch(req, res);
     if (req.method === "DELETE") return handlePosConnectionDelete(req, res);
     res.setHeader("Allow", "PATCH, DELETE, OPTIONS");

@@ -1,5 +1,4 @@
 import { formatHttpStatusMessage } from "@/utils/apiErrorText";
-import { getStableSession } from "@/core/auth/SessionCoordinator";
 
 /**
  * PayFast subscription / once-off checkout
@@ -16,9 +15,8 @@ import { getStableSession } from "@/core/auth/SessionCoordinator";
  * `GET /api/subscriptions/status`. Never set status active on the client.
  * ITN: `/api/payfast/itn`.
  *
- * ## Legacy `/api/payfast/subscription` (admin / once-off style)
- * 1. POST JSON (includes amount) → signed `{ payfastUrl, fields }` → form POST to PayFast.
- * Once-off: `/api/payfast/once`.
+ * `startSubscription` delegates to that flow. Legacy client-priced
+ * `POST /api/payfast/subscription` returns 410 and must not be used.
  */
 const getPayfastApiBase = () => {
   if (import.meta.env.DEV) return "";
@@ -125,82 +123,25 @@ const PayfastService = {
   },
 
   async startSubscription({
-    subscriptionId,
-    userId,
-    userEmail,
-    userName,
     plan,
-    itemDescription,
-    billingCycle,
-    amount,
-    currency = "ZAR",
-    returnPath = "/AdminSubscriptions",
-    cancelPath = "/AdminSubscriptions",
+    planSlug,
+    returnPath = "/Settings?tab=subscription",
+    cancelPath = "/Settings?tab=subscription",
     returnUrl: returnUrlAbsolute,
     cancelUrl: cancelUrlAbsolute,
-    notifyUrl
   }) {
-    const uid = String(userId || "").trim();
-    if (!uid) {
-      throw new Error("userId is required to link this PayFast payment to your account.");
+    const { createSubscriptionAndRedirect } = await import("@/services/subscriptionCheckoutService");
+    const slug = String(planSlug || plan || "").trim();
+    if (!slug) {
+      throw new Error("planSlug is required. Amounts are loaded server-side from the plans catalog.");
     }
-    const payload = {
-      subscriptionId,
-      userId: uid,
-      userEmail,
-      userName,
-      plan,
-      ...(itemDescription != null && String(itemDescription).trim() !== ""
-        ? { itemDescription: String(itemDescription).trim() }
-        : {}),
-      billingCycle,
-      amount,
-      currency,
+    return createSubscriptionAndRedirect({
+      planSlug: slug,
       returnUrl: returnUrlAbsolute || buildReturnUrl(returnPath),
       cancelUrl: cancelUrlAbsolute || buildReturnUrl(cancelPath),
-      ...(notifyUrl != null && String(notifyUrl).trim() !== ""
-        ? { notifyUrl: String(notifyUrl).trim() }
-        : {})
-    };
-
-    const session = await getStableSession();
-    const accessToken = session?.access_token;
-    if (!accessToken) {
-      throw new Error("You must be signed in to start a subscription.");
-    }
-
-    let response;
-    try {
-      response = await fetch(`${getPayfastApiBase()}/api/payfast/subscription`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload)
-      });
-    } catch (networkError) {
-      const msg = networkError?.message || String(networkError);
-      if (msg.includes("Failed to fetch") || msg.includes("Connection refused") || msg.includes("NetworkError")) {
-        const hint = import.meta.env.DEV
-          ? "Start the backend with: npm run server"
-          : "Set VITE_SERVER_URL to your payment API and ensure the server is running";
-        throw new Error(`Payment server is unavailable. ${hint}.`);
-      }
-      throw networkError;
-    }
-
-    if (!response.ok) {
-      throw await this.readApiError(response, "Failed to start Payfast subscription");
-    }
-
-    const data = await response.json();
-    if (!data?.payfastUrl || !data?.fields?.signature) {
-      throw new Error("Invalid Payfast response: missing signed fields");
-    }
-
-    submitPayfastForm(data.payfastUrl, data.fields);
+    });
   }
+
 };
 
 export default PayfastService;

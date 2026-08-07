@@ -1,6 +1,7 @@
 import {
   PLANS,
   PLAN_SLUGS,
+  PUBLIC_PLAN_SLUGS,
   base,
   getPlanBySlug,
   hasFeature,
@@ -10,23 +11,35 @@ import {
 } from "@/lib/plans.js";
 
 /**
- * PayFast `item_name` / display keys → monthly ZAR (from `PLANS`).
- * Keys match `item_name` / `custom_str2` sent at checkout.
+ * Display-only amounts — checkout must use GET /api/subscriptions/plans + POST /api/subscriptions/create.
  */
 export const plans = Object.fromEntries(
-  PLAN_SLUGS.map((slug) => [PLANS[slug].name, PLANS[slug].price])
+  [...PLAN_SLUGS, ...PUBLIC_PLAN_SLUGS]
+    .filter((slug, i, arr) => arr.indexOf(slug) === i)
+    .map((slug) => {
+      const p = PLANS[slug];
+      return p ? [p.name, p.price] : null;
+    })
+    .filter(Boolean)
 );
 
-/** Admin + DB slug → monthly ZAR (single source: `shared/plans.js`). */
+/** Admin + DB slug → ZAR (fallback only). */
 export const PLAN_DEFAULT_AMOUNT = {
   individual: PLANS.individual.price,
   sme: PLANS.sme.price,
   corporate: PLANS.corporate.price,
+  starter_monthly: PLANS.starter_monthly.price,
+  starter_annual: PLANS.starter_annual.price,
+  business_monthly: PLANS.business_monthly.price,
+  business_annual: PLANS.business_annual.price,
+  growth_monthly: PLANS.growth_monthly.price,
+  growth_annual: PLANS.growth_annual.price,
 };
 
 export {
   PLANS,
   PLAN_SLUGS,
+  PUBLIC_PLAN_SLUGS,
   base,
   getPlanBySlug,
   hasFeature,
@@ -41,7 +54,7 @@ export function payfastAmountZar(displayPlanName) {
   return typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "0.00";
 }
 
-/** UI label e.g. `R 25` */
+/** UI label e.g. `R 50` */
 export function priceLabelZar(displayPlanName) {
   const v = plans[displayPlanName];
   return typeof v === "number" && Number.isFinite(v) ? `R ${v}` : "";

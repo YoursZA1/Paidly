@@ -1,12 +1,14 @@
 /**
- * Vercel: /api/subscriptions/create | status | cancel | current
+ * Vercel: /api/subscriptions/create | status | cancel | current | plans | change
  */
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import {
   handleSubscriptionCancel,
+  handleSubscriptionChange,
   handleSubscriptionCreate,
   handleSubscriptionCurrent,
+  handleSubscriptionPlans,
   handleSubscriptionStatus,
 } from "../../server/src/billing/subscriptionApi.js";
 
@@ -31,8 +33,14 @@ export default async function handler(req, res) {
   req.body = normalizeRequestBody(req);
   const action = resolveAction(req);
 
+  if (action === "plans" && req.method === "GET") {
+    return handleSubscriptionPlans(req, res);
+  }
   if (action === "create" && req.method === "POST") {
     return handleSubscriptionCreate(req, res);
+  }
+  if (action === "change" && req.method === "POST") {
+    return handleSubscriptionChange(req, res);
   }
   if (action === "status" && req.method === "GET") {
     return handleSubscriptionStatus(req, res);
@@ -48,7 +56,9 @@ export default async function handler(req, res) {
     return res.status(404).json({
       error: "Not found",
       routes: [
+        "GET /api/subscriptions/plans",
         "POST /api/subscriptions/create",
+        "POST /api/subscriptions/change",
         "GET /api/subscriptions/status",
         "GET /api/subscriptions/current",
         "POST /api/subscriptions/cancel",

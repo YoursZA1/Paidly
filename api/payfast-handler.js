@@ -327,7 +327,12 @@ export default async function handler(req, res) {
   const route = String(req.query.__pf || "").trim();
 
   if (route === "subscription") {
-    return payfastSubscriptionCheckout(req, res);
+    return res.status(410).json({
+      error: "Gone",
+      code: "LEGACY_CHECKOUT_DISABLED",
+      message:
+        "POST /api/payfast/subscription is disabled. Use POST /api/subscriptions/create (server-priced catalog).",
+    });
   }
   if (route === "once") {
     return payfastOnceHandler(req, res);

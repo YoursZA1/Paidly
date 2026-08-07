@@ -1,11 +1,41 @@
-/** Re-export shared tier config so server code uses one import path (`./subscriptionPlans.js`). */
-export {
-  PLANS,
-  PLAN_SLUGS,
-  base,
+import {
+  FAMILY_FEATURES,
+  FAMILY_LIMITS,
+  FAMILY_TIER_RANK,
+  familyHasFeature,
+  familyForSlug,
   getPlanBySlug,
   hasFeature,
+  LEGACY_PLAN_SLUGS,
+  LEGACY_SLUG_ALIASES,
   normalizePlanSlug,
+  PLAN_FAMILIES,
+  PLAN_SLUGS,
+  PLANS,
   planIncludesFeature,
   priceForSlug,
+  PUBLIC_PLAN_SLUGS,
+  base,
 } from "../../shared/plans.js";
+import { normalizePlanFamily } from "../../shared/planFeatures.js";
+
+export {
+  FAMILY_FEATURES,
+  FAMILY_LIMITS,
+  FAMILY_TIER_RANK,
+  familyHasFeature,
+  familyForSlug,
+  getPlanBySlug,
+  hasFeature,
+  LEGACY_PLAN_SLUGS,
+  LEGACY_SLUG_ALIASES,
+  normalizePlanSlug,
+  normalizePlanFamily,
+  PLAN_FAMILIES,
+  PLAN_SLUGS,
+  PLANS,
+  planIncludesFeature,
+  priceForSlug,
+  PUBLIC_PLAN_SLUGS,
+  base,
+};

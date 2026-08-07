@@ -179,6 +179,15 @@ await verifyIndexes();
 await verifyPolicies();
 await verifyHealthEndpoints();
 
+{
+  const skipIp = String(process.env.PAYFAST_ITN_SKIP_IP_CHECK || "").trim().toLowerCase();
+  if (skipIp === "1" || skipIp === "true" || skipIp === "yes") {
+    fail("PAYFAST_ITN_SKIP_IP_CHECK must not be set in production");
+  } else {
+    ok("PAYFAST_ITN_SKIP_IP_CHECK unset (ITN IP checks enabled)");
+  }
+}
+
 if (process.exitCode && process.exitCode !== 0) {
   console.error("Production readiness checks finished with failures.");
 } else {

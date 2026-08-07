@@ -1,0 +1,10 @@
+-- Subscription catalog cutover — apply these migrations in order in the Supabase SQL Editor
+-- (or `supabase db push`). Do not rely on psql \i in the dashboard.
+--
+-- 1) supabase/migrations/20260810090000_plans_families_and_new_pricing.sql
+-- 2) supabase/migrations/20260810091000_subscription_grace_and_family_mirror.sql
+-- 3) supabase/migrations/20260810092000_apply_verified_payfast_payment_rpc.sql
+-- 4) supabase/migrations/20260810093000_plans_catalog_flip.sql
+--
+-- After apply: set Vercel PAIDLY_ENTITLEMENTS_ENFORCE=true once write-path soak looks clean.
+-- Grandfathered subscribers keep subscriptions.amount; do not UPDATE plans.amount on legacy slugs.

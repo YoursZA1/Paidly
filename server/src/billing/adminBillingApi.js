@@ -509,7 +509,7 @@ export async function buildRevenueMetrics(supabase) {
   let activeSubsResult = await supabase
     .from("subscriptions")
     .select(
-      "id, amount, billing_cycle, company_id, user_id, status, plans:plan_id(amount, billing_cycle, currency)"
+      "id, amount, billing_cycle, company_id, user_id, status, plan_family, plan_slug, plans:plan_id(amount, billing_cycle, currency, plan_family, is_legacy)"
     )
     .eq("status", SUBSCRIPTION_STATUS.ACTIVE)
     .limit(5000);
@@ -518,7 +518,7 @@ export async function buildRevenueMetrics(supabase) {
     // Fallback if embed/FK unavailable on this schema revision
     activeSubsResult = await supabase
       .from("subscriptions")
-      .select("id, amount, billing_cycle, company_id, user_id, status")
+      .select("id, amount, billing_cycle, company_id, user_id, status, plan_family, plan_slug")
       .eq("status", SUBSCRIPTION_STATUS.ACTIVE)
       .limit(5000);
   }
@@ -542,19 +542,43 @@ export async function buildRevenueMetrics(supabase) {
 
   const activeSubs = activeSubsResult.data || [];
   let mrr = 0;
+  let recognizedMrr = 0;
+  let legacyMrr = 0;
+  let newCatalogMrr = 0;
+  const mrrByFamily = { starter: 0, business: 0, growth: 0, enterprise: 0, unknown: 0 };
+  const mrrByCycle = { monthly: 0, annual: 0, other: 0 };
   const payerKeys = new Set();
   for (const sub of activeSubs) {
     const plan = Array.isArray(sub.plans) ? sub.plans[0] : sub.plans;
+    // Prefer subscription.amount (pinned at checkout / grandfather) over catalog reprice
     const amount =
-      plan?.amount != null && Number(plan.amount) > 0
-        ? Number(plan.amount)
-        : Number(sub.amount || 0);
+      sub.amount != null && Number(sub.amount) > 0
+        ? Number(sub.amount)
+        : plan?.amount != null && Number(plan.amount) > 0
+          ? Number(plan.amount)
+          : 0;
     const cycle = plan?.billing_cycle || sub.billing_cycle || "monthly";
-    mrr += amountToMonthly(amount, cycle);
+    const monthly = amountToMonthly(amount, cycle);
+    mrr += monthly;
+    recognizedMrr += monthly;
+    const family = String(sub.plan_family || plan?.plan_family || "unknown").toLowerCase();
+    if (family in mrrByFamily) mrrByFamily[family] += monthly;
+    else mrrByFamily.unknown += monthly;
+    const cyc = String(cycle).toLowerCase();
+    if (cyc === "annual" || cyc === "yearly" || cyc === "annually") mrrByCycle.annual += monthly;
+    else if (cyc === "monthly") mrrByCycle.monthly += monthly;
+    else mrrByCycle.other += monthly;
+    if (plan?.is_legacy) legacyMrr += monthly;
+    else newCatalogMrr += monthly;
     const payer = sub.company_id || sub.user_id;
     if (payer) payerKeys.add(String(payer));
   }
   mrr = roundMoney(mrr);
+  recognizedMrr = roundMoney(recognizedMrr);
+  legacyMrr = roundMoney(legacyMrr);
+  newCatalogMrr = roundMoney(newCatalogMrr);
+  for (const k of Object.keys(mrrByFamily)) mrrByFamily[k] = roundMoney(mrrByFamily[k]);
+  for (const k of Object.keys(mrrByCycle)) mrrByCycle[k] = roundMoney(mrrByCycle[k]);
   const arr = roundMoney(mrr * 12);
   const payingUsers = payerKeys.size || activeSubs.length;
   const arpu = payingUsers > 0 ? roundMoney(mrr / payingUsers) : 0;
@@ -568,6 +592,11 @@ export async function buildRevenueMetrics(supabase) {
     currency: "ZAR",
     mrr,
     arr,
+    recognizedMrr,
+    legacyMrr,
+    newCatalogMrr,
+    mrrByFamily,
+    mrrByCycle,
     todaysRevenue: todaysRevenue.amount,
     monthlyRevenue: monthlyRevenue.amount,
     failedRevenue: failedRevenue.amount,
@@ -589,11 +618,14 @@ export async function buildRevenueMetrics(supabase) {
     metrics: [
       { key: "mrr", label: "MRR", amount: mrr },
       { key: "arr", label: "ARR", amount: arr },
+      { key: "recognizedMrr", label: "Recognized MRR", amount: recognizedMrr },
+      { key: "legacyMrr", label: "Legacy MRR", amount: legacyMrr },
+      { key: "newCatalogMrr", label: "New catalog MRR", amount: newCatalogMrr },
       { key: "todaysRevenue", label: "Today's Revenue", amount: todaysRevenue.amount },
       { key: "monthlyRevenue", label: "Monthly Revenue", amount: monthlyRevenue.amount },
       { key: "failedRevenue", label: "Failed Revenue", amount: failedRevenue.amount },
       { key: "refunds", label: "Refunds", amount: refunds.amount },
-      { key: "averageRevenuePerUser", label: "Average Revenue Per User", amount: arpu },
+      { key: "arpu", label: "ARPU", amount: arpu },
     ],
   };
 }

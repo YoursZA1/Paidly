@@ -132,6 +132,7 @@ async function loadSubscriptionForItn(supabase, payload) {
 
 async function resolveExpectedAmount(supabase, sub) {
   if (sub?.amount != null && Number(sub.amount) > 0) return Number(sub.amount);
+  // Include inactive/legacy plan rows (grandfathered renewals)
   if (sub?.plan_id) {
     const { data: plan } = await supabase
       .from("plans")
@@ -145,9 +146,14 @@ async function resolveExpectedAmount(supabase, sub) {
       .from("plans")
       .select("amount")
       .eq("slug", sub.plan_slug)
-      .eq("active", true)
       .maybeSingle();
     if (plan?.amount != null) return Number(plan.amount);
+  }
+  const requireDb =
+    String(process.env.VERCEL || "").trim() !== "" ||
+    String(process.env.NODE_ENV || "").toLowerCase() === "production";
+  if (requireDb) {
+    console.warn("[payfast-itn] expected amount unresolved in production — refusing hardcoded fallback");
   }
   return null;
 }
@@ -379,46 +385,99 @@ export function createPayfastItnProductionHandler(deps) {
     }
 
     try {
-      // 10) Update subscription (canonical upsert — only after verified)
-      await upsertSubscriptionFromItn(supabase, payload, {
-        subscriptionIdHint: sub.id,
-        companyIdHint: sub.company_id,
-        planIdHint: sub.plan_id,
-        planSlugHint: sub.plan_slug,
-      });
-
-      // 11) Insert payment history
+      // 10–12) Atomic apply when RPC available; else legacy three-step path
       const phStatus = mapPaymentHistoryStatus(paymentStatusUpper);
-      const { data: phRow, error: phErr } = await supabase
-        .from("payment_history")
-        .insert({
-          subscription_id: sub.id,
-          company_id: sub.company_id,
-          payfast_payment_id: pfPaymentId || null,
-          amount: amountCheck.gross,
-          currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
-          payment_status: phStatus,
-          payment_method: sanitizeOneLine(String(payload.payment_method || "payfast"), 64) || "payfast",
-          transaction_date: new Date().toISOString(),
-          raw_itn: payload,
-        })
-        .select("id")
-        .single();
+      const useAtomic =
+        String(process.env.PAYFAST_ITN_ATOMIC_RPC || "true").toLowerCase() !== "false";
 
-      if (phErr) {
-        // Unique race → treat as duplicate success
-        if (String(phErr.code) === "23505" || /duplicate/i.test(String(phErr.message || ""))) {
-          console.warn("[payfast-itn] payment_history duplicate race", pfPaymentId);
+      let phRowId = null;
+      let appliedDuplicate = false;
+
+      if (useAtomic && phStatus === PAYMENT_HISTORY_STATUS.COMPLETED) {
+        // Still run upsert for profile sync / token fields not covered by RPC alone
+        await upsertSubscriptionFromItn(supabase, payload, {
+          subscriptionIdHint: sub.id,
+          companyIdHint: sub.company_id,
+          planIdHint: sub.plan_id,
+          planSlugHint: sub.plan_slug,
+        });
+
+        const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_verified_payfast_payment", {
+          p_subscription_id: sub.id,
+          p_pf_payment_id: pfPaymentId || null,
+          p_amount: amountCheck.gross,
+          p_currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
+          p_payment_status: phStatus,
+          p_raw: payload,
+          p_period_end: null,
+          p_status: SUBSCRIPTION_STATUS.ACTIVE,
+          p_payfast_token: sanitizeOneLine(String(payload.token || ""), 128) || null,
+          p_payfast_subscription_id:
+            sanitizeOneLine(String(payload.token || payload.pf_subscription_id || ""), 128) || null,
+          p_company_id: sub.company_id || null,
+          p_event_type: "payment_completed",
+        });
+
+        if (rpcErr) {
+          console.warn("[payfast-itn] apply_verified_payfast_payment RPC failed; falling back", rpcErr.message);
+        } else if (rpcData?.duplicate) {
+          appliedDuplicate = true;
+          phRowId = rpcData.payment_history_id || null;
         } else {
-          console.error("[payfast-itn] payment_history insert failed", phErr.message);
-          throw new Error(phErr.message);
+          phRowId = rpcData?.payment_history_id || null;
         }
       }
 
-      // 12) Event Timeline: … → Verified → Activated | Renewed
+      if (!useAtomic || !phRowId && !appliedDuplicate) {
+        await upsertSubscriptionFromItn(supabase, payload, {
+          subscriptionIdHint: sub.id,
+          companyIdHint: sub.company_id,
+          planIdHint: sub.plan_id,
+          planSlugHint: sub.plan_slug,
+        });
+
+        const { data: phRow, error: phErr } = await supabase
+          .from("payment_history")
+          .insert({
+            subscription_id: sub.id,
+            company_id: sub.company_id,
+            payfast_payment_id: pfPaymentId || null,
+            amount: amountCheck.gross,
+            currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
+            payment_status: phStatus,
+            payment_method: sanitizeOneLine(String(payload.payment_method || "payfast"), 64) || "payfast",
+            transaction_date: new Date().toISOString(),
+            raw_itn: payload,
+          })
+          .select("id")
+          .single();
+
+        if (phErr) {
+          if (String(phErr.code) === "23505" || /duplicate/i.test(String(phErr.message || ""))) {
+            console.warn("[payfast-itn] payment_history duplicate race", pfPaymentId);
+            appliedDuplicate = true;
+          } else {
+            console.error("[payfast-itn] payment_history insert failed", phErr.message);
+            throw new Error(phErr.message);
+          }
+        } else {
+          phRowId = phRow?.id || null;
+        }
+      }
+
+      if (appliedDuplicate) {
+        await logWebhook(supabase, {
+          path: "/api/payfast/itn",
+          response: { ok: true, duplicate: true },
+          status_code: 200,
+          duration_ms: Date.now() - started,
+        });
+        return res.status(200).send("OK");
+      }
+
       if (phStatus === PAYMENT_HISTORY_STATUS.COMPLETED) {
         await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PAYMENT_VERIFIED, {
-          payment_history_id: phRow?.id || null,
+          payment_history_id: phRowId,
           payfast_payment_id: pfPaymentId,
         });
         if (sub.status === SUBSCRIPTION_STATUS.ACTIVE) {
@@ -426,16 +485,15 @@ export function createPayfastItnProductionHandler(deps) {
             payfast_payment_id: pfPaymentId,
           });
         } else {
-          // First successful payment (was pending/processing/past_due/…) → Activated
           await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.ACTIVATED, {
-            payment_history_id: phRow?.id || null,
+            payment_history_id: phRowId,
             payfast_payment_id: pfPaymentId,
             previous_status: sub.status || null,
           });
         }
       } else if (phStatus === PAYMENT_HISTORY_STATUS.FAILED) {
         await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PAYMENT_FAILED, {
-          payment_history_id: phRow?.id || null,
+          payment_history_id: phRowId,
         });
       }
 

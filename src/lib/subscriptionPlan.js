@@ -9,7 +9,7 @@
  * `update()` them from the client (see `updateMyUserData` billing-field strip in `customClient.js`).
  */
 
-const FREEISH = new Set(["free", "starter", "trial", "none", ""]);
+const FREEISH = new Set(["free", "trial", "none", ""]);
 
 export function slugFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
@@ -22,7 +22,7 @@ export function slugFromProfile(profile) {
   return String(raw).trim().toLowerCase();
 }
 
-/** Any slug we treat as a paid subscription tier (includes Individual paid tier). */
+/** Any slug we treat as a paid subscription tier. */
 export function isPaidTierSlug(slug) {
   const s = String(slug || "").trim().toLowerCase();
   if (!s || FREEISH.has(s)) return false;
@@ -30,16 +30,21 @@ export function isPaidTierSlug(slug) {
     s === "individual" ||
     s === "sme" ||
     s === "corporate" ||
-    s === "professional" ||
+    s === "starter" ||
     s === "business" ||
+    s === "growth" ||
     s === "enterprise" ||
-    s === "pro"
+    s === "professional" ||
+    s === "pro" ||
+    s.startsWith("starter_") ||
+    s.startsWith("business_") ||
+    s.startsWith("growth_") ||
+    s === "enterprise_custom"
   );
 }
 
 /**
- * Marketing / upgrade UI: SME tier and above (excludes solo Individual if you want only "Pro" label).
- * Includes literal `pro` and Paidly `sme` / `corporate` / enterprise-style slugs.
+ * Marketing / upgrade UI: Business tier and above.
  */
 export function isProPlan(profile) {
   const s = slugFromProfile(profile);
@@ -49,14 +54,30 @@ export function isProPlan(profile) {
     s === "corporate" ||
     s === "professional" ||
     s === "business" ||
-    s === "enterprise"
+    s === "growth" ||
+    s === "enterprise" ||
+    s.startsWith("business_") ||
+    s.startsWith("growth_") ||
+    s === "enterprise_custom"
   );
 }
 
-/** Billing ended without an active paid subscription (see trial expiry RPC / admin). */
+/**
+ * Billing lock for Layout: expired / cancelled / suspended, or past_due outside grace.
+ * Profiles cache: subscription_status past_due may still have is_pro during grace.
+ */
 export function isSubscriptionExpired(profileOrUser) {
   if (!profileOrUser || typeof profileOrUser !== "object") return false;
-  return String(profileOrUser.subscription_status || "").toLowerCase() === "expired";
+  const st = String(profileOrUser.subscription_status || "").toLowerCase();
+  if (st === "expired" || st === "cancelled" || st === "canceled" || st === "suspended" || st === "failed") {
+    return true;
+  }
+  if (st === "past_due") {
+    // During grace, profile.is_pro may still be true (DB trigger).
+    if (profileOrUser.is_pro === true) return false;
+    return true;
+  }
+  return false;
 }
 
 /** True while subscription_status is trial and trial_ends_at is unset or still in the future. */
@@ -102,18 +123,33 @@ export function normalizePaidPackageKey(planOrProfile) {
       ? slugFromProfile(planOrProfile)
       : String(planOrProfile ?? "").trim().toLowerCase();
   if (!raw || raw === "none") return "none";
-  if (["individual", "starter", "free", "basic", "trial"].includes(raw)) {
-    return "individual";
+  if (
+    ["individual", "starter", "free", "basic", "trial"].includes(raw) ||
+    raw.startsWith("starter_")
+  ) {
+    return "starter";
   }
-  if (["sme", "professional", "business"].includes(raw)) return "sme";
-  if (["corporate", "enterprise", "pro"].includes(raw)) return "corporate";
+  if (
+    ["sme", "professional", "business", "pro"].includes(raw) ||
+    raw.startsWith("business_")
+  ) {
+    return "business";
+  }
+  if (["corporate", "growth"].includes(raw) || raw.startsWith("growth_")) {
+    return "growth";
+  }
+  if (["enterprise", "enterprise_custom"].includes(raw)) return "enterprise";
   return "none";
 }
 
 const PACKAGE_LABELS = {
-  individual: "Individual",
-  sme: "SME",
-  corporate: "Corporate",
+  starter: "Starter",
+  business: "Business",
+  growth: "Growth",
+  enterprise: "Enterprise",
+  individual: "Starter",
+  sme: "Business",
+  corporate: "Growth",
   none: "—",
 };
 

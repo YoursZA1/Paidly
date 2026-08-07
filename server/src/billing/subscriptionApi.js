@@ -12,10 +12,12 @@ import {
 import { isSafeHttpUrl, sanitizeOneLine } from "../inputValidation.js";
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
 import { requireBearerUser, resolveUserCompanyId } from "./httpAuth.js";
-import { loadActivePlan } from "./plansCatalog.js";
+import { loadActivePlan, listPublicPlans } from "./plansCatalog.js";
+import { familyForSlug } from "../subscriptionPlans.js";
 import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
 import { cancelPayfastRecurringBilling } from "./payfastRecurringApi.js";
+import { hasPaidAccessIncludingGrace } from "./entitlements.js";
 
 const PENDING_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -105,7 +107,16 @@ export async function handleSubscriptionCreate(req, res) {
   // 2) Validate plan (catalog SoR)
   const planSlug = String(body.planSlug || body.plan || body.slug || "").trim();
   const plan = await loadActivePlan(supabase, planSlug);
-  if (!plan || !Number.isFinite(plan.amount) || plan.amount <= 0) {
+  if (!plan) {
+    return json(res, 400, { error: "Invalid or inactive plan" });
+  }
+  if (plan.contact_sales) {
+    return json(res, 400, {
+      error: "Enterprise plans require contacting sales — not available for self-serve checkout",
+      code: "CONTACT_SALES",
+    });
+  }
+  if (!Number.isFinite(plan.amount) || plan.amount <= 0) {
     return json(res, 400, { error: "Invalid or inactive plan" });
   }
   if (plan.source !== "db") {
@@ -228,6 +239,7 @@ export async function handleSubscriptionCreate(req, res) {
     plan_slug: plan.slug,
     plan: plan.slug,
     current_plan: plan.slug,
+    plan_family: plan.plan_family || familyForSlug(plan.slug),
     amount: plan.amount,
     currency: plan.currency,
     billing_cycle: plan.billing_cycle,
@@ -388,9 +400,9 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
     expiresAt: expiry,
     renewAt: renewDate,
     nextBillingDate: renewDate,
-    accessGranted:
-      currentStatus === SUBSCRIPTION_STATUS.ACTIVE ||
-      currentStatus === SUBSCRIPTION_STATUS.TRIALING,
+    planFamily: sub.plan_family || familyForSlug(planSlug) || null,
+    graceEndsAt: sub.grace_ends_at || null,
+    accessGranted: hasPaidAccessIncludingGrace(sub),
   };
 }
 
@@ -414,7 +426,7 @@ export async function handleSubscriptionStatus(req, res) {
     const { data, error } = await supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, created_at, updated_at"
       )
       .eq("id", subscriptionId)
       .maybeSingle();
@@ -427,7 +439,7 @@ export async function handleSubscriptionStatus(req, res) {
     let query = supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, created_at, updated_at"
       )
       .order("updated_at", { ascending: false })
       .limit(1);
@@ -464,7 +476,7 @@ export async function handleSubscriptionCurrent(req, res) {
   let query = supabase
     .from("subscriptions")
     .select(
-      "id, status, plan_slug, plan_id, amount, currency, company_id, activated_at, next_billing_date, current_period_end, cancelled_at, created_at, updated_at"
+      "id, status, plan_slug, plan_id, plan_family, amount, currency, company_id, activated_at, next_billing_date, current_period_end, cancelled_at, grace_ends_at, created_at, updated_at"
     )
     .order("updated_at", { ascending: false })
     .limit(1);
@@ -644,4 +656,144 @@ export async function handleSubscriptionCancel(req, res) {
     },
     message: "Subscription cancelled",
   });
+}
+
+/**
+ * GET /api/subscriptions/plans — public catalog (no auth).
+ */
+export async function handleSubscriptionPlans(req, res) {
+  const supabase = getBillingSupabaseAdmin();
+  if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
+
+  const includeInactive =
+    String(req.query?.includeInactive || "").trim() === "1" ||
+    String(req.query?.includeInactive || "").toLowerCase() === "true";
+
+  const plans = await listPublicPlans(supabase, { includeInactive });
+  if (!plans.length) {
+    // Dev fallback: shared catalog only when DB empty
+    const { PUBLIC_PLAN_SLUGS, getPlanBySlug } = await import("../subscriptionPlans.js");
+    const fallback = PUBLIC_PLAN_SLUGS.map((slug) => {
+      const p = getPlanBySlug(slug);
+      if (!p) return null;
+      return {
+        id: null,
+        slug,
+        name: p.name,
+        description: "",
+        billing_cycle: p.billing_cycle || "monthly",
+        amount: p.price,
+        currency: "ZAR",
+        features: p.features,
+        plan_family: p.family,
+        contact_sales: Boolean(p.contact_sales),
+        source: "shared_fallback",
+      };
+    }).filter(Boolean);
+    return json(res, 200, { plans: fallback });
+  }
+
+  return json(res, 200, {
+    plans: plans.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      description: p.description,
+      billing_cycle: p.billing_cycle,
+      amount: p.amount,
+      currency: p.currency,
+      features: p.features,
+      plan_family: p.plan_family,
+      tier_rank: p.tier_rank,
+      interval_months: p.interval_months,
+      limits: p.limits,
+      contact_sales: p.contact_sales,
+      sort_order: p.sort_order,
+    })),
+  });
+}
+
+/**
+ * POST /api/subscriptions/change — cancel current token then create pending checkout for new plan.
+ * Body: { planSlug, returnUrl, cancelUrl, subscriptionId? }
+ */
+export async function handleSubscriptionChange(req, res) {
+  const supabase = getBillingSupabaseAdmin();
+  if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
+
+  const auth = await requireBearerUser(req, supabase);
+  if (auth.error) return json(res, auth.status, { error: auth.error });
+
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const companyId = await resolveUserCompanyId(supabase, auth.user.id);
+
+  let subscriptionId = String(body.subscriptionId || body.id || "").trim();
+  if (!subscriptionId) {
+    let q = supabase
+      .from("subscriptions")
+      .select("id, status, payfast_token, payfast_subscription_id, company_id, user_id, created_by, plan_slug")
+      .in("status", [
+        SUBSCRIPTION_STATUS.ACTIVE,
+        SUBSCRIPTION_STATUS.PAST_DUE,
+        SUBSCRIPTION_STATUS.TRIALING,
+        SUBSCRIPTION_STATUS.SUSPENDED,
+      ])
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", auth.user.id);
+    const { data: rows } = await q;
+    subscriptionId = rows?.[0]?.id || "";
+  }
+
+  if (subscriptionId) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select(
+        "id, user_id, created_by, company_id, status, payfast_token, payfast_subscription_id, plan_slug"
+      )
+      .eq("id", subscriptionId)
+      .maybeSingle();
+
+    if (sub) {
+      const owns =
+        sub.user_id === auth.user.id ||
+        sub.created_by === auth.user.id ||
+        (companyId && sub.company_id === companyId);
+      if (!owns) return json(res, 403, { error: "Forbidden" });
+
+      const pfToken = String(sub.payfast_token || sub.payfast_subscription_id || "").trim();
+      if (pfToken && sub.status !== SUBSCRIPTION_STATUS.CANCELLED) {
+        const payfastResult = await cancelPayfastRecurringBilling(pfToken);
+        if (!payfastResult.ok) {
+          const allowDbOnly =
+            String(process.env.PAYFAST_CANCEL_ALLOW_DB_ONLY || "").toLowerCase() === "true";
+          if (!allowDbOnly) {
+            return json(res, 502, {
+              error: payfastResult.error || "Failed to cancel existing PayFast billing before change",
+              code: "PAYFAST_CANCEL_FAILED",
+            });
+          }
+        }
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from("subscriptions")
+          .update({
+            status: SUBSCRIPTION_STATUS.CANCELLED,
+            cancelled_at: nowIso,
+            canceled_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", sub.id);
+        await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+          reason: "plan_change",
+          previous_plan: sub.plan_slug,
+          next_plan: body.planSlug || null,
+          by: auth.user.id,
+        });
+      }
+    }
+  }
+
+  // Reuse create flow for new pending checkout
+  return handleSubscriptionCreate(req, res);
 }

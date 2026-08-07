@@ -3,112 +3,126 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Lock, Crown } from 'lucide-react';
 import Button from '@/components/ui/button';
-import { getPlan, getPlanOrder } from '@/data/planLimits';
+import { hasFeature, familyForSlug } from '@/lib/plans';
 
-// Feature to Package mapping
-// All plans have full access to all features
-// Individual, SME, Corporate: Full feature access
-
-export const FEATURE_TIERS = {
-    // All features available to all plans
-    invoices: ['Individual', 'SME', 'Corporate'],
-    quotes: ['Individual', 'SME', 'Corporate'],
-    clients: ['Individual', 'SME', 'Corporate'],
-    services: ['Individual', 'SME', 'Corporate'],
-    notes: ['Individual', 'SME', 'Corporate'],
-    calendar: ['Individual', 'SME', 'Corporate'],
-    messages: ['Individual', 'SME', 'Corporate'],
-    recurring: ['Individual', 'SME', 'Corporate'],
-    cashflow: ['Individual', 'SME', 'Corporate'],
-    reports: ['Individual', 'SME', 'Corporate'],
-    tasks: ['Individual', 'SME', 'Corporate'],
-    accounting: ['Individual', 'SME', 'Corporate'],
-    budgets: ['Individual', 'SME', 'Corporate'],
-    payroll: ['Individual', 'SME', 'Corporate'],
-    multicurrency: ['Individual', 'SME', 'Corporate'],
-    customBranding: ['Individual', 'SME', 'Corporate'],
-    analytics: ['Individual', 'SME', 'Corporate'],
-    advancedAccounting: ['Individual', 'SME', 'Corporate'],
-    apiAccess: ['Individual', 'SME', 'Corporate'],
-    webhooks: ['Individual', 'SME', 'Corporate'],
-    advancedReports: ['Individual', 'SME', 'Corporate'],
-    dataExport: ['Individual', 'SME', 'Corporate'],
-    ssoIntegration: ['Individual', 'SME', 'Corporate'],
-    advancedSecurity: ['Individual', 'SME', 'Corporate'],
-    prioritySupport: ['Individual', 'SME', 'Corporate']
+/** Map UI feature keys → canonical plan feature keys (default-deny). */
+const FEATURE_ALIASES = {
+  invoices: 'invoices',
+  quotes: 'quotes',
+  clients: 'clients',
+  services: 'inventory',
+  notes: 'invoices',
+  calendar: 'invoices',
+  messages: 'invoices',
+  recurring: 'recurring_invoices',
+  cashflow: 'reports_basic',
+  reports: 'reports_basic',
+  tasks: 'invoices',
+  accounting: 'expenses',
+  budgets: 'expenses',
+  payroll: 'payslips',
+  multicurrency: 'invoices',
+  customBranding: 'white_label',
+  analytics: 'reports_advanced',
+  advancedAccounting: 'vat_reports',
+  apiAccess: 'api_access',
+  webhooks: 'integrations',
+  advancedReports: 'reports_advanced',
+  dataExport: 'reports_basic',
+  ssoIntegration: 'sso',
+  advancedSecurity: 'sso',
+  prioritySupport: 'support_priority',
+  inventory: 'inventory',
+  expenses: 'expenses',
+  purchase_orders: 'purchase_orders',
+  payslips: 'payslips',
+  vat_reports: 'vat_reports',
+  email_templates: 'email_templates',
+  recurring_invoices: 'recurring_invoices',
+  multi_company: 'multi_company',
+  affiliate_program: 'affiliate_program',
+  white_label: 'white_label',
+  integrations: 'integrations',
+  api_access: 'api_access',
 };
 
-const normalizePlan = (plan) => (plan || '').toString().trim().toLowerCase();
+export const FEATURE_TIERS = {
+  invoices: ['Starter', 'Business', 'Growth'],
+  quotes: ['Starter', 'Business', 'Growth'],
+  clients: ['Starter', 'Business', 'Growth'],
+  inventory: ['Business', 'Growth'],
+  recurring: ['Business', 'Growth'],
+  payroll: ['Business', 'Growth'],
+  advancedReports: ['Growth'],
+  apiAccess: ['Growth'],
+  multi_company: ['Growth'],
+};
+
+const FAMILY_LABEL = {
+  starter: 'Starter',
+  business: 'Business',
+  growth: 'Growth',
+  enterprise: 'Enterprise',
+};
 
 export const getRequiredPlan = (feature) => {
-    const planOrder = getPlanOrder();
-
-    for (const planKey of planOrder) {
-        const plan = getPlan(planKey);
-        if (!plan?.features || !(feature in plan.features)) {
-            continue;
-        }
-        if (plan.features[feature]) {
-            return plan.name || planKey;
-        }
-    }
-
-    const tiers = FEATURE_TIERS[feature];
-    if (!tiers || tiers.length === 0) return null;
-    return tiers[0];
+  const key = FEATURE_ALIASES[feature] || feature;
+  if (['invoices', 'quotes', 'clients', 'reports_basic', 'email_send'].includes(key)) {
+    return 'Starter';
+  }
+  if (
+    [
+      'inventory',
+      'expenses',
+      'purchase_orders',
+      'payslips',
+      'vat_reports',
+      'email_templates',
+      'recurring_invoices',
+      'support_priority',
+    ].includes(key)
+  ) {
+    return 'Business';
+  }
+  return 'Growth';
 };
 
 export const hasFeatureAccess = (userPlan, feature) => {
-    const planKey = normalizePlan(userPlan) || 'free';
-    const plan = getPlan(planKey);
-
-    if (plan?.features && feature in plan.features) {
-        return Boolean(plan.features[feature]);
-    }
-
-    return true;
+  const key = FEATURE_ALIASES[feature] || feature;
+  if (!key) return false;
+  return hasFeature(userPlan, key);
 };
 
 export default function FeatureGate({ children, feature, userPlan, fallback }) {
-    const hasAccess = hasFeatureAccess(userPlan, feature);
-    
-    if (hasAccess) {
-        return children;
-    }
-    
-    if (fallback) {
-        return fallback;
-    }
-    
-    const requiredPlan = getRequiredPlan(feature);
-    
-    return (
-        <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <Lock className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                Feature Locked
-            </h3>
-            <p className="text-slate-600 mb-4 max-w-sm">
-                This feature requires the <span className="font-semibold text-primary">{requiredPlan}</span> plan or higher.
-            </p>
-            <Link to={createPageUrl('Settings') + '?tab=subscription'}>
-                <Button className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00]">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Upgrade Plan
-                </Button>
-            </Link>
-        </div>
-    );
-}
+  const hasAccess = hasFeatureAccess(userPlan, feature);
 
-export function LockedNavItem({ title, requiredPlan }) {
-    return (
-        <div className="flex items-center gap-3 rounded-lg px-4 py-3 text-white/40 cursor-not-allowed">
-            <Lock className="h-4 w-4" />
-            <span>{title}</span>
-            <span className="ml-auto text-xs bg-white/10 px-2 py-0.5 rounded">{requiredPlan}</span>
-        </div>
-    );
+  if (hasAccess) {
+    return children;
+  }
+
+  if (fallback) {
+    return fallback;
+  }
+
+  const required = getRequiredPlan(feature);
+  const fam = familyForSlug(userPlan);
+  const currentLabel = fam ? FAMILY_LABEL[fam] : userPlan || 'Free';
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
+      <Lock className="h-8 w-8 text-zinc-400" aria-hidden />
+      <div>
+        <p className="font-semibold text-zinc-900 dark:text-zinc-100">Upgrade required</p>
+        <p className="mt-1 text-sm text-zinc-500">
+          {required} plan needed for this feature. You are on {currentLabel}.
+        </p>
+      </div>
+      <Button asChild>
+        <Link to={`${createPageUrl('Settings')}?tab=subscription`}>
+          <Crown className="mr-2 h-4 w-4" />
+          View plans
+        </Link>
+      </Button>
+    </div>
+  );
 }

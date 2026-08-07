@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
-import { priceLabelZar } from "@/data/paidlySubscriptionPlans";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
 import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 
@@ -18,53 +17,58 @@ const CONTACT_SALES_EMAIL = (
 
 const TIERS = [
     {
-        id: "individual",
-        name: "Individual",
-        price: priceLabelZar("Individual"),
-        normalPrice: "R 99",
-        savingsLabel: "You save R 74/mo",
-        description: "Solo operators and side projects.",
-        features: ["Unlimited invoices", "Up to 10 clients", "Basic reports", "Email support", "1 user"],
+        id: "starter_monthly",
+        name: "Starter",
+        price: "R 50",
+        normalPrice: "R 50",
+        savingsLabel: "Annual: R 500 (2 months free)",
+        description: "Freelancers & individuals.",
+        features: [
+            "Unlimited quotes & invoices",
+            "Client management",
+            "Basic reporting",
+            "Email invoices",
+            "1 user",
+            "Basic support",
+        ],
         buttonText: "Choose Plan",
         recommended: false,
     },
     {
-        id: "sme",
-        name: "SME",
-        price: priceLabelZar("SME"),
-        normalPrice: "R 199",
-        savingsLabel: "You save R 149/mo",
-        description: "Built for growing businesses that need more control and flexibility.",
+        id: "business_monthly",
+        name: "Business",
+        price: "R 150",
+        normalPrice: "R 150",
+        savingsLabel: "Annual: R 1,500 (2 months free)",
+        description: "SMEs that need inventory, payroll docs, and team seats.",
         features: [
-            "Unlimited invoices",
-            "Unlimited clients",
-            "Advanced reports",
-            "Recurring invoices",
-            "Expense tracking",
-            "Priority email support",
+            "Everything in Starter",
             "Up to 5 users",
+            "Inventory, expenses & purchase orders",
+            "Payslips & VAT reports",
+            "Recurring invoices",
+            "Priority support",
         ],
         buttonText: "Choose Plan",
         recommended: true,
     },
     {
-        id: "corporate",
-        name: "Corporate",
-        price: priceLabelZar("Corporate"),
-        normalPrice: "R 299",
-        savingsLabel: "You save R 189/mo",
-        description: "For established businesses with advanced operational needs.",
+        id: "growth_monthly",
+        name: "Growth",
+        price: "R 350",
+        normalPrice: "R 350",
+        savingsLabel: "Annual: R 3,500 (2 months free)",
+        description: "Growing businesses — unlimited team and integrations.",
         features: [
-            "Unlimited everything",
-            "Unlimited users",
-            "Custom branding",
-            "API access",
-            "Dedicated support",
-            "Advanced analytics",
-            "Payroll management",
-            "Multi-currency support",
+            "Everything in Business",
+            "Unlimited team members",
+            "Departments & approval workflows",
+            "Advanced reports & API access",
+            "Integrations & multi-company",
+            "Affiliate system",
         ],
-        buttonText: "Update to Plan",
+        buttonText: "Choose Plan",
+        recommended: false,
     },
 ];
 
@@ -247,18 +251,14 @@ export default function SubscriptionSettings() {
                                 </ul>
 
                                 {!isCurrent &&
-                                (tier.id === "individual" ||
-                                  tier.id === "sme" ||
-                                  tier.id === "corporate") ? (
+                                (tier.id === "starter_monthly" ||
+                                  tier.id === "business_monthly" ||
+                                  tier.id === "growth_monthly") ? (
                                     <PayFastSubscriptionForm
                                         planSlug={tier.id}
                                         planName={tier.name}
                                         itemDescription={tier.description}
-                                        ctaLabel={
-                                          tier.id === "corporate"
-                                            ? "Continue — Pro +"
-                                            : `Continue — ${tier.name}`
-                                        }
+                                        ctaLabel={`Continue — ${tier.name}`}
                                         submitVariant="image"
                                         className="mt-0"
                                     />
@@ -288,7 +288,7 @@ export default function SubscriptionSettings() {
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">Need a custom solution?</h3>
                 <p className="text-slate-400 mb-8 max-w-md mx-auto">
-                    Corporate plans offer unlimited users and custom features. Contact sales for a personalized quote.
+                    Enterprise plans offer custom contracts, SSO, and dedicated support. Contact sales for a personalized quote.
                 </p>
                 <Button
                     onClick={handleContactSales}

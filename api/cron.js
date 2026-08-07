@@ -42,6 +42,45 @@ function addHoursIso(baseDate, hours) {
   return d.toISOString();
 }
 
+async function expirePendingSubscriptions(supabase) {
+  const nowIso = new Date().toISOString();
+  const { data: rows, error } = await supabase
+    .from("subscriptions")
+    .select("id, company_id")
+    .eq("status", "pending")
+    .lt("pending_expires_at", nowIso)
+    .limit(200);
+  if (error) throw error;
+  let expired = 0;
+  for (const row of rows || []) {
+    const { error: upErr } = await supabase
+      .from("subscriptions")
+      .update({
+        status: "cancelled",
+        cancelled_at: nowIso,
+        canceled_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", row.id)
+      .eq("status", "pending");
+    if (!upErr) {
+      expired += 1;
+      try {
+        await supabase.from("subscription_events").insert({
+          subscription_id: row.id,
+          company_id: row.company_id || null,
+          event_type: "cancelled",
+          source: "cron",
+          details: { reason: "pending_expired" },
+        });
+      } catch {
+        /* event allow-list may reject */
+      }
+    }
+  }
+  return { scanned: (rows || []).length, expired };
+}
+
 async function insertDunningEvent(supabase, sub, eventType, attemptNo, details = {}) {
   await supabase.from("subscription_dunning_events").insert({
     subscription_id: sub.id,
@@ -84,7 +123,11 @@ async function runSubscriptionDunningBatch() {
     const nextFailures = prevFailures + 1;
     const maxRetry = Math.max(1, Number(sub.max_retry_attempts || 3));
     const retryHours = Math.max(1, Number(sub.retry_interval_hours || 24));
-    const nextStatus = nextFailures >= maxRetry ? "canceled" : "past_due";
+    const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
+    const graceEndsAt =
+      nextStatus === "past_due"
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
     const patch = {
       status: nextStatus,
       failure_count: nextFailures,
@@ -93,16 +136,18 @@ async function runSubscriptionDunningBatch() {
       updated_at: nowIso,
       next_retry_at: nextStatus === "past_due" ? addHoursIso(nowIso, retryHours) : null,
       past_due_at: nowIso,
-      canceled_at: nextStatus === "canceled" ? nowIso : null,
+      grace_ends_at: graceEndsAt,
+      canceled_at: nextStatus === "cancelled" ? nowIso : null,
+      cancelled_at: nextStatus === "cancelled" ? nowIso : null,
     };
     const { error } = await supabase.from("subscriptions").update(patch).eq("id", sub.id);
     if (!error) {
-      if (nextStatus === "canceled") canceled += 1;
+      if (nextStatus === "cancelled") canceled += 1;
       else movedToPastDue += 1;
       await insertDunningEvent(
         supabase,
         sub,
-        nextStatus === "canceled" ? "canceled_for_nonpayment" : "payment_failed",
+        nextStatus === "cancelled" ? "canceled_for_nonpayment" : "payment_failed",
         nextFailures,
         { reason: "billing_due_without_confirmed_itn" }
       );
@@ -114,7 +159,11 @@ async function runSubscriptionDunningBatch() {
     const nextFailures = prevFailures + 1;
     const maxRetry = Math.max(1, Number(sub.max_retry_attempts || 3));
     const retryHours = Math.max(1, Number(sub.retry_interval_hours || 24));
-    const nextStatus = nextFailures >= maxRetry ? "canceled" : "past_due";
+    const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
+    const graceEndsAt =
+      nextStatus === "past_due"
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
     const patch = {
       status: nextStatus,
       failure_count: nextFailures,
@@ -122,16 +171,18 @@ async function runSubscriptionDunningBatch() {
       last_payment_failure_at: nowIso,
       updated_at: nowIso,
       next_retry_at: nextStatus === "past_due" ? addHoursIso(nowIso, retryHours) : null,
-      canceled_at: nextStatus === "canceled" ? nowIso : null,
+      grace_ends_at: graceEndsAt,
+      canceled_at: nextStatus === "cancelled" ? nowIso : null,
+      cancelled_at: nextStatus === "cancelled" ? nowIso : null,
     };
     const { error } = await supabase.from("subscriptions").update(patch).eq("id", sub.id);
     if (!error) {
-      if (nextStatus === "canceled") canceled += 1;
+      if (nextStatus === "cancelled") canceled += 1;
       else retriesScheduled += 1;
       await insertDunningEvent(
         supabase,
         sub,
-        nextStatus === "canceled" ? "canceled_for_nonpayment" : "retry_scheduled",
+        nextStatus === "cancelled" ? "canceled_for_nonpayment" : "retry_scheduled",
         nextFailures,
         { reason: "retry_window_elapsed_without_confirmed_itn" }
       );
@@ -391,12 +442,24 @@ export default async function handler(req, res) {
       const supabase = getSupabaseAdmin();
       const { data, error } = await supabase.rpc("expire_all_overdue_trials");
       if (error) throw error;
+      const pending = await expirePendingSubscriptions(supabase);
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
         path: "expire-trials",
         mode: "batch",
         rows: Number(data || 0),
+        pendingExpiry: pending,
+      });
+    }
+    if (job === "subscription-pending-expiry") {
+      const supabase = getSupabaseAdmin();
+      const pending = await expirePendingSubscriptions(supabase);
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "subscription-pending-expiry",
+        ...pending,
       });
     }
     return res.status(404).json({ error: "Unknown cron job" });

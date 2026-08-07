@@ -35,12 +35,15 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 
 | Concern | Canonical route | Client entry | Notes |
 |--------|-----------------|--------------|-------|
-| **Transactional email** | `POST /api/send-email` | `IntegrationManager.Core.SendEmail` → same-origin `/api` | Implementation: `server/src/sendEmailApi.js` (Vercel re-export `api/send-email.js`). Do not call Resend from the browser. |
-| **PayFast subscription checkout** | `POST /api/payfast/subscription` | Billing UI via `backendApi` / `apiRequest` | Signed payload from server; client posts `fields` to PayFast. |
-| **PayFast one-time invoice** | `POST /api/payfast/once` | Invoice payment flows | `server/src/payfastOnceApi.js` (Express + Vercel `api/payfast/once.js` / `__pf=once`). |
-| **PayFast ITN (webhooks)** | `POST /api/payfast/webhook`, `POST /api/payfast/subscription/itn` | N/A (PayFast server) | Subscription ITN also at `/payfast/subscription/itn` on Express. **Billing columns** (`subscription_plan`, `payfast_*`) are updated only here or via admin/service role — never from `AuthManager.updateMyUserData`. |
+| **Transactional email** | `POST /api/send-email` | `IntegrationManager.Core.SendEmail` → same-origin `/api` | Do not call Resend from the browser. |
+| **Catalog** | `GET /api/subscriptions/plans` | Pricing / Settings | Public active `plans` rows (Starter/Business/Growth/Enterprise). |
+| **Subscription checkout** | `POST /api/subscriptions/create` | Settings billing / upgrade | Server loads amount from `plans`; returns signed PayFast fields. Never activates. |
+| **Change plan** | `POST /api/subscriptions/change` | Settings | Cancels existing PayFast token then creates pending checkout. |
+| **Status / cancel** | `GET /api/subscriptions/status\|current`, `POST …/cancel` | Return page / Settings | Poll after PayFast; cancel recurring + DB. |
+| **PayFast ITN** | `POST /api/payfast/itn` (+ webhook aliases) | N/A (PayFast) | Signature → IP → VALID → merchant/amount → idempotent ledger. |
+| **PayFast one-time invoice** | `POST /api/payfast/once` | Invoice payment flows | Document Engine invoice payments. |
 
-Legacy duplicate handlers in `api/payfast-handler.js` should be treated as deprecated; new work uses the routes above.
+**Deprecated:** `POST /api/payfast/subscription` returns **410** (client-priced checkout removed). Keep ITN notify URL aliases for live tokens.
 
 ## 1d. POS integrations (Square OAuth + Yoco + webhooks)
 

@@ -86,6 +86,34 @@ export default async function handler(req, res) {
     return handleCompanyInviteResend(req, res);
   }
   if (route === "team-invite") {
+    const { requireActiveBilling, resolveEntitlement } = await import(
+      "../../server/src/billing/entitlements.js"
+    );
+    const { getBillingSupabaseAdmin } = await import("../../server/src/billing/supabaseAdmin.js");
+    const { requireBearerUser } = await import("../../server/src/billing/httpAuth.js");
+    const okBilling = await requireActiveBilling(req, res);
+    if (!okBilling) return;
+    const supabase = getBillingSupabaseAdmin();
+    const auth = await requireBearerUser(req, supabase);
+    if (!auth.error && supabase) {
+      const ent = req.__paidlyEntitlement || (await resolveEntitlement(supabase, auth.user.id));
+      if (ent?.seats != null && Number.isFinite(Number(ent.seats))) {
+        const companyId = ent.companyId;
+        if (companyId) {
+          const { count } = await supabase
+            .from("memberships")
+            .select("id", { count: "exact", head: true })
+            .eq("org_id", companyId);
+          if (count != null && count >= Number(ent.seats)) {
+            return res.status(409).json({
+              error: "Seat limit reached for your plan",
+              code: "SEAT_LIMIT_REACHED",
+              seats: ent.seats,
+            });
+          }
+        }
+      }
+    }
     return handleCompanyTeamInvite(req, res);
   }
   if (route === "team-role") {
