@@ -890,6 +890,9 @@ export default async function handler(req, res) {
       "security-events",
       "system-health",
       "settings",
+      "subscriptions",
+      "revenue",
+      "failed-payments",
     ]);
     const postResources = new Set([
       "approve",

@@ -383,6 +383,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const job = String(req.query?.job || "").trim();
+
+  // Internal billing ops use their own secret check (CRON_SECRET or INTERNAL_BILLING_SECRET).
+  if (job === "internal-activate" || job === "internal-expire") {
+    const { normalizeRequestBody } = await import("../server/src/validateBody.js");
+    const {
+      handleInternalActivate,
+      handleInternalExpire,
+    } = await import("../server/src/billing/internalBillingApi.js");
+    req.body = normalizeRequestBody(req);
+    if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+    if (job === "internal-activate") return handleInternalActivate(req, res);
+    return handleInternalExpire(req, res);
+  }
+
   const authz = isAuthorized(req);
   if (authz.reason === "misconfigured") {
     return res.status(503).json({
@@ -393,7 +411,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const job = String(req.query?.job || "").trim();
   if (!job) {
     return res.status(400).json({ error: "Missing job" });
   }

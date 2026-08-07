@@ -30,15 +30,15 @@
     },
     {
       "source": "/api/drafts/get",
-      "destination": "/api/drafts?op=get"
+      "destination": "/api/system?op=drafts-get"
     },
     {
       "source": "/api/drafts/save",
-      "destination": "/api/drafts?op=save"
+      "destination": "/api/system?op=drafts-save"
     },
     {
       "source": "/api/drafts/delete",
-      "destination": "/api/drafts?op=delete"
+      "destination": "/api/system?op=drafts-delete"
     },
     {
       "source": "/api/health",
@@ -157,16 +157,12 @@
       "destination": "/api/payfast-handler?__pf=subscription%2Fitn"
     },
     {
-      "source": "/api/admin/subscriptions",
-      "destination": "/api/admin-billing-handler?__ab=subscriptions"
+      "source": "/api/internal/activate",
+      "destination": "/api/cron?job=internal-activate"
     },
     {
-      "source": "/api/admin/revenue",
-      "destination": "/api/admin-billing-handler?__ab=revenue"
-    },
-    {
-      "source": "/api/admin/failed-payments",
-      "destination": "/api/admin-billing-handler?__ab=failed-payments"
+      "source": "/api/internal/expire",
+      "destination": "/api/cron?job=internal-expire"
     },
     {
       "source": "/((?!api/).*)",
