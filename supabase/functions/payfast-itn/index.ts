@@ -6,6 +6,10 @@ const PAYFAST_PASSPHRASE = Deno.env.get("PAYFAST_PASSPHRASE") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+/**
+ * Legacy Edge Function. Canonical ITN is POST /api/payfast/itn (Vercel/Express).
+ * Do not configure this URL as the PayFast notify_url for SaaS subscriptions.
+ */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*" } });

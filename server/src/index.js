@@ -6,16 +6,6 @@ import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import {
-  assertPayfastClientNotifySameOrigin,
-  assertPayfastHttpsUrlsInLive,
-  assertPayfastPassphraseForLiveCheckout,
-  getPayfastFrequency,
-  getPayfastMerchantCredentialsFromEnv,
-  getPayfastProcessUrl,
-  logPayfastPayloadDebug,
-  signPayfastPayload,
-} from "./payfast.js";
 import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { postgrestErrorToApiBody } from "./postgrestErrorToApiBody.js";
@@ -82,8 +72,6 @@ import {
   adminRolesBodySchema,
   adminUpdateUserBodySchema,
   generatePdfHtmlBodySchema,
-  payfastOnceBodySchema,
-  payfastSubscriptionBodySchema,
   trackOpenBodySchema,
 } from "./schemas/mutationSchemas.js";
 import { sendUnexpectedError } from "./apiResponse.js";
@@ -102,6 +90,15 @@ import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
 import authRefreshHandler from "./auth/authRefreshApi.js";
 import sendEmailHandler from "./sendEmailApi.js";
 import payfastOnceHandler from "./payfastOnceApi.js";
+import {
+  handlePayfastDiagnose,
+  handleSubscriptionCancel,
+  handleSubscriptionChange,
+  handleSubscriptionCreate,
+  handleSubscriptionCurrent,
+  handleSubscriptionPlans,
+  handleSubscriptionStatus,
+} from "./billing/subscriptionApi.js";
 import { envFlag, envNumber } from "./envFlags.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
@@ -968,18 +965,6 @@ app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
 
 app.post("/api/send-email", sendEmailHandler);
 
-const PAYFAST_BILLING_CYCLES = new Set(["monthly", "annual", "quarterly", "biannual"]);
-const PAYFAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function toPayfastBooleanFlag(value, fallback = true) {
-  if (value == null) return fallback ? "true" : "false";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  const v = String(value).trim().toLowerCase();
-  if (v === "true" || v === "1" || v === "yes" || v === "on") return "true";
-  if (v === "false" || v === "0" || v === "no" || v === "off") return "false";
-  return fallback ? "true" : "false";
-}
-
 const handlePayfastSubscriptionItn = createPayfastSubscriptionItnHandler({
   supabase: supabaseAdmin,
   getClientIp,
@@ -1010,6 +995,14 @@ app.post("/api/payfast/subscription/itn", handlePayfastSubscriptionItn);
 /** Unified PayFast ITN: invoice payments (custom_str1 invoice:…) or subscriptions. */
 app.post("/api/payfast/itn", handlePayfastSubscriptionItn);
 app.post("/api/payfast/webhook", handlePayfastSubscriptionItn);
+
+app.get("/api/subscriptions/plans", handleSubscriptionPlans);
+app.post("/api/subscriptions/create", handleSubscriptionCreate);
+app.post("/api/subscriptions/change", handleSubscriptionChange);
+app.get("/api/subscriptions/status", handleSubscriptionStatus);
+app.get("/api/subscriptions/current", handleSubscriptionCurrent);
+app.post("/api/subscriptions/cancel", handleSubscriptionCancel);
+app.post("/api/subscriptions/payfast-diagnose", handlePayfastDiagnose);
 
 app.post("/api/admin/roles", async (req, res) => {
   try {

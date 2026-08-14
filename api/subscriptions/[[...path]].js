@@ -10,6 +10,7 @@ import {
   handleSubscriptionCurrent,
   handleSubscriptionPlans,
   handleSubscriptionStatus,
+  handlePayfastDiagnose,
 } from "../../server/src/billing/subscriptionApi.js";
 
 function resolveAction(req) {
@@ -50,6 +51,9 @@ export default async function handler(req, res) {
   }
   if (action === "cancel" && req.method === "POST") {
     return handleSubscriptionCancel(req, res);
+  }
+  if ((action === "payfast-diagnose" || action === "diagnose") && req.method === "POST") {
+    return handlePayfastDiagnose(req, res);
   }
 
   if (!action) {

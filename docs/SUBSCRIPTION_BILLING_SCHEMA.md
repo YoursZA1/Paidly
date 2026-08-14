@@ -294,6 +294,8 @@ Receive ITN
 
 Logic: `server/src/billing/payfastItnPipeline.js` + `payfastItnValidate.js`.
 
+Checkout signatures: `server/src/payfastCustomSignature.js` (PayFast Custom Integration order + PHP `urlencode`). See **`docs/PAYFAST_SUBSCRIPTION.md`**.
+
 ## Status / remaining
 
 | Done | Item |

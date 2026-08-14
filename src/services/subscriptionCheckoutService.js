@@ -16,19 +16,35 @@ const getApiBase = () => {
   return (import.meta.env.VITE_SERVER_URL || "").replace(/\/$/, "");
 };
 
-function submitPayfastForm(payfastUrl, fields) {
+function submitPayfastForm(payfastUrl, fields, fieldOrder) {
   const form = document.createElement("form");
   form.method = "POST";
   form.action = payfastUrl;
   form.style.display = "none";
 
-  Object.entries(fields || {}).forEach(([key, value]) => {
+  const src = fields && typeof fields === "object" ? fields : {};
+  const orderedKeys = Array.isArray(fieldOrder) && fieldOrder.length
+    ? fieldOrder.filter((k) => k !== "signature")
+    : Object.keys(src).filter((k) => k !== "signature");
+
+  orderedKeys.forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(src, key)) return;
+    const value = src[key];
+    if (value == null || String(value).trim() === "") return;
     const input = document.createElement("input");
     input.type = "hidden";
     input.name = key;
-    input.value = value == null ? "" : String(value);
+    input.value = String(value);
     form.appendChild(input);
   });
+
+  if (src.signature) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "signature";
+    input.value = String(src.signature);
+    form.appendChild(input);
+  }
 
   document.body.appendChild(form);
   form.submit();
@@ -148,7 +164,7 @@ export async function createSubscriptionAndRedirect({ planSlug }) {
   // Remember id for return-page polling — never invent status client-side
   rememberPendingSubscription(data.subscriptionId, slug);
 
-  submitPayfastForm(redirectUrl, data.fields);
+  submitPayfastForm(redirectUrl, data.fields, data.fieldOrder);
   return data;
 }
 

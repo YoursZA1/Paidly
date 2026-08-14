@@ -5,10 +5,11 @@
 import {
   assertPayfastHttpsUrlsInLive,
   assertPayfastPassphraseForLiveCheckout,
-  getPayfastMerchantCredentialsFromEnv,
+  getPayfastMerchantCredentialsForMode,
   getPayfastProcessUrl,
   logPayfastPayloadDebug,
-  signPayfastPayload,
+  payfastMode,
+  signPayfastCheckoutFields,
 } from "./payfast.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { parseBody } from "./validateBody.js";
@@ -52,7 +53,9 @@ export default async function payfastOnceHandler(req, res) {
       }
     }
 
-    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsFromEnv();
+    const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsForMode(
+      payfastMode()
+    );
     let defaultOnceNotifyUrl = returnUrl;
     try {
       if (returnUrl) {
@@ -146,35 +149,36 @@ export default async function payfastOnceHandler(req, res) {
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
 
-    const payload = {
+    const unsignedPayload = {
       merchant_id: merchantId,
       merchant_key: merchantKey,
       return_url: returnUrlResolved,
       cancel_url: cancelUrlResolved,
       notify_url: notifyUrl,
+      name_first: firstName || "",
+      name_last: lastName || "",
+      email_address: payerEmail,
       m_payment_id: `invoice-${invoice.id}-${Date.now()}`,
       amount: safeAmount.toFixed(2),
       item_name: `Invoice ${invoice.invoice_number || invoice.id}`,
       item_description: `Payment for invoice ${invoice.invoice_number || invoice.id}`,
-      name_first: firstName || "",
-      name_last: lastName || "",
-      email_address: payerEmail,
       custom_str1: `invoice:${invoice.id}`,
       custom_str2: invoice.client_id || "",
       custom_str3: invoice.org_id || "",
       custom_str4: "once",
-      custom_str5: invoice.currency || currency || "ZAR"
+      custom_str5: invoice.currency || currency || "ZAR",
     };
 
-    logPayfastPayloadDebug(payload);
-    payload.signature = signPayfastPayload(payload, passphrase);
-    if (!payload.signature) {
+    const signed = signPayfastCheckoutFields(unsignedPayload, passphrase);
+    logPayfastPayloadDebug(signed.fields, passphrase);
+    if (!signed.signature) {
       return res.status(500).json({ error: "Failed to generate PayFast signature" });
     }
 
     return res.json({
       payfastUrl: getPayfastProcessUrl(process.env.PAYFAST_MODE || "sandbox"),
-      fields: payload
+      fields: signed.fields,
+      fieldOrder: signed.fieldOrder,
     });
   } catch (err) {
     console.error("[payfast-once] Error", err);

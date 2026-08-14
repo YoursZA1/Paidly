@@ -1,13 +1,16 @@
 import {
-  assertPayfastClientNotifySameOrigin,
   assertPayfastHttpsUrlsInLive,
-  assertPayfastPassphraseForLiveCheckout,
+  assertPayfastNotifyUrlReachable,
+  assertPayfastPassphraseForSubscriptionCheckout,
   getPayfastFrequency,
   getPayfastMerchantCredentialsForMode,
   getPayfastProcessUrl,
   isPayfastKnownSandboxMerchantId,
   logPayfastPayloadDebug,
-  signPayfastPayload,
+  payfastDeployedLikeProduction,
+  payfastLiveMode,
+  resolvePayfastSubscriptionNotifyUrl,
+  signPayfastCheckoutFields,
 } from "../payfast.js";
 import { isSafeHttpUrl, sanitizeOneLine } from "../inputValidation.js";
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
@@ -18,8 +21,16 @@ import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
 import { cancelPayfastRecurringBilling } from "./payfastRecurringApi.js";
 import { hasPaidAccessIncludingGrace } from "./entitlements.js";
+import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
+import { randomBytes } from "node:crypto";
+import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
 
 const PENDING_TTL_MS = 2 * 60 * 60 * 1000;
+
+function createSubscriptionMPaymentId(userId) {
+  const unique = `${Date.now()}_${randomBytes(8).toString("hex")}`;
+  return `sub_${userId}_${unique}`;
+}
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -168,28 +179,23 @@ export async function handleSubscriptionCreate(req, res) {
     });
   }
 
-  let defaultNotify = "";
-  try {
-    defaultNotify = `${new URL(returnUrl).origin}/api/payfast/itn`;
-  } catch {
-    /* noop */
-  }
-  const notifyUrl =
-    notifyUrlBody ||
-    process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL ||
-    process.env.PAYFAST_NOTIFY_URL ||
-    defaultNotify;
-
-  if (!notifyUrl) {
+  const notifyResolved = resolvePayfastSubscriptionNotifyUrl({
+    clientNotifyUrl: notifyUrlBody,
+    returnUrl,
+  });
+  if (!notifyResolved.ok) {
     return json(res, 400, {
-      code: "PAYFAST_NOTIFY_URL_MISSING",
-      error: "Could not determine notify_url. Set PAYFAST_SUBSCRIPTION_NOTIFY_URL or pass returnUrl.",
+      code: notifyResolved.code || "PAYFAST_NOTIFY_URL_MISSING",
+      error: notifyResolved.error,
     });
   }
-
-  if (notifyUrlBody) {
-    const originOk = assertPayfastClientNotifySameOrigin(notifyUrl, returnUrl);
-    if (!originOk.ok) return json(res, 400, { error: originOk.error });
+  const notifyUrl = notifyResolved.notifyUrl;
+  const notifyReachable = assertPayfastNotifyUrlReachable(notifyUrl);
+  if (!notifyReachable.ok) {
+    return json(res, 422, {
+      code: notifyReachable.code || "PAYFAST_NOTIFY_URL_NOT_PUBLIC",
+      error: notifyReachable.error,
+    });
   }
 
   const returnUrlResolved = process.env.PAYFAST_RETURN_URL || returnUrl;
@@ -201,19 +207,31 @@ export async function handleSubscriptionCreate(req, res) {
   ]);
   if (!httpsCheckout.ok) return json(res, 400, { error: httpsCheckout.error });
 
-  const signingReady = assertPayfastPassphraseForLiveCheckout();
+  const signingReady = assertPayfastPassphraseForSubscriptionCheckout();
   if (!signingReady.ok) {
     return json(res, 422, {
       code: signingReady.code || "PAYFAST_CHECKOUT_CONFIG",
       error: signingReady.error,
     });
   }
+  if (!passphrase) {
+    return json(res, 422, {
+      code: "PAYFAST_PASSPHRASE_REQUIRED",
+      error: "PAYFAST_PASSPHRASE is empty after loading merchant credentials.",
+    });
+  }
 
-  const mPaymentId = `sub_${user.id}_${Date.now()}`;
+  const mPaymentId = createSubscriptionMPaymentId(user.id);
   const now = new Date();
   const nowIso = now.toISOString();
   const pendingExpiresAt = new Date(now.getTime() + PENDING_TTL_MS).toISOString();
   const email = String(user.email || "").trim();
+  if (!email) {
+    return json(res, 400, {
+      code: "PAYFAST_EMAIL_REQUIRED",
+      error: "A verified account email is required to start PayFast checkout.",
+    });
+  }
   const fullName = sanitizeOneLine(
     String(user.user_metadata?.full_name || user.user_metadata?.name || ""),
     200
@@ -280,19 +298,25 @@ export async function handleSubscriptionCreate(req, res) {
     m_payment_id: mPaymentId,
   });
 
-  // 4) Generate PayFast signature (server amount only)
+  // 4) Generate PayFast signature (server amount, document field order, PHP encoding)
   const billingDateResolved = nowIso.slice(0, 10);
   const cycleRaw = String(plan.billing_cycle || "monthly").toLowerCase();
   const amountFixed = Number(plan.amount).toFixed(2);
-  const payload = {
+  const nameParts = String(fullName || "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const unsignedPayload = {
     merchant_id: merchantId,
     merchant_key: merchantKey,
     return_url: returnUrlResolved,
     cancel_url: cancelUrlResolved,
     notify_url: notifyUrl,
+    name_first: nameParts[0] || "",
+    name_last: nameParts.slice(1).join(" ") || "",
+    email_address: email,
     m_payment_id: mPaymentId,
     amount: amountFixed,
-    item_name: sanitizeOneLine(plan.payfast_item_name || plan.name, 120),
+    item_name: sanitizeOneLine(plan.payfast_item_name || plan.name, 100),
     item_description: sanitizeOneLine(
       plan.description || `Paidly ${plan.name} subscription`,
       255
@@ -301,7 +325,6 @@ export async function handleSubscriptionCreate(req, res) {
     custom_str2: plan.slug,
     custom_str3: cycleRaw,
     custom_str4: plan.currency,
-    email_address: email,
     subscription_type: 1,
     billing_date: billingDateResolved,
     recurring_amount: amountFixed,
@@ -312,15 +335,19 @@ export async function handleSubscriptionCreate(req, res) {
     subscription_notify_buyer: toPayfastBooleanFlag(true, true),
   };
 
-  const sandboxUsesPassphrase =
-    String(process.env.PAYFAST_SANDBOX_USE_PASSPHRASE || "").trim().toLowerCase() === "true";
-  const signingPassphrase = mode === "live" || sandboxUsesPassphrase ? passphrase : "";
-  payload.signature = signPayfastPayload(payload, signingPassphrase);
-  if (!payload.signature) {
+  const signed = signPayfastCheckoutFields(unsignedPayload, passphrase);
+  if (!signed.signature) {
     return json(res, 500, { error: "Failed to generate PayFast signature" });
   }
 
-  logPayfastPayloadDebug(payload);
+  logPayfastPayloadDebug(signed.fields, passphrase);
+  console.log("[payfast] subscription checkout", {
+    subscriptionId: sub.id,
+    m_payment_id: mPaymentId,
+    amount: amountFixed,
+    mode,
+    notify_source: notifyResolved.source,
+  });
 
   const redirectUrl = getPayfastProcessUrl(mode);
 
@@ -330,13 +357,14 @@ export async function handleSubscriptionCreate(req, res) {
     redirect_url: redirectUrl,
   });
 
-  // 5) Return redirect URL — frontend posts `fields` to PayFast; must poll status afterward
+  // 5) Return redirect URL — frontend posts `fields` in `fieldOrder`; must poll status afterward
   return json(res, 200, {
     subscriptionId: sub.id,
     status: SUBSCRIPTION_STATUS.PENDING,
     redirectUrl,
     payfastUrl: redirectUrl,
-    fields: payload,
+    fields: signed.fields,
+    fieldOrder: signed.fieldOrder,
     plan: {
       slug: plan.slug,
       name: plan.name,
@@ -796,4 +824,92 @@ export async function handleSubscriptionChange(req, res) {
 
   // Reuse create flow for new pending checkout
   return handleSubscriptionCreate(req, res);
+}
+
+function payfastDiagnosticAllowed() {
+  const forced = String(process.env.PAYFAST_DIAGNOSTIC || "").trim().toLowerCase();
+  if (forced === "true" || forced === "1" || forced === "yes") return true;
+  if (forced === "false" || forced === "0" || forced === "no") return false;
+  if (payfastLiveMode() || payfastDeployedLikeProduction()) return false;
+  return true;
+}
+
+/**
+ * POST /api/subscriptions/payfast-diagnose
+ * Admin + sandbox/dev only. Rebuilds a checkout signature for a plan without creating a subscription.
+ * Never returns passphrase or merchant_key.
+ */
+export async function handlePayfastDiagnose(req, res) {
+  if (!payfastDiagnosticAllowed()) {
+    return json(res, 404, { error: "Not found" });
+  }
+
+  const supabase = getBillingSupabaseAdmin();
+  if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
+
+  const auth = await requireBearerUser(req, supabase);
+  if (auth.error) return json(res, auth.status, { error: auth.error });
+  const denied = await assertCallerForAdminRoute(supabase, auth.user);
+  if (denied) return json(res, denied.status, denied.body);
+
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const planSlug = String(body.planSlug || body.plan || "").trim();
+  const plan = await loadActivePlan(supabase, planSlug);
+  if (!plan || !Number.isFinite(plan.amount) || plan.amount <= 0) {
+    return json(res, 400, { error: "Invalid or inactive plan" });
+  }
+
+  const mode = String(process.env.PAYFAST_MODE || "sandbox").trim().toLowerCase();
+  const { merchantId, merchantKey, passphrase } = getPayfastMerchantCredentialsForMode(mode);
+  const notifyResolved = resolvePayfastSubscriptionNotifyUrl({
+    clientNotifyUrl: body.notifyUrl,
+    returnUrl: body.returnUrl,
+  });
+
+  const unsignedPayload = {
+    merchant_id: merchantId || "MISSING",
+    merchant_key: merchantKey || "MISSING",
+    return_url: String(body.returnUrl || "https://example.invalid/success"),
+    cancel_url: String(body.cancelUrl || "https://example.invalid/cancel"),
+    notify_url: notifyResolved.notifyUrl || "https://example.invalid/api/payfast/itn",
+    email_address: auth.user.email || "buyer@example.invalid",
+    m_payment_id: "sub_diagnostic_preview",
+    amount: Number(plan.amount).toFixed(2),
+    item_name: plan.payfast_item_name || plan.name,
+    item_description: plan.description || `Paidly ${plan.name} subscription`,
+    custom_str1: auth.user.id,
+    custom_str2: plan.slug,
+    custom_str3: String(plan.billing_cycle || "monthly").toLowerCase(),
+    custom_str4: plan.currency || "ZAR",
+    subscription_type: 1,
+    billing_date: new Date().toISOString().slice(0, 10),
+    recurring_amount: Number(plan.amount).toFixed(2),
+    frequency: getPayfastFrequency(String(plan.billing_cycle || "monthly").toLowerCase()),
+    cycles: 0,
+    subscription_notify_email: "true",
+    subscription_notify_webhook: "true",
+    subscription_notify_buyer: "true",
+  };
+
+  const diag = describePayfastCheckoutSignature(unsignedPayload, passphrase);
+  return json(res, 200, {
+    environment: mode,
+    processUrl: getPayfastProcessUrl(mode),
+    passphraseConfigured: Boolean(passphrase),
+    merchantIdConfigured: Boolean(merchantId),
+    merchantKeyConfigured: Boolean(merchantKey),
+    notifyUrl: notifyResolved.notifyUrl || null,
+    notifySource: notifyResolved.source || null,
+    includedFields: diag.includedFields,
+    encodedPairs: diag.encodedPairs,
+    paramStringRedacted: diag.paramStringRedacted,
+    signature: diag.signature,
+    passphraseAppended: diag.passphraseAppended,
+    validation: {
+      passphrase: Boolean(passphrase),
+      merchant: Boolean(merchantId && merchantKey),
+      notify: notifyResolved.ok,
+      amount: Number(plan.amount) > 0,
+    },
+  });
 }

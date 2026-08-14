@@ -37,7 +37,7 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 |--------|-----------------|--------------|-------|
 | **Transactional email** | `POST /api/send-email` | `IntegrationManager.Core.SendEmail` → same-origin `/api` | Do not call Resend from the browser. |
 | **Catalog** | `GET /api/subscriptions/plans` | Pricing / Settings | Public active `plans` rows (Starter/Business/Growth/Enterprise). |
-| **Subscription checkout** | `POST /api/subscriptions/create` | Settings billing / upgrade | Server loads amount from `plans`; returns signed PayFast fields. Never activates. |
+| **Subscription checkout** | `POST /api/subscriptions/create` | Settings billing / upgrade | Server loads amount from `plans`; returns signed PayFast fields in Custom Integration order. Never activates. Express and Vercel both serve this route. |
 | **Change plan** | `POST /api/subscriptions/change` | Settings | Cancels existing PayFast token then creates pending checkout. |
 | **Status / cancel** | `GET /api/subscriptions/status\|current`, `POST …/cancel` | Return page / Settings | Poll after PayFast; cancel recurring + DB. |
 | **PayFast ITN** | `POST /api/payfast/itn` (+ webhook aliases) | N/A (PayFast) | Signature → IP → VALID → merchant/amount → idempotent ledger. |

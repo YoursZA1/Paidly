@@ -101,10 +101,12 @@ export const resolvePayfastSubscriptionUserIdForExport = resolvePayfastSubscript
  *   companyIdHint?: string|null,
  *   planIdHint?: string|null,
  *   planSlugHint?: string|null,
+ *   userIdHint?: string|null,
  * }} [hints]
  */
 export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
-  const userId = resolvePayfastSubscriptionUserId(payload);
+  const hintedUser = String(hints.userIdHint || "").trim();
+  const userId = isValidUuid(hintedUser) ? hintedUser : resolvePayfastSubscriptionUserId(payload);
   if (!isValidUuid(userId)) return;
 
   const paymentStatus = String(payload.payment_status || "").toUpperCase();

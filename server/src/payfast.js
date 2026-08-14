@@ -1,54 +1,37 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  describePayfastCheckoutSignature,
+  generatePayFastSignature,
+  verifyPayFastITNSignature,
+} from "./payfastCustomSignature.js";
+
+export {
+  PAYFAST_CHECKOUT_FIELD_ORDER,
+  buildPayfastCheckoutParamString,
+  describePayfastCheckoutSignature,
+  generatePayFastSignature,
+  orderPayfastCheckoutFields,
+  payfastPhpUrlEncode,
+  signPayfastCheckoutFields,
+  verifyPayFastITNSignature,
+} from "./payfastCustomSignature.js";
 
 /**
- * PayFast signing string must not include undefined/null values (avoids "undefined" in URLs / runtime errors).
+ * Custom Integration checkout signature (document field order + PHP urlencode).
+ * Prefer `generatePayFastSignature` in new code.
  */
-function omitUndefinedAndNull(input) {
-  if (input == null || typeof input !== "object" || Array.isArray(input)) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(input).filter(([_, v]) => v !== undefined && v !== null)
-  );
-}
+export const signPayfastPayload = (params, passphrase) =>
+  generatePayFastSignature(params, passphrase);
 
-const serializeParams = (params) => {
-  const safe = omitUndefinedAndNull(params);
-  const entries = Object.entries(safe)
-    .filter(([, value]) => value !== "")
-    .sort(([a], [b]) => a.localeCompare(b));
-
-  return entries
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-    .join("&");
-};
-
-export const signPayfastPayload = (params, passphrase) => {
-  const data = omitUndefinedAndNull(params);
-  const baseString = serializeParams(data);
-  const signatureString = passphrase
-    ? `${baseString}&passphrase=${encodeURIComponent(String(passphrase))}`
-    : baseString;
-
-  return createHash("md5").update(signatureString).digest("hex");
-};
-
-export const verifyPayfastSignature = (payload, passphrase) => {
-  if (payload == null || typeof payload !== "object" || Array.isArray(payload)) return false;
-  if (!payload.signature) return false;
-  const { signature, ...rest } = payload;
-  const incoming = String(signature || "").trim();
-  if (!/^[a-f0-9]{32}$/i.test(incoming)) return false;
-  const expected = signPayfastPayload(rest, passphrase);
-  if (!expected || expected.length !== incoming.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(incoming, "utf8"), Buffer.from(expected, "utf8"));
-  } catch {
-    return false;
-  }
-};
+/**
+ * Verify a PayFast **ITN** signature (received-field order, not checkout attribute order).
+ */
+export const verifyPayfastSignature = (payload, passphrase, opts) =>
+  verifyPayFastITNSignature(payload, passphrase, opts);
 
 export function isPayfastPassphraseSet() {
+  const mode = payfastMode();
+  const { passphrase } = getPayfastMerchantCredentialsForMode(mode);
+  if (passphrase) return true;
   return String(process.env.PAYFAST_PASSPHRASE || "").trim().length > 0;
 }
 
@@ -78,8 +61,9 @@ export function payfastItnMustVerifyWithPassphrase() {
 }
 
 /**
- * Live checkout signing: passphrase must match PayFast dashboard unless you explicitly allow unsigned (dashboard has no passphrase).
+ * Live one-off checkout signing: passphrase must match PayFast dashboard unless you explicitly allow unsigned.
  * Set PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT=true only when your PayFast merchant profile has no security passphrase.
+ * Subscriptions always require a passphrase — use `assertPayfastPassphraseForSubscriptionCheckout`.
  */
 export function assertPayfastPassphraseForLiveCheckout() {
   if (!payfastLiveMode()) return { ok: true };
@@ -95,6 +79,20 @@ export function assertPayfastPassphraseForLiveCheckout() {
     code: "PAYFAST_PASSPHRASE_REQUIRED",
     error:
       "Set PAYFAST_PASSPHRASE in your server env to match the PayFast security passphrase, or set PAYFAST_MODE=sandbox for testing. If your PayFast account has no passphrase, set PAYFAST_LIVE_ALLOW_UNSIGNED_CHECKOUT=true.",
+  };
+}
+
+/**
+ * Recurring Billing requires a salt passphrase in sandbox and live
+ * (PayFast Custom Integration — Subscriptions).
+ */
+export function assertPayfastPassphraseForSubscriptionCheckout() {
+  if (isPayfastPassphraseSet()) return { ok: true };
+  return {
+    ok: false,
+    code: "PAYFAST_PASSPHRASE_REQUIRED",
+    error:
+      "PayFast subscriptions require PAYFAST_PASSPHRASE to match the merchant Salt Passphrase (sandbox: sandbox.payfast.co.za → Settings; live: merchant dashboard). Do not generate an unsigned subscription request.",
   };
 }
 
@@ -145,6 +143,110 @@ export function assertPayfastClientNotifySameOrigin(notifyUrl, returnUrlFromClie
   }
 }
 
+function hostnameIsLoopbackOrPrivate(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return true;
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]" || h === "0.0.0.0") {
+    return true;
+  }
+  if (h.endsWith(".local") || h.endsWith(".localhost")) return true;
+  if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(h)) return true;
+  return false;
+}
+
+/**
+ * PayFast cannot POST ITN to a private host. Live always rejects; sandbox rejects
+ * unless PAYFAST_ALLOW_LOCALHOST_NOTIFY=true (still will not receive ITNs).
+ */
+export function assertPayfastNotifyUrlReachable(notifyUrl) {
+  const raw = String(notifyUrl || "").trim();
+  if (!raw) {
+    return { ok: false, code: "PAYFAST_NOTIFY_URL_MISSING", error: "notify_url is required" };
+  }
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { ok: false, code: "PAYFAST_NOTIFY_URL_INVALID", error: "notify_url is not a valid URL" };
+  }
+  if (payfastLiveMode() && u.protocol !== "https:") {
+    return { ok: false, error: "notify_url must use https:// when PAYFAST_MODE=live" };
+  }
+  if (!hostnameIsLoopbackOrPrivate(u.hostname)) return { ok: true };
+  const allowLocal =
+    String(process.env.PAYFAST_ALLOW_LOCALHOST_NOTIFY || "").trim().toLowerCase() === "true";
+  if (!payfastLiveMode() && allowLocal) {
+    console.warn(
+      "[payfast] notify_url is localhost — PayFast cannot deliver ITNs. Set PAYFAST_SUBSCRIPTION_NOTIFY_URL to a public HTTPS URL."
+    );
+    return { ok: true, warning: "localhost_notify" };
+  }
+  return {
+    ok: false,
+    code: "PAYFAST_NOTIFY_URL_NOT_PUBLIC",
+    error:
+      "notify_url must be publicly reachable by PayFast (not localhost). Set PAYFAST_SUBSCRIPTION_NOTIFY_URL to your Vercel URL or a tunnel such as ngrok.",
+  };
+}
+
+/**
+ * Server-owned notify URL. Env wins over any client-supplied value.
+ *
+ * @param {{ clientNotifyUrl?: string|null, returnUrl?: string|null }} opts
+ */
+export function resolvePayfastSubscriptionNotifyUrl(opts = {}) {
+  const fromEnv = String(
+    process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL || process.env.PAYFAST_NOTIFY_URL || ""
+  ).trim();
+  if (fromEnv) {
+    return { ok: true, notifyUrl: fromEnv, source: "env" };
+  }
+
+  const site = String(process.env.PAYFAST_PUBLIC_SITE_URL || process.env.VITE_PAYFAST_PUBLIC_SITE_URL || "").trim();
+  if (site) {
+    try {
+      const origin = new URL(site).origin;
+      return { ok: true, notifyUrl: `${origin}/api/payfast/itn`, source: "public_site" };
+    } catch {
+      return { ok: false, error: "PAYFAST_PUBLIC_SITE_URL is invalid" };
+    }
+  }
+
+  const vercelUrl = String(process.env.VERCEL_URL || "").trim();
+  if (vercelUrl && payfastDeployedLikeProduction()) {
+    const host = vercelUrl.replace(/^https?:\/\//, "");
+    return { ok: true, notifyUrl: `https://${host}/api/payfast/itn`, source: "vercel_url" };
+  }
+
+  const clientNotify = String(opts.clientNotifyUrl || "").trim();
+  const returnUrl = String(opts.returnUrl || "").trim();
+  if (clientNotify) {
+    const originOk = assertPayfastClientNotifySameOrigin(clientNotify, returnUrl);
+    if (!originOk.ok) return { ok: false, error: originOk.error };
+    return { ok: true, notifyUrl: clientNotify, source: "client" };
+  }
+
+  if (returnUrl) {
+    try {
+      return {
+        ok: true,
+        notifyUrl: `${new URL(returnUrl).origin}/api/payfast/itn`,
+        source: "return_origin",
+      };
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return {
+    ok: false,
+    code: "PAYFAST_NOTIFY_URL_MISSING",
+    error: "Could not determine notify_url. Set PAYFAST_SUBSCRIPTION_NOTIFY_URL.",
+  };
+}
+
 export const getPayfastProcessUrl = (mode) => {
   if (mode === "live") {
     const override = String(process.env.PAYFAST_LIVE_PROCESS_URL || "").trim();
@@ -174,7 +276,12 @@ export function getPayfastMerchantCredentialsFromEnv() {
  */
 export function getPayfastMerchantCredentialsForMode(mode) {
   const m = String(mode || payfastMode() || "sandbox").trim().toLowerCase();
-  const passphrase = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
+  const sharedPass = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
+  const modePass =
+    m === "live"
+      ? String(process.env.PAYFAST_LIVE_PASSPHRASE ?? "").trim()
+      : String(process.env.PAYFAST_SANDBOX_PASSPHRASE ?? "").trim();
+  const passphrase = modePass || sharedPass;
 
   const pick = (idKey, keyKey) => {
     const merchantId = String(process.env[idKey] ?? "").trim();
@@ -200,26 +307,45 @@ export function isPayfastKnownSandboxMerchantId(merchantId) {
   return id === "10000100" || id === "10005646";
 }
 
+function payfastSignatureDebugEnabled() {
+  const v = String(process.env.PAYFAST_SIGNATURE_DEBUG || "").trim().toLowerCase();
+  if (v !== "true" && v !== "1" && v !== "yes") return false;
+  if (payfastLiveMode() || payfastDeployedLikeProduction()) return false;
+  return true;
+}
+
 /**
- * Log PayFast field map before signing. Confirms `merchant_id` / `merchant_key` in logs.
- * `merchant_key` is redacted unless `PAYFAST_LOG_FULL_MERCHANT_KEY=true` (avoid leaking secrets in Vercel logs).
+ * Safe checkout log: identifiers only. Never logs passphrase or merchant_key.
+ * Encoded param string (passphrase redacted) only when PAYFAST_SIGNATURE_DEBUG=true in sandbox.
  * @param {Record<string, unknown>} payload
+ * @param {string} [passphrase]
  */
-export function logPayfastPayloadDebug(payload) {
+export function logPayfastPayloadDebug(payload, passphrase) {
   if (payload == null || typeof payload !== "object") return;
-  const data = { ...payload };
-  const full =
-    String(process.env.PAYFAST_LOG_FULL_MERCHANT_KEY || "").trim().toLowerCase() === "true" ||
-    process.env.PAYFAST_LOG_FULL_MERCHANT_KEY === "1";
-  const logPayload = full
-    ? data
-    : {
-        ...data,
-        merchant_key: data.merchant_key
-          ? `[present, ${String(data.merchant_key).length} chars]`
-          : "[MISSING]",
-      };
-  console.log("PAYFAST DATA:", logPayload);
+  const data = /** @type {Record<string, unknown>} */ ({ ...payload });
+  const safe = {
+    merchant_id: data.merchant_id || "[MISSING]",
+    merchant_key: data.merchant_key ? "[present]" : "[MISSING]",
+    m_payment_id: data.m_payment_id || null,
+    amount: data.amount || null,
+    item_name: data.item_name || null,
+    subscription_type: data.subscription_type ?? null,
+    frequency: data.frequency ?? null,
+    cycles: data.cycles ?? null,
+    notify_url: data.notify_url || null,
+    signature: data.signature ? "[present]" : "[MISSING]",
+    mode: payfastMode(),
+  };
+  console.log("[payfast] checkout fields", safe);
+  if (payfastSignatureDebugEnabled()) {
+    const diag = describePayfastCheckoutSignature(data, passphrase || "");
+    console.log("[payfast] signature debug", {
+      includedFields: diag.includedFields,
+      paramStringRedacted: diag.paramStringRedacted,
+      signature: diag.signature,
+      passphraseAppended: diag.passphraseAppended,
+    });
+  }
 }
 
 export const getPayfastFrequency = (billingCycle) => {

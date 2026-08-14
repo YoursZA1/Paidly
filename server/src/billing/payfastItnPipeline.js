@@ -12,6 +12,7 @@
 
 import {
   assertPayfastPassphraseForItn,
+  getPayfastMerchantCredentialsForMode,
   payfastMode,
 } from "../payfast.js";
 import { getPayfastItnPayload } from "../payfastItnBody.js";
@@ -217,7 +218,7 @@ export function createPayfastItnProductionHandler(deps) {
     }
 
     // 3) Verify signature
-    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    const passphrase = getPayfastMerchantCredentialsForMode(mode).passphrase;
     const signatureValid = checkPayfastItnSignature(payload, passphrase);
     await updateItnLog(supabase, itnLogId, { signature_valid: signatureValid });
     if (!signatureValid) {
@@ -229,7 +230,11 @@ export function createPayfastItnProductionHandler(deps) {
         duration_ms: Date.now() - started,
         error: "Invalid signature",
       });
-      console.warn("[payfast-itn] Invalid signature");
+      console.warn("[payfast-itn] Invalid signature", {
+        m_payment_id: payload?.m_payment_id || null,
+        pf_payment_id: payload?.pf_payment_id || null,
+        mode,
+      });
       return res.status(400).send("Invalid signature");
     }
 
@@ -400,6 +405,7 @@ export function createPayfastItnProductionHandler(deps) {
           companyIdHint: sub.company_id,
           planIdHint: sub.plan_id,
           planSlugHint: sub.plan_slug,
+          userIdHint: sub.user_id,
         });
 
         const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_verified_payfast_payment", {
@@ -415,7 +421,7 @@ export function createPayfastItnProductionHandler(deps) {
           p_payfast_subscription_id:
             sanitizeOneLine(String(payload.token || payload.pf_subscription_id || ""), 128) || null,
           p_company_id: sub.company_id || null,
-          p_event_type: "payment_completed",
+          p_event_type: SUBSCRIPTION_EVENT_TYPE.PAYMENT_VERIFIED,
         });
 
         if (rpcErr) {
@@ -434,6 +440,7 @@ export function createPayfastItnProductionHandler(deps) {
           companyIdHint: sub.company_id,
           planIdHint: sub.plan_id,
           planSlugHint: sub.plan_slug,
+          userIdHint: sub.user_id,
         });
 
         const { data: phRow, error: phErr } = await supabase
@@ -517,7 +524,7 @@ export function createPayfastItnProductionHandler(deps) {
 
       await logWebhook(supabase, {
         path: "/api/payfast/itn",
-        response: { ok: true, subscription_id: sub.id, payment_history_id: phRow?.id || null },
+        response: { ok: true, subscription_id: sub.id, payment_history_id: phRowId || null },
         status_code: 200,
         duration_ms: Date.now() - started,
       });
