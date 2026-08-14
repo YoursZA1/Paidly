@@ -3,7 +3,7 @@
  * `billing/payfastItnPipeline.js` (production verify flow for POST /api/payfast/itn).
  *
  * Activation only after verified ITN (never from the SPA).
- * Checkout correlation: `m_payment_id` = `sub_<userId>_<ts>`, `custom_str1` = user id, `custom_str2` = plan.
+ * Checkout correlation: `m_payment_id` = `sub_<userId>_<unique>`, `custom_str1` = user id, `custom_str2` = plan.
  */
 
 import {

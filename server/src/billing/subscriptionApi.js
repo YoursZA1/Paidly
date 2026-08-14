@@ -32,6 +32,68 @@ function createSubscriptionMPaymentId(userId) {
   return `sub_${userId}_${unique}`;
 }
 
+/** Split a display name into PayFast customer fields (Custom Integration order). */
+export function splitPayfastBuyerName(fullName) {
+  const nameParts = String(fullName || "")
+    .split(/\s+/)
+    .filter(Boolean);
+  return {
+    name_first: nameParts[0] || "",
+    name_last: nameParts.slice(1).join(" ") || "",
+  };
+}
+
+/**
+ * Unsigned PayFast checkout fields for subscription create and diagnose.
+ * Customer name fields are part of the Custom Integration canonical attribute order.
+ */
+export function buildSubscriptionCheckoutUnsignedPayload({
+  merchantId,
+  merchantKey,
+  returnUrl,
+  cancelUrl,
+  notifyUrl,
+  email,
+  fullName,
+  mPaymentId,
+  userId,
+  plan,
+  billingDate,
+}) {
+  const cycleRaw = String(plan.billing_cycle || "monthly").toLowerCase();
+  const amountFixed = Number(plan.amount).toFixed(2);
+  const { name_first, name_last } = splitPayfastBuyerName(fullName);
+  return {
+    merchant_id: merchantId,
+    merchant_key: merchantKey,
+    return_url: returnUrl,
+    cancel_url: cancelUrl,
+    notify_url: notifyUrl,
+    name_first,
+    name_last,
+    email_address: email,
+    m_payment_id: mPaymentId,
+    amount: amountFixed,
+    item_name: sanitizeOneLine(plan.payfast_item_name || plan.name, 100),
+    item_description: sanitizeOneLine(
+      plan.description || `Paidly ${plan.name} subscription`,
+      255
+    ),
+    custom_str1: userId,
+    custom_str2: plan.slug,
+    custom_str3: cycleRaw,
+    custom_str4: plan.currency || "ZAR",
+    subscription_type: 1,
+    billing_date: billingDate,
+    recurring_amount: amountFixed,
+    frequency: getPayfastFrequency(cycleRaw),
+    cycles: 0,
+    subscription_notify_email: toPayfastBooleanFlag(true, true),
+    subscription_notify_webhook: toPayfastBooleanFlag(true, true),
+    subscription_notify_buyer: toPayfastBooleanFlag(true, true),
+  };
+}
+
 function json(res, status, body) {
   return res.status(status).json(body);
 }
@@ -300,40 +362,20 @@ export async function handleSubscriptionCreate(req, res) {
 
   // 4) Generate PayFast signature (server amount, document field order, PHP encoding)
   const billingDateResolved = nowIso.slice(0, 10);
-  const cycleRaw = String(plan.billing_cycle || "monthly").toLowerCase();
   const amountFixed = Number(plan.amount).toFixed(2);
-  const nameParts = String(fullName || "")
-    .split(/\s+/)
-    .filter(Boolean);
-  const unsignedPayload = {
-    merchant_id: merchantId,
-    merchant_key: merchantKey,
-    return_url: returnUrlResolved,
-    cancel_url: cancelUrlResolved,
-    notify_url: notifyUrl,
-    name_first: nameParts[0] || "",
-    name_last: nameParts.slice(1).join(" ") || "",
-    email_address: email,
-    m_payment_id: mPaymentId,
-    amount: amountFixed,
-    item_name: sanitizeOneLine(plan.payfast_item_name || plan.name, 100),
-    item_description: sanitizeOneLine(
-      plan.description || `Paidly ${plan.name} subscription`,
-      255
-    ),
-    custom_str1: user.id,
-    custom_str2: plan.slug,
-    custom_str3: cycleRaw,
-    custom_str4: plan.currency,
-    subscription_type: 1,
-    billing_date: billingDateResolved,
-    recurring_amount: amountFixed,
-    frequency: getPayfastFrequency(cycleRaw),
-    cycles: 0,
-    subscription_notify_email: toPayfastBooleanFlag(true, true),
-    subscription_notify_webhook: toPayfastBooleanFlag(true, true),
-    subscription_notify_buyer: toPayfastBooleanFlag(true, true),
-  };
+  const unsignedPayload = buildSubscriptionCheckoutUnsignedPayload({
+    merchantId,
+    merchantKey,
+    returnUrl: returnUrlResolved,
+    cancelUrl: cancelUrlResolved,
+    notifyUrl,
+    email,
+    fullName,
+    mPaymentId,
+    userId: user.id,
+    plan,
+    billingDate: billingDateResolved,
+  });
 
   const signed = signPayfastCheckoutFields(unsignedPayload, passphrase);
   if (!signed.signature) {
@@ -866,30 +908,23 @@ export async function handlePayfastDiagnose(req, res) {
     returnUrl: body.returnUrl,
   });
 
-  const unsignedPayload = {
-    merchant_id: merchantId || "MISSING",
-    merchant_key: merchantKey || "MISSING",
-    return_url: String(body.returnUrl || "https://example.invalid/success"),
-    cancel_url: String(body.cancelUrl || "https://example.invalid/cancel"),
-    notify_url: notifyResolved.notifyUrl || "https://example.invalid/api/payfast/itn",
-    email_address: auth.user.email || "buyer@example.invalid",
-    m_payment_id: "sub_diagnostic_preview",
-    amount: Number(plan.amount).toFixed(2),
-    item_name: plan.payfast_item_name || plan.name,
-    item_description: plan.description || `Paidly ${plan.name} subscription`,
-    custom_str1: auth.user.id,
-    custom_str2: plan.slug,
-    custom_str3: String(plan.billing_cycle || "monthly").toLowerCase(),
-    custom_str4: plan.currency || "ZAR",
-    subscription_type: 1,
-    billing_date: new Date().toISOString().slice(0, 10),
-    recurring_amount: Number(plan.amount).toFixed(2),
-    frequency: getPayfastFrequency(String(plan.billing_cycle || "monthly").toLowerCase()),
-    cycles: 0,
-    subscription_notify_email: "true",
-    subscription_notify_webhook: "true",
-    subscription_notify_buyer: "true",
-  };
+  const fullName = sanitizeOneLine(
+    String(auth.user.user_metadata?.full_name || auth.user.user_metadata?.name || ""),
+    200
+  );
+  const unsignedPayload = buildSubscriptionCheckoutUnsignedPayload({
+    merchantId: merchantId || "MISSING",
+    merchantKey: merchantKey || "MISSING",
+    returnUrl: String(body.returnUrl || "https://example.invalid/success"),
+    cancelUrl: String(body.cancelUrl || "https://example.invalid/cancel"),
+    notifyUrl: notifyResolved.notifyUrl || "https://example.invalid/api/payfast/itn",
+    email: auth.user.email || "buyer@example.invalid",
+    fullName,
+    mPaymentId: "sub_diagnostic_preview",
+    userId: auth.user.id,
+    plan,
+    billingDate: new Date().toISOString().slice(0, 10),
+  });
 
   const diag = describePayfastCheckoutSignature(unsignedPayload, passphrase);
   return json(res, 200, {

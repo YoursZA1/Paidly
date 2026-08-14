@@ -54,11 +54,13 @@ serve(async (req) => {
       return new Response("Invalid signature", { status: 400 });
     }
 
-    // 4. Profile id: custom_str1 = user UUID (subscription checkout); legacy custom_str2; or m_payment_id sub_<uuid>_<ts>
+    // 4. Profile id: custom_str1 = user UUID; legacy custom_str2; or m_payment_id
+    // Align with Node parseUserIdFromSubscriptionMPaymentId: sub_<uuid>_<unique>
+    // unique is digits (legacy) or `<timestamp>_<hex>` (current createSubscriptionMPaymentId).
     const UUID_RE =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const SUB_MPAY_RE =
-      /^sub_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_\d+$/i;
+      /^sub_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_(.+)$/i;
     const customStr1 = (data.custom_str1 ?? "").trim();
     const customStr2 = (data.custom_str2 ?? "").trim();
     const mPaymentId = (data.m_payment_id ?? "").trim();

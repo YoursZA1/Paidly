@@ -19,6 +19,8 @@ SPA (plan slug only)
 
 Do **not** point PayFast’s notify URL at `supabase/functions/payfast-itn`. Use `/api/payfast/itn`.
 
+`m_payment_id` is `sub_<userUuid>_<timestamp>_<hex>` (legacy: `sub_<userUuid>_<digits>`). The Node ITN parser and the legacy edge function both extract the UUID from either format. Checkout and `POST /api/subscriptions/payfast-diagnose` share the same unsigned payload builder, including `name_first` / `name_last`.
+
 ## Signature (checkout)
 
 Custom Integration checkout signatures are **not** the REST API signature.
