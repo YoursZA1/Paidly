@@ -35,7 +35,7 @@ export default function FailedPaymentsTable({
   return (
     <section className={`overflow-hidden rounded-xl border border-border bg-card ${className}`}>
       <div className="border-b border-border px-4 py-4 sm:px-6">
-        <h2 className="inline-flex items-center gap-2 font-semibold">
+        <h2 className="inline-flex items-center gap-2 text-sm font-medium">
           <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden />
           Failed Payments
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
@@ -91,12 +91,12 @@ export default function FailedPaymentsTable({
       <div className="hidden overflow-x-auto sm:block">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border text-xs text-muted-foreground">
-              <th className="px-6 py-3 text-left font-medium">Company</th>
-              <th className="px-6 py-3 text-left font-medium">Date</th>
-              <th className="px-6 py-3 text-left font-medium">Reason</th>
-              <th className="px-6 py-3 text-left font-medium">Retry Count</th>
-              <th className="px-6 py-3 text-right font-medium">Amount</th>
+            <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="px-4 py-2 text-left font-medium">Company</th>
+              <th className="px-4 py-2 text-left font-medium">Date</th>
+              <th className="px-4 py-2 text-left font-medium">Reason</th>
+              <th className="px-4 py-2 text-left font-medium">Retry Count</th>
+              <th className="px-4 py-2 text-right font-medium">Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -105,22 +105,22 @@ export default function FailedPaymentsTable({
                 key={row.id}
                 className="border-b border-border/50 transition-colors hover:bg-muted/30"
               >
-                <td className="px-6 py-3">
+                <td className="px-4 py-2.5">
                   <p className="text-sm font-medium">{row.company}</p>
                   {row.email && row.companyName ? (
                     <p className="text-xs text-muted-foreground">{row.email}</p>
                   ) : null}
                 </td>
-                <td className="px-6 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                <td className="px-4 py-2.5 text-sm text-muted-foreground whitespace-nowrap">
                   {formatDate(row.date)}
                 </td>
-                <td className="max-w-xs px-6 py-3 text-sm">
+                <td className="max-w-xs px-4 py-2.5 text-sm">
                   <span className="line-clamp-2" title={row.reason}>
                     {row.reason}
                   </span>
                 </td>
-                <td className="px-6 py-3 text-sm tabular-nums">{row.retryCount}</td>
-                <td className="px-6 py-3 text-right text-sm font-medium tabular-nums whitespace-nowrap">
+                <td className="px-4 py-2.5 text-sm tabular-nums">{row.retryCount}</td>
+                <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums whitespace-nowrap">
                   {formatZar(row.amount, row.currency)}
                 </td>
               </tr>

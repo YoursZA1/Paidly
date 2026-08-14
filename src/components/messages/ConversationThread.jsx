@@ -44,16 +44,16 @@ export default function ConversationThread({ messages, client, invoice, onSendRe
     return (
         <div className="flex flex-col h-full min-h-0 min-w-0">
             {/* Header */}
-            <div className="bg-card border-b border-border p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-                <Button variant="ghost" size="icon" onClick={onBack} aria-label="Go back to conversations">
-                    <ArrowLeft className="w-5 h-5" />
+            <div className="bg-card border-b border-border px-3 sm:px-4 py-2.5 flex items-center gap-2.5">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack} aria-label="Go back to conversations">
+                    <ArrowLeft className="w-4 h-4" />
                 </Button>
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                        <Building2 className="w-5 h-5 text-muted-foreground" />
-                        <h2 className="font-semibold text-base sm:text-lg text-foreground truncate">{client?.name}</h2>
+                    <div className="flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <h2 className="font-medium text-sm text-foreground truncate">{client?.name}</h2>
                     </div>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{client?.email}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{client?.email}</p>
                 </div>
                 {invoice && (
                     <Badge variant="outline" className="hidden sm:flex items-center gap-1 shrink-0">
@@ -74,19 +74,19 @@ export default function ConversationThread({ messages, client, invoice, onSendRe
                         >
                             <div className={`max-w-[85%] sm:max-w-[75%] ${isFromBusiness ? 'order-2' : ''}`}>
                                 <div
-                                    className={`rounded-2xl px-4 py-3 ${
+                                    className={`rounded-2xl px-3.5 py-2.5 ${
                                         isFromBusiness
                                             ? 'bg-primary text-white rounded-br-md'
                                             : 'bg-card border border-border rounded-bl-md'
                                     }`}
                                 >
                                     {message.subject && (
-                                        <p className={`font-semibold text-sm mb-1 ${isFromBusiness ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
+                                        <p className={`font-medium text-xs mb-1 ${isFromBusiness ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
                                             {message.subject}
                                         </p>
                                     )}
                                     <div 
-                                        className="whitespace-pre-wrap prose prose-sm max-w-none"
+                                        className="whitespace-pre-wrap prose prose-sm max-w-none text-sm"
                                         dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(message.content) }}
                                     />
                                     

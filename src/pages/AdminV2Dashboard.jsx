@@ -110,7 +110,7 @@ function SortTh({ col, label, sort, onSort, className = '' }) {
   const active = sort.col === col;
   return (
     <th
-      className={`px-6 py-3 text-left font-medium cursor-pointer select-none group hover:text-foreground transition-colors ${className}`}
+      className={`px-4 py-2 text-left font-medium cursor-pointer select-none group hover:text-foreground transition-colors ${className}`}
       onClick={() => onSort(col)}
     >
       <span className="inline-flex items-center gap-1">
@@ -633,7 +633,7 @@ export default function AdminV2Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        description={`Overview of your Paidly platform · ${lastUpdatedLabel}`}
+        description={`Platform overview · ${lastUpdatedLabel}`}
         onRefresh={handleRefresh}
         isRefreshing={dashboardRefreshing}
       />
@@ -657,7 +657,7 @@ export default function AdminV2Dashboard() {
       ) : null}
 
       {/* Primary stats */}
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Users"
           value={users.length}
@@ -691,7 +691,7 @@ export default function AdminV2Dashboard() {
       </div>
 
       <SubscriptionOverview
-        className="mb-6"
+        className="mb-4"
         overview={subscriptionOverview}
         isLoading={subscriptionOverviewLoading}
         errorMessage={
@@ -702,7 +702,7 @@ export default function AdminV2Dashboard() {
       />
 
       <RevenueOverview
-        className="mb-6"
+        className="mb-4"
         metrics={revenueMetrics}
         isLoading={revenueMetricsLoading}
         errorMessage={
@@ -713,7 +713,7 @@ export default function AdminV2Dashboard() {
       />
 
       {/* Document stats */}
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Quotes (platform)"
           value={totalQuotes}
@@ -734,7 +734,7 @@ export default function AdminV2Dashboard() {
       </div>
 
       {/* Activity / engagement stats */}
-      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           title="Online Now"
           value={onlineNowCount}
@@ -759,7 +759,7 @@ export default function AdminV2Dashboard() {
         />
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-start">
         <div className="min-w-0 lg:col-span-2">
           <RevenueChart
             subscriptions={subscriptions}
@@ -790,9 +790,9 @@ export default function AdminV2Dashboard() {
       </div>
 
       {/* Top Active Users leaderboard */}
-      <div className="mb-8 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-4 py-4 sm:px-6">
-          <h2 className="font-semibold inline-flex items-center gap-2">
+      <div className="mb-5 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3 sm:px-5">
+          <h2 className="text-sm font-medium inline-flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
             Top Active Users
             {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
@@ -838,7 +838,7 @@ export default function AdminV2Dashboard() {
                     <PlanBadge plan={row.plan} />
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-base font-bold tabular-nums text-foreground">
+                    <p className="text-sm font-semibold tabular-nums text-foreground">
                       {row.activity_score}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
@@ -856,13 +856,13 @@ export default function AdminV2Dashboard() {
 
       {/* Security Events */}
       <div
-        className={`mb-8 overflow-hidden rounded-xl border bg-card ${
+        className={`mb-5 overflow-hidden rounded-xl border bg-card ${
           securitySpike ? 'border-red-500/50 bg-red-500/5' : 'border-border'
         }`}
       >
-        <div className="border-b border-border px-4 py-4 sm:px-6">
+        <div className="border-b border-border px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2 className="inline-flex items-center gap-2 font-semibold">
+            <h2 className="inline-flex items-center gap-2 text-sm font-medium">
               {securitySpike ? (
                 <ShieldAlert className="h-4 w-4 text-red-500" />
               ) : (
@@ -960,7 +960,7 @@ export default function AdminV2Dashboard() {
       </Dialog>
 
       <FailedPaymentsTable
-        className="mb-8"
+        className="mb-5"
         rows={failedPayments}
         isLoading={failedPaymentsLoading}
         errorMessage={
@@ -979,9 +979,9 @@ export default function AdminV2Dashboard() {
 
         return (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="border-b border-border px-4 py-4 sm:px-6">
+            <div className="border-b border-border px-4 py-3 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold inline-flex items-center gap-2">
+                <h2 className="text-sm font-medium inline-flex items-center gap-2">
                   Recent Subscriptions
                   {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
                 </h2>
@@ -1015,7 +1015,7 @@ export default function AdminV2Dashboard() {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Amount</p>
-                      <p className="mt-1 font-medium">R {sub.amount}</p>
+                      <p className="mt-1 font-medium tabular-nums">R {Number(sub.amount ?? 0).toFixed(2)}</p>
                     </div>
                     <div className="col-span-2">
                       <p className="text-muted-foreground">Date</p>
@@ -1036,13 +1036,13 @@ export default function AdminV2Dashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th className="px-6 py-3 text-left font-medium">#</th>
-                    <th className="px-6 py-3 text-left font-medium">User</th>
-                    <th className="px-6 py-3 text-left font-medium">Plan</th>
-                    <th className="px-6 py-3 text-left font-medium">Amount</th>
-                    <th className="px-6 py-3 text-left font-medium">Status</th>
-                    <th className="px-6 py-3 text-left font-medium">Date</th>
-                    <th className="px-6 py-3 text-right font-medium">Details</th>
+                    <th className="px-4 py-2 text-left font-medium">#</th>
+                    <th className="px-4 py-2 text-left font-medium">User</th>
+                    <th className="px-4 py-2 text-left font-medium">Plan</th>
+                    <th className="px-4 py-2 text-left font-medium">Amount</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                    <th className="px-4 py-2 text-left font-medium">Date</th>
+                    <th className="px-4 py-2 text-right font-medium">Details</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1056,24 +1056,24 @@ export default function AdminV2Dashboard() {
                           if (sub.id) setDetailSubId(sub.id);
                         }}
                       >
-                        <td className="px-6 py-4 text-xs tabular-nums text-muted-foreground">{rowNum}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-muted-foreground">{rowNum}</td>
+                        <td className="px-4 py-2.5">
                           <div>
                             <p className="text-sm font-medium">{sub.user_name || 'Unknown'}</p>
                             <p className="text-xs text-muted-foreground">{sub.user_email}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2.5">
                           <PlanBadge plan={sub.plan || 'none'} />
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium">R {sub.amount}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2.5 text-sm font-medium tabular-nums">R {Number(sub.amount ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-2.5">
                           <StatusBadge status={sub.status} />
                         </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground">
+                        <td className="px-4 py-2.5 text-sm text-muted-foreground">
                           {sub.created_date ? format(new Date(sub.created_date), 'dd MMM yyyy') : '—'}
                         </td>
-                        <td className="px-6 py-4 text-right text-xs font-medium text-primary">
+                        <td className="px-4 py-2.5 text-right text-xs font-medium text-primary">
                           {sub.id ? 'View' : '—'}
                         </td>
                       </tr>
@@ -1144,11 +1144,11 @@ export default function AdminV2Dashboard() {
       />
 
       {/* User Behavior — sortable table with inline actions */}
-      <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-4 py-4 sm:px-6">
+      <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="font-semibold inline-flex items-center gap-2">
+              <h2 className="text-sm font-medium inline-flex items-center gap-2">
                 User Behavior
                 {dashboardRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
               </h2>
@@ -1280,19 +1280,19 @@ export default function AdminV2Dashboard() {
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
                 <SortTh col="full_name" label="User" sort={behaviorSort} onSort={toggleBehaviorSort} />
-                <th className="px-6 py-3 text-left font-medium">Company</th>
+                <th className="px-4 py-2 text-left font-medium">Company</th>
                 <SortTh col="plan" label="Plan" sort={behaviorSort} onSort={toggleBehaviorSort} />
-                <th className="px-6 py-3 text-left font-medium">Profile</th>
-                <th className="px-6 py-3 text-left font-medium">Email</th>
+                <th className="px-4 py-2 text-left font-medium">Profile</th>
+                <th className="px-4 py-2 text-left font-medium">Email</th>
                 <SortTh col="activity_score" label="Score" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <SortTh col="invoices_sent" label="Inv" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <SortTh col="quotes_created" label="Quot" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <SortTh col="payslips_created" label="Pay" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <SortTh col="subscription_status" label="Sub" sort={behaviorSort} onSort={toggleBehaviorSort} />
-                <th className="px-6 py-3 text-left font-medium">Next billing</th>
+                <th className="px-4 py-2 text-left font-medium">Next billing</th>
                 <SortTh col="created_date" label="Joined" sort={behaviorSort} onSort={toggleBehaviorSort} />
                 <SortTh col="last_active_at" label="Last active" sort={behaviorSort} onSort={toggleBehaviorSort} />
-                <th className="px-6 py-3 text-right font-medium">Actions</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1301,7 +1301,7 @@ export default function AdminV2Dashboard() {
                 const isSelf = row.id && row.id === adminSelfId;
                 return (
                   <tr key={stableDirectoryRowKey(row, idx)} className="border-b border-border/50 transition-colors hover:bg-muted/30">
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         {row.is_online ? (
                           <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Online now" />
@@ -1321,14 +1321,14 @@ export default function AdminV2Dashboard() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm">{row.company_name}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5 text-sm">{row.company_name}</td>
+                    <td className="px-4 py-2.5">
                       <PlanBadge plan={row.plan} />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={row.status} />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5">
                       {row.email_verified === false ? (
                         <StatusBadge status="unverified" />
                       ) : row.email_verified === true ? (
@@ -1337,22 +1337,22 @@ export default function AdminV2Dashboard() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5">
                       <span className="text-sm font-bold tabular-nums">{row.activity_score}</span>
                     </td>
-                    <td className="px-6 py-4 text-sm tabular-nums">{row.invoices_sent}</td>
-                    <td className="px-6 py-4 text-sm tabular-nums">{row.quotes_created}</td>
-                    <td className="px-6 py-4 text-sm tabular-nums">{row.payslips_created}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-2.5 text-sm tabular-nums">{row.invoices_sent}</td>
+                    <td className="px-4 py-2.5 text-sm tabular-nums">{row.quotes_created}</td>
+                    <td className="px-4 py-2.5 text-sm tabular-nums">{row.payslips_created}</td>
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={row.subscription_status} />
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                    <td className="px-4 py-2.5 text-sm text-muted-foreground">
                       {row.next_billing_date ? format(new Date(row.next_billing_date), 'dd MMM yyyy') : '—'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                    <td className="px-4 py-2.5 text-sm text-muted-foreground">
                       {row.created_date ? format(new Date(row.created_date), 'dd MMM yyyy') : '—'}
                     </td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-4 py-2.5 text-sm">
                       {row.is_online ? (
                         <span className="font-medium text-emerald-600 dark:text-emerald-400">Online now</span>
                       ) : row.last_active_at ? (
@@ -1370,7 +1370,7 @@ export default function AdminV2Dashboard() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-2.5 text-right">
                       {!isSelf ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

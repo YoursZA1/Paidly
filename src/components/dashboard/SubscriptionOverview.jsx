@@ -41,7 +41,7 @@ export default function SubscriptionOverview({
     <section className={className}>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="font-semibold text-foreground">Subscription Overview</h2>
+          <h2 className="text-sm font-medium text-foreground">Subscription overview</h2>
           <p className="text-xs text-muted-foreground">
             Live counts from subscription status (server).{" "}
             {overview?.total != null ? (

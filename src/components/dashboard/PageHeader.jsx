@@ -25,17 +25,17 @@ export default function PageHeader({
   const showActions = onRefresh || children;
 
   return (
-    <div className="responsive-page-header mb-6">
-      <div className={icon ? 'flex gap-4' : ''}>
+    <div className="responsive-page-header mb-4">
+      <div className={icon ? 'flex gap-3' : ''}>
         {icon ? (
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/40">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40">
             {icon}
           </div>
         ) : null}
         <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight font-display">{title}</h1>
           {description ? (
-            <p className={cn('text-muted-foreground', descriptionClassName ?? 'mt-1 text-xs')}>{description}</p>
+            <p className={cn('text-muted-foreground', descriptionClassName ?? 'mt-0.5 text-xs')}>{description}</p>
           ) : null}
         </div>
       </div>
@@ -46,13 +46,13 @@ export default function PageHeader({
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 min-h-9 min-w-9 md:h-10 md:w-10 md:min-h-10 md:min-w-10"
+              className="h-8 w-8 min-h-8 min-w-8"
               onClick={onRefresh}
               disabled={isRefreshing}
               title="Refresh"
               aria-label="Refresh"
             >
-              <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+              <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
             </Button>
           ) : null}
           {children}

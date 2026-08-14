@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, Client, Invoice, Quote, DocumentSend, MessageLog, InvoiceView, Payment } from '@/api/entities';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, MessageCircle, Inbox, FileText, X } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Search, MessageCircle, FileText, X, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
-import { motion } from 'framer-motion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { breakApi } from '@/api/apiClient';
 import MessageComposer from '../components/messages/MessageComposer';
@@ -14,6 +12,30 @@ import ConversationList from '../components/messages/ConversationList';
 import ConversationThread from '../components/messages/ConversationThread';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+
+function plainPreview(text, max = 140) {
+    const plain = String(text || '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!plain) return '';
+    return plain.length > max ? `${plain.slice(0, max).trim()}…` : plain;
+}
+
+function dedupeAdminInbox(rows) {
+    const seen = new Set();
+    const out = [];
+    for (const row of rows) {
+        const minute = row.sent_at
+            ? format(new Date(row.sent_at), 'yyyy-MM-dd HH:mm')
+            : '';
+        const key = row.message_id || `${row.subject}\n${row.content}\n${minute}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
+    }
+    return out;
+}
 
 export default function MessagesPage() {
     const { profile } = useAuth();
@@ -35,6 +57,7 @@ export default function MessagesPage() {
     const [selectedMessageDetail, setSelectedMessageDetail] = useState(null);
     const [adminInboxMessages, setAdminInboxMessages] = useState([]);
     const [adminInboxUnread, setAdminInboxUnread] = useState(0);
+    const [expandedAdminId, setExpandedAdminId] = useState(null);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -66,24 +89,26 @@ export default function MessagesPage() {
             if (authError || !authData?.user?.id) return;
             const { data, error } = await supabase
                 .from('message_deliveries')
-                .select('id, status, sent_at, read_at, admin_platform_messages(subject, content)')
+                .select('id, message_id, status, sent_at, read_at, admin_platform_messages(id, subject, content)')
                 .eq('user_id', authData.user.id)
                 .eq('channel', 'in_app')
                 .order('sent_at', { ascending: false })
                 .limit(20);
             if (error) throw error;
-            const rows = (data || []).map((row) => {
+            const mapped = (data || []).map((row) => {
                 const source = Array.isArray(row.admin_platform_messages)
                     ? row.admin_platform_messages[0]
                     : row.admin_platform_messages;
                 return {
                     id: row.id,
+                    message_id: row.message_id || source?.id || null,
                     subject: String(source?.subject || 'Message from Paidly'),
                     content: String(source?.content || ''),
                     sent_at: row.sent_at,
                     read: row.read_at != null || String(row.status || '').toLowerCase() === 'read',
                 };
             });
+            const rows = dedupeAdminInbox(mapped);
             if (!mountedRef.current) return;
             setAdminInboxMessages(rows);
             setAdminInboxUnread(rows.filter((row) => !row.read).length);
@@ -404,12 +429,12 @@ export default function MessagesPage() {
 
     if (isLoading) {
         return (
-            <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6">
+            <div className="w-full min-w-0 mobile-page bg-slate-50/50 dark:bg-slate-900/50 p-4 lg:p-6">
                 <div className="max-w-7xl mx-auto min-w-0">
-                    <Skeleton className="h-12 w-64 mb-8" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
-                        <Skeleton className="h-96" />
-                        <Skeleton className="h-96 lg:col-span-2" />
+                    <Skeleton className="h-8 w-40 mb-4" />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-w-0">
+                        <Skeleton className="h-72 rounded-2xl" />
+                        <Skeleton className="h-72 lg:col-span-2 rounded-2xl" />
                     </div>
                 </div>
             </div>
@@ -417,94 +442,105 @@ export default function MessagesPage() {
     }
 
     return (
-        <div className="w-full min-w-0 mobile-page bg-background p-4 sm:p-6 overflow-x-hidden">
+        <div className="w-full min-w-0 mobile-page bg-slate-50/50 dark:bg-slate-900/50 p-4 lg:p-6 overflow-x-hidden">
             <div className="max-w-7xl mx-auto min-w-0">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
-                >
-                    <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-                        <p className="text-muted-foreground">
-                            Conversations for in-app messages; Sent documents shows email opens, link clicks, and payment status.
-                        </p>
-                    </div>
-                    <Button onClick={() => setShowComposer(true)} className="bg-primary hover:bg-primary/90">
-                        <Plus className="w-4 h-4 mr-2" />
+                <div className="flex items-center justify-between gap-3 mb-4">
+                    <h1 className="text-xl font-semibold text-foreground tracking-tight font-display">Messages</h1>
+                    <Button
+                        size="sm"
+                        onClick={() => setShowComposer(true)}
+                        className="rounded-xl text-xs font-medium bg-primary hover:bg-primary/90 shadow-sm shadow-primary/20"
+                    >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
                         New Message
                     </Button>
-                </motion.div>
+                </div>
 
-                <Card className="bg-card shadow-xl border border-border mb-6">
-                    <CardHeader className="border-b border-border">
-                        <div className="flex items-center justify-between gap-3">
-                            <CardTitle className="flex items-center gap-2">
-                                <MessageCircle className="w-5 h-5" />
-                                Admin inbox
+                {adminInboxMessages.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card shadow-sm mb-4 overflow-hidden">
+                        <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <p className="text-sm font-medium text-foreground">From Paidly</p>
                                 {adminInboxUnread > 0 && (
-                                    <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                                        {adminInboxUnread} unread
+                                    <span className="text-[10px] font-medium uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                        {adminInboxUnread} new
                                     </span>
                                 )}
-                            </CardTitle>
+                            </div>
                             {adminInboxUnread > 0 ? (
-                                <Button variant="outline" size="sm" onClick={markAdminInboxRead}>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={markAdminInboxRead}
+                                    className="h-7 text-xs font-medium"
+                                >
                                     Mark all read
                                 </Button>
                             ) : null}
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-4">
-                        {adminInboxMessages.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No admin messages yet.</p>
-                        ) : (
-                            adminInboxMessages.slice(0, 3).map((row) => (
-                                <div key={row.id} className={`rounded-lg border px-3 py-2 ${row.read ? 'bg-card' : 'bg-primary/5 border-primary/30'}`}>
-                                    <p className="text-sm font-semibold text-foreground">{row.subject}</p>
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{row.content}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {row.sent_at ? format(new Date(row.sent_at), 'MMM d, yyyy HH:mm') : '—'}
-                                    </p>
-                                </div>
-                            ))
-                        )}
-                    </CardContent>
-                </Card>
+                        {adminInboxMessages.slice(0, 4).map((row) => {
+                            const expanded = expandedAdminId === row.id;
+                            return (
+                                <button
+                                    key={row.id}
+                                    type="button"
+                                    onClick={() => setExpandedAdminId(expanded ? null : row.id)}
+                                    className={`w-full text-left px-4 py-2.5 border-b border-border last:border-0 transition-colors ${
+                                        row.read ? 'hover:bg-muted/40' : 'bg-primary/5 hover:bg-primary/10'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className={`text-sm truncate ${row.read ? 'font-medium text-foreground' : 'font-semibold text-foreground'}`}>
+                                            {row.subject}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <span className="text-[11px] text-muted-foreground">
+                                                {row.sent_at ? format(new Date(row.sent_at), 'd MMM yyyy') : '—'}
+                                            </span>
+                                            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                                        </div>
+                                    </div>
+                                    {expanded ? (
+                                        <p className="text-xs text-muted-foreground whitespace-pre-wrap mt-2 leading-relaxed">
+                                            {row.content}
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                            {plainPreview(row.content)}
+                                        </p>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
 
-                <Tabs value={pageTab} onValueChange={setPageTab} className="mb-6">
-                    <TabsList className="grid w-full max-w-xs grid-cols-2">
-                        <TabsTrigger value="conversations" className="gap-2">
-                            <MessageCircle className="w-4 h-4" />
+                <Tabs value={pageTab} onValueChange={setPageTab} className="mb-4">
+                    <TabsList className="h-9 grid w-full max-w-sm grid-cols-2">
+                        <TabsTrigger value="conversations" className="gap-1.5 text-xs font-medium">
+                            <MessageCircle className="w-3.5 h-3.5" />
                             Conversations
                         </TabsTrigger>
-                        <TabsTrigger value="sent-documents" className="gap-2">
-                            <FileText className="w-4 h-4" />
+                        <TabsTrigger value="sent-documents" className="gap-1.5 text-xs font-medium">
+                            <FileText className="w-3.5 h-3.5" />
                             Sent documents
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
 
                 {pageTab === 'sent-documents' ? (
-                    <div className={`grid gap-6 min-w-0 ${selectedMessageDetail ? 'lg:grid-cols-[1fr,320px]' : ''}`}>
-                        <Card className="bg-card shadow-xl border border-border">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <FileText className="w-5 h-5" />
-                                    Sent documents
-                                </CardTitle>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    Sent → Opened (email pixel) → Clicked (CTA) → Paid.
-                                    <span className="ml-2">🟢 Paid</span>
-                                    <span className="ml-2">🔵 Clicked</span>
-                                    <span className="ml-2">🟡 Opened</span>
-                                    <span className="ml-2">⚪ Sent</span>
+                    <div className={`grid gap-4 min-w-0 ${selectedMessageDetail ? 'lg:grid-cols-[1fr,280px]' : ''}`}>
+                        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 border-b border-border">
+                                <h2 className="text-sm font-medium text-foreground">Sent documents</h2>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Sent → opened → clicked → paid
                                 </p>
-                            </CardHeader>
-                            <CardContent className="overflow-x-auto mobile-scroll-x min-w-0">
+                            </div>
+                            <div className="p-4 overflow-x-auto mobile-scroll-x min-w-0">
                                 {sentDocumentsRows.length === 0 ? (
-                                    <p className="text-muted-foreground py-8 text-center">
-                                        No sent documents yet. Send an invoice via Email or WhatsApp to see them here.
+                                    <p className="text-sm text-muted-foreground py-10 text-center">
+                                        No sent documents yet. Send an invoice via email or WhatsApp to see them here.
                                     </p>
                                 ) : (
                                     <>
@@ -515,43 +551,43 @@ export default function MessagesPage() {
                                                     key={row.id}
                                                     type="button"
                                                     onClick={() => setSelectedMessageDetail(row.detail)}
-                                                    className={`w-full text-left rounded-xl border border-border/60 bg-card px-4 py-3 hover:bg-muted/40 active:bg-muted/60 transition-colors ${
-                                                        selectedMessageDetail?.rowId === row.id ? 'ring-2 ring-primary/40' : ''
+                                                    className={`w-full text-left rounded-xl border border-border/60 bg-card px-3.5 py-2.5 hover:bg-muted/40 active:bg-muted/60 transition-colors ${
+                                                        selectedMessageDetail?.rowId === row.id ? 'ring-1 ring-primary/30' : ''
                                                     }`}
                                                 >
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0">
-                                                            <p className="font-semibold text-foreground truncate">{row.document}</p>
-                                                            <p className="text-xs text-muted-foreground truncate">{row.client} • {row.channel}</p>
+                                                            <p className="text-sm font-medium text-foreground truncate">{row.document}</p>
+                                                            <p className="text-[11px] text-muted-foreground truncate">{row.client} • {row.channel}</p>
                                                         </div>
-                                                        <div className="shrink-0 text-xs text-muted-foreground">
-                                                            {row.sentAt ? format(row.sentAt, 'MMM d') : '—'}
+                                                        <div className="shrink-0 text-[11px] text-muted-foreground">
+                                                            {row.sentAt ? format(row.sentAt, 'd MMM') : '—'}
                                                         </div>
                                                     </div>
-                                                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                                                        <span className="text-muted-foreground">{row.sentIndicator} Sent</span>
-                                                        <span className="text-muted-foreground">{row.openedIndicator || '—'} Opened</span>
-                                                        <span className="text-muted-foreground">{row.clickedIndicator || '—'} Clicked</span>
-                                                        <span className="text-muted-foreground">{row.paidIndicator || '—'} Paid</span>
+                                                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                                        <span>{row.sentIndicator} Sent</span>
+                                                        <span>{row.openedIndicator || '—'} Opened</span>
+                                                        <span>{row.clickedIndicator || '—'} Clicked</span>
+                                                        <span>{row.paidIndicator || '—'} Paid</span>
                                                     </div>
                                                 </button>
                                             ))}
                                         </div>
 
                                         {/* Desktop/tablet: table */}
-                                        <table className="hidden sm:table w-full min-w-[640px] text-sm border-collapse">
+                                        <table className="hidden sm:table w-full min-w-[640px] text-left">
                                             <thead>
-                                                <tr className="border-b border-border">
-                                                    <th className="text-left py-3 px-2 font-medium">Document</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Client</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Channel</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Sent</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Opened</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Clicked</th>
-                                                    <th className="text-left py-3 px-2 font-medium">Paid</th>
+                                                <tr className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider border-b border-border">
+                                                    <th className="pb-3 pr-2">Document</th>
+                                                    <th className="pb-3 pr-2">Client</th>
+                                                    <th className="pb-3 pr-2">Channel</th>
+                                                    <th className="pb-3 pr-2">Sent</th>
+                                                    <th className="pb-3 pr-2">Opened</th>
+                                                    <th className="pb-3 pr-2">Clicked</th>
+                                                    <th className="pb-3">Paid</th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="text-sm text-muted-foreground">
                                                 {sentDocumentsRows.map((row) => (
                                                     <tr
                                                         key={row.id}
@@ -559,107 +595,98 @@ export default function MessagesPage() {
                                                         tabIndex={0}
                                                         onClick={() => setSelectedMessageDetail(row.detail)}
                                                         onKeyDown={(e) => e.key === 'Enter' && setSelectedMessageDetail(row.detail)}
-                                                        className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer ${selectedMessageDetail?.rowId === row.id ? 'bg-muted/70' : ''}`}
+                                                        className={`border-b border-border hover:bg-muted/50 cursor-pointer ${selectedMessageDetail?.rowId === row.id ? 'bg-muted/70' : ''}`}
                                                     >
-                                                        <td className="py-2.5 px-2">{row.document}</td>
-                                                        <td className="py-2.5 px-2">{row.client}</td>
-                                                        <td className="py-2.5 px-2">{row.channel}</td>
-                                                        <td className="py-2.5 px-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
-                                                        <td className="py-2.5 px-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
-                                                        <td className="py-2.5 px-2">{row.clickedIndicator ? `${row.clickedIndicator} ` : ''}{row.clicked}</td>
-                                                        <td className="py-2.5 px-2">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
+                                                        <td className="py-3 pr-2 font-medium text-foreground">{row.document}</td>
+                                                        <td className="py-3 pr-2">{row.client}</td>
+                                                        <td className="py-3 pr-2">{row.channel}</td>
+                                                        <td className="py-3 pr-2">{row.sentIndicator ? `${row.sentIndicator} ` : ''}{row.sent}</td>
+                                                        <td className="py-3 pr-2">{row.openedIndicator ? `${row.openedIndicator} ` : ''}{row.opened}</td>
+                                                        <td className="py-3 pr-2">{row.clickedIndicator ? `${row.clickedIndicator} ` : ''}{row.clicked}</td>
+                                                        <td className="py-3">{row.paidIndicator ? `${row.paidIndicator} ` : ''}{row.paid}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </>
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                         {selectedMessageDetail && (
-                            <Card className="bg-card shadow-xl border border-border h-fit sm:sticky sm:top-4">
-                                <CardHeader className="border-b border-border flex flex-row items-start justify-between space-y-0 gap-2">
-                                    <div>
-                                        <CardTitle className="text-lg">{selectedMessageDetail.documentLabel}</CardTitle>
-                                        <p className="text-sm text-muted-foreground">
+                            <div className="rounded-2xl border border-border bg-card shadow-sm h-fit sm:sticky sm:top-4 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <h3 className="text-sm font-medium text-foreground truncate">{selectedMessageDetail.documentLabel}</h3>
+                                        <p className="text-[11px] text-muted-foreground">
                                             Sent via {selectedMessageDetail.channelLabel}
                                         </p>
                                     </div>
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="shrink-0 h-8 w-8"
+                                        className="shrink-0 h-7 w-7"
                                         onClick={() => setSelectedMessageDetail(null)}
                                         aria-label="Close detail"
                                     >
-                                        <X className="h-4 w-4" />
+                                        <X className="h-3.5 w-3.5" />
                                     </Button>
-                                </CardHeader>
-                                <CardContent className="pt-4 space-y-3">
-                                    <p className="text-sm">
+                                </div>
+                                <div className="px-4 py-3 space-y-2 text-xs">
+                                    <p>
                                         <span className="text-muted-foreground">Sent: </span>
-                                        {selectedMessageDetail.sentAt ? format(selectedMessageDetail.sentAt, 'MMMM d') : '—'}
+                                        {selectedMessageDetail.sentAt ? format(selectedMessageDetail.sentAt, 'd MMMM') : '—'}
                                     </p>
-                                    <p className="text-sm">
+                                    <p>
                                         <span className="text-muted-foreground">Opened: </span>
-                                        {selectedMessageDetail.openedAt ? format(selectedMessageDetail.openedAt, 'MMMM d, HH:mm') : '—'}
+                                        {selectedMessageDetail.openedAt ? format(selectedMessageDetail.openedAt, 'd MMMM, HH:mm') : '—'}
                                     </p>
-                                    <p className="text-sm">
+                                    <p>
                                         <span className="text-muted-foreground">Link clicked: </span>
-                                        {selectedMessageDetail.clickedAt ? format(selectedMessageDetail.clickedAt, 'MMMM d, HH:mm') : '—'}
+                                        {selectedMessageDetail.clickedAt ? format(selectedMessageDetail.clickedAt, 'd MMMM, HH:mm') : '—'}
                                     </p>
-                                    <p className="text-sm">
+                                    <p>
                                         <span className="text-muted-foreground">Paid: </span>
-                                        {selectedMessageDetail.paymentDate ? format(selectedMessageDetail.paymentDate, 'MMMM d') : '—'}
+                                        {selectedMessageDetail.paymentDate ? format(selectedMessageDetail.paymentDate, 'd MMMM') : '—'}
                                     </p>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         )}
                     </div>
                 ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-w-0 lg:min-h-[min(70vh,calc(100dvh-14rem))]">
                     {/* Conversations List */}
-                    <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className={`${selectedConversation ? 'hidden lg:block' : ''}`}
-                    >
-                        <Card className="bg-card shadow-xl border border-border">
-                            <CardHeader className="border-b border-border">
-                                <div className="flex items-center justify-between mb-4">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <MessageCircle className="w-5 h-5" />
-                                        Conversations
-                                    </CardTitle>
+                    <div className={`${selectedConversation ? 'hidden lg:block' : ''} min-h-0`}>
+                        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col h-full">
+                            <div className="px-4 py-3 border-b border-border space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium text-foreground">Inbox</p>
                                     {unreadCount > 0 && (
-                                        <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
+                                        <span className="text-[10px] font-medium uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                                             {unreadCount} new
                                         </span>
                                     )}
                                 </div>
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                                     <Input
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         placeholder="Search conversations..."
-                                        className="pl-10"
+                                        className="pl-9 h-8 text-sm rounded-xl bg-muted border-none"
                                     />
                                 </div>
-                                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                                    <TabsList className="w-full">
-                                        <TabsTrigger value="all" className="flex-1">
-                                            <Inbox className="w-4 h-4 mr-2" />
+                                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                                    <TabsList className="w-full h-8">
+                                        <TabsTrigger value="all" className="flex-1 text-xs font-medium h-7">
                                             All
                                         </TabsTrigger>
-                                        <TabsTrigger value="unread" className="flex-1">
-                                            <MessageCircle className="w-4 h-4 mr-2" />
+                                        <TabsTrigger value="unread" className="flex-1 text-xs font-medium h-7">
                                             Unread
                                         </TabsTrigger>
                                     </TabsList>
                                 </Tabs>
-                            </CardHeader>
-                            <CardContent>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-y-auto p-2">
                                 <ConversationList
                                     conversations={filteredConversations}
                                     clients={clients}
@@ -668,20 +695,16 @@ export default function MessagesPage() {
                                     onDelete={handleDeleteConversation}
                                     selectedId={selectedConversation ? selectedConversation.client_id + (selectedConversation.invoice_id || '') : null}
                                 />
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* Conversation Thread */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className={`lg:col-span-2 ${!selectedConversation ? 'hidden lg:block' : ''}`}
-                    >
-                        <Card className={`bg-card shadow-xl border border-border flex flex-col min-h-0 w-full min-w-0 overflow-hidden ${
+                    <div className={`lg:col-span-2 ${!selectedConversation ? 'hidden lg:block' : ''} min-h-0`}>
+                        <div className={`rounded-2xl border border-border bg-card shadow-sm flex flex-col min-h-0 w-full min-w-0 overflow-hidden ${
                             selectedConversation
-                                ? "h-[min(70vh,calc(100dvh-10rem))] lg:h-[70vh]"
-                                : "min-h-[240px] lg:h-[70vh]"
+                                ? "h-[min(70vh,calc(100dvh-10rem))] lg:h-full"
+                                : "min-h-[220px] lg:h-full"
                         }`}>
                             {selectedConversation ? (
                                 <ConversationThread
@@ -694,14 +717,14 @@ export default function MessagesPage() {
                                     onBack={() => setSelectedConversation(null)}
                                 />
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                                    <MessageCircle className="w-16 h-16 mb-4 opacity-50" />
-                                    <p className="text-lg font-medium">Select a conversation</p>
-                                    <p className="text-sm">Choose a conversation from the list to view messages</p>
+                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4">
+                                    <MessageCircle className="w-8 h-8 mb-2 opacity-40" />
+                                    <p className="text-sm font-medium">Select a conversation</p>
+                                    <p className="text-xs mt-1 text-center">Choose a thread from the list to view messages.</p>
                                 </div>
                             )}
-                        </Card>
-                    </motion.div>
+                        </div>
+                    </div>
                 </div>
                 )}
 

@@ -23,17 +23,22 @@ export const plans = Object.fromEntries(
     .filter(Boolean)
 );
 
-/** Admin + DB slug → ZAR (fallback only). */
+/** Admin + DB slug → ZAR (fallback only). New catalog monthly list prices; legacy slugs stay grandfathered. */
 export const PLAN_DEFAULT_AMOUNT = {
-  individual: PLANS.individual.price,
-  sme: PLANS.sme.price,
-  corporate: PLANS.corporate.price,
+  starter: PLANS.starter_monthly.price,
+  business: PLANS.business_monthly.price,
+  growth: PLANS.growth_monthly.price,
+  enterprise: 0,
   starter_monthly: PLANS.starter_monthly.price,
   starter_annual: PLANS.starter_annual.price,
   business_monthly: PLANS.business_monthly.price,
   business_annual: PLANS.business_annual.price,
   growth_monthly: PLANS.growth_monthly.price,
   growth_annual: PLANS.growth_annual.price,
+  enterprise_custom: 0,
+  individual: PLANS.individual.price,
+  sme: PLANS.sme.price,
+  corporate: PLANS.corporate.price,
 };
 
 export {

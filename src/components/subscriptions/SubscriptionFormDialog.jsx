@@ -44,9 +44,9 @@ function emptyForm() {
     user_id: '',
     user_name: '',
     user_email: '',
-    plan: 'individual',
+    plan: 'starter',
     status: 'active',
-    amount: PLAN_DEFAULT_AMOUNT.individual,
+    amount: PLAN_DEFAULT_AMOUNT.starter,
     billing_cycle: 'monthly',
     start_date: todayDate(),
     next_billing_date: endOfMonthDate(),
@@ -75,7 +75,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
         user_email: subscription.user_email || '',
         plan: subscription.plan || 'individual',
         status: subscription.status || 'active',
-        amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? PLAN_DEFAULT_AMOUNT.individual,
+        amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? PLAN_DEFAULT_AMOUNT.starter,
         billing_cycle: subscription.billing_cycle || 'monthly',
         start_date: subscription.start_date
           ? String(subscription.start_date).slice(0, 10)
@@ -94,7 +94,7 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
           user_name: subscription.user_name || '',
           user_email: subscription.user_email || '',
           plan: p,
-          amount: PLAN_DEFAULT_AMOUNT[p] ?? PLAN_DEFAULT_AMOUNT.individual,
+          amount: PLAN_DEFAULT_AMOUNT[p] ?? PLAN_DEFAULT_AMOUNT.starter,
           status: 'active',
           billing_cycle: subscription.billing_cycle || 'monthly',
           start_date: todayDate(),
@@ -246,9 +246,17 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
                   }));
                 }}
               >
-                <option value="individual">Individual</option>
-                <option value="sme">SME</option>
-                <option value="corporate">Corporate</option>
+                <optgroup label="Current catalog">
+                  <option value="starter">Starter — R50/mo</option>
+                  <option value="business">Business — R150/mo</option>
+                  <option value="growth">Growth — R350/mo</option>
+                  <option value="enterprise">Enterprise — Custom</option>
+                </optgroup>
+                <optgroup label="Grandfathered">
+                  <option value="individual">Individual — R25/mo</option>
+                  <option value="sme">SME — R50/mo</option>
+                  <option value="corporate">Corporate — R110/mo</option>
+                </optgroup>
               </select>
             </div>
             <div className="grid gap-2">

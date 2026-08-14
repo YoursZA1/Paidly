@@ -117,14 +117,14 @@ function QuickBillCard({ client, balance, userCurrency, onSelectClient, onCreate
         whileTap={{ scale: 1 }}
       >
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="font-semibold text-foreground truncate">{client.name}</span>
+          <span className="text-sm font-medium text-foreground truncate">{client.name}</span>
           <span className="text-[11px] text-muted-foreground truncate">{client.email || client.company || "—"}</span>
         </div>
         <div className="text-right ml-4 shrink-0">
-          <p className={`font-bold text-xs tabular-nums ${balance > 0 ? "text-orange-500" : "text-emerald-500"}`}>
+          <p className={`font-medium text-xs tabular-nums ${balance > 0 ? "text-orange-500" : "text-emerald-500"}`}>
             {formatCurrency(balance, userCurrency)}
           </p>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
             {balance > 0 ? "Overdue" : "Settled"}
           </span>
         </div>
@@ -365,7 +365,7 @@ export default function Clients() {
       <div className="lg:hidden flex flex-col w-full min-w-0">
         <div className="flex flex-col w-full px-4 pt-2 sm:pt-4 space-y-3 pb-4">
           <div className="flex justify-between items-center mb-2 shrink-0">
-            <h2 className="text-2xl font-bold text-foreground tracking-tight font-display">Clients</h2>
+            <h2 className="text-xl font-semibold text-foreground tracking-tight font-display">Clients</h2>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -459,9 +459,9 @@ export default function Clients() {
 
       {/* Desktop: sidebar list (≥ 1024px) */}
       <aside className="hidden lg:flex w-72 sm:w-80 md:w-96 shrink-0 bg-card border-r border-border flex-col min-h-0 min-w-0">
-        <div className="p-6 border-b border-border shrink-0">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold text-foreground font-display">Clients</h1>
+        <div className="px-5 py-4 border-b border-border shrink-0">
+          <div className="flex justify-between items-center mb-3">
+            <h1 className="text-xl font-semibold text-foreground tracking-tight font-display">Clients</h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -490,8 +490,7 @@ export default function Clients() {
             placeholder="Search clients..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-muted border-none rounded-2xl p-3 text-base text-foreground focus:ring-2 focus:ring-ring/20 outline-none min-w-0 placeholder:text-muted-foreground/50"
-            style={{ fontSize: "16px" }}
+            className="w-full bg-muted border-none rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:ring-2 focus:ring-ring/20 outline-none min-w-0 placeholder:text-muted-foreground/50"
             data-testid="clients-search"
           />
         </div>
@@ -534,29 +533,29 @@ export default function Clients() {
                     onClick={() => setActiveClient(client)}
                     data-testid="client-list-item"
                     data-client-name={client.name}
-                    className={`w-full flex justify-between items-center p-4 rounded-[24px] transition-all text-left min-w-0 active:scale-[0.97] ${
+                    className={`w-full flex justify-between items-center px-3.5 py-3 rounded-2xl transition-all text-left min-w-0 active:scale-[0.97] ${
                       isActive
                         ? "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800"
                         : "hover:bg-muted/50"
                     }`}
                   >
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">
+                      <h3 className="text-sm font-medium text-foreground truncate">
                         {client.name}
                       </h3>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-[11px] text-muted-foreground truncate">
                         {client.company || client.email || "—"}
                       </p>
                     </div>
                     <div className="text-right shrink-0 ml-2">
                       <p
-                        className={`text-xs font-bold ${
+                        className={`text-xs font-medium tabular-nums ${
                           balance > 0 ? "text-red-500" : "text-emerald-500"
                         }`}
                       >
                         {formatCurrency(balance, userCurrency)}
                       </p>
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
                         {status}
                       </p>
                     </div>
@@ -580,7 +579,7 @@ export default function Clients() {
       </aside>
 
       {/* 2. CLIENT DETAIL VIEW */}
-      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6 md:p-10">
+      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             {loadError && (
@@ -594,10 +593,10 @@ export default function Clients() {
                 </Button>
               </div>
             )}
-            <p className="text-lg font-medium">
+            <p className="text-sm font-medium">
               {showLoadingSkeleton ? "Loading…" : "Select a client"}
             </p>
-            <p className="text-sm mt-1">
+            <p className="text-xs mt-1">
               {!showLoadingSkeleton && clients.length === 0
                 ? "Add a client to see their details here."
                 : "Choose a client from the list to view details and invoices."}
@@ -605,56 +604,59 @@ export default function Clients() {
           </div>
         ) : (
           <>
-            <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-10">
-              <div className="min-w-0">
+            <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
+              <div className="min-w-0 flex-1">
                 <h2
-                  className="text-3xl md:text-4xl font-bold text-foreground tracking-tight mb-2 truncate font-display"
+                  className="text-xl md:text-2xl font-semibold text-foreground tracking-tight mb-1.5 font-display"
                   data-testid="client-active-name"
                 >
                   {activeClient.name}
                 </h2>
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground font-medium">
-                  <span className="flex items-center gap-1 min-w-0">
-                    <EnvelopeIcon className="w-4 h-4 shrink-0" />
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <EnvelopeIcon className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{activeClient.email}</span>
                   </span>
                   {activeClient.phone && (
-                    <span className="flex items-center gap-1">
-                      <PhoneIcon className="w-4 h-4 shrink-0" />
+                    <span className="flex items-center gap-1.5">
+                      <PhoneIcon className="w-3.5 h-3.5 shrink-0" />
                       {activeClient.phone}
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-3 shrink-0">
+              <div className="flex flex-wrap gap-2 shrink-0">
                 <Link
                   to={createPageUrl("ClientDetail") + "?id=" + encodeURIComponent(activeClient.id)}
                   className="inline-flex"
                 >
                   <Button
                     variant="outline"
-                    className="rounded-2xl font-bold border-border hover:bg-muted"
+                    size="sm"
+                    className="rounded-xl text-xs font-medium border-border hover:bg-muted"
                   >
-                    <ArrowTopRightOnSquareIcon className="w-4 h-4 mr-2" />
+                    <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 mr-1.5" />
                     Full profile
                   </Button>
                 </Link>
                 <Button
                   variant="outline"
-                  className="rounded-2xl font-bold border-border hover:bg-muted"
+                  size="sm"
+                  className="rounded-xl text-xs font-medium border-border hover:bg-muted"
                   onClick={() => goEditClient(activeClient)}
                   data-testid="client-edit"
                 >
-                  <PencilSquareIcon className="w-4 h-4 mr-2" />
+                  <PencilSquareIcon className="w-3.5 h-3.5 mr-1.5" />
                   Edit Profile
                 </Button>
                 <Button
                   variant="outline"
-                  className="rounded-2xl font-bold border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-700 dark:hover:text-red-300"
+                  size="sm"
+                  className="rounded-xl text-xs font-medium border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-700 dark:hover:text-red-300"
                   onClick={() => handleDeleteRequest(activeClient)}
                   data-testid="client-delete"
                 >
-                  <TrashIcon className="w-4 h-4 mr-2" />
+                  <TrashIcon className="w-3.5 h-3.5 mr-1.5" />
                   Delete
                 </Button>
                 <Link
@@ -664,7 +666,7 @@ export default function Clients() {
                     encodeURIComponent(activeClient.id)
                   }
                 >
-                  <Button className="px-6 py-3 bg-primary hover:bg-primary/90 rounded-2xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
+                  <Button size="sm" className="px-4 bg-primary hover:bg-primary/90 rounded-xl text-xs font-medium text-primary-foreground shadow-sm shadow-primary/20">
                     Bill Client
                   </Button>
                 </Link>
@@ -678,7 +680,7 @@ export default function Clients() {
             )}
 
             {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
                 {
                   label: "Total Revenue",
@@ -698,12 +700,12 @@ export default function Clients() {
               ].map((stat, i) => (
                 <div
                   key={i}
-                  className="bg-card p-6 rounded-[32px] border border-border shadow-sm"
+                  className="bg-card px-5 py-4 rounded-2xl border border-border shadow-sm"
                 >
-                  <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest mb-1">
+                  <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-0.5">
                     {stat.label}
                   </p>
-                  <p className={`text-2xl font-bold ${stat.color}`}>
+                  <p className={`text-lg font-semibold tabular-nums ${stat.color}`}>
                     {stat.value}
                   </p>
                 </div>
@@ -711,12 +713,12 @@ export default function Clients() {
             </div>
 
             {/* Tabbed Content: Invoices */}
-            <section className="bg-card rounded-[40px] border border-border shadow-sm overflow-hidden">
-              <div className="px-8 py-6 border-b border-border flex gap-8">
+            <section className="bg-card rounded-3xl border border-border shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-border flex gap-6">
                 <button
                   type="button"
                   onClick={() => setDetailTab("invoices")}
-                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                  className={`text-sm font-medium pb-1 border-b-2 transition-colors ${
                     detailTab === "invoices"
                       ? "text-primary border-primary"
                       : "text-muted-foreground border-transparent hover:text-foreground"
@@ -727,7 +729,7 @@ export default function Clients() {
                 <button
                   type="button"
                   onClick={() => setDetailTab("quotations")}
-                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                  className={`text-sm font-medium pb-1 border-b-2 transition-colors ${
                     detailTab === "quotations"
                       ? "text-primary border-primary"
                       : "text-muted-foreground border-transparent hover:text-foreground"
@@ -738,7 +740,7 @@ export default function Clients() {
                 <button
                   type="button"
                   onClick={() => setDetailTab("statement")}
-                  className={`text-sm font-bold pb-1 border-b-2 transition-colors ${
+                  className={`text-sm font-medium pb-1 border-b-2 transition-colors ${
                     detailTab === "statement"
                       ? "text-primary border-primary"
                       : "text-muted-foreground border-transparent hover:text-foreground"
@@ -748,13 +750,13 @@ export default function Clients() {
                 </button>
               </div>
 
-              <div className="p-8">
+              <div className="p-6">
                 {detailTab === "invoices" && (
                   <>
                     {activeInvoices.length === 0 ? (
-                      <div className="py-12 text-center text-muted-foreground">
-                        <p className="font-medium">No invoices yet</p>
-                        <p className="text-sm mt-1 mb-4">
+                      <div className="py-10 text-center text-muted-foreground">
+                        <p className="text-sm font-medium">No invoices yet</p>
+                        <p className="text-xs mt-1 mb-4">
                           Create an invoice for this client to see it here.
                         </p>
                         <Link
@@ -772,38 +774,38 @@ export default function Clients() {
                     ) : (
                       <table className="w-full text-left">
                         <thead>
-                          <tr className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest border-b border-border">
-                            <th className="pb-4">Invoice #</th>
-                            <th className="pb-4">Date</th>
-                            <th className="pb-4 text-right">Amount</th>
-                            <th className="pb-4 text-right">Status</th>
+                          <tr className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider border-b border-border">
+                            <th className="pb-3">Invoice #</th>
+                            <th className="pb-3">Date</th>
+                            <th className="pb-3 text-right">Amount</th>
+                            <th className="pb-3 text-right">Status</th>
                           </tr>
                         </thead>
-                        <tbody className="text-sm font-medium text-muted-foreground">
+                        <tbody className="text-sm text-muted-foreground">
                           {activeInvoices.slice(0, 20).map((inv) => (
                             <tr
                               key={inv.id}
                               className="border-b border-border hover:bg-muted/50"
                             >
-                              <td className="py-4">
+                              <td className="py-3">
                                 <Link
                                   to={
                                     createPageUrl("ViewInvoice") + "?id=" + inv.id
                                   }
-                                  className="text-foreground font-semibold hover:text-primary"
+                                  className="text-foreground font-medium hover:text-primary"
                                 >
                                   {inv.invoice_number || inv.id?.slice(0, 8)}
                                 </Link>
                               </td>
-                              <td className="py-4">
+                              <td className="py-3 text-xs">
                                 {safeFormatDate(inv.issue_date || inv.created_date)}
                               </td>
-                              <td className="py-4 text-right font-semibold text-foreground">
+                              <td className="py-3 text-right text-sm font-medium tabular-nums text-foreground">
                                 {formatCurrency(inv.total_amount, userCurrency)}
                               </td>
-                              <td className="py-4 text-right">
+                              <td className="py-3 text-right">
                                 <span
-                                  className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                  className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium uppercase ${
                                     statusStyles[inv.status] || statusStyles.draft
                                   }`}
                                 >
@@ -818,9 +820,9 @@ export default function Clients() {
                   </>
                 )}
                 {detailTab === "quotations" && (
-                  <div className="py-12 text-center text-muted-foreground">
-                    <p className="font-medium">Quotations</p>
-                    <p className="text-sm mt-1">
+                  <div className="py-10 text-center text-muted-foreground">
+                    <p className="text-sm font-medium">Quotations</p>
+                    <p className="text-xs mt-1">
                       Link to quotes for this client can be added here.
                     </p>
                     <Link to={createPageUrl("Quotes")}>
@@ -831,9 +833,9 @@ export default function Clients() {
                   </div>
                 )}
                 {detailTab === "statement" && (
-                  <div className="py-12 text-center text-muted-foreground">
-                    <p className="font-medium">Statement</p>
-                    <p className="text-sm mt-1">
+                  <div className="py-10 text-center text-muted-foreground">
+                    <p className="text-sm font-medium">Statement</p>
+                    <p className="text-xs mt-1">
                       Account statement view can be added here.
                     </p>
                   </div>

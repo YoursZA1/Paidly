@@ -352,12 +352,12 @@ export default function CalendarPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
-          <Skeleton className="h-10 w-64 rounded-xl mb-6" />
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-6">
-            <Skeleton className="h-[560px] rounded-xl" />
-            <Skeleton className="h-[560px] rounded-xl" />
+      <div className="min-h-0 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="responsive-page-shell py-4 lg:py-6">
+          <Skeleton className="h-8 w-48 rounded-xl mb-4" />
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)] gap-4">
+            <Skeleton className="h-[420px] rounded-2xl" />
+            <Skeleton className="h-[420px] rounded-2xl" />
           </div>
         </div>
       </div>
@@ -365,44 +365,45 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="responsive-page-shell py-4 sm:py-6 md:py-8 space-y-6">
-        <header className="responsive-page-header">
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-xl sm:text-2xl md:text-3xl font-semibold text-foreground">
-              Calendar & Tasks
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">Track deadlines, invoices, and team activity</p>
-          </div>
-          <div className="responsive-page-header-actions gap-2">
-            <div className="flex h-10 items-center rounded-xl border border-border bg-muted/40 p-1">
+    <div className="min-h-0 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="responsive-page-shell py-4 lg:py-6 space-y-4">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h1 className="truncate font-display text-xl font-semibold tracking-tight text-foreground">
+            Calendar & Tasks
+          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-8 items-center rounded-xl border border-border bg-muted/40 p-0.5">
               <Button
                 variant="ghost"
+                size="sm"
                 className={cn(
-                  "h-8 px-3 rounded-lg text-sm",
+                  "h-7 px-2.5 rounded-lg text-xs font-medium",
                   layoutView === "timeline" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
                 )}
                 onClick={() => setLayoutView("timeline")}
               >
-                Timeline View
+                Timeline
               </Button>
               <Button
                 variant="ghost"
+                size="sm"
                 className={cn(
-                  "h-8 px-3 rounded-lg text-sm",
+                  "h-7 px-2.5 rounded-lg text-xs font-medium",
                   layoutView === "calendar" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
                 )}
                 onClick={() => setLayoutView("calendar")}
               >
-                Calendar View
+                Calendar
               </Button>
             </div>
-            <Button onClick={() => openTaskForm(null)} className="gap-2">
-              <Plus className="w-4 h-4" />
+            <Button size="sm" onClick={() => openTaskForm(null)} className="h-8 rounded-xl text-xs font-medium gap-1.5">
+              <Plus className="w-3.5 h-3.5" />
               Add Task
             </Button>
             <Button
               variant="outline"
+              size="sm"
+              className="h-8 rounded-xl text-xs font-medium"
               onClick={() =>
                 openTaskForm({
                   title: "",
@@ -412,11 +413,12 @@ export default function CalendarPage() {
                 })
               }
             >
-              + Add Event
+              Add Event
             </Button>
             <Button
               variant="outline"
-              className="xl:hidden"
+              size="sm"
+              className="h-8 rounded-xl text-xs font-medium xl:hidden"
               onClick={() => setIsContextPanelCollapsed((v) => !v)}
             >
               {isContextPanelCollapsed ? "Show Details" : "Hide Details"}
@@ -424,19 +426,16 @@ export default function CalendarPage() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-4 md:gap-6">
-          <div className="space-y-4 min-w-0">
-            <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-border/40">
-                <div>
-                  <h2 className="text-lg font-semibold tracking-tight">{format(viewMonth, "MMMM yyyy")}</h2>
-                  <p className="text-xs text-muted-foreground">Business timeline across tasks, invoices, and payments</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => setViewMonth((v) => subMonths(v, 1))}>
+        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)] gap-4">
+          <div className="space-y-3 min-w-0">
+            <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-medium tracking-tight">{format(viewMonth, "MMMM yyyy")}</h2>
+                <div className="flex items-center gap-0.5">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewMonth((v) => subMonths(v, 1))}>
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => setViewMonth((v) => addMonths(v, 1))}>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewMonth((v) => addMonths(v, 1))}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
@@ -445,16 +444,16 @@ export default function CalendarPage() {
               {layoutView === "calendar" ? (
                 <div className="overflow-x-auto">
                   <div className="min-w-[760px]">
-                    <div className="grid grid-cols-7 border-b border-border/40 bg-muted/20">
+                    <div className="grid grid-cols-7 border-b border-border bg-muted/20">
                       {DAYS_HEADER.map((day) => (
-                        <div key={day} className="px-3 py-2 text-[11px] uppercase tracking-wide font-medium text-muted-foreground text-center">
+                        <div key={day} className="px-2 py-1.5 text-[10px] uppercase tracking-wider font-medium text-muted-foreground/70 text-center">
                           {day}
                         </div>
                       ))}
                     </div>
-                    <div className="grid grid-cols-7 gap-px bg-border/60">
+                    <div className="grid grid-cols-7 gap-px bg-border/50">
                       {daysInGrid.map((date, idx) => {
-                        if (!date) return <div key={`empty-${idx}`} className="min-h-[120px] bg-card/70" />;
+                        if (!date) return <div key={`empty-${idx}`} className="min-h-[84px] bg-card/70" />;
                         const dayInvoices = getInvoicesForDate(date);
                         const dayTasks = getTasksForDate(date);
                         const dayPaid = getPaymentMarkersForDate(date);
@@ -478,14 +477,15 @@ export default function CalendarPage() {
                           .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
                         const isSelected = isSameDay(date, selectedDate);
                         const hovered = hoveredDate && isSameDay(date, hoveredDate);
-                        const showDayPreview = hovered || isSelected;
+                        const dayCount = dayInvoices.length + dayTasks.length + dayQuotes.length;
+                        const showDayPreview = hovered && dayCount > 0;
 
                         return (
                           <div
                             key={date.toISOString()}
                             className={cn(
-                              "group relative min-h-[130px] bg-card p-2.5 transition-colors cursor-pointer",
-                              isSelected && "bg-primary/5 ring-2 ring-inset ring-primary",
+                              "group relative min-h-[84px] bg-card p-1.5 transition-colors cursor-pointer",
+                              isSelected && "bg-orange-50 dark:bg-orange-950/40 ring-1 ring-inset ring-orange-200 dark:ring-orange-800",
                               isToday(date) && !isSelected && "bg-muted/25",
                               "hover:bg-muted/20"
                             )}
@@ -496,7 +496,7 @@ export default function CalendarPage() {
                             <div className="flex items-start justify-between">
                               <span
                                 className={cn(
-                                  "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold",
+                                  "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
                                   isToday(date) ? "bg-primary text-primary-foreground" : "text-foreground"
                                 )}
                               >
@@ -505,7 +505,7 @@ export default function CalendarPage() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedDate(date);
@@ -516,44 +516,36 @@ export default function CalendarPage() {
                                   });
                                 }}
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3 h-3" />
                               </Button>
                             </div>
 
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-1 space-y-0.5">
                               {dayInvoices.length > 0 && (
-                                <Badge className="bg-orange-500/12 text-orange-700 border-transparent text-[10px] px-1.5 py-0.5">
+                                <Badge className="bg-orange-500/12 text-orange-700 border-transparent text-[10px] px-1.5 py-0 font-medium">
                                   {dayInvoices.length} invoice{dayInvoices.length > 1 ? "s" : ""}
                                 </Badge>
                               )}
                               {dayTasks.length > 0 && (
-                                <Badge className="bg-blue-500/12 text-blue-700 border-transparent text-[10px] px-1.5 py-0.5">
+                                <Badge className="bg-blue-500/12 text-blue-700 border-transparent text-[10px] px-1.5 py-0 font-medium">
                                   {dayTasks.length} task{dayTasks.length > 1 ? "s" : ""}
                                 </Badge>
                               )}
                               {dayPaid.length > 0 && (
-                                <Badge className="bg-emerald-500/12 text-emerald-700 border-transparent text-[10px] px-1.5 py-0.5">
+                                <Badge className="bg-emerald-500/12 text-emerald-700 border-transparent text-[10px] px-1.5 py-0 font-medium">
                                   {dayPaid.length} payment{dayPaid.length > 1 ? "s" : ""}
                                 </Badge>
                               )}
                             </div>
 
                             {showDayPreview ? (
-                              <div className="pointer-events-none absolute left-2 right-2 bottom-2 rounded-lg border border-border bg-background/95 shadow-sm p-2 space-y-1 z-10">
-                                <p className="text-[11px] font-medium text-foreground truncate">{format(date, "EEE, MMM d")}</p>
-                                <p className="text-[10px] text-muted-foreground truncate">
-                                  {dayInvoices.length + dayTasks.length + dayQuotes.length} item
-                                  {dayInvoices.length + dayTasks.length + dayQuotes.length === 1 ? "" : "s"} today
-                                </p>
-                                {topPreviewItems.length ? (
-                                  <div className="space-y-0.5">
-                                    {topPreviewItems.map((item) => (
-                                      <p key={item.key} className="text-[10px] text-foreground truncate">
-                                        • {item.label}
-                                      </p>
-                                    ))}
-                                  </div>
-                                ) : null}
+                              <div className="pointer-events-none absolute left-1.5 right-1.5 bottom-1.5 rounded-lg border border-border bg-background/95 shadow-sm px-2 py-1.5 space-y-0.5 z-10">
+                                <p className="text-[10px] font-medium text-foreground truncate">{format(date, "EEE, d MMM")}</p>
+                                {topPreviewItems.map((item) => (
+                                  <p key={item.key} className="text-[10px] text-muted-foreground truncate">
+                                    {item.label}
+                                  </p>
+                                ))}
                                 {dueAmountPreview > 0 ? (
                                   <p className="text-[10px] font-medium text-orange-700">
                                     Due: {formatCurrency(dueAmountPreview, "ZAR", 0)}
@@ -568,23 +560,23 @@ export default function CalendarPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 space-y-3">
+                <div className="p-3 space-y-2">
                   {timelineRows.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                    <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
                       <p className="text-sm text-muted-foreground">No timeline activity for this month.</p>
                     </div>
                   ) : (
                     timelineRows.map((row) => (
                       <button
                         key={row.date.toISOString()}
-                        className="w-full text-left rounded-xl border border-border/50 p-3 hover:bg-muted/20 transition-colors"
+                        className="w-full text-left rounded-xl border border-border px-3 py-2 hover:bg-muted/20 transition-colors"
                         onClick={() => {
                           setSelectedDate(row.date);
                           setLayoutView("calendar");
                         }}
                       >
-                        <p className="text-sm font-semibold">{format(row.date, "EEE, MMM d")}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="text-sm font-medium">{format(row.date, "EEE, d MMM")}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
                           {row.invoices.length} invoices · {row.tasks.length} tasks · {row.quotes.length} events
                         </p>
                       </button>
@@ -594,21 +586,21 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <div className="rounded-xl border border-border/50 bg-card shadow-sm p-4">
-              <h3 className="text-sm font-semibold mb-3">Next 7 Days</h3>
+            <div className="rounded-2xl border border-border bg-card shadow-sm px-4 py-3">
+              <h3 className="text-sm font-medium mb-2">Next 7 days</h3>
               {next7DaysTimeline.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No activity scheduled in the next 7 days.</p>
+                <p className="text-xs text-muted-foreground">No activity scheduled in the next 7 days.</p>
               ) : (
-                <div className="flex gap-3 overflow-x-auto pb-1">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {next7DaysTimeline.map((slot) => (
                     <button
                       key={slot.date.toISOString()}
-                      className="shrink-0 min-w-[180px] rounded-lg border border-border/50 p-3 text-left hover:bg-muted/20 transition-colors"
+                      className="shrink-0 min-w-[148px] rounded-xl border border-border px-3 py-2 text-left hover:bg-muted/20 transition-colors"
                       onClick={() => setSelectedDate(slot.date)}
                     >
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{format(slot.date, "EEE")}</p>
-                      <p className="text-sm font-semibold">{format(slot.date, "MMM d")}</p>
-                      <div className="mt-2 space-y-1 text-xs">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{format(slot.date, "EEE")}</p>
+                      <p className="text-sm font-medium">{format(slot.date, "d MMM")}</p>
+                      <div className="mt-1.5 space-y-0.5 text-[11px]">
                         <p className="text-orange-700">{slot.invoices.length} invoices</p>
                         <p className="text-blue-700">{slot.tasks.length} tasks</p>
                         <p className="text-emerald-700">{slot.invoices.filter((i) => String(i.status || "").toLowerCase() === "paid").length} payments</p>
@@ -622,39 +614,39 @@ export default function CalendarPage() {
 
           <aside
             className={cn(
-              "rounded-xl border border-border/50 bg-card shadow-sm p-4 md:p-5 xl:sticky xl:top-24 self-start",
+              "rounded-2xl border border-border bg-card shadow-sm p-4 xl:sticky xl:top-24 self-start",
               isContextPanelCollapsed ? "hidden xl:block" : "block"
             )}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Selected Date</h3>
-              <Badge variant="outline">{format(selectedDate, "MMM d, yyyy")}</Badge>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">Selected date</h3>
+              <span className="text-[11px] text-muted-foreground">{format(selectedDate, "d MMM yyyy")}</span>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="rounded-lg bg-orange-500/10 p-2">
-                <p className="text-[11px] text-muted-foreground">Due</p>
-                <p className="text-sm font-semibold text-orange-700">{formatCurrency(selectedDueAmount, "ZAR", 0)}</p>
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+              <div className="rounded-xl bg-orange-500/10 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Due</p>
+                <p className="text-sm font-semibold tabular-nums text-orange-700">{formatCurrency(selectedDueAmount, "ZAR", 0)}</p>
               </div>
-              <div className="rounded-lg bg-blue-500/10 p-2">
-                <p className="text-[11px] text-muted-foreground">Tasks</p>
-                <p className="text-sm font-semibold text-blue-700">{selectedTasks.length}</p>
+              <div className="rounded-xl bg-blue-500/10 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tasks</p>
+                <p className="text-sm font-semibold tabular-nums text-blue-700">{selectedTasks.length}</p>
               </div>
-              <div className="rounded-lg bg-emerald-500/10 p-2">
-                <p className="text-[11px] text-muted-foreground">Events</p>
-                <p className="text-sm font-semibold text-emerald-700">{selectedQuotes.length + selectedInvoices.length}</p>
+              <div className="rounded-xl bg-emerald-500/10 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Events</p>
+                <p className="text-sm font-semibold tabular-nums text-emerald-700">{selectedQuotes.length + selectedInvoices.length}</p>
               </div>
             </div>
 
-            <div className="mt-4 space-y-2 max-h-[420px] overflow-auto pr-1">
+            <div className="mt-3 space-y-2 max-h-[360px] overflow-auto pr-1">
               {selectedInvoices.length === 0 && selectedTasks.length === 0 && selectedQuotes.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border p-5 text-center">
-                  <CalendarIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="font-medium">No activity on this day</p>
-                  <p className="text-xs text-muted-foreground mt-1">Create task or event</p>
+                <div className="rounded-xl border border-dashed border-border px-3 py-5 text-center">
+                  <CalendarIcon className="w-6 h-6 mx-auto text-muted-foreground/70 mb-1.5" />
+                  <p className="text-sm font-medium">No activity</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Add a task or event for this day.</p>
                   <Button
                     size="sm"
-                    className="mt-3"
+                    className="mt-3 h-8 rounded-xl text-xs font-medium"
                     onClick={() =>
                       openTaskForm({
                         title: "",
@@ -663,63 +655,68 @@ export default function CalendarPage() {
                       })
                     }
                   >
-                    + Add item for this date
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Add item
                   </Button>
                 </div>
               ) : (
                 <>
                   {selectedInvoices.map((invoice) => (
-                    <div key={`inv-${invoice.id}`} className="rounded-lg border border-border/40 p-3">
+                    <div key={`inv-${invoice.id}`} className="rounded-xl border border-border px-3 py-2">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium">Invoice #{invoice.invoice_number}</p>
-                        <Badge className="bg-orange-500/12 text-orange-700 border-transparent">Due</Badge>
+                        <Badge className="bg-orange-500/12 text-orange-700 border-transparent text-[10px] font-medium">Due</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{getClientName(invoice.client_id)}</p>
-                      <p className="text-xs font-medium mt-2">{formatCurrency(invoice.total_amount ?? invoice.grand_total ?? 0, "ZAR")}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{getClientName(invoice.client_id)}</p>
+                      <p className="text-xs font-medium tabular-nums mt-1.5">{formatCurrency(invoice.total_amount ?? invoice.grand_total ?? 0, "ZAR")}</p>
                     </div>
                   ))}
                   {selectedTasks.map((task) => (
-                    <div key={`task-${task.id}`} className="rounded-lg border border-border/40 p-3">
+                    <div key={`task-${task.id}`} className="rounded-xl border border-border px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium truncate">{task.title}</p>
-                        <Badge className="bg-blue-500/12 text-blue-700 border-transparent capitalize">
+                        <Badge className="bg-blue-500/12 text-blue-700 border-transparent capitalize text-[10px] font-medium">
                           {normalizeStatus(task.status).replace("_", " ")}
                         </Badge>
                       </div>
                     </div>
                   ))}
                   {selectedQuotes.map((quote) => (
-                    <div key={`q-${quote.id}`} className="rounded-lg border border-border/40 p-3">
+                    <div key={`q-${quote.id}`} className="rounded-xl border border-border px-3 py-2">
                       <p className="text-sm font-medium">Quote #{quote.quote_number}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Expires on selected date</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Expires on selected date</p>
                     </div>
                   ))}
                 </>
               )}
             </div>
 
-            <Button
-              variant="outline"
-              className="w-full mt-4"
-              onClick={() =>
-                openTaskForm({
-                  title: "",
-                  due_date: format(selectedDate, "yyyy-MM-dd"),
-                  status: "pending",
-                })
-              }
-            >
-              + Add item for this date
-            </Button>
+            {selectedInvoices.length > 0 || selectedTasks.length > 0 || selectedQuotes.length > 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-3 h-8 rounded-xl text-xs font-medium"
+                onClick={() =>
+                  openTaskForm({
+                    title: "",
+                    due_date: format(selectedDate, "yyyy-MM-dd"),
+                    status: "pending",
+                  })
+                }
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Add item
+              </Button>
+            ) : null}
           </aside>
         </section>
 
-        <section className="rounded-xl border border-border/50 bg-card shadow-sm">
-          <div className="p-4 border-b border-border/40 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <section className="rounded-2xl border border-border bg-card shadow-sm">
+          <div className="px-4 py-3 border-b border-border flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
-              <h3 className="text-base font-semibold">Task Management</h3>
-              <p className="text-xs text-muted-foreground">
-                Showing tasks due on {format(selectedDate, "MMM d, yyyy")} (drag cards between columns)
+              <h3 className="text-sm font-medium">Task management</h3>
+              <p className="text-[11px] text-muted-foreground">
+                Tasks due {format(selectedDate, "d MMM yyyy")}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -730,30 +727,35 @@ export default function CalendarPage() {
                 className="hidden"
                 onChange={handleImportTaskCsv}
               />
-              <Button variant="outline" size="sm" disabled={isImportingTasks} onClick={() => taskFileInputRef.current?.click()}>
-                <Upload className="w-4 h-4 mr-1.5" />
+              <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-medium" disabled={isImportingTasks} onClick={() => taskFileInputRef.current?.click()}>
+                <Upload className="w-3.5 h-3.5 mr-1.5" />
                 {isImportingTasks ? "Importing..." : "Import CSV"}
               </Button>
-              <Button variant="outline" size="sm" disabled={isExportingTasks} onClick={handleExportTaskCsv}>
-                <Download className="w-4 h-4 mr-1.5" />
+              <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-medium" disabled={isExportingTasks} onClick={handleExportTaskCsv}>
+                <Download className="w-3.5 h-3.5 mr-1.5" />
                 {isExportingTasks ? "Exporting..." : "Export CSV"}
               </Button>
             </div>
           </div>
 
           {filteredTasksByDate.length === 0 ? (
-            <div className="p-10 text-center">
-              <Clock3 className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-              <p className="text-base font-medium">Start managing your business timeline</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Add tasks, track invoices, and stay on top of deadlines.
+            <div className="px-4 py-8 text-center">
+              <Clock3 className="w-7 h-7 mx-auto text-muted-foreground/70 mb-2" />
+              <p className="text-sm font-medium">No tasks on this date</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Add a task to track deadlines for {format(selectedDate, "d MMM")}.
               </p>
-              <Button className="mt-4" onClick={() => openTaskForm({ due_date: format(selectedDate, "yyyy-MM-dd"), status: "pending" })}>
-                Create your first task
+              <Button
+                size="sm"
+                className="mt-3 h-8 rounded-xl text-xs font-medium"
+                onClick={() => openTaskForm({ due_date: format(selectedDate, "yyyy-MM-dd"), status: "pending" })}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Create task
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3">
               {[
                 { key: "pending", label: "Pending", color: "text-blue-700 bg-blue-500/10" },
                 { key: "in_progress", label: "In Progress", color: "text-orange-700 bg-orange-500/10" },
@@ -761,15 +763,15 @@ export default function CalendarPage() {
               ].map((column) => (
                 <div
                   key={column.key}
-                  className="rounded-xl border border-border/40 bg-muted/15 p-3 min-h-[220px]"
+                  className="rounded-xl border border-border bg-muted/15 p-2.5 min-h-[180px]"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => handleDropToColumn(column.key)}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <Badge className={cn("border-transparent", column.color)}>{column.label}</Badge>
-                    <span className="text-xs text-muted-foreground">{kanbanColumns[column.key].length}</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className={cn("border-transparent text-[10px] font-medium", column.color)}>{column.label}</Badge>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">{kanbanColumns[column.key].length}</span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {kanbanColumns[column.key].map((task) => {
                       const linkedInvoice =
                         task.invoice_number ||

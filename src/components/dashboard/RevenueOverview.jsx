@@ -54,7 +54,7 @@ export default function RevenueOverview({
   return (
     <section className={className}>
       <div className="mb-3">
-        <h2 className="font-semibold text-foreground">Revenue</h2>
+        <h2 className="text-sm font-medium text-foreground">Revenue</h2>
         <p className="text-xs text-muted-foreground">
           MRR/ARR from active subscriptions · cash, failed, and refunds from payment history (UTC month)
           {metrics?.payingUserCount != null ? (

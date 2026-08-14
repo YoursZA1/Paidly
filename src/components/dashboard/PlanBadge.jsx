@@ -3,6 +3,10 @@ import { cn } from '@/lib/utils';
 import { getPackageDisplayName, normalizePaidPackageKey } from '@/lib/subscriptionPlan';
 
 const planStyles = {
+  starter: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  business: 'bg-primary/10 text-primary border-primary/20',
+  growth: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  enterprise: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   individual: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   sme: 'bg-primary/10 text-primary border-primary/20',
   corporate: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
@@ -23,7 +27,7 @@ function badgeKeyAndLabel(plan) {
 export default function PlanBadge({ plan }) {
   const { key, label } = badgeKeyAndLabel(plan);
   return (
-    <Badge variant="outline" className={cn('text-xs font-medium border', planStyles[key] || planStyles.none)}>
+    <Badge variant="outline" className={cn('text-[10px] font-medium border', planStyles[key] || planStyles.none)}>
       {label}
     </Badge>
   );

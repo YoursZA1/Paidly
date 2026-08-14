@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Building2, FileText, MessageCircle, Trash2 } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -11,33 +9,35 @@ export default function ConversationList({ conversations, clients, invoices, onS
 
     if (conversations.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <MessageCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No conversations yet</p>
+            <div className="text-center py-10 text-muted-foreground">
+                <MessageCircle className="w-7 h-7 mx-auto mb-2 opacity-40" />
+                <p className="text-sm font-medium">No conversations yet</p>
+                <p className="text-xs mt-1">Send a message to a client to start a thread.</p>
             </div>
         );
     }
 
     return (
         <>
-            <div className="space-y-2">
+            <div className="space-y-0.5">
                 {conversations.map((conv) => {
                     const client = clients.find(c => c.id === conv.client_id);
                     const invoice = conv.invoice_id ? invoices.find(i => i.id === conv.invoice_id) : null;
                     const hasUnread = conv.messages.some(m => !m.is_read && m.sender_type === 'client');
                     const lastMessage = conv.messages[0];
+                    const isSelected = selectedId === conv.client_id + (conv.invoice_id || '');
 
                     return (
-                        <Card
+                        <div
                             key={conv.client_id + (conv.invoice_id || '')}
-                            className={`cursor-pointer hover:shadow-md transition-all group relative ${
-                                selectedId === conv.client_id + (conv.invoice_id || '')
-                                    ? 'ring-2 ring-primary bg-primary/10'
-                                    : 'bg-card'
-                            }`}
-                            onClick={() => onSelect(conv)}
                             role="button"
                             tabIndex={0}
+                            className={`w-full cursor-pointer group relative rounded-xl px-3 py-2.5 text-left transition-colors ${
+                                isSelected
+                                    ? 'bg-orange-50 dark:bg-orange-950/40 ring-1 ring-orange-100 dark:ring-orange-800'
+                                    : 'hover:bg-muted/50'
+                            }`}
+                            onClick={() => onSelect(conv)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault();
@@ -46,68 +46,66 @@ export default function ConversationList({ conversations, clients, invoices, onS
                             }}
                             aria-label={`Open conversation with ${client?.name || 'Unknown Client'}`}
                         >
-                            <CardContent>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                            hasUnread ? 'bg-primary/15' : 'bg-muted'
-                                        }`}>
-                                            <Building2 className={`w-5 h-5 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className={`font-semibold truncate ${hasUnread ? 'text-foreground' : 'text-foreground'}`}>
-                                                    {client?.name || 'Unknown Client'}
-                                                </h4>
-                                                {hasUnread && (
-                                                    <span className="w-2 h-2 bg-primary rounded-full"></span>
-                                                )}
-                                            </div>
-                                            {invoice && (
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                                    <FileText className="w-3 h-3" />
-                                                    {invoice.invoice_number}
-                                                </div>
-                                            )}
-                                            {lastMessage && (
-                                                <p className="text-sm text-muted-foreground truncate mt-1">
-                                                    {lastMessage.sender_type === 'business' ? 'You: ' : ''}
-                                                    {lastMessage.content.replace(/<[^>]*>?/gm, '')}
-                                                </p>
-                                            )}
-                                        </div>
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                        hasUnread ? 'bg-primary/15' : 'bg-muted'
+                                    }`}>
+                                        <Building2 className={`w-4 h-4 ${hasUnread ? 'text-primary' : 'text-muted-foreground'}`} />
                                     </div>
-                                    <div className="text-right shrink-0 flex flex-col items-end">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="text-sm font-medium truncate text-foreground">
+                                                {client?.name || 'Unknown Client'}
+                                            </h4>
+                                            {hasUnread && (
+                                                <span className="w-1.5 h-1.5 bg-primary rounded-full shrink-0"></span>
+                                            )}
+                                        </div>
+                                        {invoice && (
+                                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                                                <FileText className="w-3 h-3" />
+                                                {invoice.invoice_number}
+                                            </div>
+                                        )}
                                         {lastMessage && (
-                                            <p className="text-xs text-muted-foreground">
-                                                {isToday(new Date(lastMessage.created_date)) 
-                                                    ? format(new Date(lastMessage.created_date), 'h:mm a')
-                                                    : format(new Date(lastMessage.created_date), 'MMM d')}
+                                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                                {lastMessage.sender_type === 'business' ? 'You: ' : ''}
+                                                {lastMessage.content.replace(/<[^>]*>?/gm, '')}
                                             </p>
                                         )}
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Badge variant="secondary" className="text-xs">
-                                                {conv.messages.length}
-                                            </Badge>
-                                            {onDelete && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setConversationToDelete(conv);
-                                                    }}
-                                                    aria-label={`Delete conversation with ${client?.name || 'Unknown Client'}`}
-                                                >
-                                                    <Trash2 className="w-3 h-3" />
-                                                </Button>
-                                            )}
-                                        </div>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                                <div className="text-right shrink-0 flex flex-col items-end">
+                                    {lastMessage && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {isToday(new Date(lastMessage.created_date)) 
+                                                ? format(new Date(lastMessage.created_date), 'h:mm a')
+                                                : format(new Date(lastMessage.created_date), 'd MMM')}
+                                        </p>
+                                    )}
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+                                            {conv.messages.length}
+                                        </span>
+                                        {onDelete && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setConversationToDelete(conv);
+                                                }}
+                                                aria-label={`Delete conversation with ${client?.name || 'Unknown Client'}`}
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     );
                 })}
             </div>

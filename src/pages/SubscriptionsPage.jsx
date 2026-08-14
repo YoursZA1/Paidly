@@ -26,12 +26,19 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
-import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
+import { pickPreferredSubscriptionRow, normalizePaidPackageKey } from '@/lib/subscriptionPlan';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 import TablePagination from '@/components/ui/TablePagination';
 
 const LIST_LIMIT = 500;
 const SUBS_PAGE_SIZE = 15;
+
+const CATALOG_TIERS = [
+  { family: 'starter', label: 'Starter', price: 'R50/mo', color: 'border-blue-500/25' },
+  { family: 'business', label: 'Business', price: 'R150/mo', color: 'border-primary/30' },
+  { family: 'growth', label: 'Growth', price: 'R350/mo', color: 'border-purple-500/25' },
+  { family: 'enterprise', label: 'Enterprise', price: 'Custom', color: 'border-amber-500/25' },
+];
 
 function pickLatestSubscriptionForUser(subs, userId) {
   const uid = String(userId);
@@ -156,7 +163,8 @@ export default function SubscriptionsPage() {
       (s.user_email || '').toLowerCase().includes(search.toLowerCase()) ||
       (s.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (s.company_address || '').toLowerCase().includes(search.toLowerCase());
-    const matchPlan = planFilter === 'all' || s.plan === planFilter;
+    const matchPlan =
+      planFilter === 'all' || normalizePaidPackageKey(s.plan) === planFilter;
     const matchStatus = statusFilter === 'all' || s.status === statusFilter;
     return matchSearch && matchPlan && matchStatus;
   });
@@ -189,15 +197,15 @@ export default function SubscriptionsPage() {
     <div>
       <PageHeader
         title="Subscriptions"
-        description="All platform users and their subscription records (profile plan shown when no subscription row exists)"
+        description="Platform users and billed plans. Grandfathered Individual / SME / Corporate rows keep their original amount."
         onRefresh={() => {
           void refetch();
           void refetchOverview();
         }}
         isRefreshing={subsFetching}
       >
-        <Button onClick={() => setShowAdd(true)} className="bg-primary hover:bg-primary/90">
-          <Plus className="mr-2 h-4 w-4" /> Add Subscription
+        <Button size="sm" onClick={() => setShowAdd(true)} className="h-8 rounded-xl text-xs font-medium bg-primary hover:bg-primary/90">
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Subscription
         </Button>
       </PageHeader>
 
@@ -211,7 +219,7 @@ export default function SubscriptionsPage() {
       ) : null}
 
       <SubscriptionOverview
-        className="mb-6"
+        className="mb-4"
         overview={subscriptionOverview}
         isLoading={overviewLoading}
         showManageLink={false}
@@ -220,59 +228,48 @@ export default function SubscriptionsPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          {
-            plan: 'individual',
-            label: 'Individual',
-            price: `R${PLAN_DEFAULT_AMOUNT.individual}/mo`,
-            color: 'border-blue-500/30',
-          },
-          { plan: 'sme', label: 'SME', price: `R${PLAN_DEFAULT_AMOUNT.sme}/mo`, color: 'border-primary/30' },
-          {
-            plan: 'corporate',
-            label: 'Corporate',
-            price: `R${PLAN_DEFAULT_AMOUNT.corporate}/mo`,
-            color: 'border-purple-500/30',
-          },
-        ].map((p) => {
-          const count = rows.filter((s) => s.plan === p.plan && s.status === 'active').length;
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {CATALOG_TIERS.map((p) => {
+          const count = rows.filter(
+            (s) => normalizePaidPackageKey(s.plan) === p.family && s.status === 'active'
+          ).length;
           return (
-            <div key={p.plan} className={`rounded-xl border-2 bg-card p-5 ${p.color}`}>
-              <p className="text-sm text-muted-foreground">{p.label}</p>
-              <p className="mt-1 text-2xl font-bold">
+            <div key={p.family} className={`rounded-xl border bg-card px-3.5 py-3 ${p.color}`}>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{p.label}</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums">
                 {count}{' '}
-                <span className="text-sm font-normal text-muted-foreground">active</span>
+                <span className="text-xs font-normal text-muted-foreground">active</span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">{p.price}</p>
+              <p className="mt-0.5 text-xs font-medium text-foreground">{p.price}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search users and subscriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-card pl-10"
+            className="h-8 bg-card pl-9 text-sm"
           />
         </div>
         <Select value={planFilter} onValueChange={setPlanFilter}>
-          <SelectTrigger className="w-full bg-card sm:w-[150px]">
+          <SelectTrigger className="h-8 w-full bg-card text-xs sm:w-[150px]">
             <SelectValue placeholder="Plan" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Plans</SelectItem>
-            <SelectItem value="individual">Individual</SelectItem>
-            <SelectItem value="sme">SME</SelectItem>
-            <SelectItem value="corporate">Corporate</SelectItem>
+            <SelectItem value="starter">Starter</SelectItem>
+            <SelectItem value="business">Business</SelectItem>
+            <SelectItem value="growth">Growth</SelectItem>
+            <SelectItem value="enterprise">Enterprise</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full bg-card sm:w-[150px]">
+          <SelectTrigger className="h-8 w-full bg-card text-xs sm:w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -293,15 +290,15 @@ export default function SubscriptionsPage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="px-6 py-3 text-left font-medium">User</th>
-                <th className="px-6 py-3 text-left font-medium">Company</th>
-                <th className="px-6 py-3 text-left font-medium">Plan</th>
-                <th className="px-6 py-3 text-left font-medium">Amount</th>
-                <th className="px-6 py-3 text-left font-medium">Billing</th>
-                <th className="px-6 py-3 text-left font-medium">Status</th>
-                <th className="px-6 py-3 text-left font-medium">Next Billing</th>
-                <th className="px-6 py-3 text-right font-medium">Actions</th>
+              <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2 text-left font-medium">User</th>
+                <th className="px-4 py-2 text-left font-medium">Company</th>
+                <th className="px-4 py-2 text-left font-medium">Plan</th>
+                <th className="px-4 py-2 text-left font-medium">Amount</th>
+                <th className="px-4 py-2 text-left font-medium">Billing</th>
+                <th className="px-4 py-2 text-left font-medium">Status</th>
+                <th className="px-4 py-2 text-left font-medium">Next Billing</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -310,40 +307,40 @@ export default function SubscriptionsPage() {
                   key={sub._rowKey || sub.id}
                   className="border-b border-border/50 transition-colors hover:bg-muted/30"
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2.5">
                     <p className="text-sm font-medium">{sub.user_name || '—'}</p>
-                    <p className="text-xs text-muted-foreground">{sub.user_email}</p>
-                    {sub.phone ? <p className="text-xs text-muted-foreground">{sub.phone}</p> : null}
+                    <p className="text-[11px] text-muted-foreground">{sub.user_email}</p>
+                    {sub.phone ? <p className="text-[11px] text-muted-foreground">{sub.phone}</p> : null}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2.5">
                     <p className="text-sm">{sub.company_name || '—'}</p>
-                    <p className="text-xs text-muted-foreground">{sub.company_address || '—'}</p>
+                    <p className="text-[11px] text-muted-foreground">{sub.company_address || '—'}</p>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2.5">
                     <PlanBadge plan={sub.plan} />
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium">
+                  <td className="px-4 py-2.5 text-sm font-medium tabular-nums">
                     {sub._isSynthetic ? (
                       <span className="text-muted-foreground">
-                        R {PLAN_DEFAULT_AMOUNT[sub.plan] ?? 0}{' '}
-                        <span className="text-xs">(profile)</span>
+                        R {PLAN_DEFAULT_AMOUNT[sub.plan] ?? PLAN_DEFAULT_AMOUNT[normalizePaidPackageKey(sub.plan)] ?? 0}{' '}
+                        <span className="text-[10px]">(profile)</span>
                       </span>
                     ) : (
                       <>R {Number(sub.amount ?? 0).toFixed(2)}</>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm capitalize text-muted-foreground">
+                  <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
                     {sub.billing_cycle || 'monthly'}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2.5">
                     <StatusBadge status={sub.status} />
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {sub.next_billing_date
                       ? format(new Date(sub.next_billing_date), 'dd MMM yyyy')
                       : '—'}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-2.5 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -398,7 +395,7 @@ export default function SubscriptionsPage() {
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading...' : 'No subscriptions found'}
                   </td>
                 </tr>

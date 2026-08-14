@@ -38,7 +38,7 @@ export default function TaskCard({ task, client, onEdit, onDelete, onStatusChang
     const completedSubTasks = subTasks.filter(t => t.status === 'completed').length;
 
     return (
-        <Card className={`border-0 dark:border dark:border-slate-700 shadow-md hover:shadow-lg dark:bg-slate-800 transition-all ${
+        <Card className={`border border-border shadow-sm hover:shadow-md dark:bg-slate-800 transition-all ${
             task.status === 'completed' ? 'opacity-60' : ''
         } ${isOverdue ? 'ring-2 ring-red-200 dark:ring-red-800' : ''} ${hasBlockingDeps ? 'ring-2 ring-yellow-200 dark:ring-yellow-800' : ''}`}>
             <CardContent>
@@ -51,7 +51,7 @@ export default function TaskCard({ task, client, onEdit, onDelete, onStatusChang
                             {statusIcons[task.status]}
                         </button>
                         <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-slate-900 dark:text-slate-100 ${task.status === 'completed' ? 'line-through' : ''}`}>
+                            <h4 className={`text-sm font-medium text-slate-900 dark:text-slate-100 ${task.status === 'completed' ? 'line-through' : ''}`}>
                                 {task.title}
                             </h4>
                             {task.description && (
