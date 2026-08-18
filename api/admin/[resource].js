@@ -207,7 +207,7 @@ function adminSubpathFromRequest(req) {
 }
 
 function cors(res, req) {
-  applyPaidlyServerlessCors(req, res, { methods: "GET, POST, OPTIONS" });
+  applyPaidlyServerlessCors(req, res, { methods: "GET, POST, PATCH, OPTIONS" });
 }
 
 function getSupabaseAdmin() {
@@ -907,6 +907,18 @@ export default async function handler(req, res) {
       "settings",
       "system",
     ]);
+
+    if (
+      resource === "subscriptions" &&
+      (req.method === "POST" || req.method === "PATCH" || req.method === "OPTIONS")
+    ) {
+      await ensureCorsDeps();
+      applyPaidlyServerlessCors(req, res, { methods: "GET, POST, PATCH, OPTIONS" });
+      if (req.method === "OPTIONS") return res.status(200).end();
+      const billing = await import("../../server/src/billing/adminBillingApi.js");
+      if (req.method === "POST") return billing.handleAdminSubscriptionCreate(req, res);
+      return billing.handleAdminSubscriptionUpdate(req, res);
+    }
 
     if ((req.method === "POST" || req.method === "OPTIONS") && postResources.has(resource)) {
       if (req.method === "OPTIONS") {

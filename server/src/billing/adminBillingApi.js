@@ -1,10 +1,16 @@
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
 import { requireBearerUser } from "./httpAuth.js";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
+import { isValidEmail, isValidUuid } from "../inputValidation.js";
+import { familyForSlug, LEGACY_PLAN_SLUGS } from "../subscriptionPlans.js";
 import { PAYMENT_HISTORY_STATUS } from "../../../shared/paymentHistoryStatuses.js";
-import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
+import {
+  SUBSCRIPTION_STATUS,
+  coerceSubscriptionStatus,
+} from "../../../shared/subscriptionStatuses.js";
 import {
   SUBSCRIPTION_EVENT_LABELS,
+  SUBSCRIPTION_EVENT_TYPE,
   buildSubscriptionEventTimeline,
 } from "../../../shared/subscriptionEventTypes.js";
 
@@ -102,7 +108,203 @@ async function requireBillingAdmin(req, res) {
     json(res, denied.status, denied.body);
     return null;
   }
-  return supabase;
+  return { supabase, user: auth.user };
+}
+
+const LIST_SELECT_RICH =
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, created_at, updated_at";
+const LIST_SELECT_LEAN =
+  "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at";
+
+/** Shape admin list rows like EntityManager Subscription so existing UI keeps working. */
+export function normalizeAdminSubscriptionListRow(row) {
+  if (!row || typeof row !== "object") return row;
+  return {
+    ...row,
+    user_email: row.user_email || row.email || "",
+    user_name: row.user_name || row.full_name || "",
+    plan: row.plan || row.current_plan || row.plan_slug || "individual",
+    amount: Number(row.amount ?? row.custom_price ?? 0),
+    status: row.status || "active",
+    billing_cycle: row.billing_cycle || "monthly",
+    next_billing_date: row.next_billing_date || null,
+    created_date: row.created_date || row.created_at || null,
+  };
+}
+
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function normalizeBillingCycle(raw) {
+  const c = String(raw || "").trim().toLowerCase();
+  if (!c) return null;
+  if (c === "yearly" || c === "annually") return "annual";
+  if (c === "semi_annual" || c === "semiannual") return "biannual";
+  if (["monthly", "annual", "quarterly", "biannual"].includes(c)) return c;
+  return null;
+}
+
+/**
+ * Sanitize admin create/update body. Never accept PayFast tokens or status invention.
+ * @param {object} body
+ * @param {{ isCreate?: boolean }} [opts]
+ */
+export function buildAdminSubscriptionWriteRow(body, opts = {}) {
+  const isCreate = Boolean(opts.isCreate);
+  const src = body && typeof body === "object" ? body : {};
+  const out = {};
+
+  if (src.user_id != null && String(src.user_id).trim()) {
+    const uid = String(src.user_id).trim();
+    if (!isValidUuid(uid)) throw httpError(400, "invalid user_id");
+    out.user_id = uid;
+  } else if (isCreate) {
+    out.user_id = null;
+  }
+
+  if (src.company_id != null && String(src.company_id).trim()) {
+    const cid = String(src.company_id).trim();
+    if (!isValidUuid(cid)) throw httpError(400, "invalid company_id");
+    out.company_id = cid;
+  }
+
+  const emailRaw = String(src.email || src.user_email || "").trim().toLowerCase();
+  if (emailRaw) {
+    if (!isValidEmail(emailRaw)) throw httpError(400, "invalid email");
+    out.email = emailRaw;
+    out.user_email = emailRaw;
+  } else if (isCreate) {
+    throw httpError(400, "email is required");
+  }
+
+  const name = String(src.full_name || src.user_name || "").trim();
+  if (name) {
+    out.full_name = name.slice(0, 200);
+    out.user_name = name.slice(0, 200);
+  }
+
+  const planRaw = String(src.plan || src.current_plan || src.plan_slug || "")
+    .trim()
+    .toLowerCase();
+  const cycleFromBody = normalizeBillingCycle(src.billing_cycle);
+  if (src.billing_cycle != null && String(src.billing_cycle).trim() && !cycleFromBody) {
+    throw httpError(400, "invalid billing_cycle");
+  }
+  if (cycleFromBody) out.billing_cycle = cycleFromBody;
+
+  if (planRaw) {
+    const isLegacy = LEGACY_PLAN_SLUGS.includes(planRaw);
+    const family = familyForSlug(planRaw);
+    const cycle = cycleFromBody || "monthly";
+    if (isLegacy) {
+      out.plan = planRaw;
+      out.current_plan = planRaw;
+      out.plan_slug = planRaw;
+    } else {
+      const fam = family || planRaw.replace(/_monthly$|_annual$/, "");
+      out.plan = fam;
+      out.current_plan = fam;
+      if (fam === "enterprise") out.plan_slug = "enterprise_custom";
+      else if (["starter", "business", "growth"].includes(fam)) {
+        out.plan_slug = `${fam}_${cycle === "annual" ? "annual" : "monthly"}`;
+      } else {
+        out.plan_slug = planRaw;
+      }
+    }
+    if (family) out.plan_family = family;
+  }
+
+  if (src.amount != null && src.amount !== "") {
+    const n = Number(src.amount);
+    if (!Number.isFinite(n) || n < 0) throw httpError(400, "invalid amount");
+    out.amount = Math.round(n * 100) / 100;
+  }
+
+  if (src.status != null && String(src.status).trim()) {
+    const st = coerceSubscriptionStatus(src.status);
+    if (!st) throw httpError(400, "invalid subscription status");
+    out.status = st;
+  } else if (isCreate) {
+    out.status = SUBSCRIPTION_STATUS.ACTIVE;
+  }
+
+  if (src.currency != null && String(src.currency).trim()) {
+    out.currency = String(src.currency).trim().toUpperCase().slice(0, 8);
+  } else if (isCreate) {
+    out.currency = "ZAR";
+  }
+
+  const parseDate = (v) => {
+    if (v == null || v === "") return null;
+    const d = new Date(v);
+    if (!Number.isFinite(d.getTime())) throw httpError(400, "invalid date");
+    return d.toISOString();
+  };
+  if (Object.prototype.hasOwnProperty.call(src, "start_date")) {
+    out.start_date = parseDate(src.start_date);
+  }
+  if (Object.prototype.hasOwnProperty.call(src, "next_billing_date")) {
+    out.next_billing_date = parseDate(src.next_billing_date);
+  }
+
+  return out;
+}
+
+async function attachPlanId(supabase, row) {
+  const slug = row.plan_slug;
+  if (!slug) return row;
+  const { data: plan } = await supabase
+    .from("plans")
+    .select("id, slug, plan_family")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (plan?.id) {
+    row.plan_id = plan.id;
+    if (!row.plan_family && plan.plan_family) row.plan_family = plan.plan_family;
+  }
+  return row;
+}
+
+async function attachCompanyId(supabase, row) {
+  if (row.company_id || !row.user_id) return row;
+  const { data: mem } = await supabase
+    .from("memberships")
+    .select("org_id")
+    .eq("user_id", row.user_id)
+    .limit(1)
+    .maybeSingle();
+  if (mem?.org_id) row.company_id = mem.org_id;
+  return row;
+}
+
+async function logAdminSubscriptionEvent(supabase, subscriptionId, companyId, eventType, details) {
+  try {
+    await supabase.from("subscription_events").insert({
+      subscription_id: subscriptionId,
+      company_id: companyId || null,
+      event_type: eventType,
+      source: "admin",
+      details: details || {},
+    });
+  } catch (e) {
+    console.warn("[admin/subscriptions] event insert failed", e?.message || e);
+  }
+}
+
+function parseJsonBody(req) {
+  const b = req.body;
+  if (b && typeof b === "object" && !Buffer.isBuffer(b)) return b;
+  if (typeof b === "string" && b.trim()) {
+    try {
+      return JSON.parse(b);
+    } catch {
+      return null;
+    }
+  }
+  return {};
 }
 
 /**
@@ -110,8 +312,9 @@ async function requireBillingAdmin(req, res) {
  * Subscription Details: Company, Owner, Plan, PayFast ID, Renew Date + History / Logs / Invoices.
  */
 export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
-  const supabase = await requireBillingAdmin(req, res);
-  if (!supabase) return;
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase } = ctx;
 
   const id = String(subscriptionId || "").trim();
   if (!id) return json(res, 400, { error: "subscription id required" });
@@ -378,8 +581,9 @@ export async function handleAdminSubscriptionsList(req, res) {
     return handleAdminSubscriptionDetail(req, res, detailId);
   }
 
-  const supabase = await requireBillingAdmin(req, res);
-  if (!supabase) return;
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase } = ctx;
 
   const overviewOnly =
     String(q.overview || "").trim() === "1" ||
@@ -399,31 +603,144 @@ export async function handleAdminSubscriptionsList(req, res) {
   }
 
   const status = String(q.status || "").trim();
-  const limit = Math.min(200, Math.max(1, Number(q.limit) || 50));
+  const limit = Math.min(500, Math.max(1, Number(q.limit) || 50));
   const offset = Math.max(0, Number(q.offset) || 0);
 
-  let query = supabase
-    .from("subscriptions")
-    .select(
-      "id, status, plan_slug, amount, currency, company_id, user_id, email, activated_at, next_billing_date, cancelled_at, failure_count, created_at, updated_at",
-      { count: "exact" }
-    )
-    .order("updated_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+  const runList = (selectCols) => {
+    let query = supabase
+      .from("subscriptions")
+      .select(selectCols, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (status) query = query.eq("status", status);
+    return query;
+  };
 
-  if (status) query = query.eq("status", status);
-
-  const { data, error, count } = await query;
+  let { data, error, count } = await runList(LIST_SELECT_RICH);
+  if (error) {
+    ({ data, error, count } = await runList(LIST_SELECT_LEAN));
+  }
+  if (error) {
+    ({ data, error, count } = await runList("*"));
+  }
   if (error) {
     console.error("[admin/subscriptions]", error);
     return json(res, 500, { error: "Failed to list subscriptions" });
   }
 
+  const subscriptions = (data || []).map(normalizeAdminSubscriptionListRow);
   return json(res, 200, {
-    subscriptions: data || [],
-    count: count ?? (data || []).length,
+    subscriptions,
+    count: count ?? subscriptions.length,
     overview,
   });
+}
+
+/**
+ * POST /api/admin/subscriptions — admin create (service_role). Body: plan, amount, user_id, email, status, …
+ */
+export async function handleAdminSubscriptionCreate(req, res) {
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase, user } = ctx;
+
+  const body = parseJsonBody(req);
+  if (body == null) return json(res, 400, { error: "Invalid JSON body" });
+
+  let row;
+  try {
+    row = buildAdminSubscriptionWriteRow(body, { isCreate: true });
+  } catch (e) {
+    return json(res, e.status || 400, { error: e.message || "Invalid payload" });
+  }
+
+  const nowIso = new Date().toISOString();
+  row.created_at = nowIso;
+  row.updated_at = nowIso;
+  if (user?.id) row.created_by = user.id;
+  if (row.status === SUBSCRIPTION_STATUS.ACTIVE && !row.activated_at) {
+    row.activated_at = nowIso;
+  }
+
+  await attachPlanId(supabase, row);
+  await attachCompanyId(supabase, row);
+
+  const { data, error } = await supabase.from("subscriptions").insert(row).select("*").single();
+  if (error || !data) {
+    console.error("[admin/subscriptions/create]", error);
+    return json(res, 500, { error: error?.message || "Failed to create subscription" });
+  }
+
+  await logAdminSubscriptionEvent(
+    supabase,
+    data.id,
+    data.company_id,
+    SUBSCRIPTION_EVENT_TYPE.SUBSCRIPTION_CREATED,
+    { source: "admin", actor_id: user?.id || null, plan: data.plan || data.plan_slug }
+  );
+  if (data.status === SUBSCRIPTION_STATUS.ACTIVE) {
+    await logAdminSubscriptionEvent(supabase, data.id, data.company_id, SUBSCRIPTION_EVENT_TYPE.ACTIVATED, {
+      source: "admin",
+      actor_id: user?.id || null,
+    });
+  }
+
+  return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
+}
+
+/**
+ * PATCH /api/admin/subscriptions — admin update. Body: { id, ...fields }
+ */
+export async function handleAdminSubscriptionUpdate(req, res) {
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase, user } = ctx;
+
+  const body = parseJsonBody(req);
+  if (body == null) return json(res, 400, { error: "Invalid JSON body" });
+
+  const id = String(body.id || body.subscriptionId || "").trim();
+  if (!id || !isValidUuid(id)) return json(res, 400, { error: "subscription id required" });
+
+  let patch;
+  try {
+    patch = buildAdminSubscriptionWriteRow(body, { isCreate: false });
+  } catch (e) {
+    return json(res, e.status || 400, { error: e.message || "Invalid payload" });
+  }
+
+  delete patch.created_by;
+  patch.updated_at = new Date().toISOString();
+  if (patch.status === SUBSCRIPTION_STATUS.ACTIVE && patch.activated_at === undefined) {
+    // leave existing activated_at; trigger/row already has it
+  }
+  if (patch.status === SUBSCRIPTION_STATUS.CANCELLED) {
+    patch.cancelled_at = patch.cancelled_at || new Date().toISOString();
+  }
+
+  await attachPlanId(supabase, patch);
+
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .update(patch)
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[admin/subscriptions/update]", error);
+    return json(res, 500, { error: error.message || "Failed to update subscription" });
+  }
+  if (!data) return json(res, 404, { error: "Subscription not found" });
+
+  if (patch.status === SUBSCRIPTION_STATUS.CANCELLED) {
+    await logAdminSubscriptionEvent(supabase, data.id, data.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+      source: "admin",
+      actor_id: user?.id || null,
+    });
+  }
+
+  return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
 }
 
 function roundMoney(n) {
@@ -636,8 +953,9 @@ export async function buildRevenueMetrics(supabase) {
  * Otherwise trailing `days` completed payments list + metrics.
  */
 export async function handleAdminRevenue(req, res) {
-  const supabase = await requireBillingAdmin(req, res);
-  if (!supabase) return;
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase } = ctx;
 
   const q = req.query || {};
   const metricsOnly =
@@ -722,8 +1040,9 @@ export function deriveFailedPaymentReason(rawItn) {
  * Company | Date | Reason | Retry Count | Amount
  */
 export async function handleAdminFailedPayments(req, res) {
-  const supabase = await requireBillingAdmin(req, res);
-  if (!supabase) return;
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase } = ctx;
 
   const q = req.query || {};
   const limit = Math.min(200, Math.max(1, Number(q.limit) || 50));

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
+import { createAdminSubscription, updateAdminSubscription } from '@/api/mutateAdminSubscription';
 import {
   Dialog,
   DialogContent,
@@ -74,9 +74,13 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
         user_name: subscription.user_name || '',
         user_email: subscription.user_email || '',
         plan: subscription.plan || 'individual',
-        status: subscription.status || 'active',
+        status:
+          subscription.status === 'suspended' ? 'paused' : subscription.status || 'active',
         amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? PLAN_DEFAULT_AMOUNT.starter,
-        billing_cycle: subscription.billing_cycle || 'monthly',
+        billing_cycle:
+          subscription.billing_cycle === 'annual' || subscription.billing_cycle === 'annually'
+            ? 'yearly'
+            : subscription.billing_cycle || 'monthly',
         start_date: subscription.start_date
           ? String(subscription.start_date).slice(0, 10)
           : todayDate(),
@@ -131,9 +135,10 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload) => paidly.entities.Subscription.create(payload),
+    mutationFn: (payload) => createAdminSubscription(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-overview'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Subscription created');
@@ -143,9 +148,10 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => paidly.entities.Subscription.update(id, data),
+    mutationFn: ({ id, data }) => updateAdminSubscription(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-overview'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Subscription updated');

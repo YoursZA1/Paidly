@@ -99,6 +99,13 @@ import {
   handleSubscriptionPlans,
   handleSubscriptionStatus,
 } from "./billing/subscriptionApi.js";
+import {
+  handleAdminFailedPayments,
+  handleAdminRevenue,
+  handleAdminSubscriptionCreate,
+  handleAdminSubscriptionsList,
+  handleAdminSubscriptionUpdate,
+} from "./billing/adminBillingApi.js";
 import { envFlag, envNumber } from "./envFlags.js";
 import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
 import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
@@ -1003,6 +1010,12 @@ app.get("/api/subscriptions/status", handleSubscriptionStatus);
 app.get("/api/subscriptions/current", handleSubscriptionCurrent);
 app.post("/api/subscriptions/cancel", handleSubscriptionCancel);
 app.post("/api/subscriptions/payfast-diagnose", handlePayfastDiagnose);
+
+app.get("/api/admin/subscriptions", handleAdminSubscriptionsList);
+app.post("/api/admin/subscriptions", handleAdminSubscriptionCreate);
+app.patch("/api/admin/subscriptions", handleAdminSubscriptionUpdate);
+app.get("/api/admin/revenue", handleAdminRevenue);
+app.get("/api/admin/failed-payments", handleAdminFailedPayments);
 
 app.post("/api/admin/roles", async (req, res) => {
   try {

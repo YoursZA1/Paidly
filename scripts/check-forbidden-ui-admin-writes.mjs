@@ -10,7 +10,8 @@ const uiRoots = [
   path.join(repoRoot, "src/contexts"),
 ];
 const codeExt = new Set([".js", ".jsx", ".ts", ".tsx"]);
-const forbiddenPattern = /\bpaidly\s*\.\s*entities\s*\.\s*AffiliateSubmission\s*\.\s*update\s*\(/g;
+const forbiddenPattern =
+  /\bpaidly\s*\.\s*entities\s*\.\s*(AffiliateSubmission\s*\.\s*update|Subscription\s*\.\s*(?:create|update|delete))\s*\(/g;
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out;
@@ -35,17 +36,17 @@ for (const file of files) {
   let match;
   while ((match = forbiddenPattern.exec(content))) {
     const line = content.slice(0, match.index).split("\n").length;
-    violations.push({ file: rel(file), line });
+    violations.push({ file: rel(file), line, match: match[0] });
   }
 }
 
 if (violations.length > 0) {
   console.error("\nForbidden UI admin write pattern found:\n");
   for (const v of violations) {
-    console.error(`- ${v.file}:${v.line} -> paidly.entities.AffiliateSubmission.update(...)`);
+    console.error(`- ${v.file}:${v.line} -> ${v.match}`);
   }
   console.error(
-    "\nUse backend-secured admin routes (for example `/api/admin/affiliate-commission`) " +
+    "\nUse backend-secured admin routes (for example `/api/admin/subscriptions` or `/api/admin/affiliate-commission`) " +
       "via API clients in `src/api/*`.\n"
   );
   process.exit(1);

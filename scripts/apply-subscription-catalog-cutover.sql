@@ -8,3 +8,6 @@
 --
 -- After apply: set Vercel PAIDLY_ENTITLEMENTS_ENFORCE=true once write-path soak looks clean.
 -- Grandfathered subscribers keep subscriptions.amount; do not UPDATE plans.amount on legacy slugs.
+--
+-- If admin UI shows "permission denied for table subscriptions", also apply:
+--   supabase/migrations/20260814210000_subscriptions_grants_and_own_select.sql

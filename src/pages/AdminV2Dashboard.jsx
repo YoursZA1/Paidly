@@ -36,6 +36,7 @@ import RevenueOverview from '@/components/dashboard/RevenueOverview';
 import FailedPaymentsTable from '@/components/dashboard/FailedPaymentsTable';
 import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDetailsSheet';
 import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
+import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
 import { fetchAdminRevenueMetrics } from '@/api/fetchAdminRevenueMetrics';
 import { fetchAdminFailedPayments } from '@/api/fetchAdminFailedPayments';
 import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
@@ -174,7 +175,7 @@ export default function AdminV2Dashboard() {
 
   const { data: subscriptions = [], dataUpdatedAt: subscriptionsUpdatedAt } = useQuery({
     queryKey: ['subscriptions'],
-    queryFn: () => paidly.entities.Subscription.list('-created_date', 150),
+    queryFn: () => fetchAdminSubscriptionsList({ limit: 150 }),
     refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
     staleTime: ADMIN_DASHBOARD_STALE_MS,
     refetchIntervalInBackground: false,

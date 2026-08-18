@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
-import { paidly } from '@/api/paidlyClient';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { Search, MoreHorizontal, Plus } from 'lucide-react';
 import { format } from 'date-fns';
@@ -21,6 +20,8 @@ import PlanBadge from '@/components/dashboard/PlanBadge';
 import SubscriptionOverview from '@/components/dashboard/SubscriptionOverview';
 import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDetailsSheet';
 import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
+import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
+import { updateAdminSubscription } from '@/api/mutateAdminSubscription';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
@@ -105,9 +106,9 @@ export default function SubscriptionsPage() {
   const [subsPage, setSubsPage] = useState(0);
   const queryClient = useQueryClient();
 
-  const { data: subscriptions = [], isLoading: subsLoading, refetch } = useQuery({
+  const { data: subscriptions = [], isLoading: subsLoading, isError: subsError, error: subsErr, refetch } = useQuery({
     queryKey: ['subscriptions'],
-    queryFn: () => paidly.entities.Subscription.list('-created_date', LIST_LIMIT),
+    queryFn: () => fetchAdminSubscriptionsList({ limit: LIST_LIMIT }),
     refetchInterval: 30000,
   });
 
@@ -145,9 +146,10 @@ export default function SubscriptionsPage() {
   const subsFetching = useIsFetching({ queryKey: ['subscriptions'] }) > 0;
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => paidly.entities.Subscription.update(id, data),
+    mutationFn: ({ id, data }) => updateAdminSubscription(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-overview'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       toast.success('Subscription updated');
     },
@@ -214,6 +216,14 @@ export default function SubscriptionsPage() {
           <AlertDescription>
             Could not load platform users from the backend (needed for subscription rows):{' '}
             {platformUsersErr?.message || 'Unknown error'}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {subsError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            Could not load subscriptions: {subsErr?.message || 'Unknown error'}.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -375,7 +385,7 @@ export default function SubscriptionsPage() {
                                 Pause
                               </DropdownMenuItem>
                             ) : null}
-                            {sub.status === 'paused' ? (
+                            {sub.status === 'paused' || sub.status === 'suspended' ? (
                               <DropdownMenuItem onClick={() => handleStatusChange(sub, 'active')}>
                                 Reactivate
                               </DropdownMenuItem>
