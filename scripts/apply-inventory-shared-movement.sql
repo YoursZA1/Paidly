@@ -1,0 +1,7 @@
+-- Inventory shared movement function — apply in the Supabase SQL Editor (safe to re-run).
+--
+-- 1) supabase/migrations/20260820220000_inventory_shared_movement_repair.sql
+--
+-- Restores search_path on apply_inventory_movement / adjust_inventory_stock /
+-- invoice paid+reversal triggers, grants EXECUTE on apply_inventory_movement,
+-- and requires type to match delta sign so the ledger cannot diverge from stock.

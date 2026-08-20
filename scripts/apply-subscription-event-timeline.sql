@@ -1,0 +1,6 @@
+-- Subscription event timeline — apply in the Supabase SQL Editor (safe to re-run).
+--
+-- 1) supabase/migrations/20260820210000_subscription_event_timeline_repair.sql
+--
+-- This drops leftover event_type CHECKs from billing v2, allows redirected/activated,
+-- sets search_path on the normalizer, and recreates the trigger.

@@ -1,20 +1,8 @@
--- Consolidate all stock-mutating paths onto one atomic function.
---
--- Previously, adjust_inventory_stock() (manual adjustments) and the
--- handle_invoice_paid()/handle_invoice_reversal() triggers each implemented
--- their own "update stock_quantity + log a movement" logic independently,
--- with the trigger versions doing it as two separate set-based statements
--- instead of one atomic per-row operation. apply_inventory_movement()
--- becomes the single implementation; everything else calls it.
---
--- Fixes vs first draft:
---   * SET search_path (CREATE OR REPLACE otherwise wipes the 20260325230000
---     ALTER FUNCTION search_path on the invoice triggers).
---   * GRANT EXECUTE on apply_inventory_movement — nested callers
---     (adjust_inventory_stock, receive_purchase_order_item, invoice triggers)
---     fail after a REVOKE FROM PUBLIC.
---   * type must match delta sign so the ledger and stock cache cannot diverge.
---   * Recreate invoice triggers after replacing the functions.
+-- Repair apply_inventory_movement for databases that already applied the
+-- incomplete 20260804120000 migration (missing search_path — which also
+-- wiped the invoice-trigger search_path from 20260325230000 — missing
+-- GRANT on apply_inventory_movement, no type/delta sign check).
+-- Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.apply_inventory_movement(
   p_product_id uuid,
@@ -90,8 +78,6 @@ COMMENT ON FUNCTION public.apply_inventory_movement(uuid, uuid, integer, text, t
 GRANT EXECUTE ON FUNCTION public.apply_inventory_movement(uuid, uuid, integer, text, text, uuid)
   TO authenticated, service_role;
 
--- adjust_inventory_stock keeps its existing signature/callers; it now just
--- delegates to apply_inventory_movement.
 CREATE OR REPLACE FUNCTION public.adjust_inventory_stock(
   p_product_id uuid,
   p_org_id uuid,
@@ -114,11 +100,6 @@ $$;
 GRANT EXECUTE ON FUNCTION public.adjust_inventory_stock(uuid, uuid, integer, text, text, uuid)
   TO authenticated, service_role;
 
--- Invoice paid: deduct stock per line item via apply_inventory_movement,
--- clamping each row's delta to available stock (same "never go below zero,
--- never block the payment" behavior as before) instead of the previous
--- two-statement set-based UPDATE. FOR UPDATE serializes the rare case of
--- the same product appearing on multiple line items of one invoice.
 CREATE OR REPLACE FUNCTION public.handle_invoice_paid()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -161,10 +142,6 @@ BEGIN
 END;
 $$;
 
--- Invoice reversal: restore stock per line item via apply_inventory_movement.
--- Same restore-the-full-line-quantity semantics as before (a pre-existing,
--- unchanged limitation: if the original deduction was clamped by low stock,
--- reversal can over-restore beyond the original balance).
 CREATE OR REPLACE FUNCTION public.handle_invoice_reversal()
 RETURNS TRIGGER
 LANGUAGE plpgsql

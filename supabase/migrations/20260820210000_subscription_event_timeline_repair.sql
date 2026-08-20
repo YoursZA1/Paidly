@@ -1,10 +1,6 @@
--- Event Timeline vocabulary for subscription_events:
--- Created | Redirected | ITN Received | Verified | Activated | Renewed | Cancelled
--- Adds allow-list values: redirected, activated (labels via shared/subscriptionEventTypes.js).
---
--- Safe to re-run. Drops every event_type CHECK (the v2 schema created an inline
--- column check that is not always named subscription_events_event_type_check).
--- Leaving that leftover check rejects redirected/activated inserts.
+-- Repair Event Timeline allow-list for databases that already applied the
+-- incomplete 20260715180000 migration (leftover inline event_type CHECK,
+-- missing search_path, trigger not recreated). Safe to re-run.
 
 DO $$
 DECLARE

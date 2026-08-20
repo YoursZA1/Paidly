@@ -111,6 +111,7 @@ export function coerceSubscriptionEventType(raw) {
   if (t === "itn_received") t = "webhook_received";
   if (t === "itn_verified" || t === "verified") t = "webhook_verified";
   if (t === "itn_failed") t = "webhook_failed";
+  if (t === "payment_completed" || t === "paymentcompleted") t = "payment_verified";
   if (SUBSCRIPTION_EVENT_TYPES.includes(/** @type {SubscriptionEventType} */ (t))) {
     return /** @type {SubscriptionEventType} */ (t);
   }

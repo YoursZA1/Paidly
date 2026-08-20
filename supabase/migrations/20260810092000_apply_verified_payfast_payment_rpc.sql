@@ -118,7 +118,7 @@ BEGIN
     VALUES (
       p_subscription_id,
       p_company_id,
-      COALESCE(NULLIF(btrim(p_event_type), ''), 'payment_completed'),
+      COALESCE(NULLIF(btrim(p_event_type), ''), 'payment_verified'),
       'payfast_itn',
       jsonb_build_object(
         'payfast_payment_id', p_pf_payment_id,
