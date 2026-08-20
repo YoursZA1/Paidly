@@ -153,18 +153,47 @@ export function pickAccessSubscriptionRow(rows, now = new Date()) {
   })[0];
 }
 
+const MS_HOUR = 60 * 60 * 1000;
+const MS_DAY = 24 * MS_HOUR;
+
+/**
+ * Remaining time from a server `trial_ends_at` timestamp. Display-only — does not grant access.
+ * @param {string | Date | null | undefined} trialEndsAt
+ * @param {Date} [now]
+ * @returns {{
+ *   expired: boolean,
+ *   remainingMs: number | null,
+ *   daysRemaining: number | null,
+ *   hoursRemaining: number | null,
+ * }}
+ */
+export function trialRemainingBreakdown(trialEndsAt, now = new Date()) {
+  if (trialEndsAt == null || trialEndsAt === "") {
+    return { expired: false, remainingMs: null, daysRemaining: null, hoursRemaining: null };
+  }
+  const end = new Date(trialEndsAt).getTime();
+  if (!Number.isFinite(end)) {
+    return { expired: false, remainingMs: null, daysRemaining: null, hoursRemaining: null };
+  }
+  const ms = end - now.getTime();
+  if (ms <= 0) {
+    return { expired: true, remainingMs: 0, daysRemaining: 0, hoursRemaining: 0 };
+  }
+  return {
+    expired: false,
+    remainingMs: ms,
+    daysRemaining: Math.ceil(ms / MS_DAY),
+    hoursRemaining: Math.max(1, Math.ceil(ms / MS_HOUR)),
+  };
+}
+
 /**
  * Whole remaining calendar days from trial_ends_at (server timestamp), floored, min 0.
  * @param {string | Date | null | undefined} trialEndsAt
  * @param {Date} [now]
  */
 export function trialDaysRemaining(trialEndsAt, now = new Date()) {
-  if (trialEndsAt == null || trialEndsAt === "") return null;
-  const end = new Date(trialEndsAt).getTime();
-  if (!Number.isFinite(end)) return null;
-  const ms = end - now.getTime();
-  if (ms <= 0) return 0;
-  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+  return trialRemainingBreakdown(trialEndsAt, now).daysRemaining;
 }
 
 /**

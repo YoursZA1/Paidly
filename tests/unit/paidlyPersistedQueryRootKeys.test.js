@@ -15,12 +15,13 @@ describe("shouldPersistReactQueryKey", () => {
     expect(shouldPersistReactQueryKey(["currency-profiles", "u1"])).toBe(true);
   });
 
-  it("rejects auth-like roots", () => {
+  it("rejects auth-like roots and live subscription status", () => {
     expect(shouldPersistReactQueryKey(["auth", "me"])).toBe(false);
     expect(shouldPersistReactQueryKey(["auth-config", "x"])).toBe(false);
     expect(shouldPersistReactQueryKey(["session"])).toBe(false);
     expect(shouldPersistReactQueryKey(["secrets", "x"])).toBe(false);
     expect(shouldPersistReactQueryKey(["sb-access-token"])).toBe(false);
+    expect(shouldPersistReactQueryKey(["subscription-current", "u1"])).toBe(false);
   });
 
   it("allows settings-prefixed keys that are not the blocked root \"session\"", () => {

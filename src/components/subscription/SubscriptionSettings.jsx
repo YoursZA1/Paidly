@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
+import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
+import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
-import { describeSubscriptionState, normalizePaidPackageKey, isOnTrialSubscription } from "@/lib/subscriptionPlan";
+import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
+import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
 
 const CONTACT_SALES_EMAIL = (
   import.meta.env.VITE_CONTACT_SALES_EMAIL ||
@@ -76,19 +79,24 @@ export default function SubscriptionSettings() {
     const navigate = useNavigate();
     const { user: authUser } = useAuth();
     const { profile: profileFromQuery, refetch: refetchProfile } = useUserProfileQuery();
+    const { data: billingStatus, refetch: refetchBilling } = useCurrentSubscriptionQuery();
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         void refetchProfile();
-    }, [refetchProfile]);
+        void refetchBilling();
+    }, [refetchProfile, refetchBilling]);
 
     useEffect(() => {
         const onVis = () => {
-            if (document.visibilityState === "visible") void refetchProfile();
+            if (document.visibilityState === "visible") {
+                void refetchProfile();
+                void refetchBilling();
+            }
         };
         document.addEventListener("visibilitychange", onVis);
         return () => document.removeEventListener("visibilitychange", onVis);
-    }, [refetchProfile]);
+    }, [refetchProfile, refetchBilling]);
 
     useEffect(() => {
         setIsLoading(false);
@@ -108,8 +116,10 @@ export default function SubscriptionSettings() {
     );
 
     const accountState = describeSubscriptionState(billingProfile);
+    const bannerCopy = describeDashboardSubscriptionBanner(billingStatus || billingProfile);
+    const showActivePlanHeader =
+        bannerCopy.kind === "active" || bannerCopy.kind === "admin_granted" || bannerCopy.kind === "past_due";
     const currentPlanId = normalizePaidPackageKey(billingProfile);
-    const currentTier = TIERS.find((t) => t.id === currentPlanId) || TIERS[0];
 
     const handleContactSales = () => {
         window.location.href = `mailto:${CONTACT_SALES_EMAIL}`;
@@ -145,7 +155,13 @@ export default function SubscriptionSettings() {
 
     return (
         <div className="space-y-10">
-            {/* 1. Active Plan Header — Manage Billing at top */}
+            <DashboardSubscriptionBanner
+                serverStatus={billingStatus || null}
+                profileFallback={billingProfile}
+                className="mb-0"
+            />
+
+            {showActivePlanHeader ? (
             <div className="bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950/30 dark:to-transparent border border-orange-100 dark:border-orange-900/50 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="flex items-center gap-4">
                     <div className="bg-orange-500 p-3 rounded-2xl">
@@ -188,21 +204,13 @@ export default function SubscriptionSettings() {
                     ) : null}
                 </div>
             </div>
+            ) : null}
 
             {/* 2. Plan Selection Grid */}
             <div>
                 <div className="mb-8">
                     <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Change your plan</h3>
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Select the plan that best fits your current team size.</p>
-                    <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                        <p className="text-sm font-semibold text-primary">
-                            {isOnTrialSubscription(billingProfile)
-                                ? accountState.statusLabel
-                                : String(billingProfile.subscription_status || "").toLowerCase() === "expired"
-                                  ? "Trial expired. Subscribe to continue."
-                                  : "Subscribe to a Paidly plan. Amounts are taken from the server catalog, not this page."}
-                        </p>
-                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

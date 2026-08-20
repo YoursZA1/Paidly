@@ -24,9 +24,11 @@ import { hasPaidAccessIncludingGrace } from "./entitlements.js";
 import {
   pickAccessSubscriptionRow,
   trialDaysRemaining,
+  trialRemainingBreakdown,
   describeAccessFacingState,
   isAdminManaged,
 } from "../../../shared/subscriptionAccess.js";
+import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
 import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
 import { randomBytes } from "node:crypto";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
@@ -617,6 +619,25 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
   const renewDate = sub.next_billing_date || null;
   const now = new Date();
   const facing = describeAccessFacingState(sub, now);
+  const remaining = trialRemainingBreakdown(sub.trial_ends_at, now);
+  const managedByAdministrator =
+    isAdminManaged(sub) && !["payfast"].includes(String(sub.subscription_source || ""));
+  const statusPayloadBase = {
+    status: currentStatus,
+    plan: planSlug,
+    planName,
+    trialStartAt: sub.trial_started_at || null,
+    trialEndAt: sub.trial_ends_at || null,
+    trialStartedAt: sub.trial_started_at || null,
+    trialEndsAt: sub.trial_ends_at || null,
+    daysRemaining: remaining.daysRemaining,
+    hoursRemaining: remaining.hoursRemaining,
+    remainingMs: remaining.remainingMs,
+    nextBillingDate: renewDate,
+    managedByAdministrator,
+    subscription_source: sub.subscription_source || null,
+    admin_override: sub.admin_override === true,
+  };
 
   return {
     subscriptionId: sub.id,
@@ -638,12 +659,17 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
     planFamily: sub.plan_family || familyForSlug(planSlug) || null,
     graceEndsAt: sub.grace_ends_at || null,
     accessGranted: hasPaidAccessIncludingGrace(sub, now),
+    trialStartAt: sub.trial_started_at || null,
+    trialEndAt: sub.trial_ends_at || null,
     trialStartedAt: sub.trial_started_at || null,
     trialEndsAt: sub.trial_ends_at || null,
-    daysRemaining: trialDaysRemaining(sub.trial_ends_at, now),
-    managedByAdministrator: isAdminManaged(sub) && !["payfast"].includes(String(sub.subscription_source || "")),
+    daysRemaining: remaining.daysRemaining ?? trialDaysRemaining(sub.trial_ends_at, now),
+    hoursRemaining: remaining.hoursRemaining,
+    remainingMs: remaining.remainingMs,
+    managedByAdministrator,
     headline: facing.headline,
     detail: facing.detail,
+    presentation: describeDashboardSubscriptionBanner(statusPayloadBase, now),
   };
 }
 
@@ -743,6 +769,12 @@ export async function handleSubscriptionCurrent(req, res) {
       expiry: null,
       renewDate: null,
       accessGranted: false,
+      status: null,
+      plan: null,
+      trialStartAt: null,
+      trialEndAt: null,
+      daysRemaining: null,
+      presentation: describeDashboardSubscriptionBanner(null),
     });
   }
 

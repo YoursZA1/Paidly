@@ -33,6 +33,7 @@ export default function PayfastReturn() {
     const invalidateProfileCaches = () => {
       void queryClient.invalidateQueries({ queryKey: ["current-user"] });
       void queryClient.invalidateQueries({ queryKey: ["profile"] });
+      void queryClient.invalidateQueries({ queryKey: ["subscription-current"] });
     };
 
     const run = async () => {

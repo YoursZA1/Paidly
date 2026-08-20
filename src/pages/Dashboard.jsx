@@ -63,8 +63,8 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
-import PlanBadge from "@/components/dashboard/PlanBadge";
-import { describeSubscriptionState, slugFromProfile } from "@/lib/subscriptionPlan";
+import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
+import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
@@ -402,6 +402,7 @@ function DashboardMain() {
 
   const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id);
   const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id);
+  const currentSubscriptionQuery = useCurrentSubscriptionQuery({ enabled: !isAdmin });
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const resolvedInvoices = isAdmin
     ? invoices
@@ -1167,17 +1168,13 @@ function DashboardMain() {
     [resolvedInvoices]
   );
 
-  const subscriptionBanner = useMemo(() => {
-    if (isAdmin) return null;
-    const profileSlug = slugFromProfile(profileFromQuery);
-    const authSlug = slugFromProfile(authUser) || authUser?.subscription_plan || authUser?.plan || "";
-    const source = profileSlug ? profileFromQuery : authUser;
-    if (!source) return null;
-    return {
-      sub: describeSubscriptionState(source),
-      badgePlan: profileSlug || authSlug || "none",
-    };
-  }, [isAdmin, profileFromQuery, authUser]);
+  const billingProfileFallback = useMemo(
+    () => ({
+      ...(authUser || {}),
+      ...(profileFromQuery || {}),
+    }),
+    [authUser, profileFromQuery]
+  );
 
   // ADMIN DASHBOARD
   if (isAdmin) {
@@ -1721,27 +1718,17 @@ function DashboardMain() {
             </div>
         )}
 
-        {subscriptionBanner && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.3 }}
-              className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5 sm:px-4 sm:py-3 backdrop-blur-sm"
-            >
-              <span className="text-xs sm:text-sm font-medium text-muted-foreground">Subscription</span>
-              <PlanBadge plan={subscriptionBanner.badgePlan} />
-              <span className="text-xs sm:text-sm text-foreground">
-                {subscriptionBanner.sub.packageLabel}
-                <span className="text-muted-foreground"> · {subscriptionBanner.sub.statusLabel}</span>
-              </span>
-              <Link
-                to={`${createPageUrl("Settings")}?tab=subscription`}
-                className="text-xs sm:text-sm font-semibold text-primary hover:underline underline-offset-2 ml-auto sm:ml-0"
-              >
-                Manage
-              </Link>
-            </motion.div>
-        )}
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.3 }}
+        >
+          <DashboardSubscriptionBanner
+            serverStatus={currentSubscriptionQuery.data || null}
+            profileFallback={billingProfileFallback}
+            isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
+          />
+        </motion.div>
 
         <AffiliateProgramBanner />
 

@@ -319,6 +319,27 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
 }
 
 /**
+ * GET /api/subscriptions/current — display-only. Never mutates subscription status.
+ */
+export async function fetchSubscriptionCurrent() {
+  const session = await getStableSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) throw new Error("Please sign in.");
+
+  const response = await fetch(`${getApiBase()}/api/subscriptions/current`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const payload = await readJsonSafe(response);
+    throw checkoutErrorFromHttp(response.status, payload);
+  }
+
+  return response.json();
+}
+
+/**
  * GET /api/subscriptions/status — display-only. Never mutates subscription status.
  *
  * @param {string} [subscriptionId]

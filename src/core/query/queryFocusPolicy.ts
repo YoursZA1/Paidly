@@ -33,6 +33,7 @@ export const FOCUS_LIVE_QUERY_ROOTS = new Set([
   "notifications",
   "admin-messages",
   "cashflow-page",
+  "subscription-current",
 ]);
 
 /**

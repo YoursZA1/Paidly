@@ -26,7 +26,17 @@ export const PAIDLY_PERSISTED_QUERY_ROOT_KEYS = new Set([
 const PERSISTED_ROOT_PREFIXES = ["settings", "organization", "organizations", "currency"];
 
 const NEVER_PERSIST_EXACT = new Set(
-  ["auth", "session", "token", "password", "secret", "secrets", "refresh", "jwt"].map((s) => s.toLowerCase())
+  [
+    "auth",
+    "session",
+    "token",
+    "password",
+    "secret",
+    "secrets",
+    "refresh",
+    "jwt",
+    "subscription-current",
+  ].map((s) => s.toLowerCase())
 );
 
 const NEVER_PERSIST_PREFIXES = ["sb-", "supabase.auth"];
