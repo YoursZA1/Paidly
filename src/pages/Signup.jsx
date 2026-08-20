@@ -84,9 +84,6 @@ async function persistSignupProfilePlan({
     company_name: (companyName || "").trim(),
     company_address: (companyAddress || "").trim(),
     phone: (phone || "").trim(),
-    plan: canonicalPlan,
-    subscription_plan: canonicalPlan,
-    subscription_status: "trial",
     updated_at: new Date().toISOString(),
   };
 
@@ -101,12 +98,11 @@ async function persistSignupProfilePlan({
   if (profileError) throw profileError;
 
   const storedPlan = normalizeSignupPlan(profile?.subscription_plan || profile?.plan || "");
-  if (storedPlan !== canonicalPlan) {
-    console.error("[signup-plan-mismatch] Selected plan differs from stored profile plan", {
+  if (storedPlan && canonicalPlan && storedPlan !== canonicalPlan) {
+    console.info("[signup-plan] Profile plan is server-managed; selected plan is checkout preference only", {
       userId,
       selectedPlan: canonicalPlan,
       storedPlan,
-      storedProfile: profile,
     });
   }
 }
@@ -297,7 +293,8 @@ export default function Signup() {
         }
       }
 
-      // Create Supabase user (trigger creates profile: plan=individual, subscription_status=trial, trial_ends_at=+7d)
+      // Create Supabase user. handle_new_user sets a 7-day server-side trial for org owners
+      // created on/after 2026-08-20 UTC. Do not send trial dates from the browser.
       let authUserId = null;
       try {
         const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
@@ -424,7 +421,6 @@ export default function Signup() {
 
     try {
       const now = new Date();
-      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       const selectedPlan = normalizeSignupPlan(plan);
       const normalizedEmail = email.trim().toLowerCase();
       const currentSession = await SupabaseAuthService.getSession().catch(() => null);
@@ -440,9 +436,6 @@ export default function Signup() {
           storedUsers[userIndex] = {
             ...storedUsers[userIndex],
             plan: selectedPlan,
-            status: "trial",
-            trial_started_at: now.toISOString(),
-            trial_ends_at: trialEndsAt.toISOString(),
             company_name: companyName.trim(),
             company_address: companyAddress.trim(),
             phone: phone.trim(),
@@ -455,9 +448,6 @@ export default function Signup() {
         if (excelUser) {
           userService.updateUser(excelUser.id, {
             plan: selectedPlan,
-            status: "trial",
-            trial_started_at: now.toISOString(),
-            trial_ends_at: trialEndsAt.toISOString(),
             company_name: companyName.trim(),
             company_address: companyAddress.trim(),
             phone: phone.trim(),

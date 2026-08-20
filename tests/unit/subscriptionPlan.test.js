@@ -7,19 +7,19 @@ import {
 } from "@/lib/subscriptionPlan";
 
 describe("normalizePaidPackageKey", () => {
-  it("maps product and legacy slugs to individual | sme | corporate", () => {
-    expect(normalizePaidPackageKey("individual")).toBe("individual");
-    expect(normalizePaidPackageKey("free")).toBe("individual");
-    expect(normalizePaidPackageKey("trial")).toBe("individual");
-    expect(normalizePaidPackageKey("sme")).toBe("sme");
-    expect(normalizePaidPackageKey("professional")).toBe("sme");
-    expect(normalizePaidPackageKey("corporate")).toBe("corporate");
-    expect(normalizePaidPackageKey("enterprise")).toBe("corporate");
+  it("maps product and legacy slugs to starter | business | growth | enterprise", () => {
+    expect(normalizePaidPackageKey("individual")).toBe("starter");
+    expect(normalizePaidPackageKey("free")).toBe("starter");
+    expect(normalizePaidPackageKey("trial")).toBe("starter");
+    expect(normalizePaidPackageKey("sme")).toBe("business");
+    expect(normalizePaidPackageKey("professional")).toBe("business");
+    expect(normalizePaidPackageKey("corporate")).toBe("growth");
+    expect(normalizePaidPackageKey("enterprise")).toBe("enterprise");
   });
 
   it("reads slug from profile-shaped objects", () => {
-    expect(normalizePaidPackageKey({ subscription_plan: "sme" })).toBe("sme");
-    expect(normalizePaidPackageKey({ plan: "corporate" })).toBe("corporate");
+    expect(normalizePaidPackageKey({ subscription_plan: "sme" })).toBe("business");
+    expect(normalizePaidPackageKey({ plan: "corporate" })).toBe("growth");
   });
 });
 
@@ -66,7 +66,7 @@ describe("describeSubscriptionState", () => {
       subscription_plan: "sme",
       subscription_status: "active",
     });
-    expect(d.packageLabel).toBe("SME");
+    expect(d.packageLabel).toBe("Business");
     expect(d.statusLabel).toBe("Paid · Active");
   });
 
@@ -77,7 +77,7 @@ describe("describeSubscriptionState", () => {
       subscription_status: "trial",
       trial_ends_at: future,
     });
-    expect(d.statusLabel).toBe("Trial");
+    expect(d.statusLabel).toMatch(/Free Trial/);
   });
 });
 

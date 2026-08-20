@@ -1,9 +1,11 @@
 /**
  * Profile plan helpers — `profiles.plan` / `profiles.subscription_plan` are lowercase slugs.
- * Free trial: plan = individual, subscription_status = trial, trial_ends_at set (see `handle_new_user` migration).
- * Paid: subscription_status = active; tier from PayFast ITN (individual | sme | corporate). Literal `"pro"` is supported if you store it elsewhere.
+ * Free trial: org owners created on/after 2026-08-20 UTC get a 7-day server-side trial
+ * (`subscriptions.status = trialing`, `trial_ends_at = created_at + 7 days`). Profiles cache
+ * `subscription_status = trial`. Dates are never taken from the browser.
+ * Paid: `subscription_status = active` after verified PayFast ITN.
  *
- * `profiles.subscription_status`: trial | active | expired | cancelled (see migration comments).
+ * `profiles.subscription_status`: trial | active | expired | cancelled | past_due | suspended.
  *
  * Billing columns are written only by the server webhook (service role) or DB trigger. The app reads them for UI; do not
  * `update()` them from the client (see `updateMyUserData` billing-field strip in `customClient.js`).
@@ -72,6 +74,13 @@ export function isSubscriptionExpired(profileOrUser) {
   if (st === "expired" || st === "cancelled" || st === "canceled" || st === "suspended" || st === "failed") {
     return true;
   }
+  if (st === "trial" || st === "trialing") {
+    const raw = profileOrUser.trial_ends_at;
+    if (raw == null || raw === "") return false;
+    const end = new Date(raw);
+    if (!Number.isFinite(end.getTime())) return false;
+    return end.getTime() <= Date.now();
+  }
   if (st === "past_due") {
     // During grace, profile.is_pro may still be true (DB trigger).
     if (profileOrUser.is_pro === true) return false;
@@ -80,11 +89,11 @@ export function isSubscriptionExpired(profileOrUser) {
   return false;
 }
 
-/** True while subscription_status is trial and trial_ends_at is unset or still in the future. */
+/** True while subscription_status is trial/trialing and trial_ends_at is unset or still in the future. */
 export function isOnTrialSubscription(profile) {
   if (!profile) return false;
   const st = String(profile.subscription_status || "").toLowerCase();
-  if (st !== "trial") return false;
+  if (st !== "trial" && st !== "trialing") return false;
   const raw = profile.trial_ends_at;
   if (raw == null || raw === "") return true;
   const end = new Date(raw);
@@ -164,10 +173,12 @@ export function pickPreferredSubscriptionRow(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const score = (s) => {
     const x = String(s?.status || "").toLowerCase();
-    if (x === "active") return 5;
+    if (x === "active") return 6;
+    if (x === "trialing" || x === "trial") return 5;
     if (x === "past_due") return 4;
+    if (x === "pending" || x === "processing") return 2;
     if (x === "inactive") return 2;
-    if (x === "canceled" || x === "cancelled") return 1;
+    if (x === "canceled" || x === "cancelled" || x === "expired" || x === "failed" || x === "suspended") return 1;
     if (x === "none" || x === "") return 0;
     return 3;
   };
@@ -202,16 +213,36 @@ export function describeSubscriptionState(profile) {
   }
 
   let statusLabel = "Inactive";
-  if (st === "trial") {
-    statusLabel = isOnTrialSubscription(profile) ? "Trial" : "Trial ended";
+  if (st === "trial" || st === "trialing") {
+    if (isOnTrialSubscription(profile)) {
+      const raw = profile.trial_ends_at;
+      const end = raw ? new Date(raw) : null;
+      const days =
+        end && Number.isFinite(end.getTime())
+          ? Math.max(0, Math.ceil((end.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+          : null;
+      statusLabel =
+        days == null ? "Free Trial" : `Free Trial · ${days} day${days === 1 ? "" : "s"} remaining`;
+    } else {
+      statusLabel = "Trial expired";
+    }
   } else if (st === "active") {
-    statusLabel = hasActivePaidSubscription(profile) ? "Paid · Active" : "Active";
+    statusLabel =
+      profile.subscription_source === "admin" || profile.admin_override
+        ? "Active · Managed by administrator"
+        : hasActivePaidSubscription(profile)
+          ? "Paid · Active"
+          : "Active";
   } else if (st === "expired") {
-    statusLabel = "Expired";
+    statusLabel = "Trial expired";
   } else if (st === "past_due") {
     statusLabel = "Past due";
   } else if (st === "cancelled" || st === "canceled") {
     statusLabel = "Cancelled";
+  } else if (st === "suspended") {
+    statusLabel = "Suspended";
+  } else if (st === "failed") {
+    statusLabel = "Payment failed";
   } else if (st === "inactive") {
     statusLabel = "No active subscription";
   }

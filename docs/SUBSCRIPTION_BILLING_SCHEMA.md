@@ -109,6 +109,10 @@ Operational extras (checkout/ITN): `m_payment_id`, `activated_at`, `pending_expi
 | `suspended` | Admin/provider suspension (legacy `paused` mapped here) |
 | `trialing` | In trial period |
 
+**Lifecycle from 2026-08-20 UTC:** new **org-owner** accounts get `status=trialing`, `subscription_source=system_trial`, `trial_started_at=now()`, `trial_ends_at=now()+7 days` via `start_owner_system_trial()` (called from `handle_new_user`). Invite/pending-invite signups do not. Existing accounts are **not** backfilled. Access is evaluated server-side (`trialing` AND `now < trial_ends_at`, or `active`, or admin-managed). Access does not depend on cron: `expire_trial_if_due` / `expire_all_overdue_trials` skip `admin_override` and `subscription_source=admin`. Admin grant is `active` + `subscription_source=admin` + `admin_override` (the CHECK list does not include `admin_granted`). Verified PayFast ITN sets `subscription_source=payfast` and `status=active`.
+
+**Payment/revenue reporting epoch:** only `payment_history.payment_status = completed` with `coalesce(transaction_date, created_at) >= 2026-08-20T00:00:00.000Z` (UTC). Pending, failed, cancelled, refunded, invalid, and pre-cutoff rows are excluded. Do not derive revenue from `subscriptions.status = active`.
+
 Legacy writers (`inactive`, `canceled`, `paused`, `trial`) are coerced to this list in a BEFORE trigger; unknown values raise.
 
 ### `payment_history` (Phase 1.3)

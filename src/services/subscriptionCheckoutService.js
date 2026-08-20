@@ -1,31 +1,136 @@
 /**
  * SaaS subscription checkout (billing v2).
  *
- * Flow: select plan → POST /api/subscriptions/create → PayFast → return → poll status.
+ * Flow: select plan → POST /api/subscriptions/create → PayFast form POST.
  * The frontend NEVER writes subscription.status = "active". It only displays backend status.
+ * This call waits only for Paidly checkout data — never for PayFast ITN/payment.
  */
 
 import { getStableSession } from "@/core/auth/SessionCoordinator";
+import { useAuthSessionStore } from "@/stores/authSessionStore";
 import { normalizePlanSlug } from "@/lib/plans.js";
+import { promiseWithTimeout } from "@/utils/fetchWithTimeout";
 
 const PENDING_SUB_KEY = "paidly_pending_subscription_id";
 const PENDING_PLAN_KEY = "paidly_pending_plan_slug";
+
+/** Hard cap so Subscribe cannot spin forever if getSession() or fetch stalls. */
+export const CHECKOUT_REQUEST_TIMEOUT_MS = 30_000;
+export const CHECKOUT_SESSION_TIMEOUT_MS = 8_000;
+
+const USER_RETRY_MESSAGE =
+  "Something went wrong while starting your subscription. Please try again.";
 
 const getApiBase = () => {
   if (import.meta.env.DEV) return "";
   return (import.meta.env.VITE_SERVER_URL || "").replace(/\/$/, "");
 };
 
+let checkoutInFlight = false;
+
+export function isSubscriptionCheckoutInFlight() {
+  return checkoutInFlight;
+}
+
+export function releaseSubscriptionCheckoutGuard() {
+  checkoutInFlight = false;
+}
+
+/** Test-only alias. */
+export function resetSubscriptionCheckoutGuardForTests() {
+  releaseSubscriptionCheckoutGuard();
+}
+
+export class SubscriptionCheckoutError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ code?: string, status?: number, retryable?: boolean }} [meta]
+   */
+  constructor(message, meta = {}) {
+    super(message);
+    this.name = "SubscriptionCheckoutError";
+    this.code = meta.code || "CHECKOUT_FAILED";
+    this.status = meta.status ?? null;
+    this.retryable = meta.retryable !== false;
+  }
+}
+
+/**
+ * Map HTTP + API body to a user-facing checkout error (no secrets / stack traces).
+ * @param {number} status
+ * @param {object|null} payload
+ */
+export function checkoutErrorFromHttp(status, payload) {
+  const code =
+    (typeof payload?.code === "string" && payload.code) ||
+    (typeof payload?.error?.code === "string" && payload.error.code) ||
+    null;
+  const raw =
+    (typeof payload?.error === "string" && payload.error) ||
+    (typeof payload?.error?.message === "string" && payload.error.message) ||
+    (typeof payload?.message === "string" && payload.message) ||
+    "";
+
+  if (status === 401 || code === "AUTH_REQUIRED") {
+    return new SubscriptionCheckoutError("Please sign in to subscribe.", {
+      code: "AUTH_REQUIRED",
+      status: 401,
+      retryable: true,
+    });
+  }
+  if (status === 403 || code === "FORBIDDEN") {
+    return new SubscriptionCheckoutError("You do not have permission to start this subscription.", {
+      code: "FORBIDDEN",
+      status: 403,
+      retryable: true,
+    });
+  }
+  if (status === 400 || status === 422) {
+    const friendly =
+      raw && raw.length < 180 && !/passphrase|merchant_key|service.role/i.test(raw)
+        ? raw
+        : "This plan cannot be checked out. Please choose another plan or try again.";
+    return new SubscriptionCheckoutError(friendly, {
+      code: code || "VALIDATION_ERROR",
+      status,
+      retryable: true,
+    });
+  }
+  if (status === 409 || code === "CHECKOUT_IN_PROGRESS") {
+    return new SubscriptionCheckoutError(
+      raw || "A checkout is already in progress. Please try again in a moment.",
+      { code: "CHECKOUT_IN_PROGRESS", status: 409, retryable: true }
+    );
+  }
+  if (status >= 500 || code === "PAYFAST_SIGNATURE_ERROR" || code === "SUBSCRIPTION_CREATE_FAILED") {
+    return new SubscriptionCheckoutError(USER_RETRY_MESSAGE, {
+      code: code || "SERVER_ERROR",
+      status: status || 500,
+      retryable: true,
+    });
+  }
+  return new SubscriptionCheckoutError(raw || USER_RETRY_MESSAGE, {
+    code: code || "CHECKOUT_FAILED",
+    status,
+    retryable: true,
+  });
+}
+
 function submitPayfastForm(payfastUrl, fields, fieldOrder) {
+  if (typeof document === "undefined") {
+    throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+  }
   const form = document.createElement("form");
   form.method = "POST";
   form.action = payfastUrl;
+  form.acceptCharset = "utf-8";
   form.style.display = "none";
 
   const src = fields && typeof fields === "object" ? fields : {};
-  const orderedKeys = Array.isArray(fieldOrder) && fieldOrder.length
-    ? fieldOrder.filter((k) => k !== "signature")
-    : Object.keys(src).filter((k) => k !== "signature");
+  const orderedKeys =
+    Array.isArray(fieldOrder) && fieldOrder.length
+      ? fieldOrder.filter((k) => k !== "signature")
+      : Object.keys(src).filter((k) => k !== "signature");
 
   orderedKeys.forEach((key) => {
     if (!Object.prototype.hasOwnProperty.call(src, key)) return;
@@ -46,23 +151,35 @@ function submitPayfastForm(payfastUrl, fields, fieldOrder) {
     form.appendChild(input);
   }
 
+  if (!form.querySelector('input[name="signature"]')) {
+    throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+  }
+
   document.body.appendChild(form);
   form.submit();
 }
 
-async function readApiError(response, fallback) {
-  let payload = null;
+async function readJsonSafe(response) {
   try {
-    payload = await response.json();
+    return await response.json();
   } catch {
-    payload = null;
+    return null;
   }
-  const msg =
-    (typeof payload?.error === "string" && payload.error) ||
-    payload?.message ||
-    fallback;
-  const code = typeof payload?.code === "string" ? payload.code : null;
-  return new Error(code ? `${msg} (${code})` : msg);
+}
+
+async function getCheckoutAccessToken() {
+  try {
+    const session = await promiseWithTimeout(() => getStableSession(), CHECKOUT_SESSION_TIMEOUT_MS);
+    if (session?.access_token) return session.access_token;
+  } catch {
+    /* getSession can hang; fall through to in-memory store */
+  }
+  const stored = useAuthSessionStore.getState().session;
+  if (stored?.accessToken) return stored.accessToken;
+  throw new SubscriptionCheckoutError("Please sign in to subscribe.", {
+    code: "AUTH_REQUIRED",
+    status: 401,
+  });
 }
 
 export function rememberPendingSubscription(subscriptionId, planSlug) {
@@ -110,62 +227,95 @@ export function getSubscriptionCheckoutUrls() {
 
 /**
  * POST /api/subscriptions/create — pending only; amount from plans catalog (server).
- * Then navigate to PayFast via signed form POST (or window.location if only a URL).
+ * Then navigate to PayFast via signed form POST.
  *
- * @param {{ planSlug: string }} opts
+ * @param {{ planSlug: string, returnUrl?: string, cancelUrl?: string, notifyUrl?: string }} opts
  */
-export async function createSubscriptionAndRedirect({ planSlug }) {
-  const slug = normalizePlanSlug(planSlug);
-  if (!slug) throw new Error("Select a valid plan to continue.");
-
-  const session = await getStableSession();
-  const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("Please sign in to subscribe.");
-
-  const { returnUrl, cancelUrl, notifyUrl } = getSubscriptionCheckoutUrls();
-
-  let response;
-  try {
-    response = await fetch(`${getApiBase()}/api/subscriptions/create`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        planSlug: slug,
-        returnUrl,
-        cancelUrl,
-        notifyUrl,
-      }),
+export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cancelUrl, notifyUrl } = {}) {
+  if (checkoutInFlight) {
+    throw new SubscriptionCheckoutError("A checkout is already in progress. Please wait.", {
+      code: "CHECKOUT_IN_PROGRESS",
+      status: 409,
     });
-  } catch (networkError) {
-    const msg = networkError?.message || String(networkError);
-    if (/Failed to fetch|Connection refused|NetworkError/i.test(msg)) {
-      throw new Error(
-        import.meta.env.DEV
-          ? "Payment server unavailable. Start the backend (npm run server)."
-          : "Payment server unavailable. Try again shortly."
-      );
+  }
+
+  const slug = normalizePlanSlug(planSlug);
+  if (!slug) {
+    throw new SubscriptionCheckoutError("Select a valid plan to continue.", {
+      code: "VALIDATION_ERROR",
+      status: 400,
+    });
+  }
+
+  checkoutInFlight = true;
+  let redirected = false;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CHECKOUT_REQUEST_TIMEOUT_MS);
+
+  try {
+    const accessToken = await getCheckoutAccessToken();
+    const urls = getSubscriptionCheckoutUrls();
+
+    let response;
+    try {
+      response = await fetch(`${getApiBase()}/api/subscriptions/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          planSlug: slug,
+          returnUrl: returnUrl || urls.returnUrl,
+          cancelUrl: cancelUrl || urls.cancelUrl,
+          ...(notifyUrl ? { notifyUrl } : {}),
+        }),
+        signal: controller.signal,
+      });
+    } catch (networkError) {
+      if (networkError?.name === "AbortError" || controller.signal.aborted) {
+        throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, {
+          code: "CHECKOUT_TIMEOUT",
+          status: 408,
+        });
+      }
+      const msg = networkError?.message || String(networkError);
+      if (/Failed to fetch|Connection refused|NetworkError/i.test(msg)) {
+        throw new SubscriptionCheckoutError(
+          import.meta.env.DEV
+            ? "Payment server unavailable. Start the backend (npm run server)."
+            : "We couldn't connect to the payment service. Please try again.",
+          { code: "NETWORK_ERROR", retryable: true }
+        );
+      }
+      throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, { code: "NETWORK_ERROR" });
     }
-    throw networkError;
+
+    const data = await readJsonSafe(response);
+
+    if (!response.ok) {
+      throw checkoutErrorFromHttp(response.status, data);
+    }
+
+    const checkoutUrl = data?.checkout?.url || data?.redirectUrl || data?.payfastUrl;
+    const fields = data?.checkout?.fields || data?.fields;
+    const fieldOrder = data?.checkout?.fieldOrder || data?.fieldOrder;
+    if (!checkoutUrl || !fields?.signature) {
+      throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, {
+        code: "INVALID_CHECKOUT_RESPONSE",
+        status: 502,
+      });
+    }
+
+    rememberPendingSubscription(data.subscriptionId, slug);
+    submitPayfastForm(checkoutUrl, fields, fieldOrder);
+    redirected = true;
+    return { ...data, redirected: true };
+  } finally {
+    clearTimeout(timeoutId);
+    if (!redirected) checkoutInFlight = false;
   }
-
-  if (!response.ok) {
-    throw await readApiError(response, "Failed to create subscription");
-  }
-
-  const data = await response.json();
-  const redirectUrl = data.redirectUrl || data.payfastUrl;
-  if (!redirectUrl || !data?.fields?.signature) {
-    throw new Error("Invalid checkout response: missing PayFast redirect");
-  }
-
-  // Remember id for return-page polling — never invent status client-side
-  rememberPendingSubscription(data.subscriptionId, slug);
-
-  submitPayfastForm(redirectUrl, data.fields, data.fieldOrder);
-  return data;
 }
 
 /**
@@ -187,7 +337,8 @@ export async function fetchSubscriptionStatus(subscriptionId) {
   });
 
   if (!response.ok) {
-    throw await readApiError(response, "Failed to load subscription status");
+    const payload = await readJsonSafe(response);
+    throw checkoutErrorFromHttp(response.status, payload);
   }
 
   return response.json();

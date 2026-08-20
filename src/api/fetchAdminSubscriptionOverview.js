@@ -69,6 +69,8 @@ function normalizeOverview(raw) {
     pastDue,
     bucketTotal: n(raw.bucketTotal),
     total: n(raw.total),
+    failed: n(raw.failed),
+    adminGranted: n(raw.adminGranted ?? raw.admin_granted),
     buckets: [
       { key: "active", label: "Active", count: active },
       { key: "pending", label: "Pending", count: pending },
@@ -77,6 +79,24 @@ function normalizeOverview(raw) {
       { key: "trial", label: "Trial", count: trial },
       { key: "pastDue", label: "Past Due", count: pastDue },
     ],
+  };
+}
+
+function normalizeReporting(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const n = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) && x >= 0 ? x : 0;
+  };
+  return {
+    startDate: raw.startDate || "2026-08-20T00:00:00.000Z",
+    timezone: raw.timezone || "UTC",
+    successfulPayments: n(raw.successfulPayments),
+    revenue: n(raw.revenue),
+    currency: raw.currency || "ZAR",
+    activeSubscribers: n(raw.activeSubscribers),
+    trialUsers: n(raw.trialUsers),
+    expiredTrials: n(raw.expiredTrials),
   };
 }
 
@@ -119,7 +139,10 @@ export async function fetchAdminSubscriptionOverview() {
     }
 
     const data = await res.json();
-    return { overview: normalizeOverview(data?.overview || data) };
+    return {
+      overview: normalizeOverview(data?.overview || data),
+      reporting: normalizeReporting(data?.reporting),
+    };
   }
 
   throw new Error(lastError || "Failed to load subscription overview");

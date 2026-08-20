@@ -21,6 +21,12 @@ import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
 import { cancelPayfastRecurringBilling } from "./payfastRecurringApi.js";
 import { hasPaidAccessIncludingGrace } from "./entitlements.js";
+import {
+  pickAccessSubscriptionRow,
+  trialDaysRemaining,
+  describeAccessFacingState,
+  isAdminManaged,
+} from "../../../shared/subscriptionAccess.js";
 import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
 import { randomBytes } from "node:crypto";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
@@ -41,6 +47,24 @@ export function splitPayfastBuyerName(fullName) {
     name_first: nameParts[0] || "",
     name_last: nameParts.slice(1).join(" ") || "",
   };
+}
+
+/**
+ * PayFast ITN validates amount against the stored pending row, not the signed form.
+ * Never send the customer to PayFast unless the persisted pending agreement matches
+ * the catalog plan being charged.
+ * @param {object | null | undefined} sub
+ * @param {object | null | undefined} plan
+ */
+export function pendingCheckoutMatchesCatalogPlan(sub, plan) {
+  if (!sub || !plan) return false;
+  const storedSlug = String(sub.plan_slug || sub.plan || "").trim();
+  const requestedSlug = String(plan.slug || "").trim();
+  if (!storedSlug || storedSlug !== requestedSlug) return false;
+  if (Number(sub.amount) !== Number(plan.amount)) return false;
+  const storedCurrency = String(sub.currency || "ZAR").trim().toUpperCase();
+  const requestedCurrency = String(plan.currency || "ZAR").trim().toUpperCase();
+  return storedCurrency === requestedCurrency;
 }
 
 /**
@@ -143,13 +167,32 @@ async function logEvent(supabase, subscriptionId, companyId, eventType, details 
  * Body (trusted keys only): { planSlug, returnUrl, cancelUrl, notifyUrl? }
  */
 export async function handleSubscriptionCreate(req, res) {
+  const requestId = randomBytes(6).toString("hex");
+  const startedAt = Date.now();
+  const slog = (step, extra) => {
+    if (extra && typeof extra === "object") {
+      console.log(`[SUBSCRIPTION][requestId=${requestId}] ${step}`, extra);
+    } else {
+      console.log(`[SUBSCRIPTION][requestId=${requestId}] ${step}`);
+    }
+  };
+
+  try {
+  slog("Started");
   const supabase = getBillingSupabaseAdmin();
-  if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
+  if (!supabase) return json(res, 503, { success: false, code: "SERVER_MISCONFIGURED", error: "Server configuration error (Supabase)" });
 
   // 1) Authenticate
   const auth = await requireBearerUser(req, supabase);
-  if (auth.error) return json(res, auth.status, { error: auth.error });
+  if (auth.error) {
+    return json(res, auth.status, {
+      success: false,
+      code: auth.status === 401 ? "AUTH_REQUIRED" : "FORBIDDEN",
+      error: auth.error,
+    });
+  }
   const user = auth.user;
+  slog("Authenticated");
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
 
@@ -198,12 +241,14 @@ export async function handleSubscriptionCreate(req, res) {
       String(process.env.NODE_ENV || "").toLowerCase() === "production";
     if (requireDb) {
       return json(res, 503, {
+        success: false,
         code: "PLANS_CATALOG_UNAVAILABLE",
         error: "Plan catalog unavailable. Apply billing migration so public.plans is seeded.",
       });
     }
     console.warn("[billing/subscriptions/create] using shared plan fallback (dev only)", plan.slug);
   }
+  slog("Plan loaded", { slug: plan.slug });
 
   const returnUrl = body.returnUrl != null ? String(body.returnUrl).trim() : "";
   const cancelUrl = body.cancelUrl != null ? String(body.cancelUrl).trim() : "";
@@ -334,35 +379,119 @@ export async function handleSubscriptionCreate(req, res) {
     updated_at: nowIso,
   };
 
-  const { data: sub, error: insertErr } = await supabase
+  let reusedPending = false;
+  const pendingSelect =
+    "id, status, plan_slug, amount, currency, m_payment_id, pending_expires_at, company_id, user_id";
+  let { data: sub, error: insertErr } = await supabase
     .from("subscriptions")
     .insert(insertRow)
-    .select("id, status, plan_slug, amount, currency, m_payment_id, pending_expires_at, company_id")
+    .select(pendingSelect)
     .single();
 
   if (insertErr || !sub) {
-    console.error("[billing/subscriptions/create] insert failed", insertErr);
-    return json(res, 500, { error: "Failed to create pending subscription" });
+    const isUnique = String(insertErr?.code || "") === "23505";
+    if (isUnique) {
+      const { data: existing } = await supabase
+        .from("subscriptions")
+        .select(pendingSelect)
+        .eq("user_id", user.id)
+        .eq("status", SUBSCRIPTION_STATUS.PENDING)
+        .maybeSingle();
+      if (existing?.id && String(existing.user_id) === String(user.id)) {
+        slog("Reused pending subscription");
+        reusedPending = true;
+        sub = existing;
+        insertErr = null;
+        if (!pendingCheckoutMatchesCatalogPlan(existing, plan)) {
+          const { data: updated, error: updErr } = await supabase
+            .from("subscriptions")
+            .update({
+              plan_id: plan.id,
+              plan_slug: plan.slug,
+              plan: plan.slug,
+              current_plan: plan.slug,
+              plan_family: plan.plan_family || familyForSlug(plan.slug),
+              amount: plan.amount,
+              currency: plan.currency,
+              billing_cycle: plan.billing_cycle,
+              m_payment_id: mPaymentId,
+              pending_expires_at: pendingExpiresAt,
+              updated_at: nowIso,
+            })
+            .eq("id", existing.id)
+            .eq("user_id", user.id)
+            .eq("status", SUBSCRIPTION_STATUS.PENDING)
+            .select(pendingSelect)
+            .maybeSingle();
+          if (updErr || !updated || !pendingCheckoutMatchesCatalogPlan(updated, plan)) {
+            slog("Pending reuse could not bind requested plan", {
+              existingPlan: existing.plan_slug,
+              existingAmount: existing.amount,
+              requestedPlan: plan.slug,
+              updateError: updErr?.message || null,
+            });
+            return json(res, 409, {
+              success: false,
+              code: "CHECKOUT_IN_PROGRESS",
+              error: "A checkout is already in progress. Please try again in a moment.",
+            });
+          }
+          sub = updated;
+        }
+      } else {
+        slog("Pending conflict");
+        return json(res, 409, {
+          success: false,
+          code: "CHECKOUT_IN_PROGRESS",
+          error: "A checkout is already in progress. Please try again in a moment.",
+        });
+      }
+    } else {
+      console.error("[billing/subscriptions/create] insert failed", insertErr);
+      return json(res, 500, {
+        success: false,
+        code: "SUBSCRIPTION_CREATE_FAILED",
+        error: "Unable to start the subscription. Please try again.",
+      });
+    }
   }
+  slog("Payment record created");
 
   if (sub.status !== SUBSCRIPTION_STATUS.PENDING) {
     console.error("[billing/subscriptions/create] refused non-pending status after insert", sub.status);
     return json(res, 500, { error: "Subscription create aborted: unexpected status" });
   }
 
+  if (!pendingCheckoutMatchesCatalogPlan(sub, plan)) {
+    slog("Refusing PayFast sign: pending row does not match catalog plan", {
+      storedPlan: sub.plan_slug,
+      storedAmount: sub.amount,
+      requestedPlan: plan.slug,
+      requestedAmount: plan.amount,
+    });
+    return json(res, 409, {
+      success: false,
+      code: "CHECKOUT_IN_PROGRESS",
+      error: "A checkout is already in progress. Please try again in a moment.",
+    });
+  }
+
   // Intentionally no payment_history / subscription_invoices writes on create.
 
-  await logEvent(supabase, sub.id, companyId, SUBSCRIPTION_EVENT_TYPE.SUBSCRIPTION_CREATED, {
-    plan_slug: plan.slug,
-    amount: plan.amount,
-  });
-  await logEvent(supabase, sub.id, companyId, SUBSCRIPTION_EVENT_TYPE.PAYMENT_PENDING, {
-    m_payment_id: mPaymentId,
-  });
+  if (!reusedPending) {
+    await logEvent(supabase, sub.id, companyId, SUBSCRIPTION_EVENT_TYPE.SUBSCRIPTION_CREATED, {
+      plan_slug: plan.slug,
+      amount: plan.amount,
+    });
+    await logEvent(supabase, sub.id, companyId, SUBSCRIPTION_EVENT_TYPE.PAYMENT_PENDING, {
+      m_payment_id: sub.m_payment_id || mPaymentId,
+    });
+  }
 
   // 4) Generate PayFast signature (server amount, document field order, PHP encoding)
   const billingDateResolved = nowIso.slice(0, 10);
   const amountFixed = Number(plan.amount).toFixed(2);
+  const checkoutPaymentId = sub.m_payment_id || mPaymentId;
   const unsignedPayload = buildSubscriptionCheckoutUnsignedPayload({
     merchantId,
     merchantKey,
@@ -371,21 +500,37 @@ export async function handleSubscriptionCreate(req, res) {
     notifyUrl,
     email,
     fullName,
-    mPaymentId,
+    mPaymentId: checkoutPaymentId,
     userId: user.id,
     plan,
     billingDate: billingDateResolved,
   });
 
-  const signed = signPayfastCheckoutFields(unsignedPayload, passphrase);
-  if (!signed.signature) {
-    return json(res, 500, { error: "Failed to generate PayFast signature" });
+  let signed;
+  try {
+    signed = signPayfastCheckoutFields(unsignedPayload, passphrase);
+  } catch (signErr) {
+    console.error("[billing/subscriptions/create] signature failed", signErr?.message || signErr);
+    return json(res, 500, {
+      success: false,
+      code: "PAYFAST_SIGNATURE_ERROR",
+      error: "Unable to start the subscription. Please try again.",
+    });
   }
+  if (!signed?.signature) {
+    return json(res, 500, {
+      success: false,
+      code: "PAYFAST_SIGNATURE_ERROR",
+      error: "Unable to start the subscription. Please try again.",
+    });
+  }
+  slog("PayFast payload generated");
 
   logPayfastPayloadDebug(signed.fields, passphrase);
   console.log("[payfast] subscription checkout", {
+    requestId,
     subscriptionId: sub.id,
-    m_payment_id: mPaymentId,
+    m_payment_id: checkoutPaymentId,
     amount: amountFixed,
     mode,
     notify_source: notifyResolved.source,
@@ -395,14 +540,23 @@ export async function handleSubscriptionCreate(req, res) {
 
   // Timeline: Redirected — checkout URL ready for browser → PayFast
   await logEvent(supabase, sub.id, companyId, SUBSCRIPTION_EVENT_TYPE.REDIRECTED, {
-    m_payment_id: mPaymentId,
+    m_payment_id: checkoutPaymentId,
     redirect_url: redirectUrl,
   });
 
+  slog("Returning checkout", { ms: Date.now() - startedAt });
+
   // 5) Return redirect URL — frontend posts `fields` in `fieldOrder`; must poll status afterward
   return json(res, 200, {
+    success: true,
+    requestId,
     subscriptionId: sub.id,
     status: SUBSCRIPTION_STATUS.PENDING,
+    checkout: {
+      url: redirectUrl,
+      fields: signed.fields,
+      fieldOrder: signed.fieldOrder,
+    },
     redirectUrl,
     payfastUrl: redirectUrl,
     fields: signed.fields,
@@ -417,6 +571,15 @@ export async function handleSubscriptionCreate(req, res) {
     message:
       "Pending subscription created. Redirect to PayFast. Do not activate from the client — poll GET /api/subscriptions/status.",
   });
+  } catch (e) {
+    console.error(`[SUBSCRIPTION][requestId=${requestId}] Unhandled`, e?.message || e);
+    if (res.headersSent) return;
+    return json(res, 500, {
+      success: false,
+      code: "SUBSCRIPTION_CREATE_FAILED",
+      error: "Unable to start the subscription. Please try again.",
+    });
+  }
 }
 
 /**
@@ -449,9 +612,11 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
   const currentStatus = sub.status || null;
   /** Access end: expires_at → current_period_end → pending_expires_at */
   const expiry =
-    sub.expires_at || sub.current_period_end || sub.pending_expires_at || null;
+    sub.expires_at || sub.current_period_end || sub.pending_expires_at || sub.trial_ends_at || null;
   /** Next charge / renewal */
   const renewDate = sub.next_billing_date || null;
+  const now = new Date();
+  const facing = describeAccessFacingState(sub, now);
 
   return {
     subscriptionId: sub.id,
@@ -472,7 +637,13 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
     nextBillingDate: renewDate,
     planFamily: sub.plan_family || familyForSlug(planSlug) || null,
     graceEndsAt: sub.grace_ends_at || null,
-    accessGranted: hasPaidAccessIncludingGrace(sub),
+    accessGranted: hasPaidAccessIncludingGrace(sub, now),
+    trialStartedAt: sub.trial_started_at || null,
+    trialEndsAt: sub.trial_ends_at || null,
+    daysRemaining: trialDaysRemaining(sub.trial_ends_at, now),
+    managedByAdministrator: isAdminManaged(sub) && !["payfast"].includes(String(sub.subscription_source || "")),
+    headline: facing.headline,
+    detail: facing.detail,
   };
 }
 
@@ -496,7 +667,7 @@ export async function handleSubscriptionStatus(req, res) {
     const { data, error } = await supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
       )
       .eq("id", subscriptionId)
       .maybeSingle();
@@ -509,17 +680,17 @@ export async function handleSubscriptionStatus(req, res) {
     let query = supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
       )
       .order("updated_at", { ascending: false })
-      .limit(1);
+      .limit(10);
     query = companyId ? query.eq("company_id", companyId) : query.eq("user_id", auth.user.id);
     const { data: rows, error } = await query;
     if (error) {
       console.error("[billing/subscriptions/status]", error);
       return json(res, 500, { error: "Failed to load subscription" });
     }
-    sub = rows?.[0] || null;
+    sub = pickAccessSubscriptionRow(rows || []) || rows?.[0] || null;
   }
 
   if (!sub) return json(res, 404, { error: "Subscription not found" });
@@ -546,10 +717,10 @@ export async function handleSubscriptionCurrent(req, res) {
   let query = supabase
     .from("subscriptions")
     .select(
-      "id, status, plan_slug, plan_id, plan_family, amount, currency, company_id, activated_at, next_billing_date, current_period_end, cancelled_at, grace_ends_at, created_at, updated_at"
+      "id, status, plan_slug, plan_id, plan_family, amount, currency, company_id, activated_at, next_billing_date, current_period_end, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
     )
     .order("updated_at", { ascending: false })
-    .limit(1);
+    .limit(10);
 
   if (companyId) {
     query = query.eq("company_id", companyId);
@@ -563,7 +734,7 @@ export async function handleSubscriptionCurrent(req, res) {
     return json(res, 500, { error: "Failed to load subscription" });
   }
 
-  const sub = rows?.[0] || null;
+  const sub = pickAccessSubscriptionRow(rows || []) || rows?.[0] || null;
   if (!sub) {
     return json(res, 200, {
       subscription: null,

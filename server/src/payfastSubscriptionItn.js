@@ -231,6 +231,9 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
           canceled_at: null,
           cancelled_at: null,
           last_payment_failure_at: null,
+          subscription_source: "payfast",
+          admin_override: false,
+          trial_ends_at: null,
         }
       : {
           next_retry_at: addHoursIso(nowIso, retryHours) || nowIso,
@@ -277,6 +280,25 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
     if (insErr) {
       console.error("[payfast-subscription-itn] subscriptions insert failed", insErr.message);
       throw new Error(insErr.message);
+    }
+  }
+
+  if (isSuccess && userId) {
+    try {
+      let q = supabase
+        .from("subscriptions")
+        .update({
+          status: SUBSCRIPTION_STATUS.CANCELLED,
+          cancelled_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq("user_id", userId)
+        .eq("status", SUBSCRIPTION_STATUS.TRIALING)
+        .eq("admin_override", false);
+      if (rowTargetForMutation?.id) q = q.neq("id", rowTargetForMutation.id);
+      await q;
+    } catch (e) {
+      console.warn("[payfast-subscription-itn] leftover trial cleanup", e?.message || e);
     }
   }
 

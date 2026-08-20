@@ -15,7 +15,12 @@ import {
   normalizePlanFamily,
   familyForSlug,
 } from "../subscriptionPlans.js";
-import { PAID_ACCESS_STATUSES, coerceSubscriptionStatus } from "../../../shared/subscriptionStatuses.js";
+import { coerceSubscriptionStatus } from "../../../shared/subscriptionStatuses.js";
+import {
+  hasSubscriptionAccess,
+  pickAccessSubscriptionRow,
+  shouldExpireTrialRow,
+} from "../../../shared/subscriptionAccess.js";
 
 function entitlementsEnforceEnabled() {
   // Default report-only until PAIDLY_ENTITLEMENTS_ENFORCE=true is set after migrations + soak.
@@ -24,36 +29,64 @@ function entitlementsEnforceEnabled() {
 }
 
 /**
- * @param {{ status?: string, grace_ends_at?: string | null }} sub
+ * Access is decided from the subscriptions row (status + trial_ends_at + grace + admin_override).
+ * Trialing past trial_ends_at is not access, even if cron has not flipped the row yet.
+ * @param {{ status?: string, grace_ends_at?: string | null, trial_ends_at?: string | null, admin_override?: boolean, subscription_source?: string }} sub
+ * @param {Date} [now]
  */
-export function hasPaidAccessIncludingGrace(sub) {
-  if (!sub) return false;
-  const st = coerceSubscriptionStatus(sub.status);
-  if (!st) return false;
-  if (PAID_ACCESS_STATUSES.includes(st)) return true;
-  if (st === "past_due" && sub.grace_ends_at) {
-    const end = new Date(sub.grace_ends_at).getTime();
-    return Number.isFinite(end) && end > Date.now();
-  }
-  return false;
+export function hasPaidAccessIncludingGrace(sub, now = new Date()) {
+  return hasSubscriptionAccess(sub, now);
 }
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase
  * @param {string} userId
  */
+const ENTITLEMENT_SELECT_RICH =
+  "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
+const ENTITLEMENT_SELECT_LEAN =
+  "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
+
 export async function resolveEntitlement(supabase, userId) {
   const companyId = await resolveUserCompanyId(supabase, userId);
-  let query = supabase
-    .from("subscriptions")
-    .select(
-      "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end"
-    )
-    .order("updated_at", { ascending: false })
-    .limit(1);
-  query = companyId ? query.eq("company_id", companyId) : query.eq("user_id", userId);
-  const { data: rows } = await query;
-  const sub = rows?.[0] || null;
+  const now = new Date();
+
+  const run = (cols) => {
+    let query = supabase
+      .from("subscriptions")
+      .select(cols)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    return companyId ? query.eq("company_id", companyId) : query.eq("user_id", userId);
+  };
+
+  let { data: rows, error } = await run(ENTITLEMENT_SELECT_RICH);
+  if (error) {
+    ({ data: rows, error } = await run(ENTITLEMENT_SELECT_LEAN));
+  }
+  if (error) {
+    console.warn("[entitlements] subscription lookup", error.message);
+  }
+
+  let sub = pickAccessSubscriptionRow(rows || [], now) || null;
+
+  if (sub && shouldExpireTrialRow(sub, now) && sub.id) {
+    try {
+      const expiredAt = now.toISOString();
+      const { data: expiredRow } = await supabase
+        .from("subscriptions")
+        .update({ status: "expired", updated_at: expiredAt })
+        .eq("id", sub.id)
+        .eq("status", "trialing")
+        .eq("admin_override", false)
+        .select(ENTITLEMENT_SELECT_LEAN)
+        .maybeSingle();
+      sub = expiredRow ? { ...sub, ...expiredRow, status: "expired" } : { ...sub, status: "expired" };
+    } catch (e) {
+      console.warn("[entitlements] trial expire write", e?.message || e);
+      sub = { ...sub, status: "expired" };
+    }
+  }
 
   const family =
     normalizePlanFamily(sub?.plan_family) ||

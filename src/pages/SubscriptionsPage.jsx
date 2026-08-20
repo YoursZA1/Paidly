@@ -22,8 +22,6 @@ import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDet
 import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
 import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
 import { updateAdminSubscription } from '@/api/mutateAdminSubscription';
-import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
-import { useCurrentUser } from '@/lib/useCurrentUser';
 import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
@@ -96,7 +94,6 @@ function buildSubscriptionRows(users, subscriptions) {
 }
 
 export default function SubscriptionsPage() {
-  const { user: currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -124,6 +121,7 @@ export default function SubscriptionsPage() {
     refetchInterval: 30000,
   });
   const subscriptionOverview = subscriptionOverviewPayload?.overview;
+  const billingReporting = subscriptionOverviewPayload?.reporting;
 
   const {
     data: platformUsers = [],
@@ -167,33 +165,16 @@ export default function SubscriptionsPage() {
       (s.company_address || '').toLowerCase().includes(search.toLowerCase());
     const matchPlan =
       planFilter === 'all' || normalizePaidPackageKey(s.plan) === planFilter;
-    const matchStatus = statusFilter === 'all' || s.status === statusFilter;
+    const matchStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'admin_granted'
+        ? s.subscription_source === 'admin' && s.status === 'active'
+        : s.status === statusFilter);
     return matchSearch && matchPlan && matchStatus;
   });
 
   const totalSubsPages = Math.max(1, Math.ceil(filtered.length / SUBS_PAGE_SIZE));
   const pagedFiltered = filtered.slice(subsPage * SUBS_PAGE_SIZE, (subsPage + 1) * SUBS_PAGE_SIZE);
-
-  const handleStatusChange = (sub, newStatus) => {
-    const prevStatus = sub.status;
-    updateMutation.mutate(
-      { id: sub.id, data: { status: newStatus } },
-      {
-        onSuccess: () => {
-          logAction({
-            actor: currentUser,
-            action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
-            category: 'subscriptions',
-            description: `Changed subscription status of ${sub.user_name || sub.user_email} from "${prevStatus}" to "${newStatus}"`,
-            targetId: sub.id,
-            targetLabel: sub.user_email,
-            before: { status: prevStatus },
-            after: { status: newStatus },
-          });
-        },
-      }
-    );
-  };
 
   return (
     <div>
@@ -231,6 +212,7 @@ export default function SubscriptionsPage() {
       <SubscriptionOverview
         className="mb-4"
         overview={subscriptionOverview}
+        reporting={billingReporting}
         isLoading={overviewLoading}
         showManageLink={false}
         errorMessage={
@@ -284,12 +266,14 @@ export default function SubscriptionsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="trialing">Trial</SelectItem>
-            <SelectItem value="past_due">Past Due</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
             <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="admin_granted">Admin Granted</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="past_due">Past Due</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
             <SelectItem value="none">No subscription row</SelectItem>
           </SelectContent>
@@ -380,19 +364,58 @@ export default function SubscriptionsPage() {
                             >
                               Edit subscription
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                updateMutation.mutate({
+                                  id: sub.id,
+                                  data: { action: 'extend_trial', days: 7, reason: 'Admin extended trial by 7 days' },
+                                })
+                              }
+                            >
+                              Extend trial +7 days
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                updateMutation.mutate({
+                                  id: sub.id,
+                                  data: { action: 'grant', reason: 'Admin granted access' },
+                                })
+                              }
+                            >
+                              Grant access
+                            </DropdownMenuItem>
                             {sub.status === 'active' ? (
-                              <DropdownMenuItem onClick={() => handleStatusChange(sub, 'paused')}>
-                                Pause
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  updateMutation.mutate({
+                                    id: sub.id,
+                                    data: { action: 'suspend', reason: 'Admin suspended subscription' },
+                                  })
+                                }
+                              >
+                                Suspend
                               </DropdownMenuItem>
                             ) : null}
                             {sub.status === 'paused' || sub.status === 'suspended' ? (
-                              <DropdownMenuItem onClick={() => handleStatusChange(sub, 'active')}>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  updateMutation.mutate({
+                                    id: sub.id,
+                                    data: { action: 'activate', reason: 'Admin activated subscription' },
+                                  })
+                                }
+                              >
                                 Reactivate
                               </DropdownMenuItem>
                             ) : null}
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleStatusChange(sub, 'cancelled')}
+                              onClick={() =>
+                                updateMutation.mutate({
+                                  id: sub.id,
+                                  data: { action: 'cancel', reason: 'Admin cancelled subscription' },
+                                })
+                              }
                             >
                               Cancel
                             </DropdownMenuItem>

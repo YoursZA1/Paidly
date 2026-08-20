@@ -29,10 +29,12 @@ export function subscriptionRowToProfilePatch(row, updatedAtIso) {
   const st = String(row.status ?? "active").trim().toLowerCase();
   let subscription_status = "inactive";
   if (st === "active") subscription_status = "active";
-  else if (st === "paused") subscription_status = "inactive";
   else if (st === "cancelled" || st === "canceled") subscription_status = "cancelled";
   else if (st === "expired") subscription_status = "expired";
   else if (st === "past_due") subscription_status = "past_due";
+  else if (st === "trialing" || st === "trial") subscription_status = "trial";
+  else if (st === "suspended" || st === "paused") subscription_status = "suspended";
+  else if (st === "failed") subscription_status = "failed";
 
   const patch = {
     plan: planRaw,
@@ -43,6 +45,10 @@ export function subscriptionRowToProfilePatch(row, updatedAtIso) {
 
   if (subscription_status === "active") {
     patch.trial_ends_at = null;
+    patch.is_pro = true;
+  } else if (subscription_status === "trial") {
+    if (row.trial_ends_at) patch.trial_ends_at = row.trial_ends_at;
+    if (row.trial_started_at) patch.trial_started_at = row.trial_started_at;
     patch.is_pro = true;
   } else {
     patch.is_pro = false;

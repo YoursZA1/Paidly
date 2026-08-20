@@ -101,6 +101,7 @@ import {
 } from "./billing/subscriptionApi.js";
 import {
   handleAdminFailedPayments,
+  handleAdminPayments,
   handleAdminRevenue,
   handleAdminSubscriptionCreate,
   handleAdminSubscriptionsList,
@@ -1016,6 +1017,7 @@ app.post("/api/admin/subscriptions", handleAdminSubscriptionCreate);
 app.patch("/api/admin/subscriptions", handleAdminSubscriptionUpdate);
 app.get("/api/admin/revenue", handleAdminRevenue);
 app.get("/api/admin/failed-payments", handleAdminFailedPayments);
+app.get("/api/admin/payments", handleAdminPayments);
 
 app.post("/api/admin/roles", async (req, res) => {
   try {

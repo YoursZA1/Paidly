@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
-import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
+import { describeSubscriptionState, normalizePaidPackageKey, isOnTrialSubscription } from "@/lib/subscriptionPlan";
 
 const CONTACT_SALES_EMAIL = (
   import.meta.env.VITE_CONTACT_SALES_EMAIL ||
@@ -196,7 +196,11 @@ export default function SubscriptionSettings() {
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Select the plan that best fits your current team size.</p>
                     <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                         <p className="text-sm font-semibold text-primary">
-                            Start with a <strong>7-day free trial</strong>. No credit card required to try Paidly.
+                            {isOnTrialSubscription(billingProfile)
+                                ? accountState.statusLabel
+                                : String(billingProfile.subscription_status || "").toLowerCase() === "expired"
+                                  ? "Trial expired. Subscribe to continue."
+                                  : "Subscribe to a Paidly plan. Amounts are taken from the server catalog, not this page."}
                         </p>
                     </div>
                 </div>

@@ -168,10 +168,18 @@ export default function BillingAndInvoices() {
                       <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
                         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                         <div>
-                          <p className="font-medium text-foreground">Trial</p>
+                          <p className="font-medium text-foreground">{accountState.statusLabel}</p>
                           <p className="text-muted-foreground">
                             Ends {formatWhen(billingProfile.trial_ends_at)} (UTC stored; shown in local time).
                           </p>
+                        </div>
+                      </div>
+                    ) : String(billingProfile.subscription_status || "").toLowerCase() === "expired" ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+                        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        <div>
+                          <p className="font-medium text-foreground">Trial expired</p>
+                          <p className="text-muted-foreground">Subscribe to continue.</p>
                         </div>
                       </div>
                     ) : null}

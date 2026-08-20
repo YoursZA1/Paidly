@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseUserIdFromSubscriptionMPaymentId } from "../../server/src/inputValidation.js";
 import {
   buildSubscriptionCheckoutUnsignedPayload,
+  pendingCheckoutMatchesCatalogPlan,
   splitPayfastBuyerName,
 } from "../../server/src/billing/subscriptionApi.js";
 import {
@@ -109,5 +110,33 @@ describe("buildSubscriptionCheckoutUnsignedPayload", () => {
     const diag = describePayfastCheckoutSignature(withNames, passphrase);
     expect(diag.includedFields).toContain("name_first");
     expect(diag.includedFields).toContain("name_last");
+  });
+});
+
+describe("pendingCheckoutMatchesCatalogPlan", () => {
+  const plan = { slug: "business_monthly", amount: 150, currency: "ZAR" };
+
+  it("requires stored slug, amount, and currency to match the catalog plan", () => {
+    expect(
+      pendingCheckoutMatchesCatalogPlan(
+        { plan_slug: "business_monthly", amount: 150, currency: "ZAR" },
+        plan
+      )
+    ).toBe(true);
+  });
+
+  it("rejects a reused pending row for a different plan or amount", () => {
+    expect(
+      pendingCheckoutMatchesCatalogPlan(
+        { plan_slug: "starter_monthly", amount: 50, currency: "ZAR" },
+        plan
+      )
+    ).toBe(false);
+    expect(
+      pendingCheckoutMatchesCatalogPlan(
+        { plan_slug: "business_monthly", amount: 50, currency: "ZAR" },
+        plan
+      )
+    ).toBe(false);
   });
 });

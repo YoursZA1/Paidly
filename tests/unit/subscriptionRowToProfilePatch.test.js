@@ -12,15 +12,15 @@ describe("subscriptionRowToProfilePatch", () => {
     expect(subscriptionRowToProfilePatch({ user_id: "", plan: "sme" }, TS)).toBeNull();
   });
 
-  it("normalizes free to individual tier for profile sync", () => {
+  it("normalizes free to starter family for profile sync", () => {
     const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "free", status: "active" }, TS);
-    expect(out.patch.plan).toBe("individual");
+    expect(out.patch.plan).toBe("starter");
     expect(out.patch.subscription_status).toBe("active");
   });
 
-  it("maps enterprise-style slug to corporate", () => {
+  it("maps enterprise-style slug to enterprise family", () => {
     const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "enterprise", status: "active" }, TS);
-    expect(out.patch.plan).toBe("corporate");
+    expect(out.patch.plan).toBe("enterprise");
   });
 
   it("throws if updatedAtIso is missing or empty", () => {
@@ -37,8 +37,8 @@ describe("subscriptionRowToProfilePatch", () => {
     expect(out).toEqual({
       userId: "abc-uuid",
       patch: {
-        plan: "sme",
-        subscription_plan: "sme",
+        plan: "business",
+        subscription_plan: "business",
         subscription_status: "active",
         updated_at: TS,
         trial_ends_at: null,
@@ -52,8 +52,8 @@ describe("subscriptionRowToProfilePatch", () => {
       { user_id: "u1", current_plan: "corporate", status: "active" },
       TS
     );
-    expect(out.patch.plan).toBe("corporate");
-    expect(out.patch.subscription_plan).toBe("corporate");
+    expect(out.patch.plan).toBe("growth");
+    expect(out.patch.subscription_plan).toBe("growth");
   });
 
   it("defaults status to active when omitted", () => {
@@ -63,12 +63,12 @@ describe("subscriptionRowToProfilePatch", () => {
     expect(out.patch.trial_ends_at).toBeNull();
   });
 
-  it("maps paused to inactive profile and is_pro false", () => {
+  it("maps paused to suspended profile and is_pro false", () => {
     const out = subscriptionRowToProfilePatch(
       { user_id: "u1", plan: "individual", status: "paused" },
       TS
     );
-    expect(out.patch.subscription_status).toBe("inactive");
+    expect(out.patch.subscription_status).toBe("suspended");
     expect(out.patch.is_pro).toBe(false);
     expect(out.patch).not.toHaveProperty("trial_ends_at");
   });
@@ -94,7 +94,7 @@ describe("subscriptionRowToProfilePatch", () => {
 
   it("normalizes plan casing", () => {
     const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "SME" }, TS);
-    expect(out.patch.plan).toBe("sme");
+    expect(out.patch.plan).toBe("business");
   });
 
   it("stringifies user id (e.g. uuid object edge)", () => {

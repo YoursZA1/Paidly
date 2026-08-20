@@ -893,6 +893,7 @@ export default async function handler(req, res) {
       "subscriptions",
       "revenue",
       "failed-payments",
+      "payments",
     ]);
     const postResources = new Set([
       "approve",
@@ -1190,6 +1191,10 @@ export default async function handler(req, res) {
     if (resource === "failed-payments") {
       const { handleAdminFailedPayments } = await import("../../server/src/billing/adminBillingApi.js");
       return handleAdminFailedPayments(req, res);
+    }
+    if (resource === "payments") {
+      const { handleAdminPayments } = await import("../../server/src/billing/adminBillingApi.js");
+      return handleAdminPayments(req, res);
     }
 
     let limit = 500;

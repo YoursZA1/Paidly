@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Check, Loader2 } from "lucide-react";
 import {
@@ -9,9 +9,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { fetchAdminSubscriptionDetail } from "@/api/fetchAdminSubscriptionDetail";
+import { updateAdminSubscription } from "@/api/mutateAdminSubscription";
 import {
   SUBSCRIPTION_EVENT_LABELS,
   SUBSCRIPTION_TIMELINE_STAGES,
@@ -109,6 +112,7 @@ export default function SubscriptionDetailsSheet({
   open,
   onOpenChange,
 }) {
+  const queryClient = useQueryClient();
   const enabled = Boolean(open && subscriptionId);
 
   const { data, isLoading, isError, error } = useQuery({
@@ -116,6 +120,18 @@ export default function SubscriptionDetailsSheet({
     queryFn: () => fetchAdminSubscriptionDetail(subscriptionId),
     enabled,
     staleTime: 15000,
+  });
+
+  const overrideMutation = useMutation({
+    mutationFn: ({ action, extra }) =>
+      updateAdminSubscription(subscriptionId, { action, ...(extra || {}) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription-detail", subscriptionId] });
+      queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-overview"] });
+      toast.success("Subscription updated");
+    },
+    onError: (err) => toast.error(err?.message || "Update failed"),
   });
 
   const sub = data?.subscription;
@@ -182,6 +198,114 @@ export default function SubscriptionDetailsSheet({
                 <span className="font-mono text-xs break-all">{sub.payfastId || "—"}</span>
               </DetailField>
               <DetailField label="Renew Date">{formatDate(sub.renewDate)}</DetailField>
+              <DetailField label="Trial start">{formatDate(sub.trialStartedAt)}</DetailField>
+              <DetailField label="Trial end">{formatDate(sub.trialEndsAt)}</DetailField>
+              <DetailField label="Account created">
+                {formatDate(sub.owner?.createdAt || sub.createdAt)}
+              </DetailField>
+              <DetailField label="Successful payments">
+                {sub.paymentsSummary?.successfulCount ?? 0}
+                {sub.paymentsSummary?.successfulAmount != null
+                  ? ` · ${formatZar(sub.paymentsSummary.successfulAmount, sub.currency)}`
+                  : ""}
+              </DetailField>
+            </div>
+
+            <div className="rounded-xl border border-border p-4">
+              <h3 className="mb-3 text-sm font-semibold">Administrative controls</h3>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "extend_trial",
+                      extra: { days: 7, reason: "Admin extended trial by 7 days" },
+                    })
+                  }
+                >
+                  +7 days
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "extend_trial",
+                      extra: { days: 14, reason: "Admin extended trial by 14 days" },
+                    })
+                  }
+                >
+                  +14 days
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "extend_trial",
+                      extra: { days: 30, reason: "Admin extended trial by 30 days" },
+                    })
+                  }
+                >
+                  +30 days
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "grant",
+                      extra: { reason: "Admin granted access" },
+                    })
+                  }
+                >
+                  Grant access
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "end_trial",
+                      extra: { reason: "Admin ended trial immediately" },
+                    })
+                  }
+                >
+                  End trial
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "suspend",
+                      extra: { reason: "Admin suspended subscription" },
+                    })
+                  }
+                >
+                  Suspend
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={overrideMutation.isPending}
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      action: "activate",
+                      extra: { reason: "Admin activated subscription" },
+                    })
+                  }
+                >
+                  Activate
+                </Button>
+              </div>
             </div>
 
             <div className="rounded-xl border border-border p-4">

@@ -13,6 +13,19 @@ import {
   SUBSCRIPTION_EVENT_TYPE,
   buildSubscriptionEventTimeline,
 } from "../../../shared/subscriptionEventTypes.js";
+import {
+  PAYMENT_REPORTING_START_ISO,
+  SUBSCRIPTION_SOURCE,
+} from "../../../shared/subscriptionAccess.js";
+import {
+  getRevenueSince,
+  reportingPaymentLabel,
+  paymentEffectiveAt,
+} from "../../../shared/billingReporting.js";
+import {
+  buildAdminOverridePatch,
+  coerceAdminRequestedStatus,
+} from "./adminSubscriptionOverride.js";
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -41,6 +54,7 @@ const OVERVIEW_BUCKETS = Object.freeze([
     statuses: [SUBSCRIPTION_STATUS.TRIALING, "trial"],
   },
   { key: "pastDue", label: "Past Due", statuses: [SUBSCRIPTION_STATUS.PAST_DUE] },
+  { key: "failed", label: "Failed", statuses: [SUBSCRIPTION_STATUS.FAILED] },
 ]);
 
 async function countSubscriptionsInStatuses(supabase, statuses) {
@@ -71,6 +85,19 @@ export async function buildSubscriptionOverview(supabase) {
     .select("id", { count: "exact", head: true });
   if (allErr) throw allErr;
 
+  let adminGranted = 0;
+  try {
+    const { count: agCount, error: agErr } = await supabase
+      .from("subscriptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", SUBSCRIPTION_STATUS.ACTIVE)
+      .eq("subscription_source", SUBSCRIPTION_SOURCE.ADMIN);
+    if (!agErr) adminGranted = agCount ?? 0;
+  } catch {
+    adminGranted = 0;
+  }
+  counts.adminGranted = adminGranted;
+
   return {
     active: counts.active || 0,
     pending: counts.pending || 0,
@@ -78,15 +105,73 @@ export async function buildSubscriptionOverview(supabase) {
     cancelled: counts.cancelled || 0,
     trial: counts.trial || 0,
     pastDue: counts.pastDue || 0,
+    failed: counts.failed || 0,
+    adminGranted,
     /** Sum of overview buckets (may be less than all rows when other statuses exist). */
     bucketTotal: total,
     /** All rows in `subscriptions`. */
     total: allCount ?? total,
-    buckets: OVERVIEW_BUCKETS.map((b) => ({
+    buckets: OVERVIEW_BUCKETS.filter((b) => b.key !== "adminGranted").map((b) => ({
       key: b.key,
       label: b.label,
       count: counts[b.key] || 0,
     })),
+  };
+}
+
+/**
+ * Payment/revenue KPIs from verified payment_history, epoch 2026-08-20 UTC.
+ * Active/trial/expired counts come from subscriptions, not from payment rows.
+ */
+export async function buildBillingReporting(supabase, now = new Date()) {
+  const startIso = PAYMENT_REPORTING_START_ISO;
+  const nowIso = now.toISOString();
+
+  const completedRows = await fetchPaymentRowsSince(supabase, {
+    status: PAYMENT_HISTORY_STATUS.COMPLETED,
+    sinceIso: startIso,
+  });
+  const revenue = getRevenueSince(completedRows, startIso);
+
+  let trialUsers = 0;
+  try {
+    const { count, error } = await supabase
+      .from("subscriptions")
+      .select("id", { count: "exact", head: true })
+      .in("status", [SUBSCRIPTION_STATUS.TRIALING, "trial"])
+      .or(`trial_ends_at.is.null,trial_ends_at.gt.${nowIso}`);
+    if (!error) trialUsers = count ?? 0;
+  } catch {
+    trialUsers = await countSubscriptionsInStatuses(supabase, [SUBSCRIPTION_STATUS.TRIALING, "trial"]);
+  }
+
+  const [activeSubscribers, expiredStatus] = await Promise.all([
+    countSubscriptionsInStatuses(supabase, [SUBSCRIPTION_STATUS.ACTIVE]),
+    countSubscriptionsInStatuses(supabase, [SUBSCRIPTION_STATUS.EXPIRED]),
+  ]);
+
+  let overdueTrials = 0;
+  try {
+    const { count, error } = await supabase
+      .from("subscriptions")
+      .select("id", { count: "exact", head: true })
+      .in("status", [SUBSCRIPTION_STATUS.TRIALING, "trial"])
+      .lt("trial_ends_at", nowIso)
+      .eq("admin_override", false);
+    if (!error) overdueTrials = count ?? 0;
+  } catch {
+    overdueTrials = 0;
+  }
+
+  return {
+    startDate: startIso,
+    timezone: "UTC",
+    successfulPayments: revenue.count,
+    revenue: revenue.amount,
+    currency: revenue.currency,
+    activeSubscribers,
+    trialUsers,
+    expiredTrials: expiredStatus + overdueTrials,
   };
 }
 
@@ -112,7 +197,7 @@ async function requireBillingAdmin(req, res) {
 }
 
 const LIST_SELECT_RICH =
-  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, created_at, updated_at";
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at";
 const LIST_SELECT_LEAN =
   "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at";
 
@@ -224,7 +309,7 @@ export function buildAdminSubscriptionWriteRow(body, opts = {}) {
   }
 
   if (src.status != null && String(src.status).trim()) {
-    const st = coerceSubscriptionStatus(src.status);
+    const st = coerceAdminRequestedStatus(src.status) || coerceSubscriptionStatus(src.status);
     if (!st) throw httpError(400, "invalid subscription status");
     out.status = st;
   } else if (isCreate) {
@@ -248,6 +333,15 @@ export function buildAdminSubscriptionWriteRow(body, opts = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(src, "next_billing_date")) {
     out.next_billing_date = parseDate(src.next_billing_date);
+  }
+  if (Object.prototype.hasOwnProperty.call(src, "trial_ends_at")) {
+    out.trial_ends_at = parseDate(src.trial_ends_at);
+  }
+  if (Object.prototype.hasOwnProperty.call(src, "trial_started_at")) {
+    out.trial_started_at = parseDate(src.trial_started_at);
+  }
+  if (Object.prototype.hasOwnProperty.call(src, "expires_at")) {
+    out.expires_at = parseDate(src.expires_at);
   }
 
   return out;
@@ -322,7 +416,7 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
   let { data: sub, error: subErr } = await supabase
     .from("subscriptions")
     .select(
-      "id, status, plan_id, plan_slug, plan, current_plan, amount, currency, billing_cycle, company_id, user_id, email, payfast_token, payfast_subscription_id, payfast_payment_id, m_payment_id, next_billing_date, current_period_end, expires_at, activated_at, started_at, cancelled_at, failure_count, created_at, updated_at"
+      "id, status, plan_id, plan_slug, plan, current_plan, amount, currency, billing_cycle, company_id, user_id, email, payfast_token, payfast_subscription_id, payfast_payment_id, m_payment_id, next_billing_date, current_period_end, expires_at, activated_at, started_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -359,7 +453,7 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
   if (ownerUserId) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, email, created_at")
       .eq("id", ownerUserId)
       .maybeSingle();
     owner = profile
@@ -367,6 +461,7 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
           id: profile.id,
           name: profile.full_name || null,
           email: profile.email || sub.email || null,
+          createdAt: profile.created_at || null,
         }
       : {
           id: ownerUserId,
@@ -531,6 +626,12 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
     createdAt: inv.created_at,
   }));
 
+  const successfulHistory = history.filter(
+    (h) => String(h.status || "").toLowerCase() === PAYMENT_HISTORY_STATUS.COMPLETED
+  );
+  const successfulTotal = successfulHistory.reduce((sum, h) => sum + Number(h.amount || 0), 0);
+  const lastSuccessful = successfulHistory[0] || null;
+
   return json(res, 200, {
     subscription: {
       id: sub.id,
@@ -542,6 +643,7 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
             id: owner.id,
             name: owner.name,
             email: owner.email,
+            createdAt: owner.createdAt || null,
             label: owner.name || owner.email || "—",
           }
         : null,
@@ -554,12 +656,23 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
       payfastSubscriptionId: sub.payfast_subscription_id || null,
       payfastPaymentId: sub.payfast_payment_id || null,
       payfastToken: sub.payfast_token || null,
+      mPaymentId: sub.m_payment_id || null,
       renewDate,
+      trialStartedAt: sub.trial_started_at || null,
+      trialEndsAt: sub.trial_ends_at || null,
+      subscriptionSource: sub.subscription_source || null,
+      adminOverride: Boolean(sub.admin_override),
       failureCount: Number(sub.failure_count || 0),
       activatedAt: sub.activated_at || sub.started_at || null,
       cancelledAt: sub.cancelled_at || null,
+      expiresAt: sub.expires_at || null,
       createdAt: sub.created_at,
       updatedAt: sub.updated_at,
+      paymentsSummary: {
+        successfulCount: successfulHistory.length,
+        successfulAmount: Math.round(successfulTotal * 100) / 100,
+        lastSuccessfulAt: lastSuccessful?.date || null,
+      },
     },
     history,
     logs,
@@ -591,15 +704,31 @@ export async function handleAdminSubscriptionsList(req, res) {
     String(q.overview || "").trim().toLowerCase() === "true";
 
   let overview = null;
+  let reporting = null;
   try {
     overview = await buildSubscriptionOverview(supabase);
   } catch (e) {
     console.error("[admin/subscriptions] overview", e);
     return json(res, 500, { error: "Failed to load subscription overview" });
   }
+  try {
+    reporting = await buildBillingReporting(supabase);
+  } catch (e) {
+    console.warn("[admin/subscriptions] reporting", e?.message || e);
+    reporting = {
+      startDate: PAYMENT_REPORTING_START_ISO,
+      timezone: "UTC",
+      successfulPayments: 0,
+      revenue: 0,
+      currency: "ZAR",
+      activeSubscribers: overview.active || 0,
+      trialUsers: overview.trial || 0,
+      expiredTrials: overview.expired || 0,
+    };
+  }
 
   if (overviewOnly) {
-    return json(res, 200, { overview });
+    return json(res, 200, { overview, reporting });
   }
 
   const status = String(q.status || "").trim();
@@ -633,6 +762,7 @@ export async function handleAdminSubscriptionsList(req, res) {
     subscriptions,
     count: count ?? subscriptions.length,
     overview,
+    reporting,
   });
 }
 
@@ -658,6 +788,10 @@ export async function handleAdminSubscriptionCreate(req, res) {
   row.created_at = nowIso;
   row.updated_at = nowIso;
   if (user?.id) row.created_by = user.id;
+  row.admin_override = true;
+  row.subscription_source = SUBSCRIPTION_SOURCE.ADMIN;
+  row.admin_override_at = nowIso;
+  if (user?.id) row.admin_override_by = user.id;
   if (row.status === SUBSCRIPTION_STATUS.ACTIVE && !row.activated_at) {
     row.activated_at = nowIso;
   }
@@ -689,7 +823,8 @@ export async function handleAdminSubscriptionCreate(req, res) {
 }
 
 /**
- * PATCH /api/admin/subscriptions — admin update. Body: { id, ...fields }
+ * PATCH /api/admin/subscriptions — admin update. Body: { id, action?, ...fields }
+ * Named actions always set admin_override so trial expiry cannot revert them.
  */
 export async function handleAdminSubscriptionUpdate(req, res) {
   const ctx = await requireBillingAdmin(req, res);
@@ -702,20 +837,44 @@ export async function handleAdminSubscriptionUpdate(req, res) {
   const id = String(body.id || body.subscriptionId || "").trim();
   if (!id || !isValidUuid(id)) return json(res, 400, { error: "subscription id required" });
 
+  const { data: existing, error: loadErr } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (loadErr) {
+    console.error("[admin/subscriptions/update] load", loadErr);
+    return json(res, 500, { error: "Failed to load subscription" });
+  }
+  if (!existing) return json(res, 404, { error: "Subscription not found" });
+
   let patch;
+  let auditAction = "update";
+  let auditDescription = "Admin updated subscription";
   try {
-    patch = buildAdminSubscriptionWriteRow(body, { isCreate: false });
+    if (body.action) {
+      const built = buildAdminOverridePatch(existing, body, { actorId: user?.id || null });
+      patch = built.patch;
+      auditAction = built.action;
+      auditDescription = built.description;
+    } else {
+      patch = buildAdminSubscriptionWriteRow(body, { isCreate: false });
+      delete patch.created_by;
+      const nowIso = new Date().toISOString();
+      patch.updated_at = nowIso;
+      patch.admin_override = true;
+      patch.subscription_source = SUBSCRIPTION_SOURCE.ADMIN;
+      patch.admin_override_at = nowIso;
+      if (user?.id) patch.admin_override_by = user.id;
+      const reason = String(body.reason || "").trim();
+      if (reason) patch.admin_override_reason = reason.slice(0, 500);
+      if (patch.status === SUBSCRIPTION_STATUS.CANCELLED) {
+        patch.cancelled_at = patch.cancelled_at || nowIso;
+      }
+      if (reason) auditDescription = reason;
+    }
   } catch (e) {
     return json(res, e.status || 400, { error: e.message || "Invalid payload" });
-  }
-
-  delete patch.created_by;
-  patch.updated_at = new Date().toISOString();
-  if (patch.status === SUBSCRIPTION_STATUS.ACTIVE && patch.activated_at === undefined) {
-    // leave existing activated_at; trigger/row already has it
-  }
-  if (patch.status === SUBSCRIPTION_STATUS.CANCELLED) {
-    patch.cancelled_at = patch.cancelled_at || new Date().toISOString();
   }
 
   await attachPlanId(supabase, patch);
@@ -738,9 +897,62 @@ export async function handleAdminSubscriptionUpdate(req, res) {
       source: "admin",
       actor_id: user?.id || null,
     });
+  } else if (patch.status === SUBSCRIPTION_STATUS.ACTIVE && existing.status !== SUBSCRIPTION_STATUS.ACTIVE) {
+    await logAdminSubscriptionEvent(supabase, data.id, data.company_id, SUBSCRIPTION_EVENT_TYPE.ACTIVATED, {
+      source: "admin",
+      actor_id: user?.id || null,
+      action: auditAction,
+    });
   }
 
+  await writeAdminSubscriptionAudit(supabase, {
+    actor: user,
+    target: data,
+    action: auditAction,
+    description: auditDescription,
+    before: {
+      status: existing.status,
+      plan: existing.plan || existing.plan_slug,
+      trial_ends_at: existing.trial_ends_at || null,
+    },
+    after: {
+      status: data.status,
+      plan: data.plan || data.plan_slug,
+      trial_ends_at: data.trial_ends_at || null,
+    },
+  });
+
   return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
+}
+
+async function writeAdminSubscriptionAudit(supabase, { actor, target, action, description, before, after }) {
+  try {
+    await supabase.from("audit_logs").insert({
+      category: "subscription",
+      action: `admin_subscription_${action}`,
+      description: description || "Admin updated subscription",
+      before: before || {},
+      after: after || {},
+      actor_id: actor?.id || null,
+      actor_email: actor?.email || null,
+      actor_name: actor?.user_metadata?.full_name || actor?.email || null,
+      actor_role: "admin",
+      target_label: target?.email || target?.id || null,
+      metadata: {
+        subscription_id: target?.id || null,
+        user_id: target?.user_id || null,
+        company_id: target?.company_id || null,
+        previous_status: before?.status || null,
+        new_status: after?.status || null,
+        previous_plan: before?.plan || null,
+        new_plan: after?.plan || null,
+        previous_trial_end: before?.trial_ends_at || null,
+        new_trial_end: after?.trial_ends_at || null,
+      },
+    });
+  } catch (e) {
+    console.warn("[admin/subscriptions] audit_logs insert failed", e?.message || e);
+  }
 }
 
 function roundMoney(n) {
@@ -756,13 +968,6 @@ function amountToMonthly(amount, billingCycle) {
   if (c === "quarterly") return a / 3;
   if (c === "biannual" || c === "semi_annual" || c === "semiannual") return a / 6;
   return a;
-}
-
-function paymentEffectiveAt(row) {
-  const raw = row?.transaction_date || row?.created_at;
-  if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function startOfUtcDay(d = new Date()) {
@@ -1132,3 +1337,131 @@ export async function handleAdminFailedPayments(req, res) {
     columns: ["company", "date", "reason", "retryCount", "amount"],
   });
 }
+
+/**
+ * GET /api/admin/payments
+ * Verified PayFast ledger with reporting labels. Default period starts 2026-08-20 UTC.
+ * Only SUCCESSFUL rows count toward revenue.
+ */
+export async function handleAdminPayments(req, res) {
+  const ctx = await requireBillingAdmin(req, res);
+  if (!ctx) return;
+  const { supabase } = ctx;
+
+  const q = req.query || {};
+  const fromIso = String(q.from || q.since || PAYMENT_REPORTING_START_ISO).trim() || PAYMENT_REPORTING_START_ISO;
+  const toRaw = String(q.to || "").trim();
+  const statusFilter = String(q.status || "").trim().toUpperCase();
+  const search = String(q.q || q.customer || q.email || "").trim().toLowerCase();
+  const planFilter = String(q.plan || "").trim().toLowerCase();
+  const paymentId = String(q.paymentId || q.payfast_payment_id || q.id || "").trim();
+  const limit = Math.min(2000, Math.max(1, Number(q.limit) || 200));
+
+  let query = supabase
+    .from("payment_history")
+    .select(
+      "id, subscription_id, company_id, amount, currency, payment_status, payment_method, payfast_payment_id, transaction_date, created_at"
+    )
+    .gte("created_at", fromIso)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (toRaw) {
+    const toDate = new Date(toRaw);
+    if (Number.isFinite(toDate.getTime())) query = query.lte("created_at", toDate.toISOString());
+  }
+  if (paymentId) {
+    query = query.or(`id.eq.${paymentId},payfast_payment_id.eq.${paymentId}`);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[admin/payments]", error);
+    return json(res, 500, { error: "Failed to load payments" });
+  }
+
+  const rows = data || [];
+  const subscriptionIds = [...new Set(rows.map((r) => r.subscription_id).filter(Boolean))];
+  const companyIds = [...new Set(rows.map((r) => r.company_id).filter(Boolean))];
+
+  const subMetaById = new Map();
+  if (subscriptionIds.length) {
+    const { data: subs } = await supabase
+      .from("subscriptions")
+      .select("id, email, user_email, full_name, user_name, user_id, company_id, plan_slug, plan, plan_family")
+      .in("id", subscriptionIds);
+    for (const s of subs || []) subMetaById.set(s.id, s);
+  }
+
+  const companyNameById = new Map();
+  if (companyIds.length) {
+    const { data: orgs } = await supabase.from("organizations").select("id, name").in("id", companyIds);
+    for (const o of orgs || []) companyNameById.set(o.id, o.name || null);
+  }
+
+  const ownerIds = [
+    ...new Set(
+      [...subMetaById.values()].map((s) => s.user_id).filter(Boolean)
+    ),
+  ];
+  const profileById = new Map();
+  if (ownerIds.length) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, company_name")
+      .in("id", ownerIds);
+    for (const p of profiles || []) profileById.set(p.id, p);
+  }
+
+  let payments = rows.map((r) => {
+    const sub = r.subscription_id ? subMetaById.get(r.subscription_id) : null;
+    const profile = sub?.user_id ? profileById.get(sub.user_id) : null;
+    const label = reportingPaymentLabel(r);
+    const at = paymentEffectiveAt(r);
+    return {
+      id: r.id,
+      paidlyPaymentId: r.id,
+      payfastPaymentId: r.payfast_payment_id || null,
+      subscriptionId: r.subscription_id || null,
+      companyId: r.company_id || sub?.company_id || null,
+      company: companyNameById.get(r.company_id) || profile?.company_name || null,
+      customer: profile?.full_name || sub?.full_name || sub?.user_name || null,
+      email: profile?.email || sub?.email || sub?.user_email || null,
+      plan: sub?.plan_family || sub?.plan || sub?.plan_slug || null,
+      amount: Number(r.amount || 0),
+      currency: String(r.currency || "ZAR").toUpperCase(),
+      ledgerStatus: r.payment_status,
+      status: label,
+      paymentDate: at ? at.toISOString() : r.created_at,
+      paymentMethod: r.payment_method || "payfast",
+      provider: r.payment_method || "payfast",
+      countsTowardRevenue: label === "SUCCESSFUL" && at && at.getTime() >= new Date(PAYMENT_REPORTING_START_ISO).getTime(),
+    };
+  });
+
+  if (statusFilter) {
+    payments = payments.filter((p) => p.status === statusFilter);
+  }
+  if (planFilter) {
+    payments = payments.filter((p) => String(p.plan || "").toLowerCase().includes(planFilter));
+  }
+  if (search) {
+    payments = payments.filter((p) => {
+      const blob = `${p.customer || ""} ${p.email || ""} ${p.company || ""} ${p.payfastPaymentId || ""} ${p.paidlyPaymentId || ""}`.toLowerCase();
+      return blob.includes(search);
+    });
+  }
+
+  const reporting = await buildBillingReporting(supabase);
+
+  return json(res, 200, {
+    startDate: PAYMENT_REPORTING_START_ISO,
+    from: fromIso,
+    to: toRaw || null,
+    timezone: "UTC",
+    payments,
+    count: payments.length,
+    reporting,
+  });
+}
+

@@ -197,6 +197,7 @@ export default function AdminV2Dashboard() {
     refetchOnWindowFocus: false,
   });
   const subscriptionOverview = subscriptionOverviewPayload?.overview;
+  const billingReporting = subscriptionOverviewPayload?.reporting;
 
   const {
     data: revenueMetricsPayload,
@@ -694,6 +695,7 @@ export default function AdminV2Dashboard() {
       <SubscriptionOverview
         className="mb-4"
         overview={subscriptionOverview}
+        reporting={billingReporting}
         isLoading={subscriptionOverviewLoading}
         errorMessage={
           subscriptionOverviewError
