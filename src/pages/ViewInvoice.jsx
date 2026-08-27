@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import InvoiceActions from '@/components/invoice/InvoiceActions';
 import InvoiceService from '@/api/InvoiceService';
+import { sendInvoicePdfEmailToClient } from '@/services/InvoiceSendService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { useQueryClient } from '@tanstack/react-query';
@@ -24,6 +25,7 @@ import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
+import { resolveIssuerLogoPath, resolveIssuerName } from '@/lib/documentIssuerBrand';
 import { useToast } from '@/components/ui/use-toast';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
@@ -141,47 +143,38 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
     };
     
     const handleSendEmail = async () => {
-        if (!client || !invoice || !company) return;
+        if (!client || !invoice) return;
         setIsSending(true);
 
         try {
-            let inv = invoice;
-            if (!inv.public_share_token) {
-                const token = crypto.randomUUID();
-                await retryOnAbort(() => Invoice.update(inv.id, { public_share_token: token }));
-                setInvoice((prev) => ({ ...prev, public_share_token: token }));
-                inv = { ...inv, public_share_token: token };
+            const result = await sendInvoicePdfEmailToClient(invoice, client, {});
+            if (result?.success) {
+                setInvoice((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              status: prev.status === "draft" ? "sent" : prev.status,
+                              sent_to_email: client.email,
+                              sent_date: result.sentAt || prev.sent_date,
+                          }
+                        : prev
+                );
             }
-            const { createTrackableInvoiceLink, recordDocumentSend } = await import('@/services/InvoiceSendService');
-            const { url: trackableViewUrl } = await createTrackableInvoiceLink(inv, 'email', client.email);
-            await InvoiceService.sendInvoiceEmail(
-                inv,
-                client.email,
-                client.name,
-                company.company_name,
-                inv.invoice_number,
-                '',
-                trackableViewUrl
-            );
-
-            if (inv.status === 'draft') {
-                await retryOnAbort(() => Invoice.update(inv.id, { ...inv, status: 'sent' }));
-                setInvoice(prev => ({...prev, status: 'sent'}));
-            }
-            recordDocumentSend('invoice', inv.id, client?.id, 'email');
             toast({
                 title: "Invoice sent to email successfully!",
                 description: documentSendSuccessDescription({
-                    mode: 'invoice',
-                    recipientEmail: client.email?.trim() || '',
+                    mode: "invoice",
+                    recipientEmail: client.email?.trim() || "",
                 }),
-                variant: 'success',
+                variant: "success",
                 duration: 6500,
             });
         } catch (error) {
             console.error("Failed to send email:", error);
-            const message = isAbortError(error) ? "Request was interrupted. Please try again." : (error.message || 'Failed to send email. Please try again.');
-            toast({ title: 'Failed to send email', description: message, variant: 'destructive' });
+            const message = isAbortError(error)
+                ? "Request was interrupted. Please try again."
+                : error.message || "Invoice could not be sent. Please try again.";
+            toast({ title: "Failed to send email", description: message, variant: "destructive" });
         } finally {
             setIsSending(false);
         }
@@ -341,13 +334,20 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                 parseDocumentBrandHex(invoice.document_brand_secondary) != null
                     ? invoice.document_brand_secondary
                     : company?.document_brand_secondary,
-            // `company` is User.me() profile — prefer profile logo over stale owner_logo_url snapshot.
             logo_url:
-                company?.logo_url ||
-                company?.company_logo_url ||
-                invoice.owner_logo_url ||
+                resolveIssuerLogoPath({
+                    document: invoice,
+                    company: invoice.company,
+                    profile: company,
+                }) || '',
+            company_name:
+                resolveIssuerName({
+                    document: invoice,
+                    company: invoice.company,
+                    profile: company,
+                }) ||
+                company?.company_name ||
                 '',
-            company_name: invoice.owner_company_name || company?.company_name || '',
             company_address: invoice.owner_company_address || company?.company_address || '',
             email: invoice.owner_email || company?.email || '',
             currency: userCurrency,

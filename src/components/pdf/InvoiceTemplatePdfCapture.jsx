@@ -11,6 +11,7 @@ import {
   DOCUMENT_TEMPLATE_KEY,
 } from "@/utils/invoiceTemplateData";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
+import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
 
@@ -53,25 +54,31 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
     ? {
         ...user,
         // Profile / live branding first so Settings logo appears on invoices; snapshot as fallback.
-        logo_url:
-          user.logo_url ||
-          user.company_logo_url ||
-          invoice?.owner_logo_url ||
-          invoice?.company?.logo_url ||
-          invoice?.company?.company_logo_url ||
-          null,
-        company_name: invoice?.owner_company_name || user.company_name,
+        logo_url: resolveIssuerLogoPath({
+          document: invoice,
+          company: invoice?.company,
+          profile: user,
+        }),
+        company_name: resolveIssuerName({
+          document: invoice,
+          company: invoice?.company,
+          profile: user,
+        }) || user.company_name,
         company_address: invoice?.owner_company_address || user.company_address,
         currency: invoice?.currency || invoice?.owner_currency || user.currency || "ZAR",
         invoice_template: templateKey,
       }
     : {
-        company_name: invoice?.owner_company_name || "Company",
-        logo_url:
-          invoice?.owner_logo_url ||
-          invoice?.company?.logo_url ||
-          invoice?.company?.company_logo_url ||
-          null,
+        company_name: resolveIssuerName({
+          document: invoice,
+          company: invoice?.company,
+          profile: null,
+        }) || "Company",
+        logo_url: resolveIssuerLogoPath({
+          document: invoice,
+          company: invoice?.company,
+          profile: null,
+        }),
         company_address: invoice?.owner_company_address || "",
         currency: invoice?.currency || invoice?.owner_currency || "ZAR",
         invoice_template: templateKey,

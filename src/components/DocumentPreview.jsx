@@ -4,6 +4,7 @@ import { formatCurrency } from "@/components/CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
+import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
@@ -158,17 +159,25 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       [clientFromList?.address, clientFromList?.city, clientFromList?.country].filter(Boolean).join("\n") ||
       "";
 
-    const company_name = doc.company_name || effectiveUser?.company_name || "Your Company";
+    const company_name =
+      resolveIssuerName({
+        document: doc,
+        company: doc.company,
+        profile: effectiveUser,
+      }) ||
+      doc.company_name ||
+      "Your Company";
     const company_email = doc.company_email || effectiveUser?.email || "";
     const company_phone = String(doc.company_phone || effectiveUser?.phone || "").trim();
     const company_website = String(
       doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
     ).trim();
     const company_address = doc.company_address || effectiveUser?.company_address || "";
-    // Always prefer the live profile logo (Settings) for authenticated previews;
-    // persisted document snapshot logo is a fallback for public/legacy records.
-    const logo_url =
-      effectiveUser?.logo_url || effectiveUser?.company_logo_url || doc.owner_logo_url || null;
+    const logo_url = resolveIssuerLogoPath({
+      document: doc,
+      company: doc.company,
+      profile: effectiveUser,
+    });
 
     const number = doc.number || doc.invoice_number || doc.quote_number || "—";
     const status = doc.status || "draft";

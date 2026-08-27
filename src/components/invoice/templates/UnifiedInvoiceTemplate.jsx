@@ -5,6 +5,7 @@ import {
 } from "@/utils/invoiceTemplateData";
 import LogoImage from "@/components/shared/LogoImage";
 import { paginateInvoice } from "./invoicePageLayout";
+import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
 
 /**
  * Typography scale (print + PDF): title 20–24px, section headers 11–12px, body 12–13px,
@@ -450,6 +451,14 @@ export default function UnifiedInvoiceTemplate({
   documentTitle,
 }) {
   const cfg = VARIANT_CONFIG[variant] || VARIANT_CONFIG.classic;
+  const issuerName = resolveIssuerName({
+    document: invoice,
+    company: invoice?.company,
+    profile: user,
+  });
+  const brandedUser = user
+    ? { ...user, company_name: issuerName || user.company_name }
+    : { company_name: issuerName || "Company" };
   const accent = cfg.accent;
   const heavy = Boolean(cfg.heavy);
   const issueDate = safeFormatDate(invoice.created_date);
@@ -472,13 +481,12 @@ export default function UnifiedInvoiceTemplate({
     ? invoice.quote_number ?? invoice.number ?? "—"
     : invoice.invoice_number ?? invoice.number ?? "—";
 
-  const logoPath =
-    user?.logo_url ||
-    user?.company_logo_url ||
-    invoice?.owner_logo_url ||
-    invoice?.company?.logo_url ||
-    null;
-  const businessContactRows = accountInfoRowsFromUser(user);
+  const logoPath = resolveIssuerLogoPath({
+    document: invoice,
+    company: invoice?.company,
+    profile: user,
+  });
+  const businessContactRows = accountInfoRowsFromUser(brandedUser);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
   const hasAccountDetailsSection = accountBankRows.length > 0 || businessContactRows.length > 0;
 
@@ -811,9 +819,9 @@ export default function UnifiedInvoiceTemplate({
               {/* Footer — present on every page, pinned to the page bottom. */}
               <div className="mt-auto">
                 {isLast ? (
-                  <DetailedFooter user={user} cfg={cfg} pageLabel={pageLabel} />
+                  <DetailedFooter user={brandedUser} cfg={cfg} pageLabel={pageLabel} />
                 ) : (
-                  <RunningFooter user={user} cfg={cfg} pageLabel={pageLabel} />
+                  <RunningFooter user={brandedUser} cfg={cfg} pageLabel={pageLabel} />
                 )}
               </div>
             </section>

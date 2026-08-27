@@ -18,7 +18,7 @@ pdf_options:
 **Paidly v2 Systems (final):**
 
 1. **Identity System** — Auth, users, organizations, roles, RLS-backed tenancy.
-2. **Document Engine** — Invoices, quotes, payslips unified as `document(type=…)`; shared compose, send, and PDF paths.
+2. **Document Engine** — Shared compose, send, and PDF behaviour for commercial documents (invoices, quotes, payslips) **plus** a Documents Hub for other business document types. Persistence is split: specialised tables vs `documents`.
 3. **Payment Intent Layer** — Canonical handoff from document delivery/observation to payment rails and settlement orchestration.
 4. **Revenue System** — Payment providers, subscriptions, cash flow, and reporting (reads/rails downstream of documents).
 5. **Relationship System** — Clients + catalog + offering intelligence that feeds document composition.
@@ -64,7 +64,7 @@ On-call session/runtime guardrails: see `docs/SESSION_RUNTIME_GUARDS.md`.
 
 **Investor-facing framing:** shift the story from “invoice app” to **financial workflow platform for SMEs**.
 
-**You already have (in shipped or advanced form):** invoices, quotes, payslips (unified as **documents**), clients, reporting, affiliates, and the plumbing for payments, subscriptions, and cash visibility.
+**You already have (in shipped or advanced form):** invoices, quotes, payslips (specialised commercial tables), Documents Hub (generic business documents), clients, reporting, affiliates, and the plumbing for payments, subscriptions, and cash visibility.
 
 **Competitive edge:** most tools **excel at one slice** (invoicing-only, or accounting-only, or a disconnected referral program). **Few competitors unify** issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence **under one coherent architecture** and vocabulary. That unification—**Document → Payment Intent → Revenue System** plus shared **Experience** and **Payment Intelligence**—is the defensible story: not “another invoice PDF,” but **operating the business** in one system.
 
@@ -77,8 +77,8 @@ On-call session/runtime guardrails: see `docs/SESSION_RUNTIME_GUARDS.md`.
 | Old lens | New lens |
 |----------|----------|
 | “Invoicing app” / feature checklist | **Business operating system** — documents + relationships + money + growth |
-| “We have Invoices, Quotes, Payslips…” | **One Document Engine** with multiple **document kinds** |
-| “Invoices page, Quotes page, Clients page…” | **Create Document** → configure **type** (invoice / quote / payslip) → **same UI shell** → **different logic** per kind |
+| “We have Invoices, Quotes, Payslips…” | **One Document Engine** (shared compose/send/PDF) with **split persistence** |
+| “Invoices page, Quotes page, Clients page…” | Commercial lists over specialised tables; Documents Hub for other business documents |
 | Features as separate products | **Five core systems** + one **Experience system** (cross-cutting) |
 | Routes drive architecture | **Capabilities** drive architecture; routes are just entry points |
 
@@ -100,6 +100,16 @@ These are the **real** architecture—not the sidebar.
 - `profiles`, `organizations`, `memberships`, roles (`admin`, `management`, …)
 - RLS as the enforcement layer; client as the UX layer
 
+**Organisation vs company/brand vs team (do not confuse these):**
+
+| Concept | Meaning | Persistence |
+|---------|---------|-------------|
+| **Organization / account** | The Paidly tenant using the product | `organizations`; `CompanyContext.companyId` is this **org id** (product copy often says `company_id` for the tenant) |
+| **Company / brand** | A trading identity that belongs to that organization, used for document branding | `public.companies` (`org_id`, `name`, `logo_url`); invoices set **`invoices.company_id` → `companies.id`** |
+| **Team / membership** | People who have access to the organization | `memberships` + org roles |
+
+Do not create a second tenant system. `CompanyContext` remains org RBAC. Active brand is a **UI default for new documents** (per-org localStorage); changing it must not rewrite existing invoices. Quotes have no `company_id` column (name/logo snapshot only). Payslips stay organization-profile scoped. See `docs/MULTIBRAND_COMPANIES.md`.
+
 **Strategy:** **Stabilise, don’t expand.** Harden session edge cases, org bootstrap, and role gates (`RequireAuth`) so every other system trusts Identity cheaply.
 
 **Auth + session stabilization (in flight):** one coherent story for **session read/write** (`getStableSession` / SessionCoordinator vs reserved raw `getSession` in AuthContext / SupabaseAuthService / supabaseAuthRefresh), **profile restore** when local auth cache is cleared, **invite / password / org bootstrap** flows, and **no silent “logged in but empty user”** states. Client work touches **`customClient.js`** / `AuthManager`, **`RequireAuth`**, and Supabase Auth config—treat this as **foundation** before shipping net-new document features at scale.
@@ -118,29 +128,36 @@ These are the **real** architecture—not the sidebar.
 
 **Job:** Everything a business **issues to another party** to record obligation, intent, or compensation—then **delivers**, **tracks**, and often **collects** on.
 
-**Canonical product vocabulary** (feature → model):
+**Canonical product vocabulary** (feature → source of truth):
 
-| Feature (legacy naming) | Becomes |
+| Feature | Persistence (system of record) |
 |---------------------------|---------|
-| Invoice | `document(type="invoice")` |
-| Quote | `document(type="quote")` |
-| Payslip | `document(type="payslip")` |
+| Invoice | `invoices` |
+| Quote | `quotes` |
+| Payslip | `payslips` |
+| Recurring invoice | `recurring_invoices` |
+| Other business documents (leave, expenses, contracts, …) | `documents` (+ `document_items`, `document_events`) |
 
-**Persistence (today):** still separate Supabase tables (`invoices`, `quotes`, `payslips` / payslip stack)—the **unification is logical and in code** first (`src/document-engine/`), not a forced single-table migration.
+**Do not dual-write.** Invoices, quotes, payslips, and recurring invoices must not be copied into `documents`. The Documents Hub is not a second store for commercial documents.
+
+**Persistence:** commercial documents remain on specialised Supabase tables. Shared UI and helpers live in `src/document-engine/`. Ownership policy: `src/document-engine/documentSystemOfRecord.js`.
 
 **Migration status (implementation):**
 
-- **Unified now (code-level contracts):**
+- **Shared now (code-level contracts, split persistence):**
   - Shared document type vocabulary and routing helpers in `src/document-engine/`.
   - Shared list-controller and adapter pattern for invoice/quote/payslip list screens.
   - Shared pagination and shared export assembly service paths.
-- **Partially unified (same behavior, separate persistence):**
-  - Compose/send/render flows increasingly share helpers/services, but write into legacy per-type tables.
-- **Not unified yet (roadmap):**
-  - Single persistence model for all document kinds.
-  - Full payment-intent/event model as canonical settlement source.
+- **Documents Hub (generic types only):**
+  - Leave requests, expense claims, contracts, and other catalog types persist in `public.documents`.
+  - Hub **Convert to invoice / quote** (job cards, reports, proposals, scopes) opens specialised compose (`CreateDocument/invoice|quote?fromHubDocument=`) and writes to `invoices` / `quotes`. It does not insert commercial types into `documents`.
+  - Quote → invoice remains on the Quotes page (`CreateInvoice?quoteId=` / `CreateDocument/invoice?quoteId=`).
+  - Leftover `documents` rows with `type=invoice|quote|payslip` (if any exist from earlier experiments) are **hidden from the hub list**. Opening a direct URL shows a cleanup screen: go to the specialised list, or archive/remove the leftover hub row. Rows are not migrated and not auto-deleted.
+- **Not a goal:**
+  - Migrating invoices, quotes, or payslips into `documents`.
+  - Dual-write / automatic mirroring of commercial documents into the hub.
 
-**Reframe:** not “invoices vs quotes vs payslips” but **one engine**:
+**Reframe:** one **engine** (compose, send, PDF) with **two persistence owners**:
 
 | Document kind | Today’s surface | Same engine primitives |
 |---------------|-----------------|---------------------------|
@@ -228,14 +245,14 @@ Without a first-class `Payment Intent`, payments feel bolted on, Payfast-specifi
 
 #### Product upgrade: one compose surface, many kinds
 
-The **big upgrade** is not more list pages—it is **one mental journey**:
+The **big upgrade** is not more list pages—it is **one mental journey** with honest persistence:
 
-1. **Create Document** (single entry pattern: compose, brand, line items).
-2. **Configure type** — `invoice` / `quote` / `payslip` (and future kinds)—as a **property of the document**, not a separate app area.
-3. **Same UI** — shared shell, editors, preview, send affordances (Experience System + document templates).
+1. **Create** from a consistent compose pattern (brand, line items, preview).
+2. **Commercial types** (invoice / quote / payslip) write to specialised tables; **other types** write to the Documents Hub.
+3. **Shared UI** where it already exists — editors, preview, send affordances (Experience System + templates).
 4. **Different logic** — status machines, tax/settlement rules, payroll vs AR: **kind-specific adapters** behind the same surface.
 
-List routes (“Invoices”, “Quotes”) remain **indexes and filters** over `document(type=…)`; they are not where the product story starts.
+List routes (“Invoices”, “Quotes”, “Payslips”) remain **indexes** over their specialised tables. The Documents Hub lists generic `documents` rows only.
 
 ---
 
@@ -566,10 +583,11 @@ Auth session → org scope → the stack above + Query cache → **`/api/*`** fo
 
 These three compound **retention**, **differentiation**, and the **business OS** story. Run them as explicit initiatives; the numbered backlog below is hygiene and scale in parallel.
 
-### 1. Unify the document system
+### 1. Keep the document system honest (split persistence)
 
-- **Invoice + quote = same engine** — one `document(type="invoice" | "quote")` mental model, shared **lifecycle** primitives (draft → send → observe → settle / convert), implemented through **`src/document-engine/`** and shared compose/send/PDF adapters (tables can stay split short term).
-- **Shared UI** — one **Create / Edit document** shell (header, line items, preview, actions), **kind-specific** rules (tax, status machine, quote expiry vs invoice due) behind thin adapters—not two unrelated apps.
+- **Invoice + quote + payslip = same engine, different tables** — shared **lifecycle** primitives (draft → send → observe → settle / convert) in **`src/document-engine/`**, specialised persistence (`invoices`, `quotes`, `payslips`). Do **not** migrate these into `documents`.
+- **Documents Hub** — generic business documents only (`documents` / `document_items` / `document_events`).
+- **Shared UI** — one **Create / Edit document** shell where it already exists for invoice/quote compose; hub types use typed/dedicated pages. Kind-specific rules stay behind thin adapters.
 
 ### 2. Client Timeline (inside client profile)
 
@@ -589,9 +607,13 @@ When a quote moves to **accepted** (or explicit user action “Convert to invoic
 
 1. **Create** an **invoice draft** (link `quote_id` or metadata for traceability).
 2. **Prefill** client, line items, currency, terms/branding from the quote.
-3. **Route** the user to **Edit invoice** (or unified **Edit document** with `type=invoice`) to review, adjust tax/dates, then send.
+3. **Route** the user to **Edit invoice** to review, adjust tax/dates, then send.
 
-This closes the **commercial loop** in-product and is the flagship **document engine** workflow competitors rarely wire end-to-end.
+This closes the **commercial loop** in-product. Persistence is `quotes` → `invoices`, not the Documents Hub.
+
+Hub job cards, project reports, and scopes **Convert to Invoice / Quote** the same way: specialised compose, specialised tables.
+
+**Blueprint PDF:** regenerate from this markdown with `npm run docs:blueprint-pdf` (`scripts/generate-blueprint-pdf.mjs`).
 
 ---
 

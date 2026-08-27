@@ -12,6 +12,9 @@ import { logInvoiceUpdated, logStatusChanged } from "@/utils/auditLogger";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { DEFAULT_INVOICE_TERMS_BODY } from "@/constants/invoiceTerms";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
+import BrandSelect from "@/components/brands/BrandSelect";
+import useOrgBrands from "@/hooks/useOrgBrands";
+import { snapshotForNewDocument } from "@/lib/documentIssuerBrand";
 
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +31,7 @@ export default function EditInvoice() {
     const location = useLocation();
     const { toast } = useToast();
     const { authUserId, user } = useAuth();
+    const { brands } = useOrgBrands();
     const [invoiceId, setInvoiceId] = useState(null);
     const [clients, setClients] = useState([]);
     const [bankingDetails, setBankingDetails] = useState([]);
@@ -166,24 +170,28 @@ export default function EditInvoice() {
                 'owner_currency'
             ];
 
+            const wantsSend = originalStatus === "draft" && newStatus === "sent";
+            const persistStatus = wantsSend ? originalStatus : newStatus;
+
             const updatedInvoiceData = {
                 ...invoiceData,
-                created_date: invoiceDate.toISOString().split('T')[0],
-                status: newStatus,
-                sent_date: (newStatus === 'sent' && originalStatus === 'draft') ? new Date().toISOString() : invoiceData.sent_date,
+                created_date: invoiceDate.toISOString().split("T")[0],
+                status: persistStatus,
+                sent_date: wantsSend ? invoiceData.sent_date : (newStatus === "sent" && originalStatus === "draft") ? new Date().toISOString() : invoiceData.sent_date,
                 last_modified_date: new Date().toISOString(),
             };
 
-            const changes = diffInvoiceFields(originalInvoiceData, updatedInvoiceData, trackedFields);
+            const changes = diffInvoiceFields(originalInvoiceData, { ...updatedInvoiceData, status: newStatus }, trackedFields);
             const historyEntry = createHistoryEntry({
-                action: newStatus === 'draft' ? 'draft_update' : 'update',
-                summary: newStatus === 'sent' && originalStatus === 'draft'
-                    ? 'Draft updated and sent'
-                    : 'Invoice updated',
+                action: newStatus === "draft" ? "draft_update" : "update",
+                summary: wantsSend
+                    ? "Draft updated and queued for sending"
+                    : "Invoice updated",
                 changes,
                 meta: {
                     fromStatus: originalStatus,
-                    toStatus: newStatus,
+                    toStatus: wantsSend ? originalStatus : newStatus,
+                    queuedSend: wantsSend,
                 },
             });
 
@@ -193,9 +201,15 @@ export default function EditInvoice() {
             const brandPatch = user ? snapshotDocumentBrandForPersist(user) : {};
             // Queue the write so edits are optimistic, offline-capable, and retried on failure
             // (mirrors the create path). The optimistic store update happens inside queueUpdateInvoice.
+            const persistPayload = { ...updatedInvoiceData, ...brandPatch };
+            if (wantsSend) {
+                delete persistPayload.status;
+                delete persistPayload.sent_date;
+                delete persistPayload.sent_to_email;
+            }
             queueUpdateInvoice(
                 invoiceId,
-                { ...updatedInvoiceData, ...brandPatch },
+                persistPayload,
                 { source: "edit-invoice", label: invoiceData.invoice_number }
             );
 
@@ -212,49 +226,48 @@ export default function EditInvoice() {
             );
 
             // Log status change if status was changed
-            if (originalStatus !== newStatus) {
+            if (originalStatus !== persistStatus) {
               logStatusChanged(
                 invoiceId,
                 invoiceData.invoice_number,
                 clientName,
                 originalStatus,
-                newStatus,
+                persistStatus,
                 authUserId || 'system',
                 user?.full_name || 'System'
               );
             }
 
             let emailSendFailed = false;
-            if (originalStatus === 'draft' && newStatus === 'sent') {
+            if (wantsSend) {
                 try {
                     queueSendInvoice(invoiceId, {}, { source: "edit-invoice", label: invoiceData.invoice_number });
                 } catch (sendError) {
-                    console.error('Error sending invoice:', sendError);
+                    console.error("Error queueing invoice send:", sendError);
                     emailSendFailed = true;
                 }
             }
 
             if (emailSendFailed) {
                 toast({
-                    title: 'Invoice saved and marked sent',
-                    description: `Invoice ${invoiceData.invoice_number} was updated, but the client email could not be sent. Use Open preview to resend from the invoice view, or try again.`,
-                    variant: 'destructive',
+                    title: "Invoice saved",
+                    description: `Invoice ${invoiceData.invoice_number} was updated, but the send could not be queued. Use Email Client from the invoice view to send.`,
+                    variant: "destructive",
                     duration: 10000,
                 });
                 const merged = { ...invoiceData, ...updatedInvoiceData };
                 setInvoiceData(merged);
                 setOriginalInvoiceData(merged);
-                setOriginalStatus(newStatus);
+                setOriginalStatus(persistStatus);
                 return;
             }
 
             toast({
-                title: newStatus === 'draft' ? 'Draft saved' : 'Invoice updated',
-                description:
-                    newStatus === 'sent' && originalStatus === 'draft'
-                        ? `Invoice ${invoiceData.invoice_number} was queued for sending.`
-                        : `Invoice ${invoiceData.invoice_number} was updated successfully.`,
-                variant: 'success',
+                title: newStatus === "draft" ? "Draft saved" : wantsSend ? "Invoice queued for sending" : "Invoice updated",
+                description: wantsSend
+                    ? `Invoice ${invoiceData.invoice_number} was saved as a draft and queued. It will be marked sent after the email is accepted.`
+                    : `Invoice ${invoiceData.invoice_number} was updated successfully.`,
+                variant: "success",
             });
             await clearDraft();
 
@@ -340,6 +353,23 @@ export default function EditInvoice() {
                                 <span className="text-muted-foreground font-normal"> #{invoiceData.invoice_number}</span>
                             </h1>
                             <InvoiceStatusBadge status={invoiceData.status || "draft"} />
+                        </div>
+                        <div className="mt-3 max-w-sm">
+                            <BrandSelect
+                                brands={brands}
+                                value={invoiceData.company_id}
+                                onChange={(brandId) => {
+                                    const brand = brands.find((row) => row.id === brandId) || null;
+                                    const snap = snapshotForNewDocument({ brand, profile: user });
+                                    setInvoiceData((prev) => ({
+                                        ...prev,
+                                        company_id: snap.companyId || null,
+                                        owner_company_name: snap.owner_company_name,
+                                        owner_logo_url: snap.owner_logo_url,
+                                    }));
+                                }}
+                                description="Changing this updates this invoice only. The header brand is a default for new documents."
+                            />
                         </div>
                         <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                             {client?.name ? (

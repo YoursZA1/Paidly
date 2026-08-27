@@ -42,6 +42,7 @@ import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import Logo from "@/components/shared/Logo";
 import { useCompanyBrand } from "@/hooks/useCompanyBrand";
+import BrandSwitcher from "@/components/brands/BrandSwitcher";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
@@ -1137,6 +1138,7 @@ export default function Layout({ children, currentPageName }) {
                 <Search className="size-5" aria-hidden />
               </Button>
             )}
+            {user ? <BrandSwitcher compact className="max-w-[7.5rem] px-2" /> : null}
             {user && <NotificationBell />}
             <div className="shrink-0 flex items-center gap-0.5">
               <ConnectionStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
@@ -1227,6 +1229,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="mr-0.5 flex items-center gap-1">
               <SyncStatus className="max-w-[min(22vw,10rem)] md:max-w-[13rem]" />
             </div>
+            {user ? <BrandSwitcher /> : null}
             <NotificationBell />
             
             {user && (
@@ -1275,7 +1278,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-14 pb-6 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-auto overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-14 pb-8 sm:pt-6 sm:pb-6 md:pt-8 md:pb-8 lg:pt-8 ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className="max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1">
           <AnimatePresence mode="wait">

@@ -185,12 +185,26 @@ export async function loadPortalDocuments(supabase, clientId, expectedEmail) {
     }
   }
 
+  const companyIds = [...new Set((invRows || []).map((r) => r.company_id).filter(Boolean))];
+  let companiesById = {};
+  if (companyIds.length > 0) {
+    const { data: companyRows } = await supabase
+      .from("companies")
+      .select("id, name, logo_url")
+      .eq("org_id", orgId)
+      .in("id", companyIds);
+    for (const row of companyRows || []) {
+      companiesById[row.id] = { id: row.id, name: row.name, logo_url: row.logo_url };
+    }
+  }
+
   const invoices = (invRows || []).map((inv) => {
     const base = mapInvoiceRow(inv);
     return {
       ...base,
       items: itemsByInvoice[inv.id] || [],
       payments: paymentsByInvoice[inv.id] || [],
+      company: inv.company_id ? companiesById[inv.company_id] : undefined,
     };
   });
 

@@ -246,6 +246,9 @@ export default function CreatePayslip() {
                     <div>
                         <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Create New Payslip</h1>
                         <p className="text-sm sm:text-base text-muted-foreground mt-1">Generate payslips with automatic PAYE tax calculation</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Payslips use your organization profile — they are not assigned to a company / brand.
+                        </p>
                     </div>
                 </motion.div>
 

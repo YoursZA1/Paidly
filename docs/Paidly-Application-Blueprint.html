@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paidly — Product Architecture Strategy &amp; Blueprint</title>
+  <style>
+    @page { margin: 16mm 14mm 18mm; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 9.5pt; line-height: 1.45; color: #0f172a; margin: 0; padding: 0; }
+    h1 { font-size: 18pt; margin: 0 0 8px; color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+    h2 { font-size: 12pt; margin: 16px 0 6px; color: #1e3a5f; text-transform: uppercase; letter-spacing: 0.03em; page-break-after: avoid; }
+    h3 { font-size: 10.5pt; margin: 12px 0 4px; color: #334155; page-break-after: avoid; }
+    h4 { font-size: 10pt; margin: 10px 0 4px; color: #475569; }
+    p { margin: 0 0 7px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 8.4pt; page-break-inside: auto; }
+    th, td { border: 1px solid #cbd5e1; padding: 4px 6px; vertical-align: top; }
+    th { background: #f1f5f9; text-align: left; }
+    ul, ol { margin: 4px 0 8px 18px; padding: 0; }
+    li { margin-bottom: 3px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8pt; background: #f1f5f9; padding: 0 3px; border-radius: 2px; }
+    pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 7.6pt; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    pre code { background: none; padding: 0; }
+    a { color: #1d4ed8; text-decoration: none; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<h1>Paidly — Product Architecture Strategy &amp; Blueprint</h1>
+<p><strong>Purpose:</strong> Shift from a <em>page list</em> mental model to <strong>systems</strong> and a defined <strong>core engine</strong>, while keeping the technical map honest.</p>
+<hr />
+<h2>Paidly Architecture v2 (clean reference)</h2>
+<p><em>One-page upgrade summary. This section is the canonical <strong>Paidly v2 system map</strong> used across product and engineering.</em></p>
+<p><strong>Paidly v2 Systems (final):</strong></p>
+<ol>
+<li><strong>Identity System</strong> — Auth, users, organizations, roles, RLS-backed tenancy.</li>
+<li><strong>Document Engine</strong> — Shared compose, send, and PDF behaviour for commercial documents (invoices, quotes, payslips) <strong>plus</strong> a Documents Hub for other business document types. Persistence is split: specialised tables vs <code>documents</code>.</li>
+<li><strong>Payment Intent Layer</strong> — Canonical handoff from document delivery/observation to payment rails and settlement orchestration.</li>
+<li><strong>Revenue System</strong> — Payment providers, subscriptions, cash flow, and reporting (reads/rails downstream of documents).</li>
+<li><strong>Relationship System</strong> — Clients + catalog + offering intelligence that feeds document composition.</li>
+<li><strong>Experience System</strong> — Shared UI/interaction contracts (shell, sticky actions, money UX consistency).</li>
+<li><strong>Payment Intelligence Layer</strong> — Get Paid logic: reminders, nudges, triggers, and follow-up intelligence.</li>
+</ol>
+<p><strong>Frontend layout system</strong> (consistent everywhere):</p>
+<ul>
+<li><strong>Header</strong> — title + primary <strong>actions</strong></li>
+<li><strong>Content</strong> — tables, grids, main <strong>forms</strong></li>
+<li><strong>Side panel</strong> — <strong>summary</strong>, filters, secondary controls (<code>PageTemplate</code> in code)</li>
+</ul>
+<p><strong>Data flow (client):</strong></p>
+<pre><code>UI → Hooks → Services → Entity facades (EntityManager) → Supabase</code></pre>
+<p>**Serverless APIs (<code>/api/<em></code>)</em>* handle:</p>
+<ul>
+<li>Payments (<strong>Payfast</strong>)</li>
+<li>Emails (<strong>Resend</strong> / SMTP)</li>
+<li>Public document access (shares, tokens)</li>
+<li><strong>Cron</strong> jobs (dunning, reminders, ops)</li>
+</ul>
+<p><strong>Deployment note:</strong> Same-origin <code>/api</code> on Vercel is implemented by **<code>api/<em>.js</code> serverless functions<strong>; the optional </strong>Express<strong> app in <code>server/src/index.js</code> is a </strong>separate<strong> runtime (rate limits and middleware apply only where that process fronts <code>/api</code>). See </strong><code>docs/API_DEPLOYMENT_MODEL.md</code></em>* before tuning limits or tracing 429s.</p>
+<p><strong>Goal:</strong> Evolve Paidly from an <strong>invoicing tool</strong> into a full <strong>business operating system</strong>—same story as <strong>Positioning</strong> below.</p>
+<p>On-call session/runtime guardrails: see <code>docs/SESSION_RUNTIME_GUARDS.md</code>.</p>
+<p><strong>New to the codebase:</strong> see <strong><code>docs/HOW_EVERYTHING_CONNECTS.md</code></strong> (one-page diagrams: browser ↔ Supabase ↔ <code>/api</code> ↔ optional Express).</p>
+<p><strong>Runtime scalability &amp; coordination:</strong> <code>docs/runtime-audit-report.md</code>, <code>src/core/</code> (<code>RuntimeCoordinator</code>, <code>RealtimeManager</code> logical registry over <code>paidlyRealtimeManager</code>, query policies, mutation dedupe, request budgeting, error classification).</p>
+<p><strong>Marketing SEO / structured data:</strong> homepage JSON-LD (<code>Organization</code>, <code>WebSite</code>, <code>WebApplication</code> offers) follows <a href="https://developers.google.com/search/docs/appearance/structured-data/sd-policies">Google structured data policies</a> — visible content only, no fabricated ratings. See <code>docs/SEO_STRUCTURED_DATA.md</code>.</p>
+<hr />
+<h2>Positioning — real product advantage</h2>
+<p><strong>Paidly is not an invoicing app.</strong> It is a <strong>business operating system</strong> for SMBs: one place to <strong>issue</strong> commercial documents, <strong>run</strong> client and catalog relationships, <strong>see</strong> money and performance, and <strong>grow</strong> through channels like affiliates—without treating each area as a separate product bolted together in the UI only.</p>
+<p><strong>Investor-facing framing:</strong> shift the story from “invoice app” to <strong>financial workflow platform for SMEs</strong>.</p>
+<p><strong>You already have (in shipped or advanced form):</strong> invoices, quotes, payslips (specialised commercial tables), Documents Hub (generic business documents), clients, reporting, affiliates, and the plumbing for payments, subscriptions, and cash visibility.</p>
+<p><strong>Competitive edge:</strong> most tools <strong>excel at one slice</strong> (invoicing-only, or accounting-only, or a disconnected referral program). <strong>Few competitors unify</strong> issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence <strong>under one coherent architecture</strong> and vocabulary. That unification—<strong>Document → Payment Intent → Revenue System</strong> plus shared <strong>Experience</strong> and <strong>Payment Intelligence</strong>—is the defensible story: not “another invoice PDF,” but <strong>operating the business</strong> in one system.</p>
+<p><strong>Execution reality:</strong> roughly 70% of the SaaS architecture is already in place. The remaining value-defining 30% is: payment abstraction, event tracking, and experience consistency.</p>
+<hr />
+<h2>Executive framing</h2>
+<table><thead><tr>
+<th>Old lens</th>
+<th>New lens</th>
+</tr></thead><tbody>
+<tr>
+<td>“Invoicing app” / feature checklist</td>
+<td><strong>Business operating system</strong> — documents + relationships + money + growth</td>
+</tr>
+<tr>
+<td>“We have Invoices, Quotes, Payslips…”</td>
+<td><strong>One Document Engine</strong> (shared compose/send/PDF) with <strong>split persistence</strong></td>
+</tr>
+<tr>
+<td>“Invoices page, Quotes page, Clients page…”</td>
+<td>Commercial lists over specialised tables; Documents Hub for other business documents</td>
+</tr>
+<tr>
+<td>Features as separate products</td>
+<td><strong>Five core systems</strong> + one <strong>Experience system</strong> (cross-cutting)</td>
+</tr>
+<tr>
+<td>Routes drive architecture</td>
+<td><strong>Capabilities</strong> drive architecture; routes are just entry points</td>
+</tr>
+</tbody></table>
+<p><strong>Brutal truth the strategy fixes:</strong> the stack was described accurately but not <strong>product-driven</strong>: no named “engine,” no explicit system boundaries, and no place for <strong>scaled UX consistency</strong> beyond ad hoc pages.</p>
+<hr />
+<h1>Part A — Product architecture (systems)</h1>
+<h2>A.1 Paidly v2 systems (final architecture)</h2>
+<p>These are the <strong>real</strong> architecture—not the sidebar.</p>
+<h3>1. Identity System</h3>
+<p><strong>Job:</strong> Who is acting, for which organisation, with what authority.</p>
+<ul>
+<li>Supabase Auth (sessions, JWT)</li>
+<li><code>profiles</code>, <code>organizations</code>, <code>memberships</code>, roles (<code>admin</code>, <code>management</code>, …)</li>
+<li>RLS as the enforcement layer; client as the UX layer</li>
+</ul>
+<p><strong>Organisation vs company/brand vs team (do not confuse these):</strong></p>
+<table><thead><tr>
+<th>Concept</th>
+<th>Meaning</th>
+<th>Persistence</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Organization / account</strong></td>
+<td>The Paidly tenant using the product</td>
+<td><code>organizations</code>; <code>CompanyContext.companyId</code> is this <strong>org id</strong> (product copy often says <code>company_id</code> for the tenant)</td>
+</tr>
+<tr>
+<td><strong>Company / brand</strong></td>
+<td>A trading identity that belongs to that organization, used for document branding</td>
+<td><code>public.companies</code> (<code>org_id</code>, <code>name</code>, <code>logo_url</code>); invoices set <strong><code>invoices.company_id</code> → <code>companies.id</code></strong></td>
+</tr>
+<tr>
+<td><strong>Team / membership</strong></td>
+<td>People who have access to the organization</td>
+<td><code>memberships</code> + org roles</td>
+</tr>
+</tbody></table>
+<p>Do not create a second tenant system. <code>CompanyContext</code> remains org RBAC. Active brand is a <strong>UI default for new documents</strong> (per-org localStorage); changing it must not rewrite existing invoices. Quotes have no <code>company_id</code> column (name/logo snapshot only). Payslips stay organization-profile scoped. See <code>docs/MULTIBRAND_COMPANIES.md</code>.</p>
+<p><strong>Strategy:</strong> <strong>Stabilise, don’t expand.</strong> Harden session edge cases, org bootstrap, and role gates (<code>RequireAuth</code>) so every other system trusts Identity cheaply.</p>
+<p><strong>Auth + session stabilization (in flight):</strong> one coherent story for <strong>session read/write</strong> (<code>getStableSession</code> / SessionCoordinator vs reserved raw <code>getSession</code> in AuthContext / SupabaseAuthService / supabaseAuthRefresh), <strong>profile restore</strong> when local auth cache is cleared, <strong>invite / password / org bootstrap</strong> flows, and <strong>no silent “logged in but empty user”</strong> states. Client work touches <strong><code>customClient.js</code></strong> / <code>AuthManager</code>, <strong><code>RequireAuth</code></strong>, and Supabase Auth config—treat this as <strong>foundation</strong> before shipping net-new document features at scale.</p>
+<p><strong>Connection lifecycle (client OS):</strong> <code>ConnectionLifecycleManager</code> (<code>src/lib/connection/ConnectionLifecycleManager.js</code>) is the single ingress for <strong>auth, refresh, realtime, visibility, network, sleep/wake, and recovery</strong> signals; it updates a read model store and delegates terminal decisions to <code>SessionOrchestrator</code> only through one adapter (<code>registerSessionAuthority(...toSessionAuthorityAdapter())</code>). Subsystems <strong>report in</strong>; they do not apply parallel session health policies. Transport events use semantic types (<code>LifecycleSignalType</code>, e.g. <code>REALTIME_DISCONNECTED</code>, <code>REFRESH_SKIPPED</code>) and <strong><code>lifecyclePolicy</code></strong> chooses effects (ignore vs recover vs reconnect) so realtime/visibility noise does not escalate to logout. The same signals also feed <strong><code>RuntimeCoordinator</code></strong> (<code>runtimeCoordinatorBridge.js</code>) for <strong>phase + <code>pauseNonCriticalRequests</code></strong> so authenticated HTTP (<code>apiRequest</code> / <code>backendApi</code>) waits during AUTH_RECOVERING / RECONNECTING. <strong>Session health</strong> uses a degraded ladder (<code>sessionRecoveryEscalation.js</code> + <code>SESSION_STATUS</code>: <code>unstable</code> → <code>reconnecting</code> → <code>degraded</code> → <code>reauth_required</code>) before <code>transitionToExpired</code> for recoverable failures (reconnect, wake, reauth-class 401s); fatal refresh / explicit sign-out still expire immediately.</p>
+<p><strong>Sleep/wake app recovery lock:</strong> <strong><code>AppRecoveryLock</code></strong> (<code>src/lib/recovery/appRecoveryLock.js</code>) + <strong><code>wakeRecoveryStore</code></strong> enforce phased recovery: <strong><code>wakeRecoveryGuard</code></strong> blocks <strong><code>customClient</code></strong> mutations, <strong><code>SyncEngine</code></strong> skips queue draining while <code>blockMutations</code> is set, <strong><code>paidlyRealtimeManager</code></strong> suppresses postgres_change delivery during the lock, and <strong><code>runWakeRecoverySequence</code></strong> restores the JWT/session first (<code>lockPhase: auth</code>), then <strong><code>awaitRealtimeRecoveryHandlers</code></strong> + <strong><code>waitForPaidlyMainChannelJoined</code></strong> (<code>lockPhase: realtime</code>) before unlocking the UI.</p>
+<p><strong>Realtime + JWT rotation:</strong> On every successful refresh (<code>TOKEN_REFRESHED</code>, <strong><code>refreshSession</code></strong> success, optional <strong><code>USER_UPDATED</code></strong>), call <strong><code>reconcilePaidlyRealtimeAfterTokenRefresh</code></strong> (<code>paidlyRealtimeManager.js</code>): <strong><code>supabase.realtime.setAuth(access_token)</code></strong>, then <strong>fully remove</strong> the multiplex channel (<strong><code>removeChannel</code></strong>) and <strong>recreate</strong> it so postgres_changes always bind to the fresh JWT (no “joined but stale auth” shortcuts). Rebuild debouncing, heartbeat stale detection, transport error backoff, and a small <strong><code>RealtimeConnectionPhase</code></strong> state machine (<strong>IDLE / CONNECTING / CONNECTED / STALE / RECONNECTING / FAILED</strong>) live in <strong><code>paidlyRealtimeManager</code></strong> + <strong><code>paidlyRealtimeConnectionMachine.js</code></strong>; <strong><code>ConnectionMonitor</code></strong> maps UX only (no parallel realtime reconnect timers). Visibility alone does <strong>not</strong> run a dedicated “stale realtime repair” path — recovery is heartbeat / transport / auth–driven. Use <strong><code>validatePaidlyRealtime()</code></strong> for a cheap health snapshot.</p>
+<p><strong>Background session resync:</strong> <strong><code>sessionRefreshScheduler</code></strong> (<code>src/lib/session/sessionRefreshScheduler.js</code>) is the single coalescing entry for <strong>refresh + profile + realtime hint</strong> work driven by visibility, online, heartbeat, keep-alive, tab sync, wake follow-ups, etc.; initiators call <strong><code>requestSessionRefresh({ source })</code></strong> instead of invoking <strong><code>refreshSession</code></strong> directly (the executor is registered from <strong><code>AuthContext.impl.jsx</code></strong>).</p>
+<hr />
+<h3>2. Document Engine (the commerce core)</h3>
+<p><strong>Job:</strong> Everything a business <strong>issues to another party</strong> to record obligation, intent, or compensation—then <strong>delivers</strong>, <strong>tracks</strong>, and often <strong>collects</strong> on.</p>
+<p><strong>Canonical product vocabulary</strong> (feature → source of truth):</p>
+<table><thead><tr>
+<th>Feature</th>
+<th>Persistence (system of record)</th>
+</tr></thead><tbody>
+<tr>
+<td>Invoice</td>
+<td><code>invoices</code></td>
+</tr>
+<tr>
+<td>Quote</td>
+<td><code>quotes</code></td>
+</tr>
+<tr>
+<td>Payslip</td>
+<td><code>payslips</code></td>
+</tr>
+<tr>
+<td>Recurring invoice</td>
+<td><code>recurring_invoices</code></td>
+</tr>
+<tr>
+<td>Other business documents (leave, expenses, contracts, …)</td>
+<td><code>documents</code> (+ <code>document_items</code>, <code>document_events</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Do not dual-write.</strong> Invoices, quotes, payslips, and recurring invoices must not be copied into <code>documents</code>. The Documents Hub is not a second store for commercial documents.</p>
+<p><strong>Persistence:</strong> commercial documents remain on specialised Supabase tables. Shared UI and helpers live in <code>src/document-engine/</code>. Ownership policy: <code>src/document-engine/documentSystemOfRecord.js</code>.</p>
+<p><strong>Migration status (implementation):</strong></p>
+<ul>
+<li><strong>Shared now (code-level contracts, split persistence):</strong></li>
+<li>Shared document type vocabulary and routing helpers in <code>src/document-engine/</code>.</li>
+<li>Shared list-controller and adapter pattern for invoice/quote/payslip list screens.</li>
+<li>Shared pagination and shared export assembly service paths.</li>
+<li><strong>Documents Hub (generic types only):</strong></li>
+<li>Leave requests, expense claims, contracts, and other catalog types persist in <code>public.documents</code>.</li>
+<li>Hub <strong>Convert to invoice / quote</strong> (job cards, reports, proposals, scopes) opens specialised compose (<code>CreateDocument/invoice|quote?fromHubDocument=</code>) and writes to <code>invoices</code> / <code>quotes</code>. It does not insert commercial types into <code>documents</code>.</li>
+<li>Quote → invoice remains on the Quotes page (<code>CreateInvoice?quoteId=</code> / <code>CreateDocument/invoice?quoteId=</code>).</li>
+<li>Leftover <code>documents</code> rows with <code>type=invoice|quote|payslip</code> (if any exist from earlier experiments) are <strong>hidden from the hub list</strong>. Opening a direct URL shows a cleanup screen: go to the specialised list, or archive/remove the leftover hub row. Rows are not migrated and not auto-deleted.</li>
+<li><strong>Not a goal:</strong></li>
+<li>Migrating invoices, quotes, or payslips into <code>documents</code>.</li>
+<li>Dual-write / automatic mirroring of commercial documents into the hub.</li>
+</ul>
+<p><strong>Reframe:</strong> one <strong>engine</strong> (compose, send, PDF) with <strong>two persistence owners</strong>:</p>
+<table><thead><tr>
+<th>Document kind</th>
+<th>Today’s surface</th>
+<th>Same engine primitives</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Invoice</strong></td>
+<td>Invoices, recurring</td>
+<td>Draft → send → view/track → pay / remind</td>
+</tr>
+<tr>
+<td><strong>Quote</strong></td>
+<td>Quotes, templates</td>
+<td>Draft → send → accept/expire → convert</td>
+</tr>
+<tr>
+<td><strong>Payslip</strong></td>
+<td>Payslips</td>
+<td>Draft → send → employee view</td>
+</tr>
+</tbody></table>
+<p><strong>Shared lifecycle (conceptual):</strong></p>
+<p><code>Author</code> → <code>Compose</code> (lines, tax, branding) → <code>Render</code> (PDF/HTML) → <code>Deliver</code> (email, link, portal) → <code>Observe</code> (opens, reminders, delivery/engagement telemetry) → <code>Payment Intent</code> (amount/currency/expiry + rail handoff) → <code>Settle</code> (payment, acceptance, archive)</p>
+<h4>Observe layer (formalized)</h4>
+<p><code>Observe</code> is not a loose log. It is a first-class event layer that records delivery, engagement, and money-adjacent milestones in a single stream per document.</p>
+<p><strong>Schema upgrade (<code>document_events</code>):</strong></p>
+<ul>
+<li><code>id</code></li>
+<li><code>document_id</code></li>
+<li><code>event_type</code> (<code>sent</code> | <code>opened</code> | <code>clicked</code> | <code>paid</code> | <code>reminded</code>)</li>
+<li><code>occurred_at</code></li>
+<li><code>actor_type</code> (system | recipient | user | webhook)</li>
+<li><code>metadata</code> (jsonb for channel, provider payload refs, reminder run id, etc.)</li>
+</ul>
+<p><strong>Event taxonomy (minimum canonical set):</strong></p>
+<ul>
+<li><code>sent</code></li>
+<li><code>opened</code></li>
+<li><code>clicked</code></li>
+<li><code>paid</code></li>
+<li><code>reminded</code></li>
+</ul>
+<p><strong>This powers:</strong></p>
+<ul>
+<li>Timeline (client and document history)</li>
+<li>Notifications (state-aware in-app/email nudges)</li>
+<li>Smart reminders (behavior + due-date + payment-intent aware)</li>
+<li>Analytics (delivery-to-payment funnel and conversion diagnostics)</li>
+</ul>
+<p><strong>Why this matters for product:</strong></p>
+<ul>
+<li>One <strong>mental model</strong> for PM, design, and eng.</li>
+<li>One place to invest: <strong>send pipeline</strong>, <strong>PDF pipeline</strong>, <strong>public token model</strong>, <strong>status vocabulary</strong>, <strong>line-item model</strong>.</li>
+<li>One observable event stream (<code>document_events</code>) that unifies communication and payment lifecycle telemetry.</li>
+<li>Feature parity (e.g. quote send = invoice send) becomes <strong>engine work</strong>, not three copies.</li>
+</ul>
+<p><strong>Technical anchor today:</strong> <code>Invoice</code> / <code>Quote</code> / <code>Payslip</code> entities + <code>InvoiceSendService</code>-style orchestration + <code>/api/send-email</code> + public share routes. <strong>In code:</strong> <code>src/document-engine/</code> exports <code>DOCUMENT_TYPES</code>, <code>normalizeDocumentType</code>, <code>parseRouteDocumentTypeStrict</code>, <code>getDocumentEntity</code>, <code>documentRef</code>—use these for routing, analytics, and new engine code. <strong>Roadmap:</strong> grow this module (shared send/PDF adapters, shared status vocabulary) so new document kinds plug in, not fork.</p>
+<h4>Critical addition: Payment Intent layer (Document Engine ↔ Revenue &amp; Ops)</h4>
+<p>Without a first-class <code>Payment Intent</code>, payments feel bolted on, Payfast-specific logic leaks across product surfaces, and the engine is harder to scale. Introduce a canonical handoff object between document delivery/observation and financial capture.</p>
+<p><strong>Why this matters:</strong></p>
+<ul>
+<li><strong>Without it:</strong> payments feel bolted on, provider logic leaks everywhere, and cross-surface consistency breaks.</li>
+<li><strong>With it:</strong> clean abstraction between document and payment rails, multi-provider readiness, and analytics-ready payment funneling.</li>
+</ul>
+<p><strong>Payment intent contract (per payable document):</strong></p>
+<ul>
+<li><code>intent_id</code> (idempotent)</li>
+<li><code>document_ref</code> (<code>type</code>, <code>id</code>, <code>org_id</code>)</li>
+<li><code>amount_snapshot</code> + <code>currency_snapshot</code></li>
+<li><code>payer_context</code> (public share, portal user, or signed-in actor)</li>
+<li><code>rail</code> (<code>payfast</code>, future rails), <code>expires_at</code></li>
+<li><code>status</code> (<code>pending</code>, <code>requires_action</code>, <code>paid</code>, <code>failed</code>, <code>cancelled</code>, <code>expired</code>, <code>refunded</code>)</li>
+</ul>
+<p><strong>Schema upgrade (<code>payment_intents</code>):</strong></p>
+<ul>
+<li><code>id</code></li>
+<li><code>document_id</code></li>
+<li><code>provider</code> (<code>payfast</code> | <code>stripe</code>)</li>
+<li><code>amount</code></li>
+<li><code>currency</code></li>
+<li><code>status</code></li>
+<li><code>external_id</code></li>
+<li><code>created_at</code></li>
+</ul>
+<p><strong>Boundary of ownership:</strong></p>
+<ul>
+<li><strong>Document Engine owns:</strong> payable snapshot creation, due/expiry semantics, and <code>document_ref</code> identity.</li>
+<li><strong>Revenue &amp; Ops owns:</strong> provider orchestration, webhook verification, settlement/reconciliation, and ledger-like payment records.</li>
+<li><strong>Experience System owns:</strong> one payment-status language and CTA behavior across document detail, public links, and portal views.</li>
+</ul>
+<p><strong>Result:</strong> no direct “mark paid” shortcuts from UI paths; all payable settlement flows through <code>Payment Intent</code> + verified payment events.</p>
+<h4>Product upgrade: one compose surface, many kinds</h4>
+<p>The <strong>big upgrade</strong> is not more list pages—it is <strong>one mental journey</strong> with honest persistence:</p>
+<ol>
+<li><strong>Create</strong> from a consistent compose pattern (brand, line items, preview).</li>
+<li><strong>Commercial types</strong> (invoice / quote / payslip) write to specialised tables; <strong>other types</strong> write to the Documents Hub.</li>
+<li><strong>Shared UI</strong> where it already exists — editors, preview, send affordances (Experience System + templates).</li>
+<li><strong>Different logic</strong> — status machines, tax/settlement rules, payroll vs AR: <strong>kind-specific adapters</strong> behind the same surface.</li>
+</ol>
+<p>List routes (“Invoices”, “Quotes”, “Payslips”) remain <strong>indexes</strong> over their specialised tables. The Documents Hub lists generic <code>documents</code> rows only.</p>
+<hr />
+<h3>5. Relationship System</h3>
+<p><strong>Job:</strong> <strong>Who</strong> you sell to and <strong>what</strong> you sell—data that <strong>feeds</strong> the Document Engine.</p>
+<ul>
+<li><strong>Clients</strong> (CRM): contact, terms, portal access</li>
+<li><strong>Catalog</strong> (<code>services</code>): products &amp; services, pricing, inventory where relevant</li>
+<li><strong>Line items</strong> on documents: snapshots + links back to catalog when useful</li>
+</ul>
+<p><strong>Strategy:</strong> Treat this as the <strong>input graph</strong> to commerce—not a separate “Contacts app.” List screens are views; the system is <strong>relationship + SKU/rate intelligence</strong>. Growth-oriented <strong>CRM behaviour</strong> (follow-ups, nudges, sequences) lives primarily in the <strong>Growth Engine</strong>; this system owns <strong>master data</strong> and what gets embedded on documents.</p>
+<hr />
+<h3>4. Revenue System (Revenue &amp; Ops)</h3>
+<p><strong>Job:</strong> Everything that turns <strong>issued documents</strong> (especially invoices) into <strong>cash, visibility, and tenant billing</strong>—without re-implementing document authoring here.</p>
+<ul>
+<li><strong>Payments:</strong> Payfast, invoice payment state, webhooks (<code>api/payfast-handler</code>)</li>
+<li><strong>POS integrations:</strong> Generic webhook + Yoco/Square ingress (<code>api/pos/*</code>), normalized <code>pos_sales_events</code>, optional catalog stock decrement via <code>adjust_inventory_stock</code> (source <code>pos</code>). <strong>Connect flows:</strong> Square OAuth (<code>/api/pos/oauth/square/start</code> → callback); Yoco secure connect (API secret → auto webhook registration). Settings → Integrations; dashboard <strong>POS sales today</strong> card.</li>
+<li><strong>Payment intents:</strong> capture/retry/expiry orchestration and provider status normalization</li>
+<li><strong>Cash flow:</strong> timelines and balances built from documents + payments</li>
+<li><strong>Reports:</strong> read models and exports on top of documents + payments + catalog where relevant</li>
+<li><strong>Subscriptions &amp; dunning:</strong> how Paidly bills the customer (packaging, crons in <code>vercel.json</code> → <code>/api/cron/...</code>)</li>
+<li><strong>SaaS subscription SoR (billing v2):</strong> <code>plans</code> catalog (<code>amount</code>, <code>billing_cycle</code>, <code>plan_family</code>, <code>payfast_item_name</code>, <code>features</code>, <code>active</code> — <strong>not hardcoded in React</strong>) + public tiers Starter R50 / Business R150 / Growth R350 (+ annual 2 months free) + Enterprise contact-sales; legacy Individual/SME/Corporate grandfathered. <code>subscriptions</code> core (<code>company_id</code>, <code>plan_id</code>, <code>plan_family</code>, <code>grace_ends_at</code>, PayFast ids, period bounds, <code>cancelled_at</code>, <code>created_by</code>, <code>trial_started_at</code> / <code>trial_ends_at</code>, <code>subscription_source</code> (<code>system_trial</code> \| <code>payfast</code> \| <code>admin</code>), <code>admin_override</code>; status allow-list only: <code>pending</code> \| <code>processing</code> \| <code>active</code> \| <code>past_due</code> \| <code>failed</code> \| <code>cancelled</code> \| <code>expired</code> \| <code>suspended</code> \| <code>trialing</code>) + append-only <code>payment_history</code> + <code>subscription_events</code> + <code>payfast_itn_logs</code> + <code>subscription_invoices</code> + <code>webhook_logs</code>. <strong>New org-owner accounts created on/after 2026-08-20 00:00:00 UTC</strong> get a <strong>7-day server-side trial</strong> (<code>trialing</code>); invited members do not. Access is <code>hasSubscriptionAccess</code> (trial not expired, <code>active</code>, or admin-managed). Activation to paid only after verified PayFast ITN (never from the SPA). Admin PATCH <code>/api/admin/subscriptions</code> can extend/grant/suspend/cancel and always sets <code>admin_override</code> so expiry jobs cannot revert it; changes write <code>audit_logs</code>. <strong>Payment/revenue reporting</strong> counts only <code>payment_history.payment_status = completed</code> with transaction/created time <strong>≥ 2026-08-20T00:00:00.000Z</strong> (UTC) — not trials, admin grants, pending/failed, or pre-cutoff rows. <strong>APIs:</strong> <code>GET /api/subscriptions/plans</code>, <code>POST /api/subscriptions/create|change|cancel</code>, <code>GET …/status|current</code>, <code>POST /api/payfast/itn</code>, <code>GET /api/admin/subscriptions</code> (overview + reporting), <code>GET /api/admin/payments</code>, <code>PATCH /api/admin/subscriptions</code> (legacy client-priced <code>POST /api/payfast/subscription</code> returns 410). Schema: <code>docs/SUBSCRIPTION_BILLING_SCHEMA.md</code>. Profiles (<code>plan</code> / <code>subscription_status</code> / <code>is_pro</code>) remain a cache (mirrored as <code>plan_family</code>).</li>
+</ul>
+<p><strong>Feeds off the Document Engine:</strong> revenue truth is <strong>downstream of document state</strong> (totals, status, due dates, line items). Revenue &amp; Ops aggregates, reconciles, and projects; it does not fork “another invoice.”</p>
+<p><strong>Strategy:</strong> Keep business rules that define <strong>what a document is</strong> (e.g. when an invoice is <em>overdue</em> in product terms) aligned with the Document Engine; keep <strong>money rails</strong> (capture, allocate, subscription charge) here.</p>
+<p><strong>Payment integration rule:</strong> provider events never mutate document totals directly. They update payment-intent/payment records first; document settlement status is derived via verified reconciliation rules. SaaS tenant billing is separate from invoice <code>payments</code>: ITN must verify signature, PayFast server confirm, amount, merchant, and subscription correlation before moving <code>subscriptions</code> off <code>pending</code>.</p>
+<p><strong>SaaS billing security principles (non-negotiable):</strong> (1) Never trust the frontend for payment state. (2) Verify every ITN server-side with PayFast before changing subscription status. (3) Database is SoR. (4) Log every lifecycle event and webhook. (5) Idempotent webhooks (no duplicate activations). (6) RLS everywhere; service role only where required. (7) Never expose merchant credentials, signatures, or verification logic to the client. (8) Validate merchant ID, amount, currency, and subscription identifiers before activate. (9) Prefer atomic DB transactions for payment history + subscription update + event logs. Details: <code>docs/SUBSCRIPTION_BILLING_SCHEMA.md</code>.</p>
+<h4>Responsibility split (hard boundary)</h4>
+<p><strong>Document Engine owns:</strong></p>
+<ul>
+<li>Document status semantics (<code>paid</code>, <code>overdue</code>, lifecycle transitions)</li>
+<li>Document totals and payable snapshots</li>
+</ul>
+<p><strong>Revenue &amp; Ops owns:</strong></p>
+<ul>
+<li>Payment providers (Payfast, Stripe, future rails)</li>
+<li>Subscriptions and dunning/billing operations</li>
+<li>Cash flow models</li>
+<li>Reporting/read models</li>
+</ul>
+<p><strong>Boundary outcome:</strong> clear separation keeps document rules coherent while allowing payment/billing systems to scale independently.</p>
+<h3>7. Payment Intelligence Layer (Get Paid System)</h3>
+<p><strong>Job:</strong> Turn events + payment intent state into proactive actions that improve collection velocity.</p>
+<ul>
+<li>Inputs: <code>document_events</code>, <code>payment_intents</code>, due dates, client/payment history</li>
+<li>Decisions: reminder timing, CTA sequencing, retry windows, provider fallback policy</li>
+<li>Outputs: auto reminders, smart nudges, “invoice viewed but not paid” triggers, suggested follow-ups, prioritized “at-risk” invoices, and payment funnel analytics</li>
+</ul>
+<p><strong>Example trigger (v1):</strong></p>
+<p>Client viewed invoice 3 times without a <code>paid</code> event in the observation window → trigger reminder and surface a suggested follow-up action in the right panel.</p>
+<p><strong>Position in architecture:</strong> sits between observation/payment state and user-facing actions, orchestrating how Paidly gets customers paid faster without leaking provider logic into page code.</p>
+<hr />
+<h3>Growth loops (implemented within Revenue, Relationship, and Experience systems)</h3>
+<p><strong>Job:</strong> How Paidly <strong>acquires, retains, and scales</strong>—loops that sit beside day-to-day issuing.</p>
+<ul>
+<li><strong>Affiliates:</strong> acquisition + admin moderation (<code>api/affiliates</code>, …)</li>
+<li><strong>Emails:</strong> transactional and campaign-style sends from <code>/api</code> and app-triggered flows</li>
+<li><strong>Notifications:</strong> in-app + scheduled nudges (crons, reminders, due-date services)</li>
+<li><strong>CRM behaviour:</strong> follow-ups, client engagement, portal nudges—<strong>behaviour</strong> on top of Relationship data, not a duplicate CRM product</li>
+</ul>
+<p><strong>This is how Paidly scales:</strong> repeatable growth mechanics without entangling them in the document compose path.</p>
+<p><strong>Operator / platform admin</strong> (users, oversight, platform messages, <code>/admin-v2/*</code>) can be documented as part of this engine or Identity, depending on audience—treat it as <strong>platform operations</strong>, not SMB document logic.</p>
+<hr />
+<h2>6. Experience System (UX at scale)</h2>
+<p><strong>Job:</strong> So Paidly <strong>feels</strong> like one product, not twenty features stitched together.</p>
+<p><strong>Pillars:</strong></p>
+<table><thead><tr>
+<th>Pillar</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Shell</strong></td>
+<td>Repeated editor layout: full-width work area, <code>max-w-*</code> content, sticky summary/actions (pattern already emerging: EditQuote, EditClient, EditCatalogItem).</td>
+</tr>
+<tr>
+<td><strong>Tokens</strong></td>
+<td><code>border-border</code>, <code>bg-card</code>, <code>text-muted-foreground</code>—no one-off palette per page.</td>
+</tr>
+<tr>
+<td><strong>Data discipline</strong></td>
+<td>React Query keys, invalidation rules, <strong>cache-first navigation</strong> (<code>paidlyClientCachePolicy.js</code> + <code>docs/Paidly-Caching-Architecture.md</code>). Hydrate from Zustand/Dexie/RQ then refresh when stale — not a full cold load on every route entry. <strong>Observability:</strong> <code>paidlyDataLayerInstrumentation.js</code> (cache restore, dedupe, realtime patches) + <code>[PaidlyRealtime]</code> structured logs (reconnect/backoff/cooldown).</td>
+</tr>
+<tr>
+<td><strong>A11y &amp; forms</strong></td>
+<td>Label/<code>id</code> parity, focus order, disabled states that explain <em>why</em> (title/tooltip).</td>
+</tr>
+<tr>
+<td><strong>Money UX contract</strong></td>
+<td>Same status chips + primary CTA logic (<code>Pay now</code>, <code>Retry payment</code>, <code>View receipt</code>) everywhere a payable document appears.</td>
+</tr>
+<tr>
+<td><strong>Page template</strong></td>
+<td>List/index pages share one <strong>three-zone</strong> shell (below)—visual consistency reads as <strong>premium</strong>.</td>
+</tr>
+</tbody></table>
+<p><strong>Strategy:</strong> Treat “Experience” as <strong>governed</strong>: a short <strong>layout + form checklist</strong> for any new surface that touches Identity or the Document Engine—same as you’d gate API changes.</p>
+<h4>Experience upgrade: make the editor pattern universal</h4>
+<p>The editor shell is a product advantage only if it is consistent across <strong>documents and money actions</strong>. Standardize the same right-side sticky panel pattern for invoice payment actions, not just compose/edit forms.</p>
+<p><strong>Universal right panel contract (sticky):</strong></p>
+<ul>
+<li>Primary amount block (<code>Total</code>, optional secondary currency conversion).</li>
+<li>Primary action first (<code>Pay Now</code> when payable).</li>
+<li>Secondary lifecycle actions below (<code>Send Reminder</code>, receipt/share actions by state).</li>
+<li>Deterministic state switching from <code>Payment Intent</code> status (no page-specific CTA ordering).</li>
+</ul>
+<p><strong>Invoice payment panel (reference pattern):</strong></p>
+<ul>
+<li><code>Total: $100</code></li>
+<li><code>≈ R1,638</code></li>
+<li><code>[ Pay Now ]</code></li>
+<li><code>[ Send Reminder ]</code></li>
+</ul>
+<h3>Page Template System (UI system — critical)</h3>
+<p>The UI is improving but must be <strong>systemized</strong>, not page-by-page improvisation.</p>
+<p><strong>Every primary list / index page follows three zones:</strong></p>
+<ol>
+<li><strong>Header</strong> — page title, one-line purpose, <strong>primary actions</strong> (create, import, refresh, layout toggle). Prefer <code>PageHeader</code> (<code>src/components/dashboard/PageHeader.jsx</code>) inside <code>PageTemplate.Header</code>.</li>
+<li><strong>Content</strong> — main <strong>table or grid</strong> (or tabbed main). This is the scroll-heavy region; keep widths <code>min-w-0</code> so tables don’t blow the shell.</li>
+<li><strong>Side panel</strong> — <strong>filters</strong>, <strong>counts / summary</strong>, secondary controls. On large screens: <strong>sticky</strong> column (<code>lg:</code>) to the right of content; on small screens: stack <strong>below</strong> main or <strong>above</strong> the table (pick one per product area and stay consistent).</li>
+</ol>
+<p><strong>Code:</strong> <code>PageTemplate</code> + <code>PageTemplate.Header</code> + <code>PageTemplate.Body</code> (<code>sidePanel</code> prop) in <strong><code>src/components/layout/PageTemplate.jsx</code></strong>. Import from <code>@/components/layout</code> or <code>@/components/layout/PageTemplate</code>. Use <strong><code>embedded</code></strong> when the page already sits inside a padded shell (e.g. <strong><code>AdminLayout</code></strong>).</p>
+<p><strong>Conformance targets (same chrome, same rhythm):</strong></p>
+<table><thead><tr>
+<th>Page</th>
+<th>Scope</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Invoices</strong></td>
+<td>Primary document list — header/actions + table; filters/summary → side panel</td>
+</tr>
+<tr>
+<td><strong>Quotes</strong></td>
+<td>Same pattern as invoices</td>
+</tr>
+<tr>
+<td><strong>Clients</strong></td>
+<td>Relationship index — header + list/grid; filters or segment summary → side</td>
+</tr>
+<tr>
+<td><strong>Services</strong></td>
+<td>Catalog / inventory — header + content; industry/templates/search → side where possible</td>
+</tr>
+<tr>
+<td><strong>Affiliates</strong></td>
+<td>Growth admin — <code>PageHeader</code> already; align body to <strong>content + sticky side</strong> for search/status</td>
+</tr>
+</tbody></table>
+<p>Refactors can be <strong>incremental</strong>: introduce <code>PageTemplate</code> first, then move filters/summary into <code>sidePanel</code> per page without changing data logic.</p>
+<h3>Standardize UI layout (everything same structure)</h3>
+<p><strong>Rule:</strong> major surfaces share one <strong>structural grammar</strong> so the product reads as intentional, not a stack of one-off pages.</p>
+<table><thead><tr>
+<th>Surface type</th>
+<th>Structure</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>List / index</strong> (Invoices, Quotes, Clients, Services, Affiliates, …)</td>
+<td><strong><code>PageTemplate</code></strong>: Header (title + actions) → Content (table/grid) → Side panel (filters / summary)</td>
+</tr>
+<tr>
+<td><strong>Document compose / edit</strong></td>
+<td>Shared <strong>editor shell</strong>: full-width work area, <code>max-w-*</code> content, <strong>sticky</strong> summary + primary actions (align <code>EditInvoice</code> / <code>EditQuote</code> / <code>CreateDocument</code> patterns)</td>
+</tr>
+<tr>
+<td><strong>Payment touchpoints</strong> (document detail, public invoice, portal)</td>
+<td>Shared payment state model driven by <code>Payment Intent</code> status; same CTA order and error/retry messaging</td>
+</tr>
+<tr>
+<td><strong>Admin / settings-style</strong></td>
+<td><strong><code>PageHeader</code></strong> + main column; use <strong><code>PageTemplate</code> with <code>embedded</code></strong> when inside <code>AdminLayout</code> if a side rail helps</td>
+</tr>
+</tbody></table>
+<p><strong>Deliverable:</strong> keep the <strong>Experience checklist</strong> short: “Which template? Header actions? Side panel? Sticky save?”—<strong>every new page picks a row</strong>, no ad hoc fourth layout.</p>
+<hr />
+<h2>A.3 System map (one picture)</h2>
+<pre><code>                    ┌─────────────────────────┐
+                    │   Experience System     │
+                    │ (shell, tokens, a11y)     │
+                    └───────────┬─────────────┘
+                                │
+┌───────────────┐    ┌──────────▼──────────┐    ┌────────────────────┐
+│   Identity    │───►│   Document Engine    │◄───│ Relationship &amp;     │
+│   &amp; Access    │    │ (invoice/quote/      │    │ Offering           │
+└───────────────┘    │  payslip kinds)      │    └────────────────────┘
+        │            └──────────┬───────────┘
+        │                       │
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │ Payment Intent Layer  │
+        │            │ create · track · map  │
+        │            └──────────┬────────────┘
+        │                       │
+        │                       ├──────────────┐
+        │                       ▼              │
+        │            ┌───────────────────────┐ │
+        │            │ Payment Intelligence  │ │
+        │            │ reminders · retry ·   │ │
+        │            │ funnel actions        │ │
+        │            └──────────┬────────────┘ │
+        │                       │              │
+        │                       └──────────────┘
+        │                       │
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │   Revenue &amp; Ops       │
+        │            │ Payfast/Stripe · subs │
+        │            │ cash flow · reports   │
+        │            └──────────┬────────────┘
+        │                       │
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │       Webhook         │
+        │            │ verify · normalize    │
+        │            └──────────┬────────────┘
+        │                       │ settle signal
+        │                       ▼
+        │            ┌───────────────────────┐
+        │            │   Document Engine     │
+        │            │  status settlement    │
+        │            └──────────┬────────────┘
+        │                       │
+        └───────────────────────┼───────────────────────┐
+                                ▼                       │
+                    ┌───────────────────────┐           │
+                    │    Growth Engine       │◄──────────┘
+                    │ affiliates · email ·  │  (also uses
+                    │ notifications · CRM   │   relationship data)
+                    └───────────────────────┘</code></pre>
+<p><strong>Money loop (explicit):</strong></p>
+<p><code>Document Engine</code> → <code>Payment Intent Layer</code> → <code>Revenue &amp; Ops</code> (Payfast/Stripe) → <code>Webhook</code> → <code>Document Engine (Settle)</code></p>
+<p><strong>Get Paid loop (differentiator):</strong></p>
+<p><code>Observe</code> (<code>document_events</code>) + <code>Payment Intent</code> state → <code>Payment Intelligence Layer</code> → smart reminders/CTA/retry strategy → <code>Revenue &amp; Ops</code> + <code>Experience System</code></p>
+<hr />
+<h1>Part B — Technical blueprint (stack &amp; flow)</h1>
+<h2>B.1 What Paidly is (product one-liner)</h2>
+<p>Paidly is a <strong>business operating system for SMBs</strong>—not a narrow invoicing tool: <strong>documents</strong> (invoice / quote / payslip), <strong>relationships &amp; catalog</strong>, <strong>revenue visibility &amp; payments</strong>, and <strong>growth</strong> (e.g. affiliates) in one product story. <strong>South Africa–first</strong> (Payfast, ZAR defaults). <strong>Stack:</strong> <strong>Vite + React</strong> SPA on <strong>Vercel</strong>, <strong>Supabase</strong> as system of record.</p>
+<h2>B.2 What runs where</h2>
+<table><thead><tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Frontend</strong></td>
+<td>React 18, Vite 6, React Router 7</td>
+<td>UI; lazy routes</td>
+</tr>
+<tr>
+<td><strong>Styling</strong></td>
+<td>Tailwind, Radix, Framer Motion</td>
+<td>Components + motion</td>
+</tr>
+<tr>
+<td><strong>State</strong></td>
+<td>TanStack Query, Zustand, Context</td>
+<td>Cache, auth shell, prefs</td>
+</tr>
+<tr>
+<td><strong>Data</strong></td>
+<td>Supabase JS</td>
+<td>Postgres, Auth, RLS</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td>Vercel <code>/api/*</code></td>
+<td>Email, shares, Payfast, crons, affiliates</td>
+</tr>
+<tr>
+<td><strong>Optional</strong></td>
+<td><code>server/</code> Express</td>
+<td>PDF/email dev tooling</td>
+</tr>
+<tr>
+<td><strong>Analytics</strong></td>
+<td><code>@vercel/analytics</code></td>
+<td>Prod only</td>
+</tr>
+</tbody></table>
+<h2>B.3 External services</h2>
+<table><thead><tr>
+<th>Service</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Supabase</strong></td>
+<td>DB + Auth (<code>VITE_SUPABASE_*</code>)</td>
+</tr>
+<tr>
+<td><strong>Vercel</strong></td>
+<td>Host + serverless + crons + redirects</td>
+</tr>
+<tr>
+<td><strong>Payfast</strong></td>
+<td>Payments / subscriptions</td>
+</tr>
+<tr>
+<td><strong>Resend / SMTP</strong></td>
+<td>Transactional email from <code>/api</code></td>
+</tr>
+<tr>
+<td><strong>Anvil</strong></td>
+<td>PDF generation paths (tooling + app)</td>
+</tr>
+<tr>
+<td><strong>IP rate limits</strong></td>
+<td>Sign-in / sign-up / forgot-password via Node auth API when enabled</td>
+</tr>
+</tbody></table>
+<h2>B.4 Repository map</h2>
+<ul>
+<li><code>src/pages/</code> — route entrypoints (thin controllers)</li>
+<li><code>src/components/layout/PageTemplate.jsx</code> — <strong>Page Template System</strong> (header + body grid + optional sticky side panel); <code>embedded</code> for <code>AdminLayout</code></li>
+<li><code>src/components/</code>, <code>src/services/</code> — feature + domain logic; <strong>list/query orchestration</strong> lives in <code>src/services/*</code> (called from hooks), not in pages</li>
+<li><code>src/api/customClient.js</code> — <code>EntityManager</code> → Supabase (+ localStorage for unmigrated entities)</li>
+<li><code>api/</code> — Vercel handlers</li>
+<li><code>supabase/migrations/</code> — schema</li>
+</ul>
+<p>See <strong><code>docs/SUPABASE_DATA_MODEL.md</code></strong> for table ↔ entity detail.</p>
+<p>For runtime ownership and boundary rules (Browser/Supabase/Edge-Server), see <strong><code>docs/ARCHITECTURE_RUNTIME_MAP.md</code></strong>.</p>
+<p>For the connection lifecycle coordinator, semantic events, and authority rules, see <strong><code>docs/CONNECTION_LIFECYCLE_ARCHITECTURE.md</code></strong>.</p>
+<h2>B.5 Data flow (refined)</h2>
+<h3>Canonical client stack</h3>
+<p>Do <strong>not</strong> wire pages or heavy components <strong>straight to</strong> <code>Invoice</code>, <code>Quote</code>, etc. for anything beyond trivial one-offs. Prefer:</p>
+<pre><code>UI (pages / components)
+  → Hooks (TanStack Query, local UI state)
+    → Entity / domain service layer (`src/services/*`, orchestration)
+      → Entity facades (`@/api/entities` — thin `EntityManager` API)
+        → Supabase (+ RLS) / optional localStorage mirrors</code></pre>
+<p><strong>Why the middle layer:</strong> one place for <strong>timeouts/retries</strong>, <strong>logging/metrics</strong>, <strong>feature gating</strong>, <strong>error shaping</strong>, and <strong>swapping storage</strong> without rewriting every screen. Hooks stay thin (cache keys, <code>enabled</code>, composition); services own <strong>how</strong> data is fetched or mutated.</p>
+<p><strong>Anti-pattern:</strong> <code>UI → Invoice.list()</code> scattered across pages.</p>
+<p><strong>Reference example:</strong> <code>useInvoices</code> → <code>fetchInvoiceListPage</code> in <strong><code>src/services/InvoiceListService.js</code></strong> → <code>Invoice.list</code> → <code>EntityManager</code> → Supabase. PDF/email/share flows stay in <strong><code>src/api/InvoiceService.js</code></strong> (different concern: delivery, not list reads).</p>
+<h3>Canonical profile path (implemented)</h3>
+<p>Profile state has a single fetch owner:</p>
+<ul>
+<li><strong>Owner:</strong> <code>AuthContext</code> (<code>src/contexts/AuthContext.impl.jsx</code>)</li>
+<li><strong>Consumer path:</strong> <code>useAuth()</code> and <code>useUserProfileQuery()</code> (selector facade over auth state)</li>
+<li><strong>Rule:</strong> pages/components should not add new <code>User.me()</code> fetches for normal shell state; use auth/context selectors.</li>
+<li><strong>Allowed exceptions:</strong> explicit one-off snapshot reads in render/send pipelines (PDF generation, email send branding snapshots) where point-in-time profile capture is intentional.</li>
+</ul>
+<h3>Domain-approved path matrix</h3>
+<table><thead><tr>
+<th>Domain</th>
+<th>Approved path</th>
+</tr></thead><tbody>
+<tr>
+<td>Auth/profile</td>
+<td><code>AuthContext</code> → <code>useAuth</code> / <code>useUserProfileQuery</code></td>
+</tr>
+<tr>
+<td>Document lists</td>
+<td>hook (<code>useInvoices</code>/etc.) → service (<code>*ListService</code>) → entity facade</td>
+</tr>
+<tr>
+<td>Document exports</td>
+<td>page action → <code>DocumentExportService</code></td>
+</tr>
+<tr>
+<td>Dashboard bounded data</td>
+<td>dashboard hooks → <code>DashboardDataService</code></td>
+</tr>
+<tr>
+<td>Side datasets</td>
+<td>feature hook with explicit <code>enabled</code> gate + stale time</td>
+</tr>
+</tbody></table>
+<h3><code>customClient.js</code> / EntityManager — online vs offline</h3>
+<p><code>EntityManager</code> is powerful but easy to misuse: <strong>silent failures</strong>, <strong>localStorage</strong> paths for guests, and <strong><code>list()</code> timeouts</strong> returning an empty cache can look like “no data” when the network failed.</p>
+<p><strong>Policy (implemented in <code>EntityManager</code>):</strong> use <strong><code>navigator.onLine</code></strong> as a coarse gate:</p>
+<ul>
+<li><strong>Offline</strong> — do <strong>not</strong> call Supabase for bulk <code>pullFromSupabase</code> / empty <code>find()</code>; use <strong>in-memory / local</strong> only and <strong>log</strong> (<code>[Paidly][EntityManager] … offline</code>). <strong><code>get()</code></strong> cache misses throw a <strong>clear</strong> “not available offline” error instead of a failed network round-trip.</li>
+<li><strong>Online</strong> — <strong>attempt Supabase</strong> as today. When <code>list()</code> uses a <strong><code>maxWaitMs</code> race</strong>, the continuation <strong><code>pull</code> promise</strong> logs failures instead of <strong><code>void pull.catch(() =&gt; {})</code></strong>, and an <strong>empty cache</strong> after the wait emits a <strong>diagnostic warning</strong> (slow vs failed vs still loading).</li>
+</ul>
+<p><code>skipLocalPersistence</code> (signed-in + mapped table) already avoids treating <strong>localStorage</strong> as authoritative; the online/offline split further reduces <strong>masked</strong> behaviour.</p>
+<h3>Session and side effects</h3>
+<p>Auth session → org scope → the stack above + Query cache → **<code>/api/<em></code></em>* for secrets and side effects (email, Payfast, public tokens, admin queues).</p>
+<h2>B.6 Deployment</h2>
+<p><code>vite build</code> → Vercel static + <code>vercel.json</code> rewrites + scheduled crons; production domains alias to the project.</p>
+<hr />
+<h2>High impact next (product — what to ship first)</h2>
+<p>These three compound <strong>retention</strong>, <strong>differentiation</strong>, and the <strong>business OS</strong> story. Run them as explicit initiatives; the numbered backlog below is hygiene and scale in parallel.</p>
+<h3>1. Keep the document system honest (split persistence)</h3>
+<ul>
+<li><strong>Invoice + quote + payslip = same engine, different tables</strong> — shared <strong>lifecycle</strong> primitives (draft → send → observe → settle / convert) in <strong><code>src/document-engine/</code></strong>, specialised persistence (<code>invoices</code>, <code>quotes</code>, <code>payslips</code>). Do <strong>not</strong> migrate these into <code>documents</code>.</li>
+<li><strong>Documents Hub</strong> — generic business documents only (<code>documents</code> / <code>document_items</code> / <code>document_events</code>).</li>
+<li><strong>Shared UI</strong> — one <strong>Create / Edit document</strong> shell where it already exists for invoice/quote compose; hub types use typed/dedicated pages. Kind-specific rules stay behind thin adapters.</li>
+</ul>
+<h3>2. Client Timeline (inside client profile)</h3>
+<p>A single <strong>chronological timeline</strong> on the client record, for example:</p>
+<ul>
+<li><strong>Invoice sent</strong> (and viewed / paid where data exists)</li>
+<li><strong>Quote sent / accepted / declined / expired</strong></li>
+<li><strong>Payment received</strong> (linked payment rows)</li>
+</ul>
+<p><strong>Data:</strong> join <code>invoices</code>, <code>quotes</code>, <code>payments</code>, and optionally <code>document_sends</code> / <code>message_logs</code> (and later tasks/notes) filtered by <code>client_id</code> + <code>org_id</code>, sorted by time.</p>
+<p><strong>Why it hits:</strong> turns “contacts” into <strong>relationship history</strong>—high <strong>retention</strong> and a clear Paidly-only view most invoicing-only tools do not unify on one screen.</p>
+<h3>3. Conversion flow: Quote → accepted → auto invoice draft</h3>
+<p>When a quote moves to <strong>accepted</strong> (or explicit user action “Convert to invoice”):</p>
+<ol>
+<li><strong>Create</strong> an <strong>invoice draft</strong> (link <code>quote_id</code> or metadata for traceability).</li>
+<li><strong>Prefill</strong> client, line items, currency, terms/branding from the quote.</li>
+<li><strong>Route</strong> the user to <strong>Edit invoice</strong> to review, adjust tax/dates, then send.</li>
+</ol>
+<p>This closes the <strong>commercial loop</strong> in-product. Persistence is <code>quotes</code> → <code>invoices</code>, not the Documents Hub.</p>
+<p>Hub job cards, project reports, and scopes <strong>Convert to Invoice / Quote</strong> the same way: specialised compose, specialised tables.</p>
+<p><strong>Blueprint PDF:</strong> regenerate from this markdown with <code>npm run docs:blueprint-pdf</code> (<code>scripts/generate-blueprint-pdf.mjs</code>).</p>
+<hr />
+<h2>Foundation priorities (run with high impact)</h2>
+<p>Ship these in parallel with <strong>High impact next</strong>—they reduce churn and make every subsequent feature cheaper.</p>
+<h3>4. Stabilize Auth + Session (work already started)</h3>
+<ul>
+<li><strong>Goal:</strong> predictable <strong>sign-in, refresh, tab sync, and logout</strong>; no ghost states where the UI runs but org or profile is wrong.</li>
+<li><strong>Scope:</strong> Supabase Auth session lifecycle, <strong><code>getSession</code> / <code>getUser</code></strong> ordering and retries (see patterns in <strong><code>customClient.js</code></strong>), <strong><code>RequireAuth</code></strong> and role gates, <strong>org bootstrap</strong> (<code>ensureUserHasOrganization</code>), <strong>invite / reset-password</strong> flows, <strong>profile</strong> load after cold start.</li>
+<li><strong>Exit criteria:</strong> short <strong>runbook</strong> (or ADR) for “session failure modes + what the user sees”; fewer uncaught <code>AbortError</code> paths; QA checklist for multi-tab and slow network.</li>
+</ul>
+<h3>5. Standardize UI layout (same structure everywhere)</h3>
+<ul>
+<li><strong>Goal:</strong> one <strong>layout grammar</strong> across the app (see <strong>A.2 — Standardize UI layout</strong> table).</li>
+<li><strong>Scope:</strong> roll <strong><code>PageTemplate</code></strong> through primary lists; align <strong>document editors</strong> on the same shell; admin/settings use <strong><code>embedded</code></strong> + <code>PageHeader</code> where applicable.</li>
+<li><strong>Exit criteria:</strong> published <strong>Experience checklist</strong> (one page) that references <strong><code>PageTemplate</code></strong> and editor shell; new PRs default to an existing template row—no orphan layouts.</li>
+</ul>
+<hr />
+<h2>Next steps (strategy → engineering backlog)</h2>
+<p><em>Numbering map: <strong>4–5</strong> execute <strong>Foundation §4–5</strong> (auth/session, UI layout)—the same priorities called out in architecture <strong>A.1</strong> and <strong>A.2</strong>. <strong>6</strong> (Experience checklist) <strong>closes</strong> Foundation §5. <strong>7</strong> (role matrix) <strong>supports</strong> Foundation §4. Items <strong>8–11</strong> are the former 6–9 line-up (<strong>PageTemplate</strong> rollout, hook→service pattern, Client Timeline, quote→invoice). Product-led <strong>High impact</strong> items (§1–3) stay in that section above.</em></p>
+<ol>
+<li><strong>Grow <code>src/document-engine/</code></strong> — status enums, send + PDF adapters, and thin facades over <code>Invoice</code> / <code>Quote</code> / <code>Payslip</code> where behaviour overlaps (<strong>supports § High impact 1</strong>).</li>
+<li><strong>Line up quote / invoice / payslip</strong> on the same <strong>deliver + observe</strong> interfaces (even if tables stay separate short term); keep <strong>compose</strong> converging on <strong>Create Document + type</strong>, not parallel product UIs (<strong>supports § High impact 1</strong>).</li>
+<li><strong>Add first-class Payment Intent model + APIs</strong> — define intent create/update/reconcile contract between <code>Document Engine</code> and <code>Revenue &amp; Ops</code> (idempotency, status normalization, expiry/retry rules).</li>
+<li><strong>Make Revenue &amp; Ops consumers explicit</strong> — cash flow and reports should pull through document-shaped APIs or views, not ad hoc duplicates (<strong>supports Client Timeline + money story</strong>).</li>
+<li><strong>Publish payment UX contract in Experience checklist</strong> — one status vocabulary + CTA matrix for document detail, public invoice, and portal paths.</li>
+<li><strong>Stabilize Auth + Session</strong> — execute <strong>Foundation §4</strong> (session/read/write matrix, invites, org bootstrap, documentation).</li>
+<li><strong>Standardize UI layout</strong> — execute <strong>Foundation §5</strong> + <strong>A.2</strong> table (<code>PageTemplate</code>, editor shell, embedded admin).</li>
+<li><strong>Publish an “Experience checklist”</strong> (1 page) for new screens touching documents or money — include the <strong>Page Template</strong> three-zone rule (<code>PageTemplate</code>) and <strong>layout grammar</strong> row picker (<strong>closes Foundation §5</strong>).</li>
+<li><strong>Identity / role matrix doc</strong> — admin vs management vs support capabilities (complements §4).</li>
+<li><strong>Roll out <code>PageTemplate</code></strong> on Invoices, Quotes, Clients, Services, and Affiliates — move filters/summary into <strong><code>sidePanel</code></strong> where they still live inside the main card.</li>
+<li><strong>Extend the hook → service → entity pattern</strong> — add <code>*ListService</code> / query modules for Quotes, Clients, and other high-traffic reads; keep <strong><code>api/InvoiceService</code>-style</strong> modules for non-CRUD delivery concerns.</li>
+<li><strong>Implement Client Timeline</strong> — query + UI on <strong>Client detail</strong> per <strong>High impact §2</strong>; consider a small <code>ClientTimelineService</code> for aggregation and caching keys.</li>
+<li><strong>Implement quote → invoice conversion</strong> — server or client path that creates draft invoice from accepted quote per <strong>High impact §3</strong>; validate RLS and idempotency (no duplicate drafts on double-accept).</li>
+</ol>
+<h3>Immediate execution order (exact)</h3>
+<ol>
+<li><strong>Add <code>payment_intents</code> table.</strong></li>
+<li><strong>Integrate payment intents into the document lifecycle.</strong></li>
+<li><strong>Expand <code>document_events</code> coverage and event ingestion.</strong></li>
+<li><strong>Build payment UI into the sticky right panel on invoice/payment touchpoints.</strong></li>
+<li><strong>Add basic reminders (event- and due-date driven).</strong></li>
+</ol>
+<h2>v1 implementation contract (direct build plan)</h2>
+<h3>Tables (Supabase)</h3>
+<ul>
+<li><code>payment_intents</code> (new): <code>id</code>, <code>document_id</code>, <code>provider</code>, <code>amount</code>, <code>currency</code>, <code>status</code>, <code>external_id</code>, <code>created_at</code></li>
+<li><code>document_events</code> (expand): ensure canonical events <code>sent</code>, <code>opened</code>, <code>clicked</code>, <code>paid</code>, <code>reminded</code> with <code>occurred_at</code>, <code>actor_type</code>, <code>metadata</code></li>
+<li><code>payments</code> (existing): keep as settlement/reconciliation records linked to provider/webhook outcomes</li>
+</ul>
+<h3>Services (app/server orchestration)</h3>
+<ul>
+<li><code>DocumentPaymentIntentService</code> (new): create/update intent from document snapshot; enforce idempotency by <code>document_id + provider + status window</code></li>
+<li><code>DocumentEventService</code> (expand): append normalized document/payment lifecycle events; provide query helpers for timeline/reminders</li>
+<li><code>PaymentWebhookReconciliationService</code> (new or expanded from current Payfast handler): verify provider payloads, map to canonical statuses, write <code>payments</code> + <code>document_events</code>, trigger settle transition</li>
+<li><code>PaymentIntelligenceService</code> (v1 basic): evaluate reminder triggers (e.g., viewed-not-paid, due/overdue windows) and emit follow-up actions</li>
+</ul>
+<h3>Cron jobs (Vercel)</h3>
+<ul>
+<li><code>POST /api/cron/reminders</code> (existing pattern; expand logic): process due/overdue + behavior-based reminder candidates</li>
+<li><code>POST /api/cron/payment-intelligence</code> (new): run lightweight trigger evaluation (<code>viewed&gt;=N &amp;&amp; not paid</code>, retry windows)</li>
+<li><code>POST /api/cron/subscriptions-dunning</code> (existing/adjacent): keep tenant billing and subscription retries isolated from document settlement logic</li>
+</ul>
+<h3>API endpoints (<code>/api/*</code>)</h3>
+<ul>
+<li><code>POST /api/payment-intents</code> (new): create intent for payable document</li>
+<li><code>GET /api/payment-intents/:id</code> (new): fetch intent status for sticky panel + public views</li>
+<li><code>POST /api/payments/webhook/:provider</code> (new canonical route; may proxy existing <code>payfast-handler</code>)</li>
+<li><code>POST /api/pos/webhook/:token</code> (POS sale ingress — generic, Yoco, Square parsers)</li>
+<li><code>POST /api/pos/webhook/provider/square</code> (Square application webhook — routes by merchant_id)</li>
+<li><code>POST /api/pos/oauth/square/start</code> · <code>GET /api/pos/oauth/callback/square</code> (Square OAuth connect)</li>
+<li><code>POST /api/pos/oauth/yoco/connect</code> (Yoco API key connect + auto webhook)</li>
+<li><code>GET|POST|PATCH|DELETE /api/pos/connections</code> (org settings managers / company admins); RLS mirrors this via <code>is_company_admin_for_org</code> (members may SELECT only)</li>
+<li><code>GET /api/pos/sales</code> (org members — dashboard read model)</li>
+<li><code>POST /api/documents/:type/:id/events</code> (new internal endpoint) or service-only ingestion path for <code>document_events</code></li>
+<li><code>POST /api/reminders/dispatch</code> (new internal endpoint used by cron workers)</li>
+</ul>
+<p><strong>v1 acceptance checks:</strong></p>
+<ul>
+<li>Invoice can move <code>Deliver → Observe → Payment Intent → Settle</code> using provider-verified events only.</li>
+<li>Sticky right panel shows intent-aware CTA states (<code>Pay now</code>, <code>Retry payment</code>, <code>Send reminder</code>) without page-specific logic forks.</li>
+<li><code>document_events</code> powers timeline entries and at least one automated reminder trigger.</li>
+</ul>
+<hr />
+<p><em>End of document.</em></p>
+</body>
+</html>

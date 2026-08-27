@@ -30,8 +30,12 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
 import LogoImage from "@/components/shared/LogoImage";
 import { lineItemHasContent } from "@/utils/lineItemContent";
-import { normalizeDocumentType, DOCUMENT_TYPES } from "@/document-engine";
+import { normalizeDocumentType, DOCUMENT_TYPES, hubDocumentToComposePrefill, isDocumentsHubExcludedType, hubWriteForbiddenMessage, typeLabel } from "@/document-engine";
+import { DocumentService } from "@/services/DocumentService";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
+import useOrgBrands from "@/hooks/useOrgBrands";
+import BrandSelect from "@/components/brands/BrandSelect";
+import { snapshotForNewDocument } from "@/lib/documentIssuerBrand";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -170,7 +174,9 @@ function CreateDocumentCore({ docType }) {
   const location = useLocation();
   const { toast } = useToast();
   const { user, authUserId } = useAuth();
+  const { brands, activeBrand, loading: brandsLoading } = useOrgBrands();
   const profileDefaultsApplied = useRef(false);
+  const brandDefaultsApplied = useRef(false);
   const previewPdfRef = useRef(null);
   const documentLogoInputRef = useRef(null);
 
@@ -184,6 +190,7 @@ function CreateDocumentCore({ docType }) {
   const [loadingBankingDetails, setLoadingBankingDetails] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
   const [loadedQuote, setLoadedQuote] = useState(null);
+  const [loadedHubDocumentId, setLoadedHubDocumentId] = useState(null);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [showAddClientDialog, setShowAddClientDialog] = useState(false);
   const [showAddServiceDialog, setShowAddServiceDialog] = useState(false);
@@ -215,6 +222,7 @@ function CreateDocumentCore({ docType }) {
     terms_conditions: initialTerms,
     /** Public URL for logo on this document only; empty = use profile logo */
     document_logo_url: "",
+    company_id: "",
   });
 
   const {
@@ -331,9 +339,27 @@ function CreateDocumentCore({ docType }) {
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const quoteIdParam = searchParams.get("quoteId");
+  const fromHubDocumentParam = searchParams.get("fromHubDocument");
   const clientIdParam = searchParams.get("client_id");
   const templateIdParam = searchParams.get("templateId");
   const duplicateLastParam = searchParams.get("duplicateLast");
+
+  useEffect(() => {
+    if (brandDefaultsApplied.current) return;
+    if (quoteIdParam || fromHubDocumentParam || templateIdParam || duplicateLastParam) {
+      brandDefaultsApplied.current = true;
+      return;
+    }
+    if (brandsLoading) return;
+    brandDefaultsApplied.current = true;
+    const snap = snapshotForNewDocument({ brand: activeBrand, profile: user });
+    setForm((f) => ({
+      ...f,
+      company_id: snap.companyId || "",
+      company_name: snap.owner_company_name || f.company_name,
+      document_logo_url: f.document_logo_url || snap.owner_logo_url || "",
+    }));
+  }, [brandsLoading, activeBrand, user, quoteIdParam, fromHubDocumentParam, templateIdParam, duplicateLastParam]);
 
   useEffect(() => {
     if (docType !== "invoice" || !quoteIdParam) {
@@ -422,6 +448,82 @@ function CreateDocumentCore({ docType }) {
       cancelled = true;
     };
   }, [docType, quoteIdParam, toast, user?.currency]);
+
+  useEffect(() => {
+    if (!fromHubDocumentParam || quoteIdParam || (docType !== "invoice" && docType !== "quote")) {
+      if (!fromHubDocumentParam) setLoadedHubDocumentId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setPrefillLoading(true);
+      try {
+        const hubDoc = await withApiLogging("createDocument.hub.get", () =>
+          withTimeoutRetry(() => DocumentService.getDetail(fromHubDocumentParam), 20000, 1)
+        );
+        if (cancelled) return;
+        if (!hubDoc) {
+          toast({
+            title: "Source document not found",
+            description: `You can still create this ${docType} from scratch.`,
+            variant: "destructive",
+          });
+          setLoadedHubDocumentId(null);
+          return;
+        }
+        if (isDocumentsHubExcludedType(hubDoc.type)) {
+          toast({
+            title: "Cannot convert this document",
+            description: hubWriteForbiddenMessage(hubDoc.type),
+            variant: "destructive",
+          });
+          setLoadedHubDocumentId(null);
+          return;
+        }
+        setLoadedHubDocumentId(hubDoc.id);
+        let qc = null;
+        if (hubDoc.client_id) {
+          try {
+            qc = await withTimeoutRetry(() => Client.get(hubDoc.client_id), 15000, 1);
+          } catch {
+            qc = null;
+          }
+        }
+        const prefill = hubDocumentToComposePrefill(hubDoc);
+        const clientName = qc?.name || "";
+        setForm((f) => ({
+          ...f,
+          client_id: prefill.client_id || "",
+          client_name: qc?.name || "",
+          client_email: qc?.email || "",
+          client_address: [qc?.address, qc?.city, qc?.country].filter(Boolean).join("\n") || "",
+          issue_date: new Date().toISOString().split("T")[0],
+          line_items: prefill.line_items.length > 0 ? prefill.line_items : f.line_items,
+          tax_rate: prefill.tax_rate,
+          notes: prefill.notes || f.notes,
+          currency: prefill.currency || f.currency || user?.currency || "ZAR",
+          number: generateNumber(docType, clientName),
+        }));
+        toast({
+          title: `${typeLabel(hubDoc.type)} loaded`,
+          description: `Client, lines, and notes are filled from the hub document. Saving writes a ${docType}, not a hub row.`,
+        });
+      } catch (e) {
+        if (!cancelled) {
+          toast({
+            title: "Could not load source document",
+            description: e?.message || "Try again or create from scratch.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!cancelled) setPrefillLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [docType, fromHubDocumentParam, quoteIdParam, toast, user?.currency]);
 
   useEffect(() => {
     if (!clientIdParam || (docType !== "invoice" && docType !== "quote")) return;
@@ -594,6 +696,21 @@ function CreateDocumentCore({ docType }) {
       };
     });
   }, [loadedQuote, clients]);
+
+  useEffect(() => {
+    if (!loadedHubDocumentId || clients.length === 0) return;
+    setForm((f) => {
+      if (!f.client_id || (f.client_name && f.client_name.trim())) return f;
+      const qc = clients.find((c) => c.id === f.client_id);
+      if (!qc) return f;
+      return {
+        ...f,
+        client_name: qc.name,
+        client_email: qc.email || "",
+        client_address: [qc.address, qc.city, qc.country].filter(Boolean).join("\n"),
+      };
+    });
+  }, [loadedHubDocumentId, clients]);
 
   const update = useCallback((field, value) => {
     setForm((f) => ({ ...f, [field]: value }));
@@ -768,10 +885,13 @@ function CreateDocumentCore({ docType }) {
   }, [form.line_items, form.tax_rate, form.discount]);
 
   const profileLogoUrl = user?.logo_url || user?.company_logo_url || null;
+  const selectedBrand = brands.find((row) => row.id === form.company_id) || null;
   const effectiveOwnerLogoUrl = useMemo(() => {
     const override = (form.document_logo_url || "").trim();
-    return override || profileLogoUrl || null;
-  }, [form.document_logo_url, profileLogoUrl]);
+    if (override) return override;
+    if (selectedBrand?.logo_url) return selectedBrand.logo_url;
+    return profileLogoUrl || null;
+  }, [form.document_logo_url, selectedBrand?.logo_url, profileLogoUrl]);
 
   const previewDoc = useMemo(
     () => ({
@@ -780,8 +900,11 @@ function CreateDocumentCore({ docType }) {
       tax_amount: computed.tax_amount,
       total: computed.total,
       owner_logo_url: effectiveOwnerLogoUrl,
+      company: selectedBrand
+        ? { id: selectedBrand.id, name: selectedBrand.name, logo_url: selectedBrand.logo_url }
+        : undefined,
     }),
-    [form, computed, effectiveOwnerLogoUrl]
+    [form, computed, effectiveOwnerLogoUrl, selectedBrand]
   );
 
   const previewBankingRow = useMemo(() => {
@@ -855,6 +978,7 @@ function CreateDocumentCore({ docType }) {
       owner_currency,
       owner_logo_url,
       banking_detail_id: (form.banking_detail_id || "").trim() || null,
+      company_id: form.company_id || null,
       items,
     };
 
@@ -878,6 +1002,11 @@ function CreateDocumentCore({ docType }) {
       source: "create-document",
       label: `Invoice ${number}`,
     });
+    if (loadedHubDocumentId) {
+      DocumentService.noteSpecialisedConversion(loadedHubDocumentId, { targetType: "invoice" }).catch(
+        () => {}
+      );
+    }
 
     if (sendNow) {
       toast({
@@ -975,6 +1104,12 @@ function CreateDocumentCore({ docType }) {
 
         const createdQuote = await withTimeoutRetry(() => Quote.create(quoteToCreate), 45000, 2);
         writeQuoteBankingPreference(createdQuote?.id, form.banking_detail_id);
+        if (loadedHubDocumentId) {
+          DocumentService.noteSpecialisedConversion(loadedHubDocumentId, {
+            targetType: "quote",
+            targetId: createdQuote?.id || null,
+          }).catch(() => {});
+        }
         toast({
           title: "Quote created",
           description: `Saved as ${number}.`,
@@ -1142,7 +1277,37 @@ function CreateDocumentCore({ docType }) {
             <h1 className="text-2xl font-bold tracking-tight">
               New {docType === "quote" ? "Quote" : "Invoice"}
             </h1>
-            <p className="text-sm text-muted-foreground">#{form.number}</p>
+            <p className="text-sm text-muted-foreground">
+              #{form.number}
+              {selectedBrand?.name
+                ? ` · ${selectedBrand.name}`
+                : user?.company_name
+                  ? ` · ${user.company_name}`
+                  : ""}
+            </p>
+            {showPreview ? (
+              <div className="mt-3 max-w-sm">
+                <BrandSelect
+                  brands={brands}
+                  value={form.company_id}
+                  onChange={(brandId) => {
+                    const brand = brands.find((row) => row.id === brandId) || null;
+                    const snap = snapshotForNewDocument({ brand, profile: user });
+                    setForm((f) => ({
+                      ...f,
+                      company_id: snap.companyId || "",
+                      company_name: snap.owner_company_name || f.company_name,
+                      document_logo_url: snap.owner_logo_url || "",
+                    }));
+                  }}
+                  description={
+                    docType === "invoice"
+                      ? "Saved on this invoice. Switching the header brand later will not change it."
+                      : "Quotes store the brand name and logo on the document."
+                  }
+                />
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1209,6 +1374,25 @@ function CreateDocumentCore({ docType }) {
                 <CardTitle className="text-base">Your company</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <BrandSelect
+                  brands={brands}
+                  value={form.company_id}
+                  onChange={(brandId) => {
+                    const brand = brands.find((row) => row.id === brandId) || null;
+                    const snap = snapshotForNewDocument({ brand, profile: user });
+                    setForm((f) => ({
+                      ...f,
+                      company_id: snap.companyId || "",
+                      company_name: snap.owner_company_name || f.company_name,
+                      document_logo_url: snap.owner_logo_url || "",
+                    }));
+                  }}
+                  description={
+                    docType === "invoice"
+                      ? "Saved on this invoice as company / brand. Switching the header brand will not change it after you save."
+                      : "Quotes store the brand name and logo on the document. They are not linked on a separate brand id."
+                  }
+                />
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Company name</Label>

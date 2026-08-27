@@ -1,6 +1,7 @@
 import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { resolveProfileLogoUrl } from "@/lib/profileLogo";
+import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
 
 /**
  * Overlay current session profile branding on a possibly stale `user` snapshot (e.g. ViewInvoice
@@ -50,14 +51,16 @@ export function profileForQuotePreview(quoteData, user) {
     ...(user || {}),
     document_brand_primary: qp ?? user?.document_brand_primary ?? null,
     document_brand_secondary: qs ?? user?.document_brand_secondary ?? null,
-    logo_url:
-      user?.logo_url ||
-      user?.company_logo_url ||
-      quoteData?.owner_logo_url ||
-      quoteData?.company?.logo_url ||
-      quoteData?.company?.company_logo_url ||
-      null,
-    company_name: quoteData?.owner_company_name || user?.company_name || "",
+    logo_url: resolveIssuerLogoPath({
+      document: quoteData,
+      company: quoteData?.company,
+      profile: user,
+    }),
+    company_name: resolveIssuerName({
+      document: quoteData,
+      company: quoteData?.company,
+      profile: user,
+    }) || "",
     company_address: quoteData?.owner_company_address || user?.company_address || "",
     email: quoteData?.owner_email || user?.email || "",
     phone: user?.phone || "",
@@ -128,14 +131,20 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
     terms_conditions: isQuote
       ? record.terms_conditions || ""
       : effectiveInvoiceTermsForDisplay(record.terms_conditions),
-    company_name: record.owner_company_name || profile?.company_name || "",
+    company_name: resolveIssuerName({
+      document: record,
+      company: record.company,
+      profile,
+    }) || "",
     company_email: record.owner_email || profile?.email || "",
     company_phone: profile?.phone || "",
     company_website: profile?.company_website || profile?.website || "",
     company_address: record.owner_company_address || profile?.company_address || "",
-    /** Live profile logo first (Settings), then snapshot on the record (invoices). */
-    owner_logo_url:
-      profile?.logo_url || profile?.company_logo_url || record.owner_logo_url || null,
+    owner_logo_url: resolveIssuerLogoPath({
+      document: record,
+      company: record.company,
+      profile,
+    }),
     subtotal: Number(record.subtotal) || 0,
     tax_amount: Number(record.tax_amount) || 0,
     total: Number(record.total_amount) || 0,

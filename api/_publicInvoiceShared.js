@@ -129,11 +129,12 @@ export async function loadPublicInvoiceBundle(supabase, shareToken) {
   };
 
   if (invoice.company_id) {
-    const { data: comp } = await supabase
+    let companyQuery = supabase
       .from("companies")
       .select("id, name, logo_url")
-      .eq("id", invoice.company_id)
-      .maybeSingle();
+      .eq("id", invoice.company_id);
+    if (invoice.org_id) companyQuery = companyQuery.eq("org_id", invoice.org_id);
+    const { data: comp } = await companyQuery.maybeSingle();
     if (comp) out.company = { id: comp.id, name: comp.name, logo_url: comp.logo_url };
   }
 

@@ -54,6 +54,7 @@ import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
 import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
 import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
+import OrgBrandsSettings from "@/components/settings/OrgBrandsSettings";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
@@ -1696,6 +1697,7 @@ function PersonalAccountSettings() {
 const SETTINGS_TABS = [
     { value: "account", label: "My Account", icon: UserIcon, permission: PERMISSIONS.VIEW_OWN_PROFILE },
     { value: "profile", label: "Company Profile", icon: SettingsIcon, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "brands", label: "Brands", icon: Building2, permission: PERMISSIONS.VIEW_OWN_PROFILE },
     { value: "team", label: "Team Members", icon: Users, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "company-team", label: "Company Team", icon: Building2, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
@@ -1711,6 +1713,15 @@ function SettingsTabPanels({ activeTab }) {
             return <PersonalAccountSettings />;
         case "profile":
             return <CompanyProfileSettings />;
+        case "brands":
+            return (
+                <SettingsCard
+                    title="Company / brand"
+                    description="Trading names and logos for invoices. This is not a separate Paidly account."
+                >
+                    <OrgBrandsSettings />
+                </SettingsCard>
+            );
         case "team":
             return (
                 <SettingsCard title="Team Members" description="Invite teammates and manage who belongs to your company.">
@@ -1815,7 +1826,7 @@ export default function Settings() {
     if (companyLoading) {
         return (
             <div className="w-full min-w-0 mobile-page overflow-x-hidden">
-                <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-16">
+                <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-[max(6rem,calc(4rem+env(safe-area-inset-bottom,0px)))] lg:pb-16">
                     <div className="flex min-h-[40vh] items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading settings" />
                     </div>
@@ -1826,7 +1837,7 @@ export default function Settings() {
 
     return (
         <div className="w-full min-w-0 mobile-page overflow-x-hidden">
-            <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-16">
+            <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-[max(6rem,calc(4rem+env(safe-area-inset-bottom,0px)))] lg:pb-16">
                 <header className="mb-6 sm:mb-8">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>

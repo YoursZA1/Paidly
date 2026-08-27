@@ -22,6 +22,7 @@ import PayfastService from '@/services/PayfastService';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
+import { resolveIssuerLogoPath, resolveIssuerName } from '@/lib/documentIssuerBrand';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -243,11 +244,17 @@ export default function PublicInvoice() {
       normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
     const publicUser = {
         logo_url:
-            invoice.company?.logo_url ||
-            invoice.company?.company_logo_url ||
-            invoice.owner_logo_url ||
-            '',
-        company_name: invoice.owner_company_name || invoice.company?.name || '',
+            resolveIssuerLogoPath({
+                document: invoice,
+                company: invoice.company,
+                profile: null,
+            }) || '',
+        company_name:
+            resolveIssuerName({
+                document: invoice,
+                company: invoice.company,
+                profile: null,
+            }) || '',
         company_address: invoice.owner_company_address || '',
         email: invoice.owner_email || '',
         currency: ownerCurrency,

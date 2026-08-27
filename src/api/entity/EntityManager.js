@@ -901,7 +901,7 @@ export class EntityManager {
       }
 
       const INVOICE_INSERT_COLUMNS = [
-        'org_id', 'client_id', 'invoice_number', 'status', 'project_title', 'project_description',
+        'org_id', 'client_id', 'company_id', 'invoice_number', 'status', 'project_title', 'project_description',
         'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
         'currency', 'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
         'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
@@ -1318,7 +1318,7 @@ export class EntityManager {
         });
       }
       const INVOICE_UPDATE_COLUMNS = [
-        'client_id', 'invoice_number', 'status', 'project_title', 'project_description',
+        'client_id', 'company_id', 'invoice_number', 'status', 'project_title', 'project_description',
         'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
         'currency', 'notes', 'terms_conditions', 'updated_at',
         'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',

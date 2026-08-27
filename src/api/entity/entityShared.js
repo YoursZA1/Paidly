@@ -112,11 +112,12 @@ export function getOrderAscending(sortBy) {
 export async function attachInvoiceCompany(record) {
   if (!record || !record.company_id || record.company) return;
   try {
-    const { data } = await supabase
+    let query = supabase
       .from("companies")
       .select("id, name, logo_url")
-      .eq("id", record.company_id)
-      .single();
+      .eq("id", record.company_id);
+    if (record.org_id) query = query.eq("org_id", record.org_id);
+    const { data } = await query.maybeSingle();
     if (data) record.company = { id: data.id, name: data.name, logo_url: data.logo_url };
   } catch {
     /* ignore */
@@ -127,6 +128,14 @@ export async function attachInvoiceCompany(record) {
 /**
  * Entity class name (e.g. "Invoice") → Supabase table when rows are loaded via pullFromSupabase.
  * Used to skip localStorage mirrors for signed-in users: Supabase (+ in-memory EntityManager cache) is authoritative.
+ *
+ * Commercial documents never map to `documents`. Hub documents are accessed via DocumentService,
+ * not EntityManager.
+ *
+ *   Invoice → invoices
+ *   Quote → quotes
+ *   Payslip / Payroll → payslips
+ *   RecurringInvoice → recurring_invoices
  */
 export function getSupabaseTableForEntityName(entityName) {
   const table = String(entityName || "").toLowerCase() + "s";
@@ -140,6 +149,7 @@ export function getSupabaseTableForEntityName(entityName) {
   if (table === "packages") return "packages";
   if (table === "invoiceviews") return "invoice_views";
   if (table === "payrolls") return "payslips";
+  if (table === "payslips") return "payslips";
   if (table === "expenses") return "expenses";
   if (table === "tasks") return "tasks";
   if (table === "notes") return "notes";
