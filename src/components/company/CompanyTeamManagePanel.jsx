@@ -13,6 +13,8 @@ import {
   updateCompanyMemberDirect,
   INVITE_ROLES,
 } from "@/services/CompanyTeamService";
+import { listPosRegisters } from "@/services/PosIntegrationService";
+import { resendCompanyInvite } from "@/services/CompanyInvitesService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Users, UserPlus } from "lucide-react";
 import CompanyTeamInviteResultDialog from "@/components/company/CompanyTeamInviteResultDialog";
+import { POS_INVITE_SOURCE, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 
 /**
  * Company org team management — invite employees/managers with job function (Sales, HR, …).
@@ -42,12 +45,15 @@ export default function CompanyTeamManagePanel() {
   const [fullName, setFullName] = useState("");
   const [inviteRole, setInviteRole] = useState("employee");
   const [inviteJobFunction, setInviteJobFunction] = useState("sales");
+  const [inviteRegisterId, setInviteRegisterId] = useState("");
+  const [registers, setRegisters] = useState([]);
   const [inviting, setInviting] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [inviteNotice, setInviteNotice] = useState(null);
 
   const canManage = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const showJobFunctionOnInvite = jobFunctionRequiredForRole(inviteRole);
+  const posOnlyInvite = inviteRole === "employee" && inviteJobFunction === POS_JOB_FUNCTION;
 
   const reload = async () => {
     if (!ctx) return;
@@ -71,10 +77,37 @@ export default function CompanyTeamManagePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx?.companyId, ctx?.companyRole]);
 
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    void listPosRegisters()
+      .then((data) => {
+        if (cancelled) return;
+        const rows = Array.isArray(data?.registers) ? data.registers : [];
+        const active = rows.filter((row) => row.status !== "disabled");
+        setRegisters(active);
+        setInviteRegisterId((prev) => prev || active[0]?.id || "");
+      })
+      .catch(() => {
+        if (!cancelled) setRegisters([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage]);
+
   if (!canManage) return null;
 
   const handleInvite = async (e) => {
     e.preventDefault();
+    if (posOnlyInvite && !inviteRegisterId) {
+      toast({
+        variant: "destructive",
+        title: "Till is required",
+        description: "Assign this POS employee to a till before sending the invite.",
+      });
+      return;
+    }
     setInviting(true);
     try {
       const result = await inviteCompanyMember({
@@ -82,18 +115,30 @@ export default function CompanyTeamManagePanel() {
         fullName,
         role: inviteRole,
         jobFunction: showJobFunctionOnInvite ? inviteJobFunction : "general",
+        source: posOnlyInvite ? POS_INVITE_SOURCE : undefined,
+        registerId: posOnlyInvite ? inviteRegisterId : undefined,
       });
       if (result.mode === "email_invite") {
+        const selectedTill = registers.find((row) => row.id === inviteRegisterId);
         setInviteNotice({
+          inviteId: result.id || null,
           email: String(result.email || email).trim(),
+          invitedName: fullName.trim() || result.invited_name || null,
           inviteLink: result.invite_link || "",
+          inviteCode: result.invite_code || null,
           emailSent: result.email_sent === true,
           emailError: result.email_error || null,
+          posOnly: posOnlyInvite || result.source === POS_INVITE_SOURCE,
+          role: result.role || inviteRole,
+          jobFunction: result.job_function || inviteJobFunction,
+          registerName: result.register_name || selectedTill?.name || null,
+          expiresAt: result.expires_at || null,
+          reused: result.reused === true || result.pending_exists === true,
         });
       } else {
         toast({
           title: "Member added",
-          description: `${email} was added to your company.`,
+          description: `${email} already had a Paidly account and was added to your business.`,
         });
       }
       setEmail("");
@@ -107,6 +152,39 @@ export default function CompanyTeamManagePanel() {
       });
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleRetryInviteEmail = async () => {
+    const inviteId = inviteNotice?.inviteId;
+    if (!inviteId) return;
+    setInviteNotice((prev) => (prev ? { ...prev, retrying: true } : prev));
+    try {
+      const result = await resendCompanyInvite(inviteId);
+      setInviteNotice((prev) =>
+        prev
+          ? {
+              ...prev,
+              retrying: false,
+              inviteLink: result.invite_link || prev.inviteLink,
+              inviteCode: result.invite_code || prev.inviteCode,
+              emailSent: result.email_sent === true,
+              emailError: result.email_error || null,
+              expiresAt: result.expires_at || prev.expiresAt,
+            }
+          : prev
+      );
+    } catch (err) {
+      setInviteNotice((prev) =>
+        prev
+          ? {
+              ...prev,
+              retrying: false,
+              emailSent: false,
+              emailError: err?.message || String(err),
+            }
+          : prev
+      );
     }
   };
 
@@ -139,6 +217,7 @@ export default function CompanyTeamManagePanel() {
       onOpenChange={(open) => {
         if (!open) setInviteNotice(null);
       }}
+      onRetryEmail={inviteNotice?.inviteId ? handleRetryInviteEmail : undefined}
     />
     <Card className="mb-6">
       <CardHeader className="pb-3">
@@ -214,6 +293,29 @@ export default function CompanyTeamManagePanel() {
               <p className="text-sm text-muted-foreground pt-2">Not required for company admins.</p>
             </div>
           )}
+          {posOnlyInvite ? (
+            <div className="space-y-2 sm:col-span-2 lg:col-span-5 rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-sm font-medium">POS-only access</p>
+              <p className="text-xs text-muted-foreground">
+                This employee can use the POS but cannot access the rest of Paidly.
+              </p>
+              <div className="space-y-2 max-w-sm">
+                <Label>Till</Label>
+                <Select value={inviteRegisterId} onValueChange={setInviteRegisterId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={registers.length ? "Select till" : "No tills yet"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {registers.map((row) => (
+                      <SelectItem key={row.id} value={row.id}>
+                        {row.name || "Till"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : null}
           <div className="flex items-end sm:col-span-2 lg:col-span-5">
             <Button type="submit" disabled={inviting} className="gap-2">
               <UserPlus className="h-4 w-4" />

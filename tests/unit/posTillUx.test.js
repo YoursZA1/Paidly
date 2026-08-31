@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyPosCashKey, centsToCashTender } from "../../src/lib/pos/posCashKeypad.js";
+import { posStockLabel } from "../../src/lib/pos/posCart.js";
 import { popularProductIdsFromSales, scopePosCatalog } from "../../src/lib/pos/posPopularProducts.js";
 
 describe("posCashKeypad", () => {
@@ -17,6 +18,14 @@ describe("posCashKeypad", () => {
     expect(applyPosCashKey("12.34", "back")).toBe("1.23");
     expect(applyPosCashKey("12.34", "clear")).toBe("0.00");
     expect(centsToCashTender(5000)).toBe("50.00");
+  });
+});
+
+describe("posStockLabel compact cards", () => {
+  it("uses cashier-short copy on product cards", () => {
+    expect(posStockLabel(24, { compact: true })).toEqual({ text: "24 left", tone: "ok" });
+    expect(posStockLabel(4, { compact: true })).toEqual({ text: "Low stock", tone: "low" });
+    expect(posStockLabel(0, { compact: true })).toEqual({ text: "Out of stock", tone: "out" });
   });
 });
 

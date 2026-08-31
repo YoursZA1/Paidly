@@ -95,6 +95,8 @@ export default function ConnectionMonitor() {
     setConnectionState,
   ]);
 
+  const kickedRealtimeRef = useRef(false);
+
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
     void runCheck();
@@ -141,7 +143,10 @@ export default function ConnectionMonitor() {
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    kickPaidlyRealtimeIfNeededOnMonitorMount();
+    if (!kickedRealtimeRef.current) {
+      kickedRealtimeRef.current = true;
+      kickPaidlyRealtimeIfNeededOnMonitorMount();
+    }
 
     return () => {
       unsubMainStatus();

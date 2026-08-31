@@ -7,11 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { X, Save, Headset, DollarSign, Plus, Lock } from "lucide-react";
+import { X, Save, Headset, DollarSign, Plus, Lock, ScanBarcode } from "lucide-react";
 import { motion } from "framer-motion";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { renderIcon } from "@/utils/renderIcon";
 import { useOrgBrands } from "@/hooks/useOrgBrands";
+import BarcodeScannerDialog from "@/components/inventory/BarcodeScannerDialog";
+import { generatePosProductBarcode } from "@/lib/pos/posBarcode";
 
 function normalizeTags(raw) {
     if (Array.isArray(raw)) return raw;
@@ -37,6 +39,7 @@ function buildFormStateFromService(service, defaultType) {
         is_active: service?.is_active !== undefined ? service.is_active : true,
         price_locked: service?.price_locked || false,
         sku: service?.sku || "",
+        barcode: service?.barcode || "",
         stock_quantity: service?.stock_quantity ?? null,
         cost_price: service?.cost_price ?? null,
         low_stock_threshold: service?.low_stock_threshold ?? 5,
@@ -154,6 +157,7 @@ export default function ServiceForm({
     const { brands } = useOrgBrands();
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState(() => buildFormStateFromService(service, defaultType));
+    const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
 
     const [newTag, setNewTag] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -228,6 +232,7 @@ export default function ServiceForm({
             // Type-specific fields
             ...(formData.item_type === 'product' && {
                 ...(formData.sku && { sku: formData.sku }),
+                barcode: String(formData.barcode || "").trim() || null,
                 ...(formData.unit && { unit: formData.unit }),
                 ...(formData.price !== undefined && { price: Number(formData.price) || 0 }),
                 ...(formData.stock_quantity !== null && formData.stock_quantity !== undefined && {
@@ -315,6 +320,7 @@ export default function ServiceForm({
     }
 
     return (
+        <>
         <motion.div
             initial={isEditorSurface ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -506,6 +512,37 @@ export default function ServiceForm({
                                                 placeholder="e.g., PROD-001, ITEM-SKU-123"
                                                 className="h-12 rounded-xl"
                                             />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="barcode" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcode</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    id="barcode"
+                                                    data-testid="service-barcode"
+                                                    value={formData.barcode || ""}
+                                                    onChange={(e) => handleInputChange('barcode', String(e.target.value))}
+                                                    placeholder="6001234567890"
+                                                    className="h-12 rounded-xl"
+                                                    autoComplete="off"
+                                                    inputMode="text"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="h-12 shrink-0 px-3"
+                                                    onClick={() => setBarcodeScannerOpen(true)}
+                                                >
+                                                    <ScanBarcode className="size-4" />
+                                                    <span className="ml-1 hidden sm:inline">Scan</span>
+                                                </Button>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                                                onClick={() => handleInputChange('barcode', generatePosProductBarcode())}
+                                            >
+                                                Generate barcode
+                                            </button>
                                         </div>
                                         {brands.length > 0 ? (
                                         <div className="space-y-2">
@@ -966,5 +1003,15 @@ export default function ServiceForm({
                 </CardContent>
             </Card>
         </motion.div>
+        <BarcodeScannerDialog
+            open={barcodeScannerOpen}
+            onOpenChange={setBarcodeScannerOpen}
+            title="Scan barcode"
+            onDetected={(code) => {
+                handleInputChange("barcode", String(code));
+                setBarcodeScannerOpen(false);
+            }}
+        />
+        </>
     );
 }

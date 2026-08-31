@@ -15,8 +15,9 @@ import {
   companyInviteRedirectUrl,
   sendCompanyTeamInviteEmail,
 } from "./companyTeamInviteDelivery.js";
+import { companyInviteShareUrl } from "./companyInviteAppUrl.js";
 
-const INVITE_TTL_DAYS = 14;
+const INVITE_TTL_DAYS = 7;
 const COMPANY_ROLE_LABELS = {
   employee: "Employee",
   manager: "Manager",
@@ -28,12 +29,7 @@ function jsonError(res, status, message) {
 }
 
 function companyInviteAppUrl(token) {
-  const origin =
-    (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
-    process.env.VITE_APP_URL ||
-    process.env.APP_URL ||
-    "https://www.paidly.co.za";
-  return `${String(origin).replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+  return companyInviteShareUrl(token, { source: "company_admin" });
 }
 
 function generateInviteToken() {

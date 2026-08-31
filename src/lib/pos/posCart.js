@@ -7,14 +7,14 @@ export function posProductStock(product) {
 
 /**
  * @param {number} stock
- * @param {{ low?: number }} [opts]
+ * @param {{ low?: number, compact?: boolean }} [opts]
  * @returns {{ text: string, tone: "out" | "low" | "ok" }}
  */
-export function posStockLabel(stock, { low = 5 } = {}) {
+export function posStockLabel(stock, { low = 5, compact = false } = {}) {
   const n = Number(stock);
   if (!Number.isFinite(n) || n <= 0) return { text: "Out of stock", tone: "out" };
-  if (n <= low) return { text: `LOW STOCK · ${n} in stock`, tone: "low" };
-  return { text: `${n} in stock`, tone: "ok" };
+  if (n <= low) return { text: compact ? "Low stock" : `LOW STOCK · ${n} in stock`, tone: "low" };
+  return { text: compact ? `${n} left` : `${n} in stock`, tone: "ok" };
 }
 
 /**

@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, ScanBarcode, Upload } from "lucide-react";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
+import BarcodeScannerDialog from "@/components/inventory/BarcodeScannerDialog";
 import { uploadProductImage } from "@/lib/productImageUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgBrands } from "@/hooks/useOrgBrands";
+import { generatePosProductBarcode } from "@/lib/pos/posBarcode";
 
 const COUNT_STYLES = ["units", "cases", "packs", "boxes", "pallets", "bottles", "bags", "rolls"];
 
@@ -28,13 +30,14 @@ const defaultProduct = {
   company_id: "",
 };
 
-export default function ProductFormDialog({ open, onOpenChange, product, onSave }) {
+export default function ProductFormDialog({ open, onOpenChange, product, onSave, initialBarcode = "" }) {
   const { user } = useAuth();
   const { brands } = useOrgBrands();
   const [form, setForm] = useState(defaultProduct);
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const isEdit = !!product;
 
   useEffect(() => {
@@ -48,10 +51,10 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
       });
       setImagePreview(product.image_url || null);
     } else {
-      setForm(defaultProduct);
+      setForm({ ...defaultProduct, barcode: String(initialBarcode || "") });
       setImagePreview(null);
     }
-  }, [product, open]);
+  }, [product, open, initialBarcode]);
 
   const handleImagePick = async (e) => {
     const file = e.target.files?.[0];
@@ -86,6 +89,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -143,13 +147,33 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="product-barcode">Barcode</Label>
-              <Input
-                id="product-barcode"
-                value={form.barcode}
-                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                placeholder="Scan or type barcode"
-                inputMode="numeric"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="product-barcode"
+                  value={form.barcode}
+                  onChange={(e) => setForm({ ...form, barcode: String(e.target.value) })}
+                  placeholder="6001234567890"
+                  inputMode="text"
+                  autoComplete="off"
+                  className="min-w-0"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 min-h-11 shrink-0 px-3"
+                  onClick={() => setBarcodeScannerOpen(true)}
+                >
+                  <ScanBarcode className="size-4" />
+                  <span className="ml-1 hidden sm:inline">Scan</span>
+                </Button>
+              </div>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                onClick={() => setForm((f) => ({ ...f, barcode: generatePosProductBarcode() }))}
+              >
+                Generate barcode
+              </button>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="product-category">Category</Label>
@@ -264,5 +288,15 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
         </form>
       </DialogContent>
     </Dialog>
+    <BarcodeScannerDialog
+      open={barcodeScannerOpen}
+      onOpenChange={setBarcodeScannerOpen}
+      title="Scan barcode"
+      onDetected={(code) => {
+        setForm((f) => ({ ...f, barcode: String(code) }));
+        setBarcodeScannerOpen(false);
+      }}
+    />
+    </>
   );
 }

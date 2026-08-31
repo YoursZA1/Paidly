@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { isPosInviteUrl } from "@shared/posStaffInvite.js";
 import { buildPosTillInviteMessage, formatPosTillInviteCode } from "@shared/posTillInviteCode.js";
+import { JOB_FUNCTION_LABELS } from "@/lib/companyJobFunctions";
+import { COMPANY_ROLE_LABELS } from "@/lib/companyPermissions";
 
 function formatExpiry(iso) {
   if (!iso) return "—";
@@ -24,6 +26,17 @@ async function copyText(value, success) {
   if (!value) return;
   await navigator.clipboard.writeText(value);
   toast.success(success);
+}
+
+function roleLabel(role) {
+  const key = String(role || "").toLowerCase();
+  return COMPANY_ROLE_LABELS[key] || role || "Employee";
+}
+
+function functionLabel(jobFunction, posOnly) {
+  if (posOnly) return "POS only";
+  const key = String(jobFunction || "").toLowerCase();
+  return JOB_FUNCTION_LABELS[key] || jobFunction || "—";
 }
 
 /**
@@ -39,11 +52,17 @@ async function copyText(value, success) {
  *     registerName?: string | null,
  *     expiresAt?: string | null,
  *     companyName?: string | null,
+ *     role?: string | null,
+ *     jobFunction?: string | null,
+ *     inviteId?: string | null,
+ *     reused?: boolean,
+ *     retrying?: boolean,
  *   } | null,
  *   onOpenChange: (open: boolean) => void,
+ *   onRetryEmail?: () => void | Promise<void>,
  * }} props
  */
-export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) {
+export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, onRetryEmail }) {
   const open = notice != null;
   const posOnly = notice?.posOnly === true || isPosInviteUrl(notice?.inviteLink);
   const code = formatPosTillInviteCode(notice?.inviteCode) || notice?.inviteCode || "";
@@ -62,12 +81,14 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-left">
             <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
-            {posOnly ? "Till invite created" : "Invitation ready"}
+            Invitation created
           </DialogTitle>
           <DialogDescription className="text-left">
-            {posOnly
-              ? "This code gives POS-only access to the assigned till."
-              : `Share the secure link below with ${notice?.email || "your teammate"} so they can set a password and join your company workspace.`}
+            {notice?.reused
+              ? "A pending invitation already exists for this email. Use the same link below."
+              : posOnly
+                ? "This employee can use the POS but cannot access the rest of Paidly."
+                : `Share the secure link with ${notice?.email || "your teammate"} so they can join your business.`}
           </DialogDescription>
         </DialogHeader>
         {notice ? (
@@ -77,45 +98,55 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
                 <AlertDescription className="flex items-start gap-2">
                   <Mail className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
                   <span>
-                    Email sent to <span className="font-medium">{notice.email}</span>. You can still copy the code or
-                    link as a backup.
+                    Invitation sent successfully to <span className="font-medium">{notice.email}</span>.
+                    The invite link is still available to copy.
                   </span>
                 </AlertDescription>
               </Alert>
             ) : (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Email could not be sent
-                  {notice.emailError ? `: ${notice.emailError}` : ""}. Copy the invite below and send it to{" "}
-                  {notice.email} manually.
+                  Invitation created, but email could not be sent
+                  {notice.emailError ? `: ${notice.emailError}` : ""}. Copy the invite link and send it
+                  manually.
                 </AlertDescription>
               </Alert>
             )}
 
-            {posOnly ? (
-              <dl className="space-y-2 text-sm">
+            <dl className="space-y-2 text-sm">
+              {notice.invitedName ? (
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Staff</dt>
-                  <dd className="font-medium">{notice.invitedName || "—"}</dd>
+                  <dt className="text-muted-foreground">Name</dt>
+                  <dd className="font-medium">{notice.invitedName}</dd>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Email</dt>
-                  <dd className="truncate font-medium">{notice.email}</dd>
-                </div>
+              ) : null}
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="truncate font-medium">{notice.email}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Role</dt>
+                <dd className="font-medium">{roleLabel(notice.role)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Function</dt>
+                <dd className="font-medium">{functionLabel(notice.jobFunction, posOnly)}</dd>
+              </div>
+              {posOnly || notice.registerName ? (
                 <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">Till</dt>
                   <dd className="font-medium">{notice.registerName || "Assigned till"}</dd>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Access</dt>
-                  <dd className="font-medium">POS only</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Expires</dt>
-                  <dd className="tabular-nums">{formatExpiry(notice.expiresAt)}</dd>
-                </div>
-              </dl>
-            ) : null}
+              ) : null}
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Status</dt>
+                <dd className="font-medium">Pending</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Expires</dt>
+                <dd className="tabular-nums">{formatExpiry(notice.expiresAt)}</dd>
+              </div>
+            </dl>
 
             {posOnly && code ? (
               <div>
@@ -134,17 +165,6 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {posOnly && code ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-11"
-                  onClick={() => void copyText(code, "Invite code copied")}
-                >
-                  <Copy className="h-4 w-4" aria-hidden />
-                  Copy code
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="secondary"
@@ -155,20 +175,28 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
                 <Copy className="h-4 w-4" aria-hidden />
                 Copy invite link
               </Button>
-              <Button
-                type="button"
-                className="h-11"
-                asChild
-              >
-                <a
-                  href={`mailto:${encodeURIComponent(notice.email || "")}?subject=${encodeURIComponent(
-                    "You're invited to Paidly POS"
-                  )}&body=${encodeURIComponent(shareText)}`}
+              {onRetryEmail ? (
+                <Button
+                  type="button"
+                  className="h-11"
+                  disabled={notice.retrying === true}
+                  onClick={() => void onRetryEmail()}
                 >
                   <Mail className="h-4 w-4" aria-hidden />
-                  Send invite
-                </a>
-              </Button>
+                  {notice.emailSent ? "Send again" : "Retry email"}
+                </Button>
+              ) : (
+                <Button type="button" className="h-11" asChild>
+                  <a
+                    href={`mailto:${encodeURIComponent(notice.email || "")}?subject=${encodeURIComponent(
+                      posOnly ? "You're invited to Paidly POS" : "You're invited to Paidly"
+                    )}&body=${encodeURIComponent(shareText)}`}
+                  >
+                    <Mail className="h-4 w-4" aria-hidden />
+                    Send invite
+                  </a>
+                </Button>
+              )}
               {posOnly ? (
                 <Button type="button" variant="outline" className="h-11" asChild>
                   <a
@@ -179,6 +207,17 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
                     <MessageCircle className="h-4 w-4" aria-hidden />
                     WhatsApp
                   </a>
+                </Button>
+              ) : null}
+              {posOnly && code ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11"
+                  onClick={() => void copyText(code, "Invite code copied")}
+                >
+                  <Copy className="h-4 w-4" aria-hidden />
+                  Copy code
                 </Button>
               ) : null}
             </div>

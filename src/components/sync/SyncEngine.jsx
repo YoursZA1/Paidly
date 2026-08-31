@@ -346,6 +346,9 @@ export default function SyncEngine() {
     [scheduleEntityInvalidation, user?.role]
   );
 
+  const onEntityEventRef = useRef(onEntityEvent);
+  onEntityEventRef.current = onEntityEvent;
+
   useEffect(() => {
     if (isRecoveryCircuitOpen()) {
       setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
@@ -366,7 +369,8 @@ export default function SyncEngine() {
         setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
       };
     }
-    setPaidlySyncRealtimeBridge({ userId: user.id, onEntityEvent });
+    const handler = (entity, payload) => onEntityEventRef.current?.(entity, payload);
+    setPaidlySyncRealtimeBridge({ userId: user.id, onEntityEvent: handler });
     return () => {
       if (globalStoreRefreshTimerRef.current) {
         window.clearTimeout(globalStoreRefreshTimerRef.current);
@@ -379,7 +383,7 @@ export default function SyncEngine() {
       });
       setPaidlySyncRealtimeBridge({ userId: null, onEntityEvent: null });
     };
-  }, [user?.id, onEntityEvent]);
+  }, [user?.id]);
 
   /** Fires only after successful wake pipeline, from `finally` after unlock ({@link CustomEvent} `detail.ok`). */
   useEffect(() => {

@@ -1,13 +1,9 @@
 import { sendHtmlEmail } from "./sendInvoice.js";
 import { sanitizeOneLine } from "./inputValidation.js";
+import { resolvePublicAppOrigin } from "./companyInviteAppUrl.js";
 
 export function companyInviteRedirectUrl() {
-  const origin =
-    (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
-    process.env.VITE_APP_URL ||
-    process.env.APP_URL ||
-    "https://www.paidly.co.za";
-  return `${String(origin).replace(/\/$/, "")}/ResetPassword`;
+  return `${resolvePublicAppOrigin()}/ResetPassword`;
 }
 
 function escapeHtml(value) {

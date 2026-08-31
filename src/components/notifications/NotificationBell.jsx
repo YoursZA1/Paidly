@@ -126,16 +126,21 @@ export default function NotificationBell() {
     }
   }, [authUserId]);
 
+  const fetchUnreadCountRef = useRef(fetchUnreadCount);
+  fetchUnreadCountRef.current = fetchUnreadCount;
+  const fetchNotificationsRef = useRef(fetchNotifications);
+  fetchNotificationsRef.current = fetchNotifications;
+
   useEffect(() => {
     if (!authUserId) return undefined;
-    void fetchUnreadCount();
+    void fetchUnreadCountRef.current();
     const scheduleRefresh = () => {
       if (realtimeDebounceRef.current) {
         window.clearTimeout(realtimeDebounceRef.current);
       }
       realtimeDebounceRef.current = window.setTimeout(() => {
-        void fetchUnreadCount();
-        if (openRef.current) void fetchNotifications();
+        void fetchUnreadCountRef.current();
+        if (openRef.current) void fetchNotificationsRef.current();
       }, REALTIME_REFRESH_DEBOUNCE_MS);
     };
     const unsub = subscribePaidlyNotificationsRealtime(authUserId, scheduleRefresh);
@@ -146,7 +151,7 @@ export default function NotificationBell() {
       }
       unsub();
     };
-  }, [authUserId, fetchNotifications, fetchUnreadCount]);
+  }, [authUserId]);
 
   useEffect(() => {
     if (!authUserId) return;

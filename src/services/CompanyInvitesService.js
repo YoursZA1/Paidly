@@ -4,6 +4,7 @@
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
+import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
 
 async function authHeaders() {
   const session = await getStableSession();
@@ -94,14 +95,7 @@ export async function validatePublicInviteToken(token) {
   }
   if (!res.ok || json.ok === false) {
     const reason = json.error || "invalid";
-    const messages = {
-      not_found: "This invitation code is invalid or has already been used.",
-      expired: "This invitation has expired. Ask your administrator to send a new invite.",
-      not_pending: "This invitation is no longer active.",
-      revoked: "This invitation was revoked.",
-      missing_token: "Enter your till invite code.",
-    };
-    throw new Error(messages[reason] || json.error || "This invitation is not valid.");
+    throw new Error(invitePublicErrorMessage(reason, json.status));
   }
   return json;
 }

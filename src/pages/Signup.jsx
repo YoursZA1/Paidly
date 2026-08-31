@@ -144,6 +144,9 @@ export default function Signup() {
   const stepOneSubmitLockRef = useRef(false);
   const stepTwoSubmitLockRef = useRef(false);
 
+  const inviteLockedEmail = String(searchParams.get("email") || "").trim().toLowerCase();
+  const isInviteSignup = searchParams.get("invite") === "1" || Boolean(inviteLockedEmail);
+
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -220,6 +223,11 @@ export default function Signup() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError("Please enter a valid email address");
+      return false;
+    }
+
+    if (inviteLockedEmail && email.trim().toLowerCase() !== inviteLockedEmail) {
+      setError("This invitation was issued to a different email address.");
       return false;
     }
 
@@ -634,7 +642,12 @@ export default function Signup() {
                       type="email"
                       placeholder="you@company.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        if (inviteLockedEmail) return;
+                        setEmail(e.target.value);
+                      }}
+                      readOnly={Boolean(inviteLockedEmail)}
+                      autoComplete={isInviteSignup ? "username" : "email"}
                       className="h-11 pl-10 rounded-xl border-zinc-600/80 bg-zinc-950/50 text-zinc-100 placeholder:text-zinc-400"
                       required
                     />

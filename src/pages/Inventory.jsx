@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
@@ -29,7 +30,7 @@ import CategoryDialog from "../components/inventory/CategoryDialog";
 import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
 import IndustryTemplatesDialog from "../components/inventory/IndustryTemplatesDialog";
-import AssetService from "@/services/AssetService";
+import { activeProductHasBarcode } from "@/lib/pos/posBarcode";
 
 function toInt(value) {
   const n = Number(value);
@@ -215,6 +216,8 @@ export default function Inventory() {
   const [loadError, setLoadError] = useState("");
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [prefillBarcode, setPrefillBarcode] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
   const [catalogDialogItem, setCatalogDialogItem] = useState(null);
   const [catalogDialogType, setCatalogDialogType] = useState("service");
@@ -230,6 +233,17 @@ export default function Inventory() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState("sell"); // 'sell' | 'receive'
   const [scannerQty, setScannerQty] = useState(1);
+
+  useEffect(() => {
+    const code = String(searchParams.get("barcode") || "").trim();
+    if (!code) return;
+    setEditingProduct(null);
+    setPrefillBarcode(code);
+    setProductDialogOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("barcode");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Funnel both camera + keyboard-wedge scans through one state transition.
   // Must be defined before the desktop keydown `useEffect` that calls it.
@@ -752,6 +766,18 @@ export default function Inventory() {
         }
 
         const requestedStockQuantity = toInt(productData?.stock_on_hand);
+        const barcodeValue = String(productData?.barcode || "").trim();
+        if (
+          barcodeValue &&
+          activeProductHasBarcode(products, barcodeValue, { excludeId: editingProduct?.id })
+        ) {
+          toast({
+            title: "Barcode already in use",
+            description: "Two active products in this business cannot share the same barcode.",
+            variant: "destructive",
+          });
+          return;
+        }
 
         // stock_quantity is intentionally excluded here: every stock change must
         // flow through adjust_inventory_stock (or the initial_stock movement
@@ -762,7 +788,7 @@ export default function Inventory() {
           type: "product",
           name,
           sku: (productData?.sku || "").trim() || null,
-          barcode: (productData?.barcode || "").trim() || null,
+          barcode: barcodeValue || null,
           category: (productData?.category || "").trim() || null,
           image_url: productData?.image_url || null,
           default_unit: toDbDefaultUnit(productData?.count_style, editingProduct?._raw?.default_unit),
@@ -893,7 +919,7 @@ export default function Inventory() {
         });
       }
     },
-    [editingProduct, getOrgIdForCurrentUser, refetchAll, toast, user?.id]
+    [editingProduct, getOrgIdForCurrentUser, products, refetchAll, toast, user?.id]
   );
 
   const handleDeleteProduct = useCallback(
@@ -1339,9 +1365,13 @@ export default function Inventory() {
         open={productDialogOpen}
         onOpenChange={(open) => {
           setProductDialogOpen(open);
-          if (!open) setEditingProduct(null);
+          if (!open) {
+            setEditingProduct(null);
+            setPrefillBarcode("");
+          }
         }}
         product={editingProduct}
+        initialBarcode={prefillBarcode}
         onSave={handleSaveProduct}
       />
 

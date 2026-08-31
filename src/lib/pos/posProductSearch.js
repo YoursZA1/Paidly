@@ -1,44 +1,59 @@
 /**
  * Fast POS catalog lookup.
- * Product code in Paidly is services.sku (labeled "SKU / Product Code" in catalog forms).
+ * Barcode and SKU live on public.services and are compared as strings (never Number()).
  */
 
 export function normalizePosQuery(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value ?? "").trim().toLowerCase();
 }
 
+/** Trim, drop spaces, lowercase. Do not parse as a number — "0123" must not become "123". */
 export function normalizePosCode(value) {
   return normalizePosQuery(value).replace(/\s+/g, "");
 }
 
-function codeKeys(product) {
-  return [
-    product?.barcode,
-    product?.sku,
-    product?.product_code,
-    product?.code,
-  ];
+function skuKeys(product) {
+  return [product?.sku, product?.product_code, product?.code];
+}
+
+function emptyIndex() {
+  return { byBarcode: new Map(), bySku: new Map() };
 }
 
 /**
- * O(1) exact lookup by barcode, SKU, or product code.
- * First product wins if two rows share a code (catalog uniqueness is an inventory concern).
+ * O(1) exact lookup. Barcode map is separate from SKU so barcode always wins.
  */
 export function buildPosCodeIndex(products) {
-  const byCode = new Map();
+  const index = emptyIndex();
   for (const product of Array.isArray(products) ? products : []) {
-    for (const raw of codeKeys(product)) {
+    const barcodeKey = normalizePosCode(product?.barcode);
+    if (barcodeKey && !index.byBarcode.has(barcodeKey)) index.byBarcode.set(barcodeKey, product);
+    for (const raw of skuKeys(product)) {
       const key = normalizePosCode(raw);
-      if (key && !byCode.has(key)) byCode.set(key, product);
+      if (key && !index.bySku.has(key)) index.bySku.set(key, product);
     }
   }
-  return byCode;
+  return index;
 }
 
-export function lookupPosProductByCode(index, raw) {
+export function lookupPosProductByBarcode(index, raw) {
   const key = normalizePosCode(raw);
   if (!key || !index) return null;
-  return index.get(key) || null;
+  if (index.byBarcode) return index.byBarcode.get(key) || null;
+  return null;
+}
+
+export function lookupPosProductBySku(index, raw) {
+  const key = normalizePosCode(raw);
+  if (!key || !index) return null;
+  if (index.bySku) return index.bySku.get(key) || null;
+  if (typeof index.get === "function") return index.get(key) || null;
+  return null;
+}
+
+/** Exact barcode first, then SKU / product code. */
+export function lookupPosProductByCode(index, raw) {
+  return lookupPosProductByBarcode(index, raw) || lookupPosProductBySku(index, raw);
 }
 
 function inCategory(product, category) {
@@ -66,10 +81,13 @@ function nameHaystack(product) {
   return String(product?.name || "").toLowerCase();
 }
 
+function productCodeList(product) {
+  return [product?.barcode, ...skuKeys(product)].map(normalizePosCode).filter(Boolean);
+}
+
 /**
  * Ranked filter for the till grid.
- * Exact codes first, then code prefixes, then name prefix / contains.
- * Category is a chip filter, not a text field.
+ * Exact barcode match returns that product only.
  */
 export function filterPosProducts(products, { query = "", category = "all", codeIndex = null } = {}) {
   const list = Array.isArray(products) ? products : [];
@@ -78,8 +96,11 @@ export function filterPosProducts(products, { query = "", category = "all", code
   if (!q) return scoped;
 
   const codeQ = normalizePosCode(query);
-  const exact = codeIndex ? lookupPosProductByCode(codeIndex, query) : null;
-  const exactInScope = exact && inCategory(exact, category) ? exact : null;
+  const barcodeHit = lookupPosProductByBarcode(codeIndex, query);
+  if (barcodeHit && inCategory(barcodeHit, category)) return [barcodeHit];
+
+  const skuHit = lookupPosProductBySku(codeIndex, query);
+  if (skuHit && inCategory(skuHit, category) && isPosScanQuery(query)) return [skuHit];
 
   const ranked = [];
   const seen = new Set();
@@ -90,10 +111,10 @@ export function filterPosProducts(products, { query = "", category = "all", code
     ranked.push({ product, rank });
   };
 
-  if (exactInScope) push(exactInScope, 0);
+  if (skuHit && inCategory(skuHit, category)) push(skuHit, 0);
 
   for (const product of scoped) {
-    const codes = codeKeys(product).map(normalizePosCode).filter(Boolean);
+    const codes = productCodeList(product);
     if (codes.some((c) => c === codeQ)) {
       push(product, 0);
       continue;
@@ -116,10 +137,15 @@ export function filterPosProducts(products, { query = "", category = "all", code
   return ranked.map((row) => row.product);
 }
 
-/** Digit barcodes (EAN/UPC) — used to add-or-reject on Enter without grabbing a name match. */
+/**
+ * Compact scanner payloads: EAN/UPC digits, or Code 128 / SKU-like tokens that include a digit.
+ * Name search like "pads" stays false.
+ */
 export function isPosScanQuery(value) {
-  const code = normalizePosCode(value);
-  if (code.length < 8) return false;
-  if (/\s/.test(String(value || "").trim())) return false;
-  return /^\d+$/.test(code);
+  const raw = String(value ?? "").trim();
+  if (!raw || /\s/.test(raw)) return false;
+  const code = normalizePosCode(raw);
+  if (code.length < 4) return false;
+  if (/^\d+$/.test(code)) return code.length >= 8;
+  return /^[a-z0-9._-]+$/i.test(code) && /\d/.test(code) && code.length >= 6;
 }

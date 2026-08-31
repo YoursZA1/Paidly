@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
+import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
 
 export const INVITE_TOKEN_KEY = "paidly_company_invite_token";
 
@@ -114,7 +115,9 @@ export async function validateInviteToken(token) {
 export async function acceptPendingInviteToken(token) {
   const { data, error } = await supabase.rpc("accept_company_invite_token", { p_token: token });
   if (error) throw new Error(getSupabaseErrorMessage(error, "Could not accept invite"));
-  if (!data?.ok) throw new Error(data?.error || "Invite could not be accepted");
+  if (!data?.ok) {
+    throw new Error(invitePublicErrorMessage(data?.error, data?.status));
+  }
   clearPendingInviteToken();
   clearTenantContextCache();
   return data;

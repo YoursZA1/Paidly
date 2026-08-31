@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { useToast } from "@/components/ui/use-toast";
 import { inviteCompanyMember } from "@/services/CompanyTeamService";
 import { listPosRegisters } from "@/services/PosIntegrationService";
+import { resendCompanyInvite } from "@/services/CompanyInvitesService";
 import CompanyTeamInviteResultDialog from "@/components/company/CompanyTeamInviteResultDialog";
 import { POS_INVITE_SOURCE, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 import { COMPANY_ROLES } from "@/lib/companyPermissions";
@@ -75,6 +76,7 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
       });
       if (result.mode === "email_invite") {
         setInviteNotice({
+          inviteId: result.id || null,
           email: String(result.email || email).trim(),
           invitedName: fullName.trim() || null,
           inviteLink: result.invite_link || "",
@@ -84,6 +86,9 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
           emailSent: result.email_sent === true,
           emailError: result.email_error || null,
           posOnly: true,
+          role: COMPANY_ROLES.EMPLOYEE,
+          jobFunction: POS_JOB_FUNCTION,
+          reused: result.reused === true,
         });
       } else {
         toast({
@@ -102,6 +107,39 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRetryEmail = async () => {
+    const inviteId = inviteNotice?.inviteId;
+    if (!inviteId) return;
+    setInviteNotice((prev) => (prev ? { ...prev, retrying: true } : prev));
+    try {
+      const result = await resendCompanyInvite(inviteId);
+      setInviteNotice((prev) =>
+        prev
+          ? {
+              ...prev,
+              retrying: false,
+              inviteLink: result.invite_link || prev.inviteLink,
+              inviteCode: result.invite_code || prev.inviteCode,
+              emailSent: result.email_sent === true,
+              emailError: result.email_error || null,
+              expiresAt: result.expires_at || prev.expiresAt,
+            }
+          : prev
+      );
+    } catch (err) {
+      setInviteNotice((prev) =>
+        prev
+          ? {
+              ...prev,
+              retrying: false,
+              emailSent: false,
+              emailError: err?.message || String(err),
+            }
+          : prev
+      );
     }
   };
 
@@ -182,6 +220,7 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setInviteNotice(null);
         }}
+        onRetryEmail={inviteNotice?.inviteId ? handleRetryEmail : undefined}
       />
     </>
   );

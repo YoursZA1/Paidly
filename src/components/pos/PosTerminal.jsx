@@ -42,6 +42,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ToastAction } from "@/components/ui/toast";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
@@ -78,6 +79,8 @@ import {
   listPosCatalogCategories,
   lookupPosProductByCode,
 } from "@/lib/pos/posProductSearch";
+import { createPosWedgeBuffer, POS_SCAN_COMMIT_MS, isRapidScanGap } from "@/lib/pos/posWedgeScan";
+import { displayPosBarcode } from "@/lib/pos/posBarcode";
 import { applyPosSaleDiscount, catalogUnitPrice, computeCashChange } from "../../../server/src/pos/posCheckoutMath.js";
 import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
 import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
@@ -120,6 +123,95 @@ function cashSuggestions(total) {
     .map((n) => roundMoney(n))
     .filter((n) => n >= due && !seen.has(n) && seen.add(n))
     .slice(0, 6);
+}
+
+function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
+  const stock = posProductStock(product);
+  const stockUi = posStockLabel(stock, { compact: true });
+  const out = stockUi.tone === "out";
+  const hasImage = Boolean(product.image_url);
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col overflow-hidden rounded-md border bg-card text-left shadow-none",
+        out ? "border-border opacity-50" : "border-border/80 hover:border-primary/40",
+        inCart ? "border-primary" : ""
+      )}
+    >
+      <button
+        type="button"
+        disabled={out}
+        aria-label={`Add ${product.name} to cart`}
+        onClick={() => onAdd(product)}
+        className="flex min-w-0 flex-1 flex-col touch-manipulation select-none active:bg-muted/30"
+      >
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-center bg-muted/30 px-1.5 py-1",
+            hasImage ? "h-[4.5rem] sm:h-20" : "h-10 sm:h-11"
+          )}
+        >
+          <ProductThumbnail
+            imageUrl={product.image_url}
+            name={product.name}
+            fit="contain"
+            className="h-full w-full rounded-none border-0 bg-transparent"
+          />
+          {inCart ? (
+            <span className="absolute right-1.5 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold tabular-nums text-primary-foreground">
+              {inCart.quantity}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-1.5">
+          <p className="line-clamp-2 text-[13px] font-medium leading-snug">{product.name}</p>
+          <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-1 gap-y-0.5">
+            <p className="text-sm font-bold tabular-nums sm:text-[15px]">
+              {formatCurrency(catalogUnitPrice(product), currency)}
+            </p>
+            <p
+              className={cn(
+                "shrink-0 text-[11px] font-medium leading-none",
+                stockUi.tone === "out"
+                  ? "text-destructive"
+                  : stockUi.tone === "low"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground"
+              )}
+            >
+              {stockUi.text}
+            </p>
+          </div>
+        </div>
+      </button>
+      {inCart && !out ? (
+        <div className="flex items-center justify-between gap-1 border-t border-border px-1 py-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 min-h-11 min-w-11 touch-manipulation"
+            onClick={() => onQty(product.id, inCart.quantity - 1)}
+            aria-label={`Decrease ${product.name}`}
+          >
+            <Minus className="size-3.5" />
+          </Button>
+          <span className="min-w-5 text-center text-xs font-semibold tabular-nums">{inCart.quantity}</span>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 min-h-11 min-w-11 touch-manipulation"
+            onClick={() => onAdd(product)}
+            aria-label={`Increase ${product.name}`}
+          >
+            <Plus className="size-3.5" />
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function CartLineList({ cart, currency, onQty }) {
@@ -246,9 +338,15 @@ export default function PosTerminal() {
 
   const searchRef = useRef(null);
   const receiptPdfRef = useRef(null);
+  const scanDebounceRef = useRef(null);
+  const lastSearchKeyAtRef = useRef(0);
   const [products, setProducts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(null);
   const [query, setQuery] = useState("");
+  const [scanMode, setScanMode] = useState(true);
+  const [cameraContinuous, setCameraContinuous] = useState(false);
+  const [scanStatus, setScanStatus] = useState(null);
   const [category, setCategory] = useState("all");
   const [cart, setCart] = useState([]);
   const [clientId, setClientId] = useState("");
@@ -304,14 +402,16 @@ export default function PosTerminal() {
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
+    setCatalogError(null);
     try {
       const rows = await fetchPosCatalog({ registerId: activeRegister?.id || undefined });
       setProducts(rows);
       const ids = new Set(rows.map((row) => row.id));
       setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
     } catch (err) {
+      setCatalogError(err?.message || "Product catalogue unavailable.");
       toast({
-        title: "Could not load products",
+        title: "Product catalogue unavailable.",
         description: err?.message || "Check inventory in the back office.",
         variant: "destructive",
       });
@@ -489,48 +589,101 @@ export default function PosTerminal() {
     if (discountAmount > subtotal) setDiscountAmount(subtotal);
   }, [discountAmount, subtotal]);
 
+  const focusScanner = useCallback(() => {
+    window.setTimeout(() => searchRef.current?.focus(), 0);
+  }, []);
+
   const addProduct = useCallback(
     (product, qty = 1) => {
       const stock = posProductStock(product);
       if (stock <= 0) {
         toast({ title: "Out of stock", description: product.name, variant: "destructive" });
-        return;
+        setScanStatus({ tone: "error", text: "Out of stock" });
+        return false;
       }
-      triggerHaptic(10);
+      let result;
       setCart((prev) => {
-        const result = addPosCartLine(prev, product, qty);
-        if (result.error === "INSUFFICIENT_STOCK") {
-          toast({
-            title: "Not enough stock",
-            description: `${product.name} has ${stock} left.`,
-            variant: "destructive",
-          });
-        }
+        result = addPosCartLine(prev, product, qty);
         return result.cart;
       });
+      if (result?.error === "INSUFFICIENT_STOCK") {
+        toast({
+          title: "Only " + stock + " available.",
+          description: product.name,
+          variant: "destructive",
+        });
+        setScanStatus({ tone: "error", text: `Only ${stock} available.` });
+        return false;
+      }
+      triggerHaptic(10);
+      setScanStatus({ tone: "ok", text: `${product.name} · ${result?.cart?.find((l) => l.product_id === product.id)?.quantity || 1}` });
+      return true;
     },
     [toast]
   );
 
   const applyScannedCode = useCallback(
-    (raw) => {
-      const product = lookupPosProductByCode(codeIndex, raw);
+    (raw, { keepScanner = false } = {}) => {
+      const code = displayPosBarcode(raw);
       setQuery("");
-      setScannerOpen(false);
+      if (!keepScanner) setScannerOpen(false);
+
+      if (catalogLoading && products.length === 0) {
+        toast({ title: "Product catalogue unavailable.", variant: "destructive" });
+        setScanStatus({ tone: "error", text: "Product catalogue unavailable." });
+        focusScanner();
+        return false;
+      }
+      if (catalogError && products.length === 0) {
+        toast({ title: "Product catalogue unavailable.", variant: "destructive" });
+        setScanStatus({ tone: "error", text: "Product catalogue unavailable." });
+        focusScanner();
+        return false;
+      }
+      if (!code) {
+        focusScanner();
+        return false;
+      }
+
+      const product = lookupPosProductByCode(codeIndex, code);
       if (!product) {
         toast({
-          title: "No matching product",
-          description: `Nothing in the catalog for “${String(raw || "").trim()}”.`,
+          title: "Barcode not found",
+          description: `${code} isn't linked to a product.`,
           variant: "destructive",
+          duration: 8000,
+          action: (
+            <div className="flex flex-col gap-1">
+              {posOnlyStaff ? null : (
+                <ToastAction
+                  altText="Add product"
+                  onClick={() =>
+                    navigate(`${createPageUrl("Services")}?barcode=${encodeURIComponent(code)}`)
+                  }
+                >
+                  Add Product
+                </ToastAction>
+              )}
+              <ToastAction
+                altText="Scan again"
+                onClick={() => {
+                  focusScanner();
+                }}
+              >
+                Scan Again
+              </ToastAction>
+            </div>
+          ),
         });
-        searchRef.current?.focus();
+        setScanStatus({ tone: "error", text: "Barcode not found" });
+        focusScanner();
         return false;
       }
       addProduct(product);
-      searchRef.current?.focus();
+      focusScanner();
       return true;
     },
-    [addProduct, codeIndex, toast]
+    [addProduct, catalogError, catalogLoading, codeIndex, focusScanner, navigate, posOnlyStaff, products.length, toast]
   );
 
   const setQty = (productId, quantity) => {
@@ -608,28 +761,57 @@ export default function PosTerminal() {
 
   const handleSearchSubmit = (event) => {
     event.preventDefault();
-    if (!query.trim()) return;
-    if (lookupPosProductByCode(codeIndex, query) || isPosScanQuery(query)) {
-      applyScannedCode(query);
+    const text = query;
+    if (!displayPosBarcode(text)) return;
+    if (lookupPosProductByCode(codeIndex, text) || isPosScanQuery(text)) {
+      applyScannedCode(text);
     }
   };
 
   const handleSearchPaste = (event) => {
     const text = event.clipboardData?.getData("text") || "";
-    if (!lookupPosProductByCode(codeIndex, text)) return;
-    event.preventDefault();
-    applyScannedCode(text);
+    if (lookupPosProductByCode(codeIndex, text) || isPosScanQuery(text)) {
+      event.preventDefault();
+      applyScannedCode(text);
+    }
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    const now = Date.now();
+    const gap = now - lastSearchKeyAtRef.current;
+    lastSearchKeyAtRef.current = now;
+    setQuery(value);
+    window.clearTimeout(scanDebounceRef.current);
+    if (!isRapidScanGap(gap) || !(lookupPosProductByCode(codeIndex, value) || isPosScanQuery(value))) {
+      return;
+    }
+    scanDebounceRef.current = window.setTimeout(() => {
+      if (lookupPosProductByCode(codeIndex, value) || isPosScanQuery(value)) {
+        applyScannedCode(value);
+      }
+    }, POS_SCAN_COMMIT_MS);
   };
 
   useEffect(() => {
-    let buffer = "";
-    let lastAt = 0;
-    const RESET_MS = 50;
-    const MIN_LEN = 4;
+    const wedge = createPosWedgeBuffer();
+    const payBusy =
+      scannerOpen ||
+      cashOpen ||
+      payMethodOpen ||
+      customerOpen ||
+      discountOpen ||
+      cardOpen ||
+      digitalOpen ||
+      Boolean(completedSale) ||
+      startShiftOpen ||
+      closeShiftOpen ||
+      registerOpen ||
+      helpOpen;
 
     const onKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (scannerOpen || cashOpen || payMethodOpen || customerOpen || discountOpen || cardOpen || digitalOpen) return;
+      if (payBusy) return;
 
       const el = document.activeElement;
       const tag = el?.tagName?.toLowerCase();
@@ -638,24 +820,54 @@ export default function PosTerminal() {
       if (typingElsewhere) return;
       if (el === searchRef.current) return;
 
-      const now = Date.now();
-      if (now - lastAt > RESET_MS) buffer = "";
-      lastAt = now;
-
-      if (e.key === "Enter") {
-        if (buffer.length >= MIN_LEN) {
-          e.preventDefault();
-          applyScannedCode(buffer);
-        }
-        buffer = "";
-        return;
-      }
-      if (e.key.length === 1) buffer += e.key;
+      const code = wedge.push(e.key, Date.now());
+      if (!code) return;
+      if (e.key === "Enter" || e.key === "Tab") e.preventDefault();
+      applyScannedCode(code);
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyScannedCode, scannerOpen, cashOpen, payMethodOpen, customerOpen, discountOpen, cardOpen, digitalOpen]);
+  }, [
+    applyScannedCode,
+    scannerOpen,
+    cashOpen,
+    payMethodOpen,
+    customerOpen,
+    discountOpen,
+    cardOpen,
+    digitalOpen,
+    completedSale,
+    startShiftOpen,
+    closeShiftOpen,
+    registerOpen,
+    helpOpen,
+  ]);
+
+  useEffect(() => {
+    if (!scanStatus) return undefined;
+    const id = window.setTimeout(() => setScanStatus(null), 1800);
+    return () => window.clearTimeout(id);
+  }, [scanStatus]);
+
+  useEffect(() => {
+    if (!scanMode) return;
+    if (scannerOpen || cashOpen || payMethodOpen || customerOpen || discountOpen || cardOpen || digitalOpen || completedSale) {
+      return;
+    }
+    focusScanner();
+  }, [
+    scanMode,
+    scannerOpen,
+    cashOpen,
+    payMethodOpen,
+    customerOpen,
+    discountOpen,
+    cardOpen,
+    digitalOpen,
+    completedSale,
+    focusScanner,
+  ]);
 
   const applyInventory = (inventoryResult) => {
     if (!Array.isArray(inventoryResult)) return;
@@ -1278,17 +1490,17 @@ export default function PosTerminal() {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="shrink-0 space-y-3 p-3 sm:p-4">
-            <div className="flex gap-2">
+          <div className="shrink-0 space-y-2 px-3 py-2 sm:px-3">
+            <div className="flex gap-1.5">
               <form onSubmit={handleSearchSubmit} className="min-w-0 flex-1">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     ref={searchRef}
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search products / Scan barcode"
-                    className="h-12 pl-12 pr-12 text-base"
+                    onChange={handleSearchChange}
+                    placeholder="Search products or scan barcode"
+                    className="h-11 min-h-11 pl-10 pr-11 text-sm sm:text-base"
                     autoComplete="off"
                     inputMode="search"
                     enterKeyHint="go"
@@ -1298,10 +1510,10 @@ export default function PosTerminal() {
                   {query ? (
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-input text-muted-foreground hover:bg-muted"
+                      className="absolute right-1.5 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-input text-muted-foreground hover:bg-muted"
                       onClick={() => {
                         setQuery("");
-                        searchRef.current?.focus();
+                        focusScanner();
                       }}
                       aria-label="Clear search"
                     >
@@ -1313,74 +1525,101 @@ export default function PosTerminal() {
               <Button
                 type="button"
                 variant="outline"
-                size="icon"
-                className="h-12 w-12 shrink-0 touch-manipulation"
+                className="h-11 min-h-11 shrink-0 touch-manipulation px-3"
                 onClick={() => setScannerOpen(true)}
                 aria-label="Scan barcode with camera"
                 title="Scan barcode"
               >
-                <ScanBarcode className="size-5" />
+                <ScanBarcode className="size-4 sm:mr-1.5" />
+                Scan
               </Button>
             </div>
-
-            <div>
-              <div
-                className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                role="tablist"
-                aria-label="Product categories"
+            <div className="flex items-center justify-between gap-2">
+              <p
+                className={cn(
+                  "min-h-4 truncate text-[11px] font-medium",
+                  scanStatus?.tone === "error"
+                    ? "text-destructive"
+                    : scanStatus?.tone === "ok"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-muted-foreground"
+                )}
+                role="status"
               >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={category === "all"}
-                  onClick={() => {
-                    triggerHaptic(8);
-                    setCategory("all");
-                  }}
-                  className={cn(
-                    "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
-                    category === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                  )}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={category === "popular"}
-                  onClick={() => {
-                    triggerHaptic(8);
-                    setCategory("popular");
-                  }}
-                  className={cn(
-                    "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
-                    category === "popular" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                  )}
-                >
-                  Popular
-                </button>
-                {categories.map((row) => {
-                  const selected = category === row.name;
-                  return (
-                    <button
-                      key={row.name}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => {
-                        triggerHaptic(8);
-                        setCategory(row.name);
-                      }}
-                      className={cn(
-                        "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
-                        selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                      )}
-                    >
-                      {row.name}
-                    </button>
-                  );
-                })}
-              </div>
+                {scanStatus?.text || (scanMode ? "Ready to scan" : "Search products")}
+              </p>
+              <button
+                type="button"
+                className={cn(
+                  "h-8 shrink-0 rounded-md px-2 text-[11px] font-semibold uppercase tracking-wide",
+                  scanMode ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                )}
+                onClick={() => {
+                  setScanMode((on) => !on);
+                  focusScanner();
+                }}
+                aria-pressed={scanMode}
+              >
+                {scanMode ? "Scan mode: ON" : "Scan mode: Off"}
+              </button>
+            </div>
+
+            <div
+              className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+              aria-label="Product categories"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={category === "all"}
+                onClick={() => {
+                  triggerHaptic(8);
+                  setCategory("all");
+                }}
+                className={cn(
+                  "h-11 min-h-11 shrink-0 rounded-md px-3 text-sm font-medium touch-manipulation",
+                  category === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                )}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={category === "popular"}
+                onClick={() => {
+                  triggerHaptic(8);
+                  setCategory("popular");
+                }}
+                className={cn(
+                  "h-11 min-h-11 shrink-0 rounded-md px-3 text-sm font-medium touch-manipulation",
+                  category === "popular" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                )}
+              >
+                Popular
+              </button>
+              {categories.map((row) => {
+                const selected = category === row.name;
+                return (
+                  <button
+                    key={row.name}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => {
+                      triggerHaptic(8);
+                      setCategory(row.name);
+                    }}
+                    className={cn(
+                      "h-11 min-h-11 shrink-0 rounded-md px-3 text-sm font-medium touch-manipulation",
+                      selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                    )}
+                  >
+                    {row.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1423,88 +1662,18 @@ export default function PosTerminal() {
               )}
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-24 sm:px-4 lg:pb-3">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {filteredProducts.map((product) => {
-                  const stock = posProductStock(product);
-                  const stockUi = posStockLabel(stock);
-                  const out = stockUi.tone === "out";
-                  const inCart = cart.find((line) => line.product_id === product.id);
-                  return (
-                    <div
-                      key={product.id}
-                      className={cn(
-                        "flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-2xl border border-border bg-card text-left",
-                        out ? "opacity-45" : "hover:border-primary",
-                        inCart ? "border-primary ring-1 ring-primary/40" : ""
-                      )}
-                    >
-                      <button
-                        type="button"
-                        disabled={out}
-                        aria-label={`Add ${product.name} to cart`}
-                        onClick={() => addProduct(product)}
-                        className="flex min-w-0 flex-1 flex-col touch-manipulation select-none active:scale-[0.99]"
-                      >
-                        <div className="relative aspect-[4/3] w-full bg-muted/40">
-                          <ProductThumbnail
-                            imageUrl={product.image_url}
-                            name={product.name}
-                            className="h-full w-full rounded-none border-0"
-                          />
-                          {inCart ? (
-                            <span className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                              {inCart.quantity}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-1 flex-col gap-1 p-3 pb-2">
-                          <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
-                          <p className="text-base font-semibold tabular-nums">
-                            {formatCurrency(catalogUnitPrice(product), currency)}
-                          </p>
-                          <p
-                            className={cn(
-                              "mt-auto text-xs font-medium",
-                              stockUi.tone === "out"
-                                ? "text-destructive"
-                                : stockUi.tone === "low"
-                                  ? "font-semibold uppercase tracking-wide text-amber-600"
-                                  : "text-muted-foreground"
-                            )}
-                          >
-                            {stockUi.text}
-                          </p>
-                        </div>
-                      </button>
-                      {inCart && !out ? (
-                        <div className="flex items-center justify-between gap-1 border-t border-border px-2 py-1.5">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="size-11 min-h-11 min-w-11"
-                            onClick={() => setQty(product.id, inCart.quantity - 1)}
-                            aria-label={`Decrease ${product.name}`}
-                          >
-                            <Minus className="size-3.5" />
-                          </Button>
-                          <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{inCart.quantity}</span>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="size-11 min-h-11 min-w-11"
-                            onClick={() => addProduct(product)}
-                            aria-label={`Increase ${product.name}`}
-                          >
-                            <Plus className="size-3.5" />
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-28 lg:pb-3">
+              <div className="grid grid-cols-2 gap-2 sm:[grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+                {filteredProducts.map((product) => (
+                  <PosCatalogProductCard
+                    key={product.id}
+                    product={product}
+                    currency={currency}
+                    inCart={cart.find((line) => line.product_id === product.id)}
+                    onAdd={addProduct}
+                    onQty={setQty}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -1611,10 +1780,10 @@ export default function PosTerminal() {
       </div>
 
       {cartCount > 0 || (orgId && heldCart) ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
           <button
             type="button"
-            className="pointer-events-auto flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-primary px-5 py-3 text-left text-primary-foreground shadow-lg touch-manipulation"
+            className="pointer-events-auto flex min-h-11 w-full flex-col gap-0.5 rounded-md bg-primary px-4 py-2 text-primary-foreground shadow-sm touch-manipulation"
             onClick={() => {
               if (orgId && heldCart && cart.length === 0) {
                 resumeHeldCart();
@@ -1623,12 +1792,19 @@ export default function PosTerminal() {
               setCartSheetOpen(true);
             }}
           >
-            <span className="text-sm font-semibold uppercase tracking-wide">
-              {cart.length === 0 && heldCart ? "Resume held sale" : `${cartCount} items · ${formatCurrency(cartTotal, currency)}`}
-            </span>
-            <span className="text-sm font-bold uppercase tracking-wide">
-              {cart.length === 0 ? "View" : "View cart"}
-            </span>
+            {cart.length === 0 && heldCart ? (
+              <span className="text-center text-sm font-semibold uppercase tracking-wide">Resume held sale</span>
+            ) : (
+              <>
+                <span className="flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide">
+                  <span>
+                    {cartCount} {cartCount === 1 ? "item" : "items"}
+                  </span>
+                  <span className="tabular-nums">{formatCurrency(cartTotal, currency)}</span>
+                </span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide">View cart</span>
+              </>
+            )}
           </button>
         </div>
       ) : null}
@@ -1636,8 +1812,10 @@ export default function PosTerminal() {
       <BarcodeScannerDialog
         open={scannerOpen}
         onOpenChange={setScannerOpen}
-        title="Scan barcode"
-        onDetected={(code) => applyScannedCode(code)}
+        title="Scan Barcode"
+        continuous={cameraContinuous}
+        onContinuousChange={setCameraContinuous}
+        onDetected={(code) => applyScannedCode(code, { keepScanner: cameraContinuous })}
       />
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
@@ -1647,6 +1825,7 @@ export default function PosTerminal() {
             <DialogDescription>Sell, take payment, receipt, next sale.</DialogDescription>
           </DialogHeader>
           <ul className="space-y-2 text-sm text-muted-foreground">
+            <li>USB or Bluetooth scanners type into search and add on Enter. Camera Scan requests permission only when you open it.</li>
             <li>Search or scan to add products. Out of stock items cannot be sold.</li>
             <li>Walk-in Customer is the default. Attach a POS customer only when you need a name.</li>
             <li>Cash is counted on this till. Card and EFT wait for the real payment rail.</li>

@@ -29,6 +29,17 @@ export function posOnlyStaffHasPermission(permission) {
 }
 
 /**
+ * Company (non-POS) invite URL. Query-string `/invite?token=` still validates.
+ * @param {string} token
+ * @param {string} [origin]
+ */
+export function companyInvitePath(token, origin = "") {
+  const path = `/invite/${encodeURIComponent(String(token || "").trim())}`;
+  const base = String(origin || "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
+/**
  * Dedicated till invite URL. Old `/invite?token=&next=POS` still validates.
  * @param {string} token
  * @param {string} [origin]
@@ -37,6 +48,23 @@ export function posInvitePath(token, origin = "") {
   const path = `/pos/invite/${encodeURIComponent(String(token || "").trim())}`;
   const base = String(origin || "").replace(/\/$/, "");
   return base ? `${base}${path}` : path;
+}
+
+/**
+ * Employee + POS function (or explicit source=pos) is a till invite.
+ * Function never promotes RBAC; manager/admin with function=pos stay back-office.
+ * @param {{ source?: string, role?: string, jobFunction?: string, job_function?: string }} [input]
+ */
+export function isPosStaffInviteRequest(input = {}) {
+  const source = String(input.source || "").trim().toLowerCase();
+  if (source === POS_INVITE_SOURCE) return true;
+  const role = String(input.role || "").trim().toLowerCase();
+  const fn = String(input.jobFunction || input.job_function || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  const posFn = fn === POS_JOB_FUNCTION || fn === "cashier" || fn === "till" || fn === "pos_only";
+  return posFn && (role === "employee" || role === "");
 }
 
 export function isPosInviteUrl(raw) {

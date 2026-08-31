@@ -13,9 +13,9 @@ import {
 } from "./companyRouteAccess.js";
 import {
   isPosOnlyStaff,
+  isPosStaffInviteRequest,
   POS_INVITE_SOURCE,
   POS_JOB_FUNCTION,
-  posInvitePath,
 } from "../../shared/posStaffInvite.js";
 import {
   formatPosTillInviteCode,
@@ -28,29 +28,125 @@ import {
   companyInviteRedirectUrl,
   sendCompanyTeamInviteEmail,
 } from "./companyTeamInviteDelivery.js";
+import { companyInviteShareUrl } from "./companyInviteAppUrl.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
 }
 
-const INVITE_TTL_DAYS = 14;
-const POS_INVITE_TTL_DAYS = 7;
+const COMPANY_ROLE_LABELS = {
+  employee: "Employee",
+  manager: "Manager",
+  admin: "Admin",
+};
 
-function companyInviteAppUrl(tokenOrCode, { source } = {}) {
-  const origin =
-    (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
-    process.env.VITE_APP_URL ||
-    process.env.APP_URL ||
-    "https://www.paidly.co.za";
-  const base = String(origin).replace(/\/$/, "");
-  if (source === POS_INVITE_SOURCE) {
-    return posInvitePath(formatPosTillInviteCode(tokenOrCode) || tokenOrCode, base);
-  }
-  return `${base}/invite?token=${encodeURIComponent(tokenOrCode)}`;
-}
+const INVITE_TTL_DAYS = 7;
+const POS_INVITE_TTL_DAYS = 7;
 
 function generateInviteToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function hashInviteToken(token) {
+  return crypto.createHash("sha256").update(String(token || ""), "utf8").digest("hex");
+}
+
+function inviteTtlDays(posInvite) {
+  return posInvite ? POS_INVITE_TTL_DAYS : INVITE_TTL_DAYS;
+}
+
+function inviteNotExpired(row) {
+  if (!row?.expires_at) return false;
+  return new Date(row.expires_at).getTime() > Date.now();
+}
+
+function inviteRowIsPos(row) {
+  return isPosStaffInviteRequest({
+    source: row?.source,
+    role: row?.role,
+    jobFunction: row?.job_function,
+  });
+}
+
+function inviteShareLink(tokenOrCode, rowOrSource) {
+  const source =
+    typeof rowOrSource === "string"
+      ? rowOrSource
+      : inviteRowIsPos(rowOrSource)
+        ? POS_INVITE_SOURCE
+        : "company_admin";
+  return companyInviteShareUrl(tokenOrCode, { source });
+}
+
+function inviteDisplayStatus(row) {
+  const status = String(row?.status || "").toLowerCase();
+  if (status === "revoked" || row?.revoked_at) return "revoked";
+  if (status === "accepted") return "accepted";
+  if (status === "expired") return "expired";
+  if (status === "pending" && !inviteNotExpired(row)) return "expired";
+  return status || "pending";
+}
+
+async function logCompanyInviteAudit({
+  actor,
+  orgId,
+  action,
+  email,
+  inviteId,
+  extra = {},
+}) {
+  try {
+    await supabaseAdmin.from("audit_logs").insert({
+      category: "company_invite",
+      action,
+      entity: "company_invites",
+      actor_id: actor?.id || null,
+      actor_email: actor?.email || null,
+      actor_name: actor?.user_metadata?.full_name || actor?.email || null,
+      target_label: email || null,
+      description: extra.description || action,
+      metadata: {
+        org_id: orgId || null,
+        invite_id: inviteId || null,
+        invited_email: email || null,
+        ...extra.metadata,
+      },
+    });
+  } catch (err) {
+    console.warn("[company/invite] audit_logs insert failed:", err?.message || err);
+  }
+}
+
+async function markInviteEmailSent(inviteId) {
+  if (!inviteId) return;
+  const { error } = await supabaseAdmin
+    .from("company_invites")
+    .update({ email_sent_at: new Date().toISOString() })
+    .eq("id", inviteId);
+  if (error && !/email_sent_at/i.test(error.message || "")) {
+    console.warn("[company/invite] email_sent_at update failed:", error.message);
+  }
+}
+
+async function deliverStoredInviteEmail({
+  row,
+  inviteLink,
+  inviteCode,
+  tillName,
+  inviterName,
+  companyName,
+}) {
+  const posInvite = inviteRowIsPos(row);
+  return sendCompanyTeamInviteEmail({
+    to: row.email,
+    inviteLink,
+    companyName: companyName || "your company",
+    inviterName: inviterName || "Your team admin",
+    roleLabel: posInvite ? "POS staff" : COMPANY_ROLE_LABELS[row.role] || "team member",
+    tillName: posInvite ? tillName : null,
+    inviteCode: posInvite ? inviteCode : null,
+    posOnly: posInvite,
+  });
 }
 
 async function persistCompanyInvite({
@@ -64,11 +160,12 @@ async function persistCompanyInvite({
   invitedName = null,
 }) {
   const token = generateInviteToken();
-  const ttlDays = source === POS_INVITE_SOURCE ? POS_INVITE_TTL_DAYS : INVITE_TTL_DAYS;
+  const posInvite = source === POS_INVITE_SOURCE;
+  const ttlDays = inviteTtlDays(posInvite);
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
   let inviteCode = null;
   let inviteCodeHash = null;
-  if (source === POS_INVITE_SOURCE) {
+  if (posInvite) {
     inviteCode = generatePosTillInviteCode();
     inviteCodeHash = hashPosTillInviteCode(inviteCode);
   }
@@ -77,6 +174,7 @@ async function persistCompanyInvite({
     role: role === COMPANY_ROLES.ADMIN ? "admin" : role,
     org_id: orgId,
     token,
+    token_hash: hashInviteToken(token),
     status: "pending",
     expires_at: expiresAt,
     created_by: createdBy,
@@ -87,54 +185,80 @@ async function persistCompanyInvite({
   if (invitedName) row.invited_name = invitedName;
   if (inviteCodeHash) row.invite_code_hash = inviteCodeHash;
 
+  const optionalColumns = ["token_hash", "email_sent_at", "invite_code_hash", "invited_name", "register_id", "job_function"];
+
+  const tryInsert = async (payload) => {
+    const { data, error } = await supabaseAdmin.from("company_invites").insert(payload).select("id").maybeSingle();
+    return { id: data?.id || null, error };
+  };
+
   let lastError = null;
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (attempt > 0 && source === POS_INVITE_SOURCE) {
+    if (attempt > 0 && posInvite) {
       inviteCode = generatePosTillInviteCode();
       inviteCodeHash = hashPosTillInviteCode(inviteCode);
       row.invite_code_hash = inviteCodeHash;
       row.token = generateInviteToken();
+      row.token_hash = hashInviteToken(row.token);
     }
-    const { error } = await supabaseAdmin.from("company_invites").insert(row);
-    if (!error) {
-      const linkToken = source === POS_INVITE_SOURCE ? inviteCode : token;
+    const inserted = await tryInsert(row);
+    if (!inserted.error) {
+      const linkToken = posInvite ? formatPosTillInviteCode(inviteCode) || inviteCode : row.token;
       return {
-        token,
+        id: inserted.id,
+        token: row.token,
         inviteCode,
         expiresAt,
-        inviteLink: companyInviteAppUrl(linkToken, { source }),
+        inviteLink: inviteShareLink(linkToken, source),
       };
     }
-    lastError = error;
-    if (error && /invite_code_hash/i.test(error.message || "") && source === POS_INVITE_SOURCE) {
+    lastError = inserted.error;
+    const msg = inserted.error.message || "";
+    const code = inserted.error.code || "";
+    if (
+      posInvite &&
+      /invite_code_hash/i.test(msg) &&
+      (/duplicate|unique/i.test(msg) || code === "23505")
+    ) {
+      continue;
+    }
+    if (/duplicate|unique/i.test(msg) || code === "23505") {
+      const { data: existing } = await supabaseAdmin
+        .from("company_invites")
+        .select("id, token, expires_at, source, job_function, role")
+        .eq("org_id", orgId)
+        .eq("email", email)
+        .eq("status", "pending")
+        .maybeSingle();
+      if (existing?.token) {
+        return {
+          id: existing.id,
+          token: existing.token,
+          inviteCode: null,
+          expiresAt: existing.expires_at,
+          inviteLink: inviteShareLink(existing.token, existing),
+        };
+      }
+    }
+    const dropCol = optionalColumns.find((col) => new RegExp(col, "i").test(msg));
+    if (dropCol && row[dropCol] !== undefined) {
+      delete row[dropCol];
       continue;
     }
     break;
   }
 
   if (lastError && /register_id/i.test(lastError.message || "")) {
-    if (source === POS_INVITE_SOURCE) {
+    if (posInvite) {
       throw new Error("Till invites need a database update. Run scripts/apply-native-pos.sql in the Supabase SQL Editor.");
     }
-    const { register_id: _omitRegister, invite_code_hash: _omitHash, invited_name: _omitName, ...withoutRegister } = row;
-    const { error } = await supabaseAdmin.from("company_invites").insert(withoutRegister);
-    if (error) throw new Error(error.message || "Could not store invite");
-    return { token, inviteCode: null, expiresAt, inviteLink: companyInviteAppUrl(token, { source }) };
-  }
-  if (lastError && /job_function/i.test(lastError.message || "")) {
-    const { job_function: _omit, register_id: _omitRegister, invite_code_hash: _omitHash, invited_name: _omitName, ...withoutJobFunction } = row;
-    const { error } = await supabaseAdmin.from("company_invites").insert(withoutJobFunction);
-    if (error) throw new Error(error.message || "Could not store invite");
-    return { token, inviteCode: null, expiresAt, inviteLink: companyInviteAppUrl(token, { source }) };
+    const { register_id: _omitRegister, invite_code_hash: _omitHash, invited_name: _omitName, token_hash: _omitHash2, ...withoutRegister } = row;
+    const inserted = await tryInsert(withoutRegister);
+    if (inserted.error) throw new Error(inserted.error.message || "Could not store invite");
+    return { id: inserted.id, token: row.token, inviteCode: null, expiresAt, inviteLink: inviteShareLink(row.token, source) };
   }
   throw new Error(lastError?.message || "Could not store invite");
 }
-
-const COMPANY_ROLE_LABELS = {
-  employee: "Employee",
-  manager: "Manager",
-  admin: "Admin",
-};
 
 async function requireCompanyAdmin(req, res) {
   try {
@@ -204,15 +328,22 @@ export async function handleCompanyTeamInvite(req, res) {
       .trim()
       .toLowerCase();
     const fullName = String(body.full_name || body.fullName || "").trim();
-    const sourceRaw = String(body.source || "company_admin")
-      .trim()
-      .toLowerCase();
-    const source = sourceRaw === POS_INVITE_SOURCE ? POS_INVITE_SOURCE : "company_admin";
+    if (!email) return jsonError(res, 400, "Email is required");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return jsonError(res, 400, "Enter a valid email address");
+    }
+
     let role = normalizeCompanyRole(body.role);
     let jobFunction = normalizeJobFunction(body.job_function ?? body.jobFunction ?? "general");
     let registerId = String(body.register_id || body.registerId || "").trim() || null;
-    const invitedName = String(body.full_name || body.fullName || "").trim() || null;
-    if (source === POS_INVITE_SOURCE) {
+    const invitedName = fullName || null;
+    const posInvite = isPosStaffInviteRequest({
+      source: body.source,
+      role,
+      jobFunction,
+    });
+    const source = posInvite ? POS_INVITE_SOURCE : "company_admin";
+    if (posInvite) {
       role = COMPANY_ROLES.EMPLOYEE;
       jobFunction = POS_JOB_FUNCTION;
       if (!registerId) {
@@ -234,8 +365,6 @@ export async function handleCompanyTeamInvite(req, res) {
       registerName = registerRow.name || "Till";
     }
 
-    if (!email) return jsonError(res, 400, "Email is required");
-
     const { data: existingProfile, error: profileErr } = await supabaseAdmin
       .from("profiles")
       .select("id, email, full_name")
@@ -255,7 +384,7 @@ export async function handleCompanyTeamInvite(req, res) {
         existingProfile.id,
         role,
         jobFunction,
-        source === POS_INVITE_SOURCE ? registerId : null
+        posInvite ? registerId : null
       );
       if (memErr) return jsonError(res, 500, memErr.message || "Could not add member");
       if (registerId) {
@@ -275,6 +404,16 @@ export async function handleCompanyTeamInvite(req, res) {
       if (roleErr) {
         return jsonError(res, 500, roleErr.message || "Could not assign company role");
       }
+      await logCompanyInviteAudit({
+        actor: gate.user,
+        orgId: gate.membership.companyId,
+        action: "invitation_accepted",
+        email,
+        extra: {
+          description: "Existing user added to company from invite form",
+          metadata: { mode: "existing_user", role, job_function: jobFunction },
+        },
+      });
       return res.status(200).json({
         ok: true,
         mode: "existing_user",
@@ -288,59 +427,27 @@ export async function handleCompanyTeamInvite(req, res) {
       });
     }
 
-    const onboardingForm = role === COMPANY_ROLES.ADMIN ? "admin" : "member";
-    const inviteMetadata = {
-      full_name: fullName || email.split("@")[0],
-      company_org_id: gate.membership.companyId,
-      company_role: role,
-      company_job_function: jobFunction,
-      company_onboarding_form: onboardingForm,
-      plan: "none",
-      invited_by: gate.user.id,
-    };
+    const { data: pendingRows, error: pendingErr } = await supabaseAdmin
+      .from("company_invites")
+      .select(
+        "id, email, role, status, token, org_id, source, job_function, register_id, invited_name, expires_at, revoked_at"
+      )
+      .eq("org_id", gate.membership.companyId)
+      .eq("email", email)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-      type: "invite",
-      email,
-      options: {
-        data: inviteMetadata,
-        redirectTo: companyInviteRedirectUrl(),
-      },
-    });
-
-    if (linkErr) {
-      const msg = linkErr.message || "Invite failed";
-      const status = /already|registered|exists|invalid/i.test(msg) ? 400 : 500;
-      return jsonError(res, status, msg);
+    if (pendingErr) {
+      console.warn("[company/invite] pending lookup failed:", pendingErr.message);
     }
 
-    const authInviteLink = String(linkData?.properties?.action_link || "").trim();
-    if (!authInviteLink) {
-      return jsonError(res, 500, "Could not create invite link");
-    }
-
-    let persistedInvite = null;
-    try {
-      persistedInvite = await persistCompanyInvite({
-        orgId: gate.membership.companyId,
-        email,
-        role,
-        createdBy: gate.user.id,
-        source,
-        jobFunction,
-        registerId,
-        invitedName,
-      });
-    } catch (persistErr) {
-      if (source === POS_INVITE_SOURCE) {
-        return jsonError(res, 500, persistErr?.message || "Could not store till invite");
-      }
-      console.warn("[company/invite] persist company_invites failed:", persistErr?.message);
-    }
-
-    const inviteLink = persistedInvite?.inviteLink || authInviteLink;
-    const emailInviteLink =
-      source === POS_INVITE_SOURCE ? inviteLink : authInviteLink || inviteLink;
+    const livePending = (pendingRows || []).find(
+      (row) => !row.revoked_at && inviteNotExpired(row)
+    );
+    const expiredPending = (pendingRows || []).find(
+      (row) => !row.revoked_at && !inviteNotExpired(row)
+    );
 
     const [{ data: inviterProfile }, { data: orgRow }] = await Promise.all([
       supabaseAdmin
@@ -361,21 +468,120 @@ export async function handleCompanyTeamInvite(req, res) {
       String(inviterProfile?.full_name || gate.user.user_metadata?.full_name || gate.user.email || "")
         .trim() || "Your team admin";
 
-    const emailResult = await sendCompanyTeamInviteEmail({
-      to: email,
-      inviteLink: emailInviteLink,
-      companyName,
-      inviterName,
-      roleLabel:
-        source === POS_INVITE_SOURCE ? "POS staff" : COMPANY_ROLE_LABELS[role] || "team member",
-      tillName: source === POS_INVITE_SOURCE ? registerName : null,
-      inviteCode: source === POS_INVITE_SOURCE ? persistedInvite?.inviteCode : null,
-      posOnly: source === POS_INVITE_SOURCE,
+    let persistedInvite = null;
+    let reused = false;
+    let rotated = false;
+
+    if (livePending) {
+      reused = true;
+      persistedInvite = {
+        id: livePending.id,
+        token: livePending.token,
+        inviteCode: null,
+        expiresAt: livePending.expires_at,
+        inviteLink: inviteShareLink(livePending.token, livePending),
+      };
+    } else if (expiredPending) {
+      rotated = true;
+      persistedInvite = await rotateCompanyInvite(expiredPending, { posInvite, registerId });
+    } else {
+      try {
+        persistedInvite = await persistCompanyInvite({
+          orgId: gate.membership.companyId,
+          email,
+          role,
+          createdBy: gate.user.id,
+          source,
+          jobFunction,
+          registerId,
+          invitedName,
+        });
+      } catch (persistErr) {
+        return jsonError(res, 500, persistErr?.message || "Could not store invitation");
+      }
+    }
+
+    if (!persistedInvite?.inviteLink) {
+      return jsonError(res, 500, "Invitation was created but the share link could not be built");
+    }
+
+    tryGenerateAuthInviteLink({
+      email,
+      fullName,
+      orgId: gate.membership.companyId,
+      role,
+      jobFunction,
+    }).catch((err) => {
+      console.warn("[company/invite] generateLink skipped:", err?.message || err);
     });
+
+    const emailResult = await deliverStoredInviteEmail({
+      row: {
+        email,
+        role,
+        source,
+        job_function: jobFunction,
+      },
+      inviteLink: persistedInvite.inviteLink,
+      inviteCode: persistedInvite.inviteCode,
+      tillName: registerName,
+      inviterName,
+      companyName,
+    });
+
+    if (emailResult.success === true) {
+      await markInviteEmailSent(persistedInvite.id);
+    } else {
+      console.error("[company/invite] email delivery failed:", emailResult.error, { to: email, inviteId: persistedInvite.id });
+    }
+
+    await logCompanyInviteAudit({
+      actor: gate.user,
+      orgId: gate.membership.companyId,
+      action: reused ? "invitation_resent" : rotated ? "invitation_resent" : "invitation_created",
+      email,
+      inviteId: persistedInvite.id,
+      extra: {
+        description: reused
+          ? "Reused pending invitation"
+          : rotated
+            ? "Rotated expired invitation"
+            : "Invitation created",
+        metadata: {
+          role,
+          job_function: jobFunction,
+          source,
+          email_sent: emailResult.success === true,
+        },
+      },
+    });
+    if (emailResult.success === true) {
+      await logCompanyInviteAudit({
+        actor: gate.user,
+        orgId: gate.membership.companyId,
+        action: "invitation_email_sent",
+        email,
+        inviteId: persistedInvite.id,
+        extra: { description: "Invitation email accepted by provider" },
+      });
+    } else {
+      await logCompanyInviteAudit({
+        actor: gate.user,
+        orgId: gate.membership.companyId,
+        action: "invitation_email_failed",
+        email,
+        inviteId: persistedInvite.id,
+        extra: {
+          description: "Invitation email was not accepted by provider",
+          metadata: { error: emailResult.error || "Email delivery failed" },
+        },
+      });
+    }
 
     return res.status(200).json({
       ok: true,
       mode: "email_invite",
+      id: persistedInvite.id,
       email,
       invited_name: invitedName,
       role,
@@ -383,15 +589,74 @@ export async function handleCompanyTeamInvite(req, res) {
       source,
       register_id: registerId,
       register_name: registerName,
-      user_id: linkData?.user?.id || null,
-      invite_link: inviteLink,
-      invite_code: persistedInvite?.inviteCode || null,
-      expires_at: persistedInvite?.expiresAt || null,
+      invite_link: persistedInvite.inviteLink,
+      invite_code: persistedInvite.inviteCode || null,
+      expires_at: persistedInvite.expiresAt || null,
+      reused,
+      rotated,
       email_sent: emailResult.success === true,
       email_error: emailResult.success ? null : emailResult.error || "Email delivery failed",
+      pending_exists: reused,
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Invite failed");
+  }
+}
+
+async function rotateCompanyInvite(row, { posInvite, registerId } = {}) {
+  const usePos = posInvite || inviteRowIsPos(row);
+  const newToken = generateInviteToken();
+  const ttlDays = inviteTtlDays(usePos);
+  const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
+  const inviteCode = usePos ? generatePosTillInviteCode() : null;
+  const patch = {
+    token: newToken,
+    token_hash: hashInviteToken(newToken),
+    status: "pending",
+    expires_at: expiresAt,
+    revoked_at: null,
+    email_sent_at: null,
+  };
+  if (usePos) patch.invite_code_hash = hashPosTillInviteCode(inviteCode);
+  if (registerId) patch.register_id = registerId;
+
+  let { error: updateErr } = await supabaseAdmin.from("company_invites").update(patch).eq("id", row.id);
+  if (updateErr && /token_hash|email_sent_at/i.test(updateErr.message || "")) {
+    const { token_hash: _omitHash, email_sent_at: _omitSent, ...withoutOptional } = patch;
+    ({ error: updateErr } = await supabaseAdmin.from("company_invites").update(withoutOptional).eq("id", row.id));
+  }
+  if (updateErr) throw new Error(updateErr.message || "Could not refresh invite");
+
+  const linkToken = usePos ? formatPosTillInviteCode(inviteCode) || inviteCode : newToken;
+  return {
+    id: row.id,
+    token: newToken,
+    inviteCode,
+    expiresAt,
+    inviteLink: inviteShareLink(linkToken, usePos ? POS_INVITE_SOURCE : row.source),
+  };
+}
+
+async function tryGenerateAuthInviteLink({ email, fullName, orgId, role, jobFunction }) {
+  const onboardingForm = role === COMPANY_ROLES.ADMIN ? "admin" : "member";
+  const { error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: {
+      data: {
+        full_name: fullName || email.split("@")[0],
+        company_org_id: orgId,
+        company_role: role,
+        company_job_function: jobFunction,
+        company_onboarding_form: onboardingForm,
+        plan: "none",
+        pending_company_invite: "true",
+      },
+      redirectTo: companyInviteRedirectUrl(),
+    },
+  });
+  if (linkErr) {
+    console.warn("[company/invite] auth.admin.generateLink:", linkErr.message);
   }
 }
 
@@ -512,7 +777,11 @@ export async function handleCompanyInviteValidate(req, res) {
     if (error) return jsonError(res, 500, error.message || "Validation failed");
     if (!data?.ok) {
       const status = data?.error === "not_found" ? 404 : 400;
-      return res.status(status).json({ ok: false, error: data?.error || "invalid" });
+      return res.status(status).json({
+        ok: false,
+        error: data?.error || "invalid",
+        status: data?.status || null,
+      });
     }
     return res.status(200).json({
       ok: true,
@@ -533,6 +802,36 @@ export async function handleCompanyInviteValidate(req, res) {
   }
 }
 
+async function serializeInviteList(res, rows, orgId) {
+  const registerIds = [...new Set(rows.map((row) => row.register_id).filter(Boolean))];
+  let names = new Map();
+  if (registerIds.length) {
+    const { data: registers } = await supabaseAdmin
+      .from("pos_registers")
+      .select("id, name")
+      .eq("org_id", orgId)
+      .in("id", registerIds);
+    names = new Map((registers || []).map((row) => [row.id, row.name]));
+  }
+
+  return res.status(200).json({
+    ok: true,
+    invites: rows.map((row) => {
+      const { token, ...rest } = row;
+      const displayStatus = inviteDisplayStatus(row);
+      const canCopy = displayStatus === "pending" && Boolean(token);
+      return {
+        ...rest,
+        status: displayStatus,
+        stored_status: row.status,
+        email_sent: Boolean(row.email_sent_at),
+        register_name: row.register_id ? names.get(row.register_id) || null : null,
+        invite_link: canCopy ? inviteShareLink(token, row) : null,
+      };
+    }),
+  });
+}
+
 /**
  * GET /api/company/invites — list invites for the caller's company (admin only).
  */
@@ -547,41 +846,40 @@ export async function handleCompanyInvitesList(req, res) {
     if (!gate.ok) return gate.response;
 
     const status = String(req.query?.status || "").trim().toLowerCase();
+    const nowIso = new Date().toISOString();
     let query = supabaseAdmin
       .from("company_invites")
       .select(
-        "id, email, invited_name, role, status, expires_at, created_at, accepted_at, revoked_at, source, job_function, register_id"
+        "id, email, invited_name, role, status, token, expires_at, created_at, accepted_at, revoked_at, source, job_function, register_id, email_sent_at"
       )
       .eq("org_id", gate.membership.companyId)
       .order("created_at", { ascending: false })
       .limit(100);
 
-    if (status && status !== "all") {
+    if (status === "pending") {
+      query = query.eq("status", "pending").is("revoked_at", null).gte("expires_at", nowIso);
+    } else if (status === "expired") {
+      query = query.or(`status.eq.expired,and(status.eq.pending,expires_at.lt.${nowIso})`);
+    } else if (status && status !== "all") {
       query = query.eq("status", status);
     }
 
     const { data, error } = await query;
+    if (error && /email_sent_at/i.test(error.message || "")) {
+      const fallback = await supabaseAdmin
+        .from("company_invites")
+        .select(
+          "id, email, invited_name, role, status, token, expires_at, created_at, accepted_at, revoked_at, source, job_function, register_id"
+        )
+        .eq("org_id", gate.membership.companyId)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (fallback.error) return jsonError(res, 500, fallback.error.message || "Could not load invites");
+      return serializeInviteList(res, fallback.data || [], gate.membership.companyId);
+    }
     if (error) return jsonError(res, 500, error.message || "Could not load invites");
 
-    const rows = data || [];
-    const registerIds = [...new Set(rows.map((row) => row.register_id).filter(Boolean))];
-    let names = new Map();
-    if (registerIds.length) {
-      const { data: registers } = await supabaseAdmin
-        .from("pos_registers")
-        .select("id, name")
-        .eq("org_id", gate.membership.companyId)
-        .in("id", registerIds);
-      names = new Map((registers || []).map((row) => [row.id, row.name]));
-    }
-
-    return res.status(200).json({
-      ok: true,
-      invites: rows.map((row) => ({
-        ...row,
-        register_name: row.register_id ? names.get(row.register_id) || null : null,
-      })),
-    });
+    return serializeInviteList(res, data || [], gate.membership.companyId);
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load invites");
   }
@@ -605,7 +903,7 @@ export async function handleCompanyInviteRevoke(req, res) {
 
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from("company_invites")
-      .select("id, status")
+      .select("id, status, email")
       .eq("id", inviteId)
       .eq("org_id", gate.membership.companyId)
       .maybeSingle();
@@ -620,6 +918,14 @@ export async function handleCompanyInviteRevoke(req, res) {
       .eq("id", inviteId);
 
     if (error) return jsonError(res, 500, error.message || "Could not revoke invite");
+    await logCompanyInviteAudit({
+      actor: gate.user,
+      orgId: gate.membership.companyId,
+      action: "invitation_revoked",
+      email: row.email,
+      inviteId,
+      extra: { description: "Invitation revoked" },
+    });
     return res.status(200).json({ ok: true, id: inviteId, status: "revoked" });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not revoke invite");
@@ -644,7 +950,9 @@ export async function handleCompanyInviteResend(req, res) {
 
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from("company_invites")
-      .select("id, email, role, status, token, org_id, source, job_function, register_id, invited_name")
+      .select(
+        "id, email, role, status, token, org_id, source, job_function, register_id, invited_name, expires_at, revoked_at"
+      )
       .eq("id", inviteId)
       .eq("org_id", gate.membership.companyId)
       .maybeSingle();
@@ -652,28 +960,27 @@ export async function handleCompanyInviteResend(req, res) {
     if (fetchErr) return jsonError(res, 500, fetchErr.message);
     if (!row) return jsonError(res, 404, "Invite not found");
     if (row.status === "accepted") return jsonError(res, 400, "Invite already accepted");
+    if (row.status === "revoked" || row.revoked_at) {
+      return jsonError(res, 400, "This invitation was revoked. Create a new invitation.");
+    }
 
-    const posInvite = row.source === POS_INVITE_SOURCE || row.job_function === POS_JOB_FUNCTION;
-    const newToken = generateInviteToken();
-    const ttlDays = posInvite ? POS_INVITE_TTL_DAYS : INVITE_TTL_DAYS;
-    const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
-    const inviteCode = posInvite ? generatePosTillInviteCode() : null;
-    const patch = {
-      token: newToken,
-      status: "pending",
-      expires_at: expiresAt,
-      revoked_at: null,
-    };
-    if (posInvite) patch.invite_code_hash = hashPosTillInviteCode(inviteCode);
+    const posInvite = inviteRowIsPos(row);
+    const reusable = row.status === "pending" && inviteNotExpired(row);
+    let inviteLink;
+    let inviteCode = null;
+    let expiresAt = row.expires_at;
+    let rotated = false;
 
-    const { error: updateErr } = await supabaseAdmin
-      .from("company_invites")
-      .update(patch)
-      .eq("id", inviteId);
+    if (reusable && row.token) {
+      inviteLink = inviteShareLink(row.token, row);
+    } else {
+      const rotatedInvite = await rotateCompanyInvite(row, { posInvite, registerId: row.register_id });
+      inviteLink = rotatedInvite.inviteLink;
+      inviteCode = rotatedInvite.inviteCode;
+      expiresAt = rotatedInvite.expiresAt;
+      rotated = true;
+    }
 
-    if (updateErr) return jsonError(res, 500, updateErr.message || "Could not refresh invite");
-
-    const inviteLink = companyInviteAppUrl(posInvite ? inviteCode : newToken, { source: row.source });
     const { data: orgRow } = await supabaseAdmin
       .from("organizations")
       .select("name")
@@ -690,15 +997,42 @@ export async function handleCompanyInviteResend(req, res) {
       tillName = registerRow?.name || null;
     }
 
-    const emailResult = await sendCompanyTeamInviteEmail({
-      to: row.email,
+    const emailResult = await deliverStoredInviteEmail({
+      row,
       inviteLink,
+      inviteCode,
+      tillName,
       companyName: orgRow?.name || "your company",
       inviterName: "Your team admin",
-      roleLabel: posInvite ? "POS staff" : COMPANY_ROLE_LABELS[row.role] || "team member",
-      tillName,
-      inviteCode,
-      posOnly: posInvite,
+    });
+
+    if (emailResult.success === true) {
+      await markInviteEmailSent(inviteId);
+    } else {
+      console.error("[company/invite] resend email failed:", emailResult.error, { to: row.email, inviteId });
+    }
+
+    await logCompanyInviteAudit({
+      actor: gate.user,
+      orgId: gate.membership.companyId,
+      action: rotated ? "invitation_resent" : "invitation_resent",
+      email: row.email,
+      inviteId,
+      extra: {
+        description: rotated ? "Expired invitation rotated and resent" : "Pending invitation resent",
+        metadata: { rotated, email_sent: emailResult.success === true },
+      },
+    });
+    await logCompanyInviteAudit({
+      actor: gate.user,
+      orgId: gate.membership.companyId,
+      action: emailResult.success === true ? "invitation_email_sent" : "invitation_email_failed",
+      email: row.email,
+      inviteId,
+      extra: {
+        description: emailResult.success === true ? "Invitation email accepted by provider" : "Invitation email failed",
+        metadata: emailResult.success === true ? {} : { error: emailResult.error || "Email delivery failed" },
+      },
     });
 
     return res.status(200).json({
@@ -709,6 +1043,12 @@ export async function handleCompanyInviteResend(req, res) {
       expires_at: expiresAt,
       register_name: tillName,
       invited_name: row.invited_name || null,
+      email: row.email,
+      role: row.role,
+      job_function: row.job_function,
+      source: row.source,
+      reused: reusable,
+      rotated,
       email_sent: emailResult.success === true,
       email_error: emailResult.success ? null : emailResult.error || "Email delivery failed",
     });
